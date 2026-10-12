@@ -1,0 +1,18 @@
+# Monorepo Manager NPM — quy tắc chung. Chi tiết từng service nằm trong
+# manager_npm_be/.gitignore và manager_npm_fe/.gitignore.
+
+# Dependencies
+node_modules/
+
+# Env thật — chỉ commit file mẫu
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
