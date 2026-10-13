@@ -1,0 +1,103 @@
+/*
+ * Preset "pinterest" — tầng 1 (giá trị thật) của hệ thống theme.
+ * Bản tối do dự án tự suy ra từ bản sáng và phải qua `pnpm theme:check`
+ * (tương phản WCAG AA).
+ *
+ * Chỉ khai báo biến ngữ nghĩa ở đây; tầng token (styles/tokens.css) nối các
+ * biến này với utility Tailwind. Component KHÔNG đọc trực tiếp file này.
+ *
+ * Thêm preset mới: copy file này thành styles/themes/<id>.css, đổi selector
+ * sang [data-theme="<id>"], import trong app/globals.css và khai báo id trong
+ * lib/theme/presets.ts.
+ */
+
+:root,
+[data-theme="pinterest"] {
+  color-scheme: light;
+
+  /* Nền & chữ */
+  --background: #ffffff; /* canvas */
+  --foreground: #000000; /* ink — tiêu đề, chữ nhấn */
+  --body: #33332e; /* body — đoạn văn mặc định */
+  --ink-soft: #211922; /* link trong đoạn văn */
+
+  /* Bề mặt */
+  --card: #f6f6f3; /* surface-card */
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+
+  /* Hành động */
+  --primary: #e60023; /* Pinterest Red — tối đa 1 CTA mỗi màn hình */
+  --primary-foreground: #ffffff;
+  --primary-pressed: #cc001f;
+  --secondary: #e5e5e0; /* secondary-bg */
+  --secondary-foreground: #000000;
+  --secondary-pressed: #c8c8c1;
+  --muted: #f6f6f3;
+  --muted-foreground: #62625b; /* mute */
+  --accent: #e5e5e0; /* nền hover/focus của item trong menu */
+  --accent-foreground: #000000;
+
+  /* Trạng thái */
+  --destructive: #9e0a0a; /* error */
+  --destructive-foreground: #ffffff;
+  --success: #103c25; /* success-deep */
+  --success-foreground: #ffffff;
+  --success-soft: #c7f0da; /* success-pale */
+
+  /* Viền & focus */
+  --border: #dadad3; /* hairline */
+  --input: #91918c; /* ash — viền ô nhập */
+  --ring: #435ee5; /* focus-outer */
+  --focus-inner: #ffffff;
+
+  /* Lớp phủ & bóng (chỉ modal có bóng) */
+  --overlay: rgb(0 0 0 / 0.5);
+  --shadow-color: rgb(0 0 0 / 0.16);
+
+  /* Hình khối & chữ — đổi 1 biến là cả thang đổi theo */
+  --radius: 1rem; /* rounded.md = 16px */
+  --font-body: var(--font-inter);
+  --font-code: var(--font-geist-mono);
+}
+
+:root.dark,
+[data-theme="pinterest"].dark {
+  color-scheme: dark;
+
+  --background: #141412;
+  --foreground: #ffffff;
+  --body: #e5e5e0;
+  --ink-soft: #f0e6f0;
+
+  --card: #262622; /* surface-dark */
+  --card-foreground: #ffffff;
+  --popover: #1f1f1c;
+  --popover-foreground: #ffffff;
+
+  --primary: #e60023;
+  --primary-foreground: #ffffff;
+  --primary-pressed: #cc001f;
+  --secondary: #33332e;
+  --secondary-foreground: #ffffff;
+  --secondary-pressed: #45453f;
+  --muted: #262622;
+  --muted-foreground: #a5a59e;
+  --accent: #33332e;
+  --accent-foreground: #ffffff;
+
+  --destructive: #ff8a80;
+  --destructive-foreground: #141412;
+  --success: #6fd39b;
+  --success-foreground: #0b2a1a;
+  --success-soft: #103c25;
+
+  --border: #3a3a35;
+  --input: #6b6b64;
+  --ring: #7c91f0;
+  --focus-inner: #141412;
+
+  --overlay: rgb(0 0 0 / 0.7);
+  --shadow-color: rgb(0 0 0 / 0.5);
+}
