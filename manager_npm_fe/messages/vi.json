@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "title": "Manager NPM",
+    "description": "Quét, phân tích và quản lý các dự án Node.js/npm trên máy"
+  },
+  "common": {
+    "close": "Đóng",
+    "cancel": "Huỷ",
+    "confirm": "Xác nhận",
+    "loading": "Đang tải…"
+  },
+  "nav": {
+    "brand": "Manager NPM",
+    "skipToContent": "Bỏ qua tới nội dung",
+    "mainNavigation": "Điều hướng chính",
+    "openMenu": "Mở menu",
+    "projects": "Dự án",
+    "designSystem": "Design system"
+  },
+  "theme": {
+    "label": "Giao diện",
+    "light": "Sáng",
+    "dark": "Tối",
+    "system": "Theo hệ thống",
+    "presets": {
+      "pinterest": "Pinterest"
+    }
+  },
+  "locale": {
+    "label": "Ngôn ngữ"
+  },
+  "home": {
+    "title": "Dự án",
+    "emptyTitle": "Chưa có dữ liệu",
+    "emptyDescription": "Danh sách dự án Node.js quét được trên máy sẽ hiện ở đây khi ScannerModule (backend) hoàn thành.",
+    "viewDesignSystem": "Xem design system"
+  }
+}

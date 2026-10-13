@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "title": "Manager NPM",
+    "description": "Scan, analyze and manage the Node.js/npm projects on this machine"
+  },
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "brand": "Manager NPM",
+    "skipToContent": "Skip to content",
+    "mainNavigation": "Main navigation",
+    "openMenu": "Open menu",
+    "projects": "Projects",
+    "designSystem": "Design system"
+  },
+  "theme": {
+    "label": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "presets": {
+      "pinterest": "Pinterest"
+    }
+  },
+  "locale": {
+    "label": "Language"
+  },
+  "home": {
+    "title": "Projects",
+    "emptyTitle": "No data yet",
+    "emptyDescription": "Node.js projects found on this machine will show up here once the ScannerModule (backend) is done.",
+    "viewDesignSystem": "View design system"
+  }
+}
