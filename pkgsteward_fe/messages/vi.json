@@ -200,6 +200,34 @@
         "emptyDescription": "Cài package bằng npm, pnpm hoặc yarn với cờ -g rồi quét lại để thấy ở đây.",
         "action": "Quét lại"
       }
+    },
+    "overlays": {
+      "title": "Lớp nổi",
+      "description": "Tooltip và menu nổi trên trang, bo góc 8–16px; chỉ lớp nổi mới có bóng.",
+      "tooltip": {
+        "title": "Tooltip",
+        "description": "Rê chuột hoặc focus vào nút để xem. Nút chỉ có icon luôn cần tooltip.",
+        "copyPath": "Sao chép đường dẫn",
+        "rescan": "Quét lại",
+        "rescanHint": "Bỏ kết quả cũ và quét lại toàn bộ thư mục"
+      },
+      "dropdown": {
+        "title": "DropdownMenu",
+        "description": "Đủ các loại mục: thường, có phím tắt, checkbox, radio, menu con, disabled và destructive.",
+        "trigger": "Tuỳ chọn dự án",
+        "openFolder": "Mở thư mục",
+        "copyPath": "Sao chép đường dẫn",
+        "exportReport": "Xuất báo cáo",
+        "showDev": "Hiện devDependencies",
+        "showPeer": "Hiện peerDependencies",
+        "sortBy": "Sắp xếp theo",
+        "sort": {
+          "name": "Tên",
+          "size": "Dung lượng"
+        },
+        "runScript": "Chạy script",
+        "deleteNodeModules": "Xoá node_modules…"
+      }
     }
   }
 }

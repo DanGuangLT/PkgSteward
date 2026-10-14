@@ -200,6 +200,34 @@
         "emptyDescription": "Install a package with npm, pnpm or yarn using the -g flag, then rescan to see it here.",
         "action": "Rescan"
       }
+    },
+    "overlays": {
+      "title": "Floating layers",
+      "description": "Tooltips and menus float above the page with 8–16px corners; only floating layers cast a shadow.",
+      "tooltip": {
+        "title": "Tooltip",
+        "description": "Hover or focus a button to see it. Icon-only buttons always need a tooltip.",
+        "copyPath": "Copy path",
+        "rescan": "Rescan",
+        "rescanHint": "Discard previous results and rescan the whole folder"
+      },
+      "dropdown": {
+        "title": "DropdownMenu",
+        "description": "Every item type: plain, with shortcut, checkbox, radio, submenu, disabled and destructive.",
+        "trigger": "Project options",
+        "openFolder": "Open folder",
+        "copyPath": "Copy path",
+        "exportReport": "Export report",
+        "showDev": "Show devDependencies",
+        "showPeer": "Show peerDependencies",
+        "sortBy": "Sort by",
+        "sort": {
+          "name": "Name",
+          "size": "Size"
+        },
+        "runScript": "Run script",
+        "deleteNodeModules": "Delete node_modules…"
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import { ActionsSection } from "./_components/actions-section"
 import { ColorSection } from "./_components/color-section"
 import { DataSection } from "./_components/data-section"
 import { FormsSection } from "./_components/forms-section"
+import { OverlaysSection } from "./_components/overlays-section"
 import { ShapeSection } from "./_components/shape-section"
 import { TypographySection } from "./_components/typography-section"
 
@@ -25,6 +26,7 @@ const SECTIONS = [
   { id: "actions", Section: ActionsSection },
   { id: "forms", Section: FormsSection },
   { id: "data", Section: DataSection },
+  { id: "overlays", Section: OverlaysSection },
 ] as const
 
 /** Style guide sống: token + component đọc thẳng từ theme đang chọn. */
