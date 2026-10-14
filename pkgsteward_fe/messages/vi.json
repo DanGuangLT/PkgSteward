@@ -111,6 +111,44 @@
           "success": "Mới nhất"
         }
       }
+    },
+    "forms": {
+      "title": "Nhập liệu",
+      "description": "Ô nhập cao 44px; khi focus có viền trong 2px và vòng ngoài 4px màu xanh. Nhấn Tab để xem.",
+      "input": {
+        "title": "Input và Label",
+        "description": "Trạng thái mặc định, disabled và không hợp lệ (aria-invalid).",
+        "defaultLabel": "Tìm package",
+        "placeholder": "Ví dụ: react",
+        "disabledLabel": "Thư mục dự án",
+        "invalidLabel": "Phiên bản",
+        "invalidMessage": "Phiên bản không hợp lệ. Dùng dạng 1.2.3 hoặc khoảng như ^1.2.0."
+      },
+      "checkbox": {
+        "title": "Checkbox",
+        "description": "Ô đã chọn dùng màu chữ, không dùng đỏ.",
+        "legend": "Chọn mục cần xoá"
+      },
+      "select": {
+        "title": "Select",
+        "description": "Size default và sm, có nhóm, mục bị khoá và trạng thái disabled.",
+        "managerLabel": "Trình quản lý gói",
+        "installed": "Đã cài trên máy",
+        "notInstalled": "Chưa cài",
+        "nodeLabel": "Phiên bản Node.js",
+        "nodePlaceholder": "Chọn phiên bản",
+        "projectManagerLabel": "Trình quản lý gói của dự án"
+      },
+      "toggleGroup": {
+        "title": "ToggleGroup (filter chip)",
+        "description": "Chip bo tròn, đảo màu khi được chọn. Dùng để lọc danh sách.",
+        "filterLabel": "Lọc dependency",
+        "typeLabel": "Loại dependency",
+        "managerLabel": "Trình quản lý gói",
+        "all": "Tất cả",
+        "outdated": "Cần cập nhật",
+        "vulnerable": "Có lỗ hổng"
+      }
     }
   }
 }

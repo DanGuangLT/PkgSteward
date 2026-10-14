@@ -111,6 +111,44 @@
           "success": "Up to date"
         }
       }
+    },
+    "forms": {
+      "title": "Forms",
+      "description": "Inputs are 44px tall; on focus they get a 2px inner border and a 4px blue outer ring. Press Tab to see it.",
+      "input": {
+        "title": "Input and Label",
+        "description": "Default, disabled and invalid (aria-invalid) states.",
+        "defaultLabel": "Search packages",
+        "placeholder": "e.g. react",
+        "disabledLabel": "Project folder",
+        "invalidLabel": "Version",
+        "invalidMessage": "Invalid version. Use 1.2.3 or a range like ^1.2.0."
+      },
+      "checkbox": {
+        "title": "Checkbox",
+        "description": "Checked boxes use the text color, not red.",
+        "legend": "Select items to delete"
+      },
+      "select": {
+        "title": "Select",
+        "description": "Sizes default and sm, with groups, a locked item and the disabled state.",
+        "managerLabel": "Package manager",
+        "installed": "Installed on this machine",
+        "notInstalled": "Not installed",
+        "nodeLabel": "Node.js version",
+        "nodePlaceholder": "Choose a version",
+        "projectManagerLabel": "Project package manager"
+      },
+      "toggleGroup": {
+        "title": "ToggleGroup (filter chip)",
+        "description": "Pill-shaped chips that invert when selected. Used to filter lists.",
+        "filterLabel": "Filter dependencies",
+        "typeLabel": "Dependency type",
+        "managerLabel": "Package manager",
+        "all": "All",
+        "outdated": "Outdated",
+        "vulnerable": "Vulnerable"
+      }
     }
   }
 }
