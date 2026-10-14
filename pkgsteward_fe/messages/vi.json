@@ -84,6 +84,33 @@
         "title": "Bề rộng nội dung",
         "description": "Nội dung rộng tối đa 1280px, lề hai bên 16px trên mobile và 24px từ 640px trở lên."
       }
+    },
+    "actions": {
+      "title": "Nút và nhãn",
+      "description": "Nút cao 40px, bo 16px. Nhãn (badge) bo tròn, chữ 12px đậm.",
+      "buttons": {
+        "title": "Button",
+        "description": "Mỗi màn hình có tối đa một nút default (đỏ) cho hành động chính; hành động khác dùng secondary. Mỗi hàng gồm size sm, default, lg, icon-sm, icon, icon-lg và trạng thái disabled.",
+        "labels": {
+          "default": "Quét lại",
+          "secondary": "Xem chi tiết",
+          "outline": "Mở thư mục",
+          "ghost": "Bỏ qua",
+          "destructive": "Xoá",
+          "link": "Tìm hiểu thêm"
+        }
+      },
+      "badges": {
+        "title": "Badge",
+        "description": "Cho trạng thái ngắn gọn: phiên bản, loại dependency, lỗ hổng.",
+        "labels": {
+          "default": "Mới",
+          "secondary": "Đã cài",
+          "outline": "Tuỳ chọn",
+          "destructive": "Có lỗ hổng",
+          "success": "Mới nhất"
+        }
+      }
     }
   }
 }

@@ -84,6 +84,33 @@
         "title": "Content width",
         "description": "Content is at most 1280px wide, with 16px side gutters on mobile and 24px from 640px up."
       }
+    },
+    "actions": {
+      "title": "Buttons and badges",
+      "description": "Buttons are 40px tall with 16px corners. Badges are pill-shaped with 12px bold text.",
+      "buttons": {
+        "title": "Button",
+        "description": "Each screen has at most one default (red) button for its main action; everything else uses secondary. Each row shows sizes sm, default, lg, icon-sm, icon, icon-lg and the disabled state.",
+        "labels": {
+          "default": "Rescan",
+          "secondary": "View details",
+          "outline": "Open folder",
+          "ghost": "Skip",
+          "destructive": "Delete",
+          "link": "Learn more"
+        }
+      },
+      "badges": {
+        "title": "Badge",
+        "description": "For short statuses: versions, dependency types, vulnerabilities.",
+        "labels": {
+          "default": "New",
+          "secondary": "Installed",
+          "outline": "Optional",
+          "destructive": "Vulnerable",
+          "success": "Up to date"
+        }
+      }
     }
   }
 }

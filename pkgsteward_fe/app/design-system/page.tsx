@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 
+import { ActionsSection } from "./_components/actions-section"
 import { ColorSection } from "./_components/color-section"
 import { ShapeSection } from "./_components/shape-section"
 import { TypographySection } from "./_components/typography-section"
@@ -19,6 +20,7 @@ const SECTIONS = [
   { id: "colors", Section: ColorSection },
   { id: "typography", Section: TypographySection },
   { id: "shape", Section: ShapeSection },
+  { id: "actions", Section: ActionsSection },
 ] as const
 
 /** Style guide sống: token + component đọc thẳng từ theme đang chọn. */
