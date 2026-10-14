@@ -1,4 +1,4 @@
-# Monorepo Manager NPM — quy tắc chung. Chi tiết từng service nằm trong
+# Monorepo PkgSteward — quy tắc chung. Chi tiết từng service nằm trong
 # pkgsteward_be/.gitignore và pkgsteward_fe/.gitignore.
 
 # Dependencies

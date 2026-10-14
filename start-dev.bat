@@ -1,5 +1,5 @@
 @echo off
-rem Manager NPM - start the backend and the frontend in development mode (watch / hot reload).
+rem PkgSteward - start the backend and the frontend in development mode (watch / hot reload).
 rem Each app runs in its own window: press Ctrl+C there or close the window to stop it.
 setlocal
 
@@ -30,8 +30,8 @@ for %%D in ("%BE_DIR%" "%FE_DIR%") do (
   )
 )
 
-start "Manager NPM - backend (dev)" /D "%BE_DIR%" cmd /k "%BE_CMD%"
-start "Manager NPM - frontend (dev)" /D "%FE_DIR%" cmd /k "%FE_CMD%"
+start "PkgSteward - backend (dev)" /D "%BE_DIR%" cmd /k "%BE_CMD%"
+start "PkgSteward - frontend (dev)" /D "%FE_DIR%" cmd /k "%FE_CMD%"
 echo Backend and frontend are starting in development mode, each in its own window.
 exit /b 0
 

@@ -1,5 +1,5 @@
 @echo off
-rem Manager NPM - build the backend and the frontend, then start them in production mode.
+rem PkgSteward - build the backend and the frontend, then start them in production mode.
 rem Each app runs in its own window: press Ctrl+C there or close the window to stop it.
 setlocal
 
@@ -32,8 +32,8 @@ for %%D in ("%BE_DIR%" "%FE_DIR%") do (
   )
 )
 
-start "Manager NPM - backend (prod)" /D "%BE_DIR%" cmd /k "%BE_CMD%"
-start "Manager NPM - frontend (prod)" /D "%FE_DIR%" cmd /k "%FE_CMD%"
+start "PkgSteward - backend (prod)" /D "%BE_DIR%" cmd /k "%BE_CMD%"
+start "PkgSteward - frontend (prod)" /D "%FE_DIR%" cmd /k "%FE_CMD%"
 echo Backend and frontend are building, then starting in production mode, each in its own window.
 exit /b 0
 
