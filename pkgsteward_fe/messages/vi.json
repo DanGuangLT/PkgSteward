@@ -149,6 +149,57 @@
         "outdated": "Cần cập nhật",
         "vulnerable": "Có lỗ hổng"
       }
+    },
+    "data": {
+      "title": "Hiển thị dữ liệu",
+      "description": "Card, bảng, tab và các trạng thái đang tải, trống.",
+      "card": {
+        "title": "Card",
+        "description": "Nền kem, không viền, không bóng. Size default và sm.",
+        "outdated": "{count} cần cập nhật",
+        "summary": "{count} dependency trực tiếp",
+        "details": "Xem chi tiết",
+        "openFolder": "Mở thư mục",
+        "activeVersion": "Phiên bản đang dùng trên máy"
+      },
+      "table": {
+        "title": "Table",
+        "description": "Tiêu đề cột chữ đậm, mỗi dòng có viền mảnh. Bảng rộng thì cuộn ngang trong khung.",
+        "caption": "Dependency của demo-app (dữ liệu mẫu)",
+        "package": "Package",
+        "current": "Đang dùng",
+        "latest": "Mới nhất",
+        "status": "Trạng thái",
+        "statuses": {
+          "latest": "Mới nhất",
+          "outdated": "Cần cập nhật",
+          "vulnerable": "Có lỗ hổng"
+        }
+      },
+      "tabs": {
+        "title": "Tabs",
+        "description": "Variant line (mặc định) gạch chân đỏ dưới tab đang chọn; variant default có nền dạng viên thuốc.",
+        "label": "Trình quản lý gói",
+        "content": "Package cài global bằng {manager} sẽ hiện ở đây."
+      },
+      "progress": {
+        "title": "Progress",
+        "description": "Thanh tiến trình dùng màu chữ, không dùng đỏ.",
+        "queued": "Đang chờ quét",
+        "scanning": "Đang quét",
+        "done": "Đã quét xong"
+      },
+      "skeleton": {
+        "title": "Skeleton",
+        "description": "Giữ chỗ cho nội dung đang tải, cùng hình dạng với nội dung thật."
+      },
+      "empty": {
+        "title": "Empty",
+        "description": "Trạng thái trống nói rõ đây là gì, vì sao trống và làm gì tiếp.",
+        "emptyTitle": "Chưa có package global",
+        "emptyDescription": "Cài package bằng npm, pnpm hoặc yarn với cờ -g rồi quét lại để thấy ở đây.",
+        "action": "Quét lại"
+      }
     }
   }
 }

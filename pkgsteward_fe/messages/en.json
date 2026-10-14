@@ -149,6 +149,57 @@
         "outdated": "Outdated",
         "vulnerable": "Vulnerable"
       }
+    },
+    "data": {
+      "title": "Data display",
+      "description": "Cards, tables, tabs, and loading and empty states.",
+      "card": {
+        "title": "Card",
+        "description": "Cream background, no border, no shadow. Sizes default and sm.",
+        "outdated": "{count} outdated",
+        "summary": "{count, plural, one {# direct dependency} other {# direct dependencies}}",
+        "details": "View details",
+        "openFolder": "Open folder",
+        "activeVersion": "Version in use on this machine"
+      },
+      "table": {
+        "title": "Table",
+        "description": "Bold column headers and a hairline under each row. Wide tables scroll horizontally inside their frame.",
+        "caption": "demo-app dependencies (sample data)",
+        "package": "Package",
+        "current": "Current",
+        "latest": "Latest",
+        "status": "Status",
+        "statuses": {
+          "latest": "Up to date",
+          "outdated": "Outdated",
+          "vulnerable": "Vulnerable"
+        }
+      },
+      "tabs": {
+        "title": "Tabs",
+        "description": "The line variant (the default) underlines the active tab in red; the default variant uses a pill background.",
+        "label": "Package manager",
+        "content": "Packages installed globally with {manager} will show up here."
+      },
+      "progress": {
+        "title": "Progress",
+        "description": "Progress bars use the text color, not red.",
+        "queued": "Waiting to scan",
+        "scanning": "Scanning",
+        "done": "Scan complete"
+      },
+      "skeleton": {
+        "title": "Skeleton",
+        "description": "Placeholder for loading content, shaped like the real content."
+      },
+      "empty": {
+        "title": "Empty",
+        "description": "Empty states say what this is, why it's empty and what to do next.",
+        "emptyTitle": "No global packages yet",
+        "emptyDescription": "Install a package with npm, pnpm or yarn using the -g flag, then rescan to see it here.",
+        "action": "Rescan"
+      }
     }
   }
 }

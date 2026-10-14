@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 
 import { ActionsSection } from "./_components/actions-section"
 import { ColorSection } from "./_components/color-section"
+import { DataSection } from "./_components/data-section"
 import { FormsSection } from "./_components/forms-section"
 import { ShapeSection } from "./_components/shape-section"
 import { TypographySection } from "./_components/typography-section"
@@ -23,6 +24,7 @@ const SECTIONS = [
   { id: "shape", Section: ShapeSection },
   { id: "actions", Section: ActionsSection },
   { id: "forms", Section: FormsSection },
+  { id: "data", Section: DataSection },
 ] as const
 
 /** Style guide sống: token + component đọc thẳng từ theme đang chọn. */
