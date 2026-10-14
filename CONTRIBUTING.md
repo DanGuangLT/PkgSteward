@@ -1,6 +1,6 @@
-# Contributing to Manager NPM
+# Contributing to PkgSteward
 
-Thanks for your interest in Manager NPM! This guide explains how to set up the project, the rules every change must
+Thanks for your interest in PkgSteward! This guide explains how to set up the project, the rules every change must
 follow, and how to send a pull request.
 
 By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -17,14 +17,14 @@ For security issues, **do not open a public issue**: follow [SECURITY.md](SECURI
 Requirements: **Node.js 24** (see [`.nvmrc`](.nvmrc)) and **pnpm 11**. Windows 11 is the primary target.
 
 ```bash
-git clone https://github.com/<your-username>/Manager-NPM.git
-cd Manager-NPM
+git clone https://github.com/<your-username>/PkgSteward.git
+cd PkgSteward
 
-cd manager_npm_be && pnpm install && cp .env.example .env && cd ..
-cd manager_npm_fe && pnpm install && cd ..
+cd pkgsteward_be && pnpm install && cp .env.example .env && cd ..
+cd pkgsteward_fe && pnpm install && cd ..
 ```
 
-Run `pnpm dev` in `manager_npm_be/` (API on `http://localhost:8080/api/v1`) and in `manager_npm_fe/`
+Run `pnpm dev` in `pkgsteward_be/` (API on `http://localhost:8080/api/v1`) and in `pkgsteward_fe/`
 (UI on `http://localhost:3000`), or run `start-dev.bat` from the repository root to start both on Windows. The two
 apps are independent pnpm projects with their own lockfiles.
 
@@ -53,7 +53,7 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
 - **Tests must mock `execa` and the filesystem.** Never run real global commands (`npm -g`, `pnpm -g`, `yarn global`,
   `nvm install/use`, `corepack enable/use`) from tests or development scripts.
 
-### Backend conventions (`manager_npm_be/`)
+### Backend conventions (`pkgsteward_be/`)
 
 - One folder per feature: `src/<feature>/` with `dto/`, `entities/`, `interfaces/`, `<feature>.controller.ts`,
   `<feature>.service.ts`, `<feature>.module.ts`.
@@ -64,11 +64,11 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
 - Use the `@/` path alias for internal imports. Prettier: single quotes, trailing commas.
 - Names: files `kebab-case.<role>.ts`, classes `PascalCase`, interfaces prefixed with `I`.
 
-### Frontend conventions (`manager_npm_fe/`)
+### Frontend conventions (`pkgsteward_fe/`)
 
 - Colors, radii, font sizes and shadows come only from theme tokens (`bg-primary`, `text-muted-foreground`, …).
   ESLint rejects palette classes (`bg-red-500`), hex values in classes and `dark:` variants. Import `cn` from
-  `@/lib/utils`. See [`manager_npm_fe/README.md`](manager_npm_fe/README.md#theme-system).
+  `@/lib/utils`. See [`pkgsteward_fe/README.md`](pkgsteward_fe/README.md#theme-system).
 - Every user-facing string goes through next-intl. Add new keys to **both** `messages/vi.json` (default locale) and
   `messages/en.json`.
 - Prefer Server Components; keep client components small. API calls will go through a shared `lib/api/*` client

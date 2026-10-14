@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Manager NPM is in early development (pre-1.0). Security fixes are made on the latest `main` branch only.
+PkgSteward is in early development (pre-1.0). Security fixes are made on the latest `main` branch only.
 
 | Version | Supported |
 |---|---|
@@ -16,8 +16,8 @@ Manager NPM is in early development (pre-1.0). Security fixes are made on the la
 Report privately through one of these channels:
 
 1. **GitHub private vulnerability reporting** (preferred): open the repository's
-   [Security tab](https://github.com/LienThuan04/Manager-NPM/security) and click **Report a vulnerability**.
-2. **Email:** [lienthuan2004@gmail.com](mailto:lienthuan2004@gmail.com) with the subject `[Manager NPM security]`.
+   [Security tab](https://github.com/LienThuan04/PkgSteward/security) and click **Report a vulnerability**.
+2. **Email:** [lienthuan2004@gmail.com](mailto:lienthuan2004@gmail.com) with the subject `[PkgSteward security]`.
 
 Please include:
 
@@ -37,7 +37,7 @@ This is a side project maintained by one person, so timelines are best effort:
 
 ## Scope and threat model
 
-Manager NPM is a **local, single-user tool**. The API has **no authentication by design** and is meant to listen
+PkgSteward is a **local, single-user tool**. The API has **no authentication by design** and is meant to listen
 only on `localhost`. With that in mind, these are especially relevant:
 
 - Reading, deleting or modifying files **outside `SCAN_ROOT_PATHS`** (path traversal, symlink or junction escapes)
@@ -51,5 +51,5 @@ Usually out of scope:
 - Problems that only occur after the user exposes the API to a network (for example `HOST=0.0.0.0`); this
   configuration is not supported
 - Attacks that already require control of the user's account or shell on the machine
-- Known vulnerabilities in third-party dependencies with no demonstrated impact on Manager NPM
+- Known vulnerabilities in third-party dependencies with no demonstrated impact on PkgSteward
   (dependency updates are tracked by Dependabot; please report those upstream)

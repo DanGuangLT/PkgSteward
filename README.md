@@ -1,15 +1,15 @@
-# Manager NPM
+# PkgSteward
 
 **A local web app to scan, analyze and manage the Node.js / npm projects on your Windows machine.**
 
-[![CI](https://github.com/LienThuan04/Manager-NPM/actions/workflows/ci.yml/badge.svg)](https://github.com/LienThuan04/Manager-NPM/actions/workflows/ci.yml)
+[![CI](https://github.com/LienThuan04/PkgSteward/actions/workflows/ci.yml/badge.svg)](https://github.com/LienThuan04/PkgSteward/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 English · [Tiếng Việt](README.vi.md)
 
 ## Overview
 
-Manager NPM runs entirely on your own machine: a NestJS API and a Next.js web UI. It is meant to answer questions like
+PkgSteward runs entirely on your own machine: a NestJS API and a Next.js web UI. It is meant to answer questions like
 *"which projects do I have, what do they depend on, what is outdated, how much disk do their `node_modules` take?"*
 and to perform common chores (install/update packages, delete `node_modules`, switch package manager or Node.js
 versions) safely.
@@ -29,15 +29,15 @@ versions) safely.
 ### 1. Install
 
 ```bash
-git clone https://github.com/LienThuan04/Manager-NPM.git
-cd Manager-NPM
-cd manager_npm_be && pnpm install && cd ..
-cd manager_npm_fe && pnpm install && cd ..
+git clone https://github.com/LienThuan04/PkgSteward.git
+cd PkgSteward
+cd pkgsteward_be && pnpm install && cd ..
+cd pkgsteward_fe && pnpm install && cd ..
 ```
 
 ### 2. Configure
 
-Copy `manager_npm_be/.env.example` to `manager_npm_be/.env` and set `SCAN_ROOT_PATHS`. Main variables:
+Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PATHS`. Main variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -89,8 +89,8 @@ To run an app on its own, use the scripts below inside its folder.
 ## Project structure
 
 ```
-manager_npm_be/    Backend API (NestJS 11)
-manager_npm_fe/    Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
+pkgsteward_be/     Backend API (NestJS 11)
+pkgsteward_fe/     Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 start-dev.bat      Run both apps in development mode
 start-prod.bat     Build and run both apps in production mode
 ```
@@ -101,7 +101,7 @@ The two apps are independent pnpm projects, each with its own lockfile. There is
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-- Bug reports and feature requests: [GitHub Issues](https://github.com/LienThuan04/Manager-NPM/issues)
+- Bug reports and feature requests: [GitHub Issues](https://github.com/LienThuan04/PkgSteward/issues)
 - Security issues: **do not open a public issue**, see [SECURITY.md](SECURITY.md)
 
 ## License
@@ -110,7 +110,7 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and th
 
 ## Trademarks
 
-Manager NPM is an independent project. It is not affiliated with, endorsed by, or sponsored by npm, Inc. / GitHub,
+PkgSteward is an independent project. It is not affiliated with, endorsed by, or sponsored by npm, Inc. / GitHub,
 the OpenJS Foundation (Node.js), the pnpm or Yarn projects, Vercel (Next.js) or Pinterest, Inc. Product names are
 used only to describe compatibility. The frontend's default theme is inspired by Pinterest's public design language;
 it does not use Pinterest's logo or fonts.

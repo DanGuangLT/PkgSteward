@@ -1,15 +1,15 @@
-# Manager NPM
+# PkgSteward
 
 **Ứng dụng web chạy local để quét, phân tích và quản lý các dự án Node.js / npm trên máy Windows của bạn.**
 
-[![CI](https://github.com/LienThuan04/Manager-NPM/actions/workflows/ci.yml/badge.svg)](https://github.com/LienThuan04/Manager-NPM/actions/workflows/ci.yml)
+[![CI](https://github.com/LienThuan04/PkgSteward/actions/workflows/ci.yml/badge.svg)](https://github.com/LienThuan04/PkgSteward/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [English](README.md) · Tiếng Việt
 
 ## Giới thiệu
 
-Manager NPM chạy hoàn toàn trên máy của bạn: một API NestJS và giao diện web Next.js. Mục tiêu là trả lời các câu hỏi
+PkgSteward chạy hoàn toàn trên máy của bạn: một API NestJS và giao diện web Next.js. Mục tiêu là trả lời các câu hỏi
 như *"máy mình có những dự án nào, chúng phụ thuộc gì, gói nào đã cũ, `node_modules` chiếm bao nhiêu dung lượng?"*
 và làm các việc thường gặp (cài/cập nhật package, xoá `node_modules`, đổi phiên bản package manager hoặc Node.js)
 một cách an toàn.
@@ -29,15 +29,15 @@ một cách an toàn.
 ### 1. Cài đặt
 
 ```bash
-git clone https://github.com/LienThuan04/Manager-NPM.git
-cd Manager-NPM
-cd manager_npm_be && pnpm install && cd ..
-cd manager_npm_fe && pnpm install && cd ..
+git clone https://github.com/LienThuan04/PkgSteward.git
+cd PkgSteward
+cd pkgsteward_be && pnpm install && cd ..
+cd pkgsteward_fe && pnpm install && cd ..
 ```
 
 ### 2. Cấu hình
 
-Sao chép `manager_npm_be/.env.example` thành `manager_npm_be/.env` rồi điền `SCAN_ROOT_PATHS`. Các biến chính:
+Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền `SCAN_ROOT_PATHS`. Các biến chính:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -89,8 +89,8 @@ Muốn chạy riêng một ứng dụng, dùng các lệnh bên dưới trong th
 ## Cấu trúc thư mục
 
 ```
-manager_npm_be/    API backend (NestJS 11)
-manager_npm_fe/    Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
+pkgsteward_be/     API backend (NestJS 11)
+pkgsteward_fe/     Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 start-dev.bat      Chạy cả hai ứng dụng ở chế độ development
 start-prod.bat     Build và chạy cả hai ứng dụng ở chế độ production
 ```
@@ -101,7 +101,7 @@ Hai ứng dụng là hai dự án pnpm độc lập, mỗi bên có lockfile ri�
 
 Rất hoan nghênh đóng góp. Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.md) (tiếng Anh) và [Bộ quy tắc ứng xử](CODE_OF_CONDUCT.md).
 
-- Báo lỗi và đề xuất tính năng: [GitHub Issues](https://github.com/LienThuan04/Manager-NPM/issues)
+- Báo lỗi và đề xuất tính năng: [GitHub Issues](https://github.com/LienThuan04/PkgSteward/issues)
 - Lỗ hổng bảo mật: **không mở issue công khai**, xem [SECURITY.md](SECURITY.md)
 
 ## Giấy phép
@@ -110,7 +110,7 @@ Rất hoan nghênh đóng góp. Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.
 
 ## Thương hiệu
 
-Manager NPM là dự án độc lập, không liên kết, không được bảo trợ hay tài trợ bởi npm, Inc. / GitHub, OpenJS
+PkgSteward là dự án độc lập, không liên kết, không được bảo trợ hay tài trợ bởi npm, Inc. / GitHub, OpenJS
 Foundation (Node.js), dự án pnpm hay Yarn, Vercel (Next.js) hoặc Pinterest, Inc. Tên sản phẩm chỉ được dùng để mô tả
 khả năng tương thích. Theme mặc định của frontend lấy cảm hứng từ ngôn ngữ thiết kế công khai của Pinterest;
 dự án không dùng logo hay font của Pinterest.

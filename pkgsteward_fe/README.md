@@ -1,6 +1,6 @@
-# manager_npm_fe
+# pkgsteward_fe
 
-Frontend of **Manager NPM**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
+Frontend of **PkgSteward**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
 next-themes and next-intl.
 
 > [!NOTE]

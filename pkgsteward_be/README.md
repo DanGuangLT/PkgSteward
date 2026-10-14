@@ -1,6 +1,6 @@
-# manager_npm_be
+# pkgsteward_be
 
-Backend of **Manager NPM**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
+Backend of **PkgSteward**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
 machine. NestJS 11 + TypeScript.
 
 - Local and single-user: **no authentication / authorization and no database** (removed when the original
