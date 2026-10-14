@@ -46,8 +46,11 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
 
 - Use a **preview → execute** pair of endpoints. `execute` must require an explicit `confirm: true` and must be
   audit-logged. The UI must show the preview and ask for confirmation before calling `execute`.
+  Every preview reports a risk level (`low` / `medium` / `high`) with reasons; the higher the risk, the stricter the
+  confirmation (acknowledge each reason, then retype a confirmation text). The server recalculates risk on `execute`.
 - Every path from the client must be resolved with `path.resolve()` **and** `realpath` (to block symlink / junction
-  escapes) and must be inside `SCAN_ROOT_PATHS`.
+  escapes) and must be inside `SCAN_ROOT_PATHS` (`*` means every local fixed drive) and outside the built-in list of
+  protected system paths, which applies even when `*` is set.
 - Run external commands with `execa` using an **argument array** (never a shell string), with the
   `NPM_COMMAND_TIMEOUT_MS` timeout. Never retry a dangerous command automatically.
 - **Tests must mock `execa` and the filesystem.** Never run real global commands (`npm -g`, `pnpm -g`, `yarn global`,
