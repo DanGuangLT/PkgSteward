@@ -9,7 +9,7 @@ export default class SwaggerConfig {
     const logger = new Logger('SwaggerConfig');
     const configService: ConfigService = app.get(ConfigService);
     const config = new DocumentBuilder()
-      .setTitle('Manager NPM API')
+      .setTitle('PkgSteward API')
       .setDescription(
         'API backend cho ứng dụng quản lý dự án npm/Node.js local',
       )

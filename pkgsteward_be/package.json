@@ -1,7 +1,7 @@
 {
-  "name": "manager_npm_be",
+  "name": "pkgsteward_be",
   "version": "0.0.1",
-  "description": "Backend for Manager NPM - Local Node.js & NPM Project Manager",
+  "description": "Backend for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages",
   "author": {
     "name": "LianHarman (LienThuan04)",
     "email": "lienthuan2004@gmail.com",
@@ -11,13 +11,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LienThuan04/Manager-NPM.git",
-    "directory": "manager_npm_be"
+    "url": "git+https://github.com/LienThuan04/PkgSteward.git",
+    "directory": "pkgsteward_be"
   },
   "bugs": {
-    "url": "https://github.com/LienThuan04/Manager-NPM/issues"
+    "url": "https://github.com/LienThuan04/PkgSteward/issues"
   },
-  "homepage": "https://github.com/LienThuan04/Manager-NPM#readme",
+  "homepage": "https://github.com/LienThuan04/PkgSteward#readme",
   "engines": {
     "node": ">=24",
     "pnpm": ">=11"
