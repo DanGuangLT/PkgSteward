@@ -55,12 +55,8 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-/generated/prisma
 swagger.json
 /documentation
 
 # Swagger docs generated in dev (EXPORT_SWAGGER_API_JSON)
 /docs_API/
-
-# Local HTTPS certificates
-certs/
