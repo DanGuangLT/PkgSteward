@@ -7,15 +7,15 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report a bug!
-        **Do not report security vulnerabilities here.** Follow [SECURITY.md](https://github.com/LienThuan04/Manager-NPM/blob/main/SECURITY.md) instead.
+        **Do not report security vulnerabilities here.** Follow [SECURITY.md](https://github.com/LienThuan04/PkgSteward/blob/main/SECURITY.md) instead.
 
   - type: dropdown
     id: area
     attributes:
       label: Area
       options:
-        - Backend (manager_npm_be)
-        - Frontend (manager_npm_fe)
+        - Backend (pkgsteward_be)
+        - Frontend (pkgsteward_fe)
         - Documentation
         - CI / tooling
         - Other

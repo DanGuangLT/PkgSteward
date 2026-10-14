@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the suggestion! Please check the [roadmap](https://github.com/LienThuan04/Manager-NPM#roadmap) first:
-        many modules are already planned.
+        Thanks for the suggestion! Please search the [existing issues](https://github.com/LienThuan04/PkgSteward/issues) first:
+        your idea may already be tracked.
 
   - type: dropdown
     id: area

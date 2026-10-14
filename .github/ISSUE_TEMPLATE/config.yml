@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/LienThuan04/Manager-NPM/security/advisories/new
+    url: https://github.com/LienThuan04/PkgSteward/security/advisories/new
     about: Please report security issues privately, never in a public issue.
   - name: Contributing guide
-    url: https://github.com/LienThuan04/Manager-NPM/blob/main/CONTRIBUTING.md
+    url: https://github.com/LienThuan04/PkgSteward/blob/main/CONTRIBUTING.md
     about: How to set up the project and send a pull request.

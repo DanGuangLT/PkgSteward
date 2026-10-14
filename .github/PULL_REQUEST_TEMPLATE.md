@@ -17,8 +17,8 @@ Closes #
 
 ## Checklist
 
-- [ ] Backend changed: `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm test:e2e` pass in `manager_npm_be/`
-- [ ] Frontend changed: `pnpm lint` and `pnpm build` pass in `manager_npm_fe/` (plus `pnpm theme:check` for style changes and `pnpm i18n:check` for message changes)
+- [ ] Backend changed: `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm test:e2e` pass in `pkgsteward_be/`
+- [ ] Frontend changed: `pnpm lint` and `pnpm build` pass in `pkgsteward_fe/` (plus `pnpm theme:check` for style changes and `pnpm i18n:check` for message changes)
 - [ ] New UI strings are added to both `messages/vi.json` and `messages/en.json`
 - [ ] Destructive or machine-wide actions use preview → confirm, paths stay inside `SCAN_ROOT_PATHS`, and tests mock `execa` / the filesystem
 - [ ] Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
