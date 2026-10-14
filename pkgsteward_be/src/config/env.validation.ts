@@ -55,7 +55,7 @@ export class EnvironmentVariables {
   @Type(() => Number)
   @IsInt({ message: 'NPM_COMMAND_TIMEOUT_MS must be an integer' })
   @IsOptional()
-  NPM_COMMAND_TIMEOUT_MS?: number = 120000;
+  NPM_COMMAND_TIMEOUT_MS?: number = 3600000;
 }
 
 export const validateEnv = (config: Record<string, unknown>) => {
