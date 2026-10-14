@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: manager_npm_be
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: manager_npm_be/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pnpm lint` runs ESLint with --fix: fail if it had to change anything.
+      - name: Lint
+        run: |
+          pnpm lint
+          git diff --exit-code
+
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:e2e
+
+  frontend:
+    name: Frontend (lint, checks, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: manager_npm_fe
+    steps:
+      - uses: actions/checkout@v7
+
+      # Uses the "packageManager" version pinned in manager_npm_fe/package.json.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: manager_npm_fe/package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: manager_npm_fe/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm theme:check
+      - run: pnpm i18n:check
+      - run: pnpm build
