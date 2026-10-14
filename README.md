@@ -111,7 +111,7 @@ Copy `manager_npm_be/.env.example` to `.env`. Main variables:
 | | `pnpm lint` | ESLint |
 | | `pnpm build` | Production build |
 | | `pnpm theme:check` | Check WCAG AA contrast of the theme tokens |
-| | `pnpm i18n:check` | Check that `messages/en.json` and `messages/vi.json` have the same keys |
+| | `pnpm i18n:check` | Compare each locale's keys with the default locale (`vi`): extra keys fail, missing keys only warn |
 
 ## Project structure
 

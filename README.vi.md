@@ -111,7 +111,7 @@ Sao chép `manager_npm_be/.env.example` thành `.env`. Các biến chính:
 | | `pnpm lint` | ESLint |
 | | `pnpm build` | Build production |
 | | `pnpm theme:check` | Kiểm tra độ tương phản WCAG AA của theme |
-| | `pnpm i18n:check` | Kiểm tra `messages/en.json` và `messages/vi.json` có cùng bộ key |
+| | `pnpm i18n:check` | So key của từng ngôn ngữ với ngôn ngữ mặc định (`vi`): thừa key báo lỗi, thiếu key chỉ cảnh báo |
 
 ## Cấu trúc thư mục
 
