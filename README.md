@@ -42,9 +42,9 @@ Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PAT
 | Variable | Default | Purpose |
 |---|---|---|
 | `MODE` | `development` | `development` enables Swagger |
-| `HOST`, `PORT` | `localhost`, `8080` | Listen address |
+| `HOST`, `PORT` | `localhost`, `24681` | Listen address |
 | `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | URL prefix, e.g. `/api/v1` |
-| `LIST_ORIGIN_CORS` | `http://localhost:3000` | Frontend origin allowed by CORS |
+| `LIST_ORIGIN_CORS` | `http://localhost:24680` | Frontend origin allowed by CORS |
 | `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan, or `*` for every local fixed drive; also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `4` | Maximum folder depth below each scan root (below each drive root for `*`) |
 | `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout for npm / pnpm / Yarn commands |
@@ -66,9 +66,9 @@ scripts install dependencies first. The commands they run are set at the top of 
 
 | | URL |
 |---|---|
-| Web UI | http://localhost:3000 |
-| API | http://localhost:8080/api/v1 |
-| Swagger (development only) | http://localhost:8080/swagger |
+| Web UI | http://localhost:24680 |
+| API | http://localhost:24681/api/v1 |
+| Swagger (development only) | http://localhost:24681/swagger |
 
 To run an app on its own, use the scripts below inside its folder.
 

@@ -42,9 +42,9 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `MODE` | `development` | `development` bật Swagger |
-| `HOST`, `PORT` | `localhost`, `8080` | Địa chỉ lắng nghe |
+| `HOST`, `PORT` | `localhost`, `24681` | Địa chỉ lắng nghe |
 | `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | Tiền tố URL, ví dụ `/api/v1` |
-| `LIST_ORIGIN_CORS` | `http://localhost:3000` | Origin của frontend được CORS cho phép |
+| `LIST_ORIGIN_CORS` | `http://localhost:24680` | Origin của frontend được CORS cho phép |
 | `SCAN_ROOT_PATHS` | *(trống)* | Các thư mục gốc để quét, phân cách bằng dấu phẩy, hoặc `*` để quét mọi ổ đĩa cố định; đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `4` | Độ sâu tối đa khi quét |
 | `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
@@ -66,9 +66,9 @@ tự cài dependencies trước. Lệnh mà script chạy được khai báo ở
 
 | | URL |
 |---|---|
-| Giao diện web | http://localhost:3000 |
-| API | http://localhost:8080/api/v1 |
-| Swagger (chỉ development) | http://localhost:8080/swagger |
+| Giao diện web | http://localhost:24680 |
+| API | http://localhost:24681/api/v1 |
+| Swagger (chỉ development) | http://localhost:24681/swagger |
 
 Muốn chạy riêng một ứng dụng, dùng các lệnh bên dưới trong thư mục của nó.
 

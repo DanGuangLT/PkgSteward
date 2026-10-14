@@ -24,8 +24,8 @@ cd pkgsteward_be && pnpm install && cp .env.example .env && cd ..
 cd pkgsteward_fe && pnpm install && cd ..
 ```
 
-Run `pnpm dev` in `pkgsteward_be/` (API on `http://localhost:8080/api/v1`) and in `pkgsteward_fe/`
-(UI on `http://localhost:3000`), or run `start-dev.bat` from the repository root to start both on Windows. The two
+Run `pnpm dev` in `pkgsteward_be/` (API on `http://localhost:24681/api/v1`) and in `pkgsteward_fe/`
+(UI on `http://localhost:24680`), or run `start-dev.bat` from the repository root to start both on Windows. The two
 apps are independent pnpm projects with their own lockfiles.
 
 pnpm 11 only runs dependency build scripts that are listed in each app's `pnpm-workspace.yaml` (`allowBuilds`).

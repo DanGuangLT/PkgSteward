@@ -43,7 +43,7 @@ body:
       label: Steps to reproduce
       placeholder: |
         1. Start the backend with `pnpm dev`
-        2. Open http://localhost:3000
+        2. Open http://localhost:24680
         3. ...
     validations:
       required: true
