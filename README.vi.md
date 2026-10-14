@@ -47,7 +47,7 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Origin của frontend được CORS cho phép |
 | `SCAN_ROOT_PATHS` | *(trống)* | Các thư mục gốc để quét, phân cách bằng dấu phẩy, hoặc `*` để quét mọi ổ đĩa cố định; đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `4` | Độ sâu tối đa khi quét |
-| `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
+| `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
 
 > [!IMPORTANT]
 > API không có xác thực theo thiết kế. Giữ `HOST=localhost`, không mở API ra mạng.

@@ -40,7 +40,7 @@ Full list in `.env.example`.
 | `EXPORT_SWAGGER_API_JSON` | `true` | Export `docs_API/swagger.json` in development (this folder is not committed) |
 | `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan, or `*` for every local fixed drive; also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `4` | Maximum folder depth below each scan root (below each drive root for `*`) |
-| `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout for npm / pnpm / Yarn commands |
+| `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout for npm / pnpm / Yarn commands |
 
 ## Documentation
 

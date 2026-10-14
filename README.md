@@ -47,7 +47,7 @@ Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PAT
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Frontend origin allowed by CORS |
 | `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan, or `*` for every local fixed drive; also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `4` | Maximum folder depth below each scan root (below each drive root for `*`) |
-| `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout for npm / pnpm / Yarn commands |
+| `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout for npm / pnpm / Yarn commands |
 
 > [!IMPORTANT]
 > The API has no authentication by design. Keep `HOST=localhost` and do not expose it to a network.
