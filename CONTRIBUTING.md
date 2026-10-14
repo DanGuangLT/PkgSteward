@@ -8,8 +8,6 @@ For security issues, **do not open a public issue**: follow [SECURITY.md](SECURI
 
 ## Before you start
 
-- The project is in **early development**: most feature modules are planned, not built yet
-  (see the [roadmap](README.md#roadmap)).
 - For anything larger than a small fix, **open an issue first** so we can agree on the approach.
 - Good first contributions: documentation, tests, accessibility and translation fixes, bug reports with clear
   reproduction steps.
@@ -27,7 +25,8 @@ cd manager_npm_fe && pnpm install && cd ..
 ```
 
 Run `pnpm dev` in `manager_npm_be/` (API on `http://localhost:8080/api/v1`) and in `manager_npm_fe/`
-(UI on `http://localhost:3000`). The two apps are independent pnpm projects with their own lockfiles.
+(UI on `http://localhost:3000`), or run `start-dev.bat` from the repository root to start both on Windows. The two
+apps are independent pnpm projects with their own lockfiles.
 
 pnpm 11 only runs dependency build scripts that are listed in each app's `pnpm-workspace.yaml` (`allowBuilds`).
 If you add a dependency that needs a build script, add it there.
