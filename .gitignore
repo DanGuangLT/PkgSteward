@@ -4,12 +4,25 @@
 # Dependencies
 node_modules/
 
+# Build output
+dist/
+.next/
+
+# Tests & coverage
+coverage/
+playwright-report/
+test-results/
+
 # Env thật — chỉ commit file mẫu
 .env
 .env.*
 !.env.example
 
+# Swagger JSON tự sinh của backend (EXPORT_SWAGGER_API_JSON)
+manager_npm_be/docs_API/
+
 # Logs
+logs/
 *.log
 
 # OS
