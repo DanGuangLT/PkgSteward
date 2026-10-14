@@ -9,9 +9,6 @@ machine. NestJS 11 + TypeScript.
 - Safety rules: dangerous operations (deleting files, changing global versions, switching Node.js) use a
   `preview` → `execute` pair; every path coming from the client must be inside `SCAN_ROOT_PATHS`.
 
-Feature modules (scanner, projects, npm runner, file operations, disk usage, global packages, package manager and
-Node.js versions) are planned; see the [root README](../README.md#roadmap).
-
 ## Run
 
 Requirements: Node 24, pnpm 11.
@@ -47,5 +44,5 @@ Full list in `.env.example`.
 
 ## Documentation
 
-- Project overview, setup and roadmap: [`README.md`](../README.md)
+- Project overview and setup: [`README.md`](../README.md)
 - Contributing guide: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
