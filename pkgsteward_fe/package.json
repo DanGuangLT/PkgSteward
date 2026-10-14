@@ -22,9 +22,9 @@
     "pnpm": ">=11"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 24680",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 24680",
     "lint": "eslint",
     "theme:check": "node scripts/check-theme-contrast.mjs",
     "i18n:check": "node scripts/check-messages.mjs"

@@ -13,7 +13,7 @@ Requirements: Node 24, pnpm 11.
 
 ```bash
 pnpm install
-pnpm dev        # http://localhost:3000
+pnpm dev        # http://localhost:24680
 ```
 
 | Command | What it does |
