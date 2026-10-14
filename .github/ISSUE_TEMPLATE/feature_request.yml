@@ -1,0 +1,68 @@
+name: Feature request
+description: Suggest an idea or an improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please check the [roadmap](https://github.com/LienThuan04/Manager-NPM#roadmap) first:
+        many modules are already planned.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scanner (find projects)
+        - Projects (dependencies, outdated, vulnerabilities)
+        - npm runner (install / update / scripts)
+        - File operations (delete node_modules, files, projects)
+        - Disk usage
+        - Global packages
+        - Package manager versions
+        - Node.js versions (nvm-windows)
+        - UI / theme / i18n
+        - Documentation / tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what makes it hard today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety impact
+      description: |
+        Does the feature delete files, change global packages or versions, or affect the whole machine?
+        If yes, describe what the preview → confirm step should show.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues and the roadmap.
+          required: true
+        - label: The feature fits a local, single-user tool (no accounts, no database, no remote server).
+          required: true
