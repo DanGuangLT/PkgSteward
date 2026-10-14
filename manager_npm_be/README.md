@@ -1,46 +1,51 @@
 # manager_npm_be
 
-Backend của **Manager NPM**: công cụ chạy local để quét, phân tích và quản lý
-các dự án Node.js/npm trên máy Windows. NestJS 11 + TypeScript.
+Backend of **Manager NPM**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
+machine. NestJS 11 + TypeScript.
 
-- Chạy local, một người dùng: **không có xác thực/phân quyền, không có
-  database** (đã loại bỏ khi dọn khung base-auth gốc). Dữ liệu là trạng thái
-  filesystem tại thời điểm gọi API.
-- API: `http://localhost:8080/api/v1`. Swagger (khi `MODE=development`):
-  `http://localhost:8080/swagger`.
-- Quy tắc an toàn: thao tác nguy hiểm (xoá file, đổi version global, đổi Node)
-  đi theo cặp `preview` → `execute`; mọi path từ client phải nằm trong
-  `SCAN_ROOT_PATHS`.
+- Local and single-user: **no authentication / authorization and no database** (removed when the original
+  base-auth scaffold was cleaned up). Data is the state of the filesystem at the time of each request.
+- API: `http://localhost:8080/api/v1`. Swagger (when `MODE=development`): `http://localhost:8080/swagger`.
+- Safety rules: dangerous operations (deleting files, changing global versions, switching Node.js) use a
+  `preview` → `execute` pair; every path coming from the client must be inside `SCAN_ROOT_PATHS`.
 
-## Chạy
+Feature modules (scanner, projects, npm runner, file operations, disk usage, global packages, package manager and
+Node.js versions) are planned; see the [root README](../README.md#roadmap).
 
-Yêu cầu: Node 24, pnpm 11.
+## Run
+
+Requirements: Node 24, pnpm 11.
 
 ```bash
 pnpm install
-# tạo .env từ .env.example, điền SCAN_ROOT_PATHS
+# create .env from .env.example and set SCAN_ROOT_PATHS
 pnpm dev
 ```
 
-| Lệnh | Việc |
+| Command | What it does |
 |---|---|
-| `pnpm dev` | Chạy dev, tự reload (`nest start --watch`) |
-| `pnpm lint` | ESLint (có `--fix`) |
-| `pnpm build` | Build ra `dist/` |
-| `pnpm start:prod` | Chạy bản build |
-| `pnpm test` / `pnpm test:e2e` | Unit test / e2e test |
+| `pnpm dev` | Start in watch mode (`nest start --watch`) |
+| `pnpm lint` | ESLint (with `--fix`) |
+| `pnpm build` | Compile to `dist/` |
+| `pnpm start:prod` | Run the compiled build |
+| `pnpm test` / `pnpm test:e2e` | Unit / end-to-end tests |
 
-## Biến môi trường chính
+## Main environment variables
 
-Đầy đủ trong `.env.example`.
+Full list in `.env.example`.
 
-| Biến | Mặc định | Ý nghĩa |
+| Variable | Default | Purpose |
 |---|---|---|
-| `MODE` | `development` | `development` bật Swagger |
-| `HOST`, `PORT` | `localhost`, `8080` | Địa chỉ lắng nghe |
-| `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | URL dạng `/api/v1` |
-| `LIST_ORIGIN_CORS` | `http://localhost:3000` | Origin của frontend được phép gọi |
-| `EXPORT_SWAGGER_API_JSON` | `true` | Xuất `docs_API/swagger.json` khi dev (thư mục này không commit) |
-| `SCAN_ROOT_PATHS` | (trống) | Các thư mục gốc để quét, phân cách bằng dấu phẩy; đồng thời là allowlist path |
-| `MAX_SCAN_DEPTH` | `4` | Độ sâu tối đa khi quét |
-| `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout khi chạy lệnh npm/pnpm/yarn |
+| `MODE` | `development` | `development` enables Swagger |
+| `HOST`, `PORT` | `localhost`, `8080` | Listen address |
+| `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | URL prefix, e.g. `/api/v1` |
+| `LIST_ORIGIN_CORS` | `http://localhost:3000` | Frontend origin allowed by CORS |
+| `EXPORT_SWAGGER_API_JSON` | `true` | Export `docs_API/swagger.json` in development (this folder is not committed) |
+| `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan; also the path allowlist |
+| `MAX_SCAN_DEPTH` | `4` | Maximum folder depth when scanning |
+| `NPM_COMMAND_TIMEOUT_MS` | `120000` | Timeout for npm / pnpm / Yarn commands |
+
+## Documentation
+
+- Project overview, setup and roadmap: [`README.md`](../README.md)
+- Contributing guide: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
