@@ -52,6 +52,38 @@
         "text": "Text colors",
         "lines": "Borders, focus and overlay"
       }
+    },
+    "typography": {
+      "title": "Typography",
+      "description": "Hierarchy comes from size and weight, not color. The main typeface is Inter.",
+      "sample": "Scan and clean up the Node.js projects on this machine",
+      "monoNote": "Only for command logs, paths and version numbers"
+    },
+    "shape": {
+      "title": "Shape and spacing",
+      "description": "Corner radius, shadow, spacing and content width shared by every screen.",
+      "radius": {
+        "title": "Corner radius",
+        "description": "The whole scale derives from --radius (16px): change that one variable and every corner follows.",
+        "sm": "Tooltips, menu items",
+        "md": "Buttons, inputs, cards",
+        "xl": "Modals, large cards",
+        "full": "Chips, avatars, icon buttons"
+      },
+      "shadow": {
+        "title": "Shadow",
+        "description": "Cards sit flat. Only modals and floating layers (menus, selects) cast a shadow.",
+        "none": "Card: no shadow",
+        "modal": "Modal: shadow-modal"
+      },
+      "spacing": {
+        "title": "Spacing",
+        "description": "8px base step; 4px and 6px are for tight gaps inside chips. Sections are 32px apart on mobile, 48px on tablet and 64px on desktop."
+      },
+      "container": {
+        "title": "Content width",
+        "description": "Content is at most 1280px wide, with 16px side gutters on mobile and 24px from 640px up."
+      }
     }
   }
 }

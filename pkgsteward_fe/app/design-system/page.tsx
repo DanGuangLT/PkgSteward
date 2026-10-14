@@ -5,6 +5,8 @@ import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 
 import { ColorSection } from "./_components/color-section"
+import { ShapeSection } from "./_components/shape-section"
+import { TypographySection } from "./_components/typography-section"
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("designSystem")
@@ -13,7 +15,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // Thứ tự ở đây = thứ tự section trên trang và trong mục lục. `id` trùng với
 // id của section và với namespace con `designSystem.<id>` (có key `title`).
-const SECTIONS = [{ id: "colors", Section: ColorSection }] as const
+const SECTIONS = [
+  { id: "colors", Section: ColorSection },
+  { id: "typography", Section: TypographySection },
+  { id: "shape", Section: ShapeSection },
+] as const
 
 /** Style guide sống: token + component đọc thẳng từ theme đang chọn. */
 export default async function DesignSystemPage() {

@@ -52,6 +52,38 @@
         "text": "Màu chữ",
         "lines": "Viền, focus và lớp phủ"
       }
+    },
+    "typography": {
+      "title": "Chữ",
+      "description": "Thứ bậc tạo bằng cỡ chữ và độ đậm, không bằng màu. Font chính là Inter.",
+      "sample": "Quét và dọn dẹp dự án Node.js trên máy",
+      "monoNote": "Chỉ dùng cho log lệnh, đường dẫn và số phiên bản"
+    },
+    "shape": {
+      "title": "Hình khối và khoảng cách",
+      "description": "Bo góc, bóng, khoảng cách và bề rộng nội dung dùng chung cho mọi màn hình.",
+      "radius": {
+        "title": "Bo góc",
+        "description": "Cả thang suy ra từ biến --radius (16px): đổi một biến là mọi góc đổi theo.",
+        "sm": "Tooltip, mục trong menu",
+        "md": "Nút, ô nhập, card",
+        "xl": "Modal, card lớn",
+        "full": "Chip, avatar, nút icon"
+      },
+      "shadow": {
+        "title": "Bóng",
+        "description": "Card nằm phẳng. Chỉ modal và lớp nổi (menu, select) có bóng.",
+        "none": "Card: không bóng",
+        "modal": "Modal: shadow-modal"
+      },
+      "spacing": {
+        "title": "Khoảng cách",
+        "description": "Bước cơ sở 8px; 4px và 6px dành cho khoảng hẹp trong chip. Các section cách nhau 32px trên mobile, 48px trên tablet và 64px trên desktop."
+      },
+      "container": {
+        "title": "Bề rộng nội dung",
+        "description": "Nội dung rộng tối đa 1280px, lề hai bên 16px trên mobile và 24px từ 640px trở lên."
+      }
     }
   }
 }
