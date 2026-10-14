@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: manager_npm_be
+        working-directory: pkgsteward_be
     steps:
       - uses: actions/checkout@v7
 
@@ -31,7 +31,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: manager_npm_be/pnpm-lock.yaml
+          cache-dependency-path: pkgsteward_be/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -51,20 +51,20 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: manager_npm_fe
+        working-directory: pkgsteward_fe
     steps:
       - uses: actions/checkout@v7
 
-      # Uses the "packageManager" version pinned in manager_npm_fe/package.json.
+      # Uses the "packageManager" version pinned in pkgsteward_fe/package.json.
       - uses: pnpm/action-setup@v6
         with:
-          package_json_file: manager_npm_fe/package.json
+          package_json_file: pkgsteward_fe/package.json
 
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: manager_npm_fe/pnpm-lock.yaml
+          cache-dependency-path: pkgsteward_fe/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint

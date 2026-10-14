@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: /manager_npm_be
+    directory: /pkgsteward_be
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -12,7 +12,7 @@ updates:
       prefix: "chore(be)"
 
   - package-ecosystem: npm
-    directory: /manager_npm_fe
+    directory: /pkgsteward_fe
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

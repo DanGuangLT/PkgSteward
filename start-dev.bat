@@ -4,8 +4,8 @@ rem Each app runs in its own window: press Ctrl+C there or close the window to s
 setlocal
 
 rem ---- Settings ------------------------------------------------------------
-set "BE_DIR=%~dp0manager_npm_be"
-set "FE_DIR=%~dp0manager_npm_fe"
+set "BE_DIR=%~dp0pkgsteward_be"
+set "FE_DIR=%~dp0pkgsteward_fe"
 set "BE_CMD=pnpm dev"
 set "FE_CMD=pnpm dev"
 rem --------------------------------------------------------------------------

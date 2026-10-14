@@ -4,11 +4,11 @@ rem Each app runs in its own window: press Ctrl+C there or close the window to s
 setlocal
 
 rem ---- Settings ------------------------------------------------------------
-set "BE_DIR=%~dp0manager_npm_be"
-set "FE_DIR=%~dp0manager_npm_fe"
+set "BE_DIR=%~dp0pkgsteward_be"
+set "FE_DIR=%~dp0pkgsteward_fe"
 set "BE_CMD=pnpm build && pnpm start:prod"
 set "FE_CMD=pnpm build && pnpm start"
-rem Backend mode (Swagger is off in production). Overrides MODE from manager_npm_be\.env.
+rem Backend mode (Swagger is off in production). Overrides MODE from pkgsteward_be\.env.
 set "MODE=production"
 rem --------------------------------------------------------------------------
 

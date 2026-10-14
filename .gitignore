@@ -1,5 +1,5 @@
 # Monorepo Manager NPM — quy tắc chung. Chi tiết từng service nằm trong
-# manager_npm_be/.gitignore và manager_npm_fe/.gitignore.
+# pkgsteward_be/.gitignore và pkgsteward_fe/.gitignore.
 
 # Dependencies
 node_modules/
@@ -19,7 +19,7 @@ test-results/
 !.env.example
 
 # Swagger JSON tự sinh của backend (EXPORT_SWAGGER_API_JSON)
-manager_npm_be/docs_API/
+pkgsteward_be/docs_API/
 
 # Logs
 logs/
