@@ -26,7 +26,7 @@ export class EnvironmentVariables {
   @Type(() => Number)
   @IsInt({ message: 'PORT must be an integer' })
   @IsOptional()
-  PORT?: number = 8080;
+  PORT?: number = 24681;
 
   @IsString()
   @IsOptional()
@@ -38,7 +38,7 @@ export class EnvironmentVariables {
 
   @IsString()
   @IsOptional()
-  LIST_ORIGIN_CORS?: string = 'http://localhost:3000';
+  LIST_ORIGIN_CORS?: string = 'http://localhost:24680';
 
   @IsOptional()
   EXPORT_SWAGGER_API_JSON?: boolean | string = true;

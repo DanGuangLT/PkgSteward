@@ -33,7 +33,7 @@ async function bootstrap() {
   setupCors(app);
 
   const host = configService.get<string>('HOST') ?? 'localhost';
-  const port = configService.get<number>('PORT') ?? 8080;
+  const port = configService.get<number>('PORT') ?? 24681;
   const lanIp = Object.values(os.networkInterfaces())
     .flat()
     .find((iface) => iface?.family === 'IPv4' && !iface.internal)?.address;
