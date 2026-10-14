@@ -102,11 +102,18 @@ modifies any file.
 
 ## Pull request process
 
-1. Fork the repository and create a branch from `main`.
-2. Make your change with tests where it makes sense.
-3. Run the checks above.
-4. Open a pull request and fill in the template: what changed, why, how you tested it, screenshots for UI changes.
-5. A maintainer will review it. Please keep the discussion focused and be patient: this is a side project.
+Nobody pushes to `main` directly, including the maintainer's collaborators. Every change lands through a pull request.
+
+1. Fork the repository (or, if you were invited as a collaborator, work on your own branch) and create a branch from
+   the latest `main`.
+2. Make your change with tests where it makes sense. One pull request = one module or one focused change.
+3. Run the checks above and make sure CI is green.
+4. Open a pull request against `main` and fill in the template: what changed, why, how you tested it, screenshots for
+   UI changes, and what is still missing if the work is only part of a module (mark it as a draft).
+5. The maintainer is automatically requested for review (see [`.github/CODEOWNERS`](.github/CODEOWNERS)). Review covers
+   the diff, the CI result and a local run of the checks. A pull request is merged only after the maintainer
+   approves it.
+6. Address review comments by pushing more commits to the same branch; do not open a new pull request.
 
 ## License
 

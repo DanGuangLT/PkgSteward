@@ -11,6 +11,10 @@ Closes #
 - [ ] Documentation
 - [ ] Refactor / tooling / CI
 
+## Progress
+
+<!-- Module or feature this belongs to. What is done in this PR, and what is still missing (open it as a draft if unfinished)? -->
+
 ## How was it tested?
 
 <!-- Commands you ran, manual steps, screenshots for UI changes. -->
