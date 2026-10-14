@@ -1,5 +1,5 @@
 {
-  "name": "manager_npm_fe",
+  "name": "pkgsteward_fe",
   "version": "0.1.0",
   "author": {
     "name": "LianHarman (LienThuan04)",
@@ -10,13 +10,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LienThuan04/Manager-NPM.git",
-    "directory": "manager_npm_fe"
+    "url": "git+https://github.com/LienThuan04/PkgSteward.git",
+    "directory": "pkgsteward_fe"
   },
   "bugs": {
-    "url": "https://github.com/LienThuan04/Manager-NPM/issues"
+    "url": "https://github.com/LienThuan04/PkgSteward/issues"
   },
-  "homepage": "https://github.com/LienThuan04/Manager-NPM#readme",
+  "homepage": "https://github.com/LienThuan04/PkgSteward#readme",
   "engines": {
     "node": ">=24",
     "pnpm": ">=11"

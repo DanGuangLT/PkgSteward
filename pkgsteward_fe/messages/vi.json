@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "Manager NPM",
+    "title": "PkgSteward",
     "description": "Quét, phân tích và quản lý các dự án Node.js/npm trên máy"
   },
   "common": {
@@ -10,7 +10,7 @@
     "loading": "Đang tải…"
   },
   "nav": {
-    "brand": "Manager NPM",
+    "brand": "PkgSteward",
     "skipToContent": "Bỏ qua tới nội dung",
     "mainNavigation": "Điều hướng chính",
     "openMenu": "Mở menu",

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "Manager NPM",
+    "title": "PkgSteward",
     "description": "Scan, analyze and manage the Node.js/npm projects on this machine"
   },
   "common": {
@@ -10,7 +10,7 @@
     "loading": "Loading…"
   },
   "nav": {
-    "brand": "Manager NPM",
+    "brand": "PkgSteward",
     "skipToContent": "Skip to content",
     "mainNavigation": "Main navigation",
     "openMenu": "Open menu",
