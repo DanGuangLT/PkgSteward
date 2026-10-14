@@ -228,6 +228,28 @@
         "runScript": "Run script",
         "deleteNodeModules": "Delete node_modules…"
       }
+    },
+    "dangerous": {
+      "title": "Dangerous actions: Preview → Confirm",
+      "description": "Deleting files, changing global versions or switching Node.js always takes two steps. The UI never calls execute before the user has seen the preview.",
+      "steps": {
+        "preview": "Call the <code>preview</code> API to get the exact list of affected items.",
+        "dialog": "Show a confirmation dialog listing every item. Cancel uses secondary; the confirm button uses destructive.",
+        "execute": "Only after the user confirms, call <code>execute</code> with <code>confirm: true</code>."
+      },
+      "alertDialog": {
+        "title": "AlertDialog",
+        "description": "Demo only: no API call, nothing is actually deleted."
+      },
+      "demo": {
+        "trigger": "Clean up demo-app…",
+        "dialogTitle": "{count, plural, one {Delete # item?} other {Delete # items?}}",
+        "dialogDescription": "The folders below will be permanently deleted, freeing {size}. This can't be undone.",
+        "listLabel": "Items to delete",
+        "confirm": "{count, plural, one {Delete # item} other {Delete # items}}",
+        "toastTitle": "{count, plural, one {Deleted # item} other {Deleted # items}}",
+        "toastDescription": "This is a demo — no files were actually deleted."
+      }
     }
   }
 }

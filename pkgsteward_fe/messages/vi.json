@@ -228,6 +228,28 @@
         "runScript": "Chạy script",
         "deleteNodeModules": "Xoá node_modules…"
       }
+    },
+    "dangerous": {
+      "title": "Thao tác nguy hiểm: Preview → Confirm",
+      "description": "Xoá file, đổi phiên bản global hay đổi Node.js đều phải qua hai bước. Giao diện không bao giờ gọi execute khi người dùng chưa xem preview.",
+      "steps": {
+        "preview": "Gọi API <code>preview</code> để lấy đúng danh sách mục sẽ bị ảnh hưởng.",
+        "dialog": "Hiện hộp xác nhận liệt kê từng mục. Nút Huỷ dùng secondary, nút xác nhận dùng destructive.",
+        "execute": "Chỉ khi người dùng bấm xác nhận mới gọi <code>execute</code> với <code>confirm: true</code>."
+      },
+      "alertDialog": {
+        "title": "AlertDialog",
+        "description": "Bản demo: không gọi API và không xoá gì thật."
+      },
+      "demo": {
+        "trigger": "Dọn dẹp demo-app…",
+        "dialogTitle": "Xoá {count} mục?",
+        "dialogDescription": "Các thư mục dưới đây sẽ bị xoá vĩnh viễn, giải phóng {size}. Không thể hoàn tác.",
+        "listLabel": "Mục sẽ bị xoá",
+        "confirm": "Xoá {count} mục",
+        "toastTitle": "Đã xoá {count} mục",
+        "toastDescription": "Đây là bản demo, không có file nào bị xoá thật."
+      }
     }
   }
 }

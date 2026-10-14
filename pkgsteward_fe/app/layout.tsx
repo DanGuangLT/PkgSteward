@@ -5,6 +5,7 @@ import { getLocale, getTranslations } from "next-intl/server"
 
 import { TopNav } from "@/components/layout/top-nav"
 import { ThemeProvider } from "@/components/theme/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getThemePreset } from "@/lib/theme/get-theme-preset"
 import { cn } from "@/lib/utils"
@@ -57,6 +58,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               <main id="main-content" className="flex flex-1 flex-col">
                 {children}
               </main>
+              <Toaster />
             </TooltipProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
