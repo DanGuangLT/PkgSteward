@@ -3,11 +3,6 @@
 Frontend of **Manager NPM**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
 next-themes and next-intl.
 
-**Status:** the app shell is in place (top navigation, mobile menu, light/dark/system toggle, language switcher) with
-an empty home page. Feature screens and the backend API client (`lib/api/*`, `API_BASE_URL`) are planned; the
-`/design-system` showcase page is in progress (the navigation link currently returns 404). See the
-[root README](../README.md#roadmap).
-
 > [!NOTE]
 > Next.js 16 has breaking changes compared to older versions. The bundled docs live in
 > `node_modules/next/dist/docs/`.
