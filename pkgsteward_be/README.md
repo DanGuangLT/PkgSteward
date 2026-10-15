@@ -39,7 +39,7 @@ Full list in `.env.example`.
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Frontend origin allowed by CORS |
 | `EXPORT_SWAGGER_API_JSON` | `true` | Export `docs_API/swagger.json` in development (this folder is not committed) |
 | `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan, or `*` for every local fixed drive; also the path allowlist (system folders are always excluded) |
-| `MAX_SCAN_DEPTH` | `4` | Maximum folder depth below each scan root (below each drive root for `*`) |
+| `MAX_SCAN_DEPTH` | `0` | Maximum folder depth below each scan root (below each drive root for `*`); `0` means no limit |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout for npm / pnpm / Yarn commands |
 
 ## Documentation
