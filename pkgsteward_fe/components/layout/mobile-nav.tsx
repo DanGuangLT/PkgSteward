@@ -33,7 +33,7 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left">
         <SheetHeader>
-          <SheetTitle className="text-heading-lg text-primary">{t("brand")}</SheetTitle>
+          <SheetTitle className="text-heading-lg font-bold text-primary">{t("brand")}</SheetTitle>
         </SheetHeader>
         <nav aria-label={t("mainNavigation")} className="px-4">
           <NavLinks orientation="vertical" onNavigate={() => setOpen(false)} />
