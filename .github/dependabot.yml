@@ -5,7 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Keep type definitions on the Node.js major in .nvmrc (24).
+    ignore:
+      - dependency-name: "@types/node"
+        versions: [">=25"]
+    # A dependency joins the first group it matches, so nestjs comes first:
+    # all @nestjs/* packages update together, including majors.
     groups:
+      nestjs:
+        patterns: ["@nestjs/*"]
       minor-and-patch:
         update-types: [minor, patch]
     commit-message:
@@ -16,7 +24,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "@types/node"
+        versions: [">=25"]
     groups:
+      nestjs:
+        patterns: ["@nestjs/*"]
       minor-and-patch:
         update-types: [minor, patch]
     commit-message:
