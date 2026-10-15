@@ -33,7 +33,7 @@ export async function ShapeSection() {
         <ShowcaseItem
           title={t("radius.title")}
           description={t("radius.description")}
-          className="grid grid-cols-2 gap-6 sm:grid-cols-4"
+          className="grid grid-cols-2 items-start gap-6 sm:grid-cols-4"
         >
           {RADII.map((radius) => (
             <div key={radius.id} className="flex flex-col gap-2">
