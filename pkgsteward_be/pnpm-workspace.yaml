@@ -1,5 +1,7 @@
 allowBuilds:
   '@compodoc/compodoc': true
   '@nestjs/core': true
+  # Prebuilt binaries come from optionalDependencies; build script is only a fallback.
+  '@parcel/watcher': false
   '@scarf/scarf': true
   unrs-resolver: true
