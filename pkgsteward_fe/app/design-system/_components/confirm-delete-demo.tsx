@@ -79,7 +79,7 @@ export function ConfirmDeleteDemo() {
               key={item.path}
               className="flex items-baseline justify-between gap-4 text-body-sm"
             >
-              <span className="min-w-0 font-mono break-words text-foreground">
+              <span className="min-w-0 font-mono wrap-break-word text-foreground">
                 {item.path}
               </span>
               <span className="shrink-0 text-muted-foreground">
