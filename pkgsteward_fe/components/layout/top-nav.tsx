@@ -17,7 +17,7 @@ export async function TopNav() {
         <MobileNav />
         <Link
           href="/"
-          className="rounded-sm text-heading-md font-bold text-primary focus-ring"
+          className="rounded-sm text-heading-lg font-bold text-primary focus-ring"
         >
           {t("brand")}
         </Link>

@@ -34,5 +34,222 @@
     "emptyTitle": "Chưa có dữ liệu",
     "emptyDescription": "Danh sách dự án Node.js quét được trên máy sẽ hiện ở đây khi ScannerModule (backend) hoàn thành.",
     "viewDesignSystem": "Xem design system"
+  },
+  "designSystem": {
+    "metaTitle": "Design system · PkgSteward",
+    "title": "Design system",
+    "description": "Token và component dùng chung của giao diện. Mọi mẫu trên trang đọc thẳng từ theme đang chọn: đổi chế độ Sáng/Tối hoặc ngôn ngữ ở thanh trên là thấy ngay.",
+    "tocLabel": "Mục lục",
+    "colors": {
+      "title": "Màu sắc",
+      "description": "Các cặp nền/chữ của preset đang dùng, hiện song song ở hai chế độ. Component chỉ dùng tên token, không dùng mã màu.",
+      "light": "Chế độ sáng",
+      "dark": "Chế độ tối",
+      "groups": {
+        "surfaces": "Nền và bề mặt",
+        "actions": "Hành động",
+        "status": "Trạng thái",
+        "text": "Màu chữ",
+        "lines": "Viền, focus và lớp phủ"
+      }
+    },
+    "typography": {
+      "title": "Chữ",
+      "description": "Thứ bậc tạo bằng cỡ chữ và độ đậm, không bằng màu. Font chính là Inter.",
+      "sample": "Quét và dọn dẹp dự án Node.js trên máy",
+      "monoNote": "Chỉ dùng cho log lệnh, đường dẫn và số phiên bản"
+    },
+    "shape": {
+      "title": "Hình khối và khoảng cách",
+      "description": "Bo góc, bóng, khoảng cách và bề rộng nội dung dùng chung cho mọi màn hình.",
+      "radius": {
+        "title": "Bo góc",
+        "description": "Cả thang suy ra từ biến --radius (16px): đổi một biến là mọi góc đổi theo.",
+        "sm": "Tooltip, mục trong menu",
+        "md": "Nút, ô nhập, card",
+        "xl": "Modal, card lớn",
+        "full": "Chip, avatar, nút icon"
+      },
+      "shadow": {
+        "title": "Bóng",
+        "description": "Card nằm phẳng. Chỉ modal và lớp nổi (menu, select) có bóng.",
+        "none": "Card: không bóng",
+        "modal": "Modal: shadow-modal"
+      },
+      "spacing": {
+        "title": "Khoảng cách",
+        "description": "Bước cơ sở 8px; 4px và 6px dành cho khoảng hẹp trong chip. Các section cách nhau 32px trên mobile, 48px trên tablet và 64px trên desktop."
+      },
+      "container": {
+        "title": "Bề rộng nội dung",
+        "description": "Nội dung rộng tối đa 1280px, lề hai bên 16px trên mobile và 24px từ 640px trở lên."
+      }
+    },
+    "actions": {
+      "title": "Nút và nhãn",
+      "description": "Nút cao 40px, bo 16px. Nhãn (badge) bo tròn, chữ 12px đậm.",
+      "buttons": {
+        "title": "Button",
+        "description": "Mỗi màn hình có tối đa một nút default (đỏ) cho hành động chính; hành động khác dùng secondary. Mỗi hàng gồm size sm, default, lg, icon-sm, icon, icon-lg và trạng thái disabled.",
+        "labels": {
+          "default": "Quét lại",
+          "secondary": "Xem chi tiết",
+          "outline": "Mở thư mục",
+          "ghost": "Bỏ qua",
+          "destructive": "Xoá",
+          "link": "Tìm hiểu thêm"
+        }
+      },
+      "badges": {
+        "title": "Badge",
+        "description": "Cho trạng thái ngắn gọn: phiên bản, loại dependency, lỗ hổng.",
+        "labels": {
+          "default": "Mới",
+          "secondary": "Đã cài",
+          "outline": "Tuỳ chọn",
+          "destructive": "Có lỗ hổng",
+          "success": "Mới nhất"
+        }
+      }
+    },
+    "forms": {
+      "title": "Nhập liệu",
+      "description": "Ô nhập cao 44px; khi focus có viền trong 2px và vòng ngoài 4px màu xanh. Nhấn Tab để xem.",
+      "input": {
+        "title": "Input và Label",
+        "description": "Trạng thái mặc định, disabled và không hợp lệ (aria-invalid).",
+        "defaultLabel": "Tìm package",
+        "placeholder": "Ví dụ: react",
+        "disabledLabel": "Thư mục dự án",
+        "invalidLabel": "Phiên bản",
+        "invalidMessage": "Phiên bản không hợp lệ. Dùng dạng 1.2.3 hoặc khoảng như ^1.2.0."
+      },
+      "checkbox": {
+        "title": "Checkbox",
+        "description": "Ô đã chọn dùng màu chữ, không dùng đỏ.",
+        "legend": "Chọn mục cần xoá"
+      },
+      "select": {
+        "title": "Select",
+        "description": "Size default và sm, có nhóm, mục bị khoá và trạng thái disabled.",
+        "managerLabel": "Trình quản lý gói",
+        "installed": "Đã cài trên máy",
+        "notInstalled": "Chưa cài",
+        "nodeLabel": "Phiên bản Node.js",
+        "nodePlaceholder": "Chọn phiên bản",
+        "projectManagerLabel": "Trình quản lý gói của dự án"
+      },
+      "toggleGroup": {
+        "title": "ToggleGroup (filter chip)",
+        "description": "Chip bo tròn, đảo màu khi được chọn. Dùng để lọc danh sách.",
+        "filterLabel": "Lọc dependency",
+        "typeLabel": "Loại dependency",
+        "managerLabel": "Trình quản lý gói",
+        "all": "Tất cả",
+        "outdated": "Cần cập nhật",
+        "vulnerable": "Có lỗ hổng"
+      }
+    },
+    "data": {
+      "title": "Hiển thị dữ liệu",
+      "description": "Card, bảng, tab và các trạng thái đang tải, trống.",
+      "card": {
+        "title": "Card",
+        "description": "Nền card (màu kem ở chế độ sáng), không viền, không bóng. Size default và sm.",
+        "outdated": "{count} cần cập nhật",
+        "summary": "{count} dependency trực tiếp",
+        "details": "Xem chi tiết",
+        "openFolder": "Mở thư mục",
+        "activeVersion": "Phiên bản đang dùng trên máy"
+      },
+      "table": {
+        "title": "Table",
+        "description": "Tiêu đề cột chữ đậm, mỗi dòng có viền mảnh. Bảng rộng thì cuộn ngang trong khung.",
+        "caption": "Dependency của demo-app (dữ liệu mẫu)",
+        "package": "Package",
+        "current": "Đang dùng",
+        "latest": "Mới nhất",
+        "status": "Trạng thái",
+        "statuses": {
+          "latest": "Mới nhất",
+          "outdated": "Cần cập nhật",
+          "vulnerable": "Có lỗ hổng"
+        }
+      },
+      "tabs": {
+        "title": "Tabs",
+        "description": "Variant line (mặc định) gạch chân đỏ dưới tab đang chọn; variant default có nền dạng viên thuốc.",
+        "label": "Trình quản lý gói",
+        "content": "Package cài global bằng {manager} sẽ hiện ở đây."
+      },
+      "progress": {
+        "title": "Progress",
+        "description": "Thanh tiến trình dùng màu chữ, không dùng đỏ.",
+        "queued": "Đang chờ quét",
+        "scanning": "Đang quét",
+        "done": "Đã quét xong"
+      },
+      "skeleton": {
+        "title": "Skeleton",
+        "description": "Giữ chỗ cho nội dung đang tải, cùng hình dạng với nội dung thật."
+      },
+      "empty": {
+        "title": "Empty",
+        "description": "Trạng thái trống nói rõ đây là gì, vì sao trống và làm gì tiếp.",
+        "emptyTitle": "Chưa có package global",
+        "emptyDescription": "Cài package bằng npm, pnpm hoặc yarn với cờ -g rồi quét lại để thấy ở đây.",
+        "action": "Quét lại"
+      }
+    },
+    "overlays": {
+      "title": "Lớp nổi",
+      "description": "Tooltip và menu nổi trên trang, bo góc 8–16px; chỉ lớp nổi mới có bóng.",
+      "tooltip": {
+        "title": "Tooltip",
+        "description": "Rê chuột hoặc focus vào nút để xem. Nút chỉ có icon luôn cần tooltip.",
+        "copyPath": "Sao chép đường dẫn",
+        "rescan": "Quét lại",
+        "rescanHint": "Bỏ kết quả cũ và quét lại toàn bộ thư mục"
+      },
+      "dropdown": {
+        "title": "DropdownMenu",
+        "description": "Đủ các loại mục: thường, có phím tắt, checkbox, radio, menu con, disabled và destructive.",
+        "trigger": "Tuỳ chọn dự án",
+        "openFolder": "Mở thư mục",
+        "copyPath": "Sao chép đường dẫn",
+        "exportReport": "Xuất báo cáo",
+        "showDev": "Hiện devDependencies",
+        "showPeer": "Hiện peerDependencies",
+        "sortBy": "Sắp xếp theo",
+        "sort": {
+          "name": "Tên",
+          "size": "Dung lượng"
+        },
+        "runScript": "Chạy script",
+        "deleteNodeModules": "Xoá node_modules…"
+      }
+    },
+    "dangerous": {
+      "title": "Thao tác nguy hiểm: Preview → Confirm",
+      "description": "Xoá file, đổi phiên bản global hay đổi Node.js đều phải qua hai bước. Giao diện không bao giờ gọi execute khi người dùng chưa xem preview.",
+      "steps": {
+        "preview": "Gọi API <code>preview</code> để lấy đúng danh sách mục sẽ bị ảnh hưởng.",
+        "dialog": "Hiện hộp xác nhận liệt kê từng mục. Nút Huỷ dùng secondary, nút xác nhận dùng destructive.",
+        "execute": "Chỉ khi người dùng bấm xác nhận mới gọi <code>execute</code> với <code>confirm: true</code>."
+      },
+      "alertDialog": {
+        "title": "AlertDialog",
+        "description": "Bản demo: không gọi API và không xoá gì thật."
+      },
+      "demo": {
+        "trigger": "Dọn dẹp demo-app…",
+        "dialogTitle": "Xoá {count} mục?",
+        "dialogDescription": "Các thư mục dưới đây sẽ bị xoá vĩnh viễn, giải phóng {size}. Không thể hoàn tác.",
+        "listLabel": "Mục sẽ bị xoá",
+        "confirm": "Xoá {count} mục",
+        "toastTitle": "Đã xoá {count} mục",
+        "toastDescription": "Đây là bản demo, không có file nào bị xoá thật."
+      }
+    }
   }
 }

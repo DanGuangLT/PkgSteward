@@ -34,5 +34,222 @@
     "emptyTitle": "No data yet",
     "emptyDescription": "Node.js projects found on this machine will show up here once the ScannerModule (backend) is done.",
     "viewDesignSystem": "View design system"
+  },
+  "designSystem": {
+    "metaTitle": "Design system · PkgSteward",
+    "title": "Design system",
+    "description": "Shared tokens and components for the interface. Every sample reads straight from the active theme: switch Light/Dark or the language in the top bar to see it change.",
+    "tocLabel": "On this page",
+    "colors": {
+      "title": "Colors",
+      "description": "Background/foreground pairs of the active preset, shown side by side in both modes. Components use token names only, never color codes.",
+      "light": "Light mode",
+      "dark": "Dark mode",
+      "groups": {
+        "surfaces": "Backgrounds and surfaces",
+        "actions": "Actions",
+        "status": "Status",
+        "text": "Text colors",
+        "lines": "Borders, focus and overlay"
+      }
+    },
+    "typography": {
+      "title": "Typography",
+      "description": "Hierarchy comes from size and weight, not color. The main typeface is Inter.",
+      "sample": "Scan and clean up the Node.js projects on this machine",
+      "monoNote": "Only for command logs, paths and version numbers"
+    },
+    "shape": {
+      "title": "Shape and spacing",
+      "description": "Corner radius, shadow, spacing and content width shared by every screen.",
+      "radius": {
+        "title": "Corner radius",
+        "description": "The whole scale derives from --radius (16px): change that one variable and every corner follows.",
+        "sm": "Tooltips, menu items",
+        "md": "Buttons, inputs, cards",
+        "xl": "Modals, large cards",
+        "full": "Chips, avatars, icon buttons"
+      },
+      "shadow": {
+        "title": "Shadow",
+        "description": "Cards sit flat. Only modals and floating layers (menus, selects) cast a shadow.",
+        "none": "Card: no shadow",
+        "modal": "Modal: shadow-modal"
+      },
+      "spacing": {
+        "title": "Spacing",
+        "description": "8px base step; 4px and 6px are for tight gaps inside chips. Sections are 32px apart on mobile, 48px on tablet and 64px on desktop."
+      },
+      "container": {
+        "title": "Content width",
+        "description": "Content is at most 1280px wide, with 16px side gutters on mobile and 24px from 640px up."
+      }
+    },
+    "actions": {
+      "title": "Buttons and badges",
+      "description": "Buttons are 40px tall with 16px corners. Badges are pill-shaped with 12px bold text.",
+      "buttons": {
+        "title": "Button",
+        "description": "Each screen has at most one default (red) button for its main action; everything else uses secondary. Each row shows sizes sm, default, lg, icon-sm, icon, icon-lg and the disabled state.",
+        "labels": {
+          "default": "Rescan",
+          "secondary": "View details",
+          "outline": "Open folder",
+          "ghost": "Skip",
+          "destructive": "Delete",
+          "link": "Learn more"
+        }
+      },
+      "badges": {
+        "title": "Badge",
+        "description": "For short statuses: versions, dependency types, vulnerabilities.",
+        "labels": {
+          "default": "New",
+          "secondary": "Installed",
+          "outline": "Optional",
+          "destructive": "Vulnerable",
+          "success": "Up to date"
+        }
+      }
+    },
+    "forms": {
+      "title": "Forms",
+      "description": "Inputs are 44px tall; on focus they get a 2px inner border and a 4px blue outer ring. Press Tab to see it.",
+      "input": {
+        "title": "Input and Label",
+        "description": "Default, disabled and invalid (aria-invalid) states.",
+        "defaultLabel": "Search packages",
+        "placeholder": "e.g. react",
+        "disabledLabel": "Project folder",
+        "invalidLabel": "Version",
+        "invalidMessage": "Invalid version. Use 1.2.3 or a range like ^1.2.0."
+      },
+      "checkbox": {
+        "title": "Checkbox",
+        "description": "Checked boxes use the text color, not red.",
+        "legend": "Select items to delete"
+      },
+      "select": {
+        "title": "Select",
+        "description": "Sizes default and sm, with groups, a locked item and the disabled state.",
+        "managerLabel": "Package manager",
+        "installed": "Installed on this machine",
+        "notInstalled": "Not installed",
+        "nodeLabel": "Node.js version",
+        "nodePlaceholder": "Choose a version",
+        "projectManagerLabel": "Project package manager"
+      },
+      "toggleGroup": {
+        "title": "ToggleGroup (filter chip)",
+        "description": "Pill-shaped chips that invert when selected. Used to filter lists.",
+        "filterLabel": "Filter dependencies",
+        "typeLabel": "Dependency type",
+        "managerLabel": "Package manager",
+        "all": "All",
+        "outdated": "Outdated",
+        "vulnerable": "Vulnerable"
+      }
+    },
+    "data": {
+      "title": "Data display",
+      "description": "Cards, tables, tabs, and loading and empty states.",
+      "card": {
+        "title": "Card",
+        "description": "Card background (cream in light mode), no border, no shadow. Sizes default and sm.",
+        "outdated": "{count} outdated",
+        "summary": "{count, plural, one {# direct dependency} other {# direct dependencies}}",
+        "details": "View details",
+        "openFolder": "Open folder",
+        "activeVersion": "Version in use on this machine"
+      },
+      "table": {
+        "title": "Table",
+        "description": "Bold column headers and a hairline under each row. Wide tables scroll horizontally inside their frame.",
+        "caption": "demo-app dependencies (sample data)",
+        "package": "Package",
+        "current": "Current",
+        "latest": "Latest",
+        "status": "Status",
+        "statuses": {
+          "latest": "Up to date",
+          "outdated": "Outdated",
+          "vulnerable": "Vulnerable"
+        }
+      },
+      "tabs": {
+        "title": "Tabs",
+        "description": "The line variant (the default) underlines the active tab in red; the default variant uses a pill background.",
+        "label": "Package manager",
+        "content": "Packages installed globally with {manager} will show up here."
+      },
+      "progress": {
+        "title": "Progress",
+        "description": "Progress bars use the text color, not red.",
+        "queued": "Waiting to scan",
+        "scanning": "Scanning",
+        "done": "Scan complete"
+      },
+      "skeleton": {
+        "title": "Skeleton",
+        "description": "Placeholder for loading content, shaped like the real content."
+      },
+      "empty": {
+        "title": "Empty",
+        "description": "Empty states say what this is, why it's empty and what to do next.",
+        "emptyTitle": "No global packages yet",
+        "emptyDescription": "Install a package with npm, pnpm or yarn using the -g flag, then rescan to see it here.",
+        "action": "Rescan"
+      }
+    },
+    "overlays": {
+      "title": "Floating layers",
+      "description": "Tooltips and menus float above the page with 8–16px corners; only floating layers cast a shadow.",
+      "tooltip": {
+        "title": "Tooltip",
+        "description": "Hover or focus a button to see it. Icon-only buttons always need a tooltip.",
+        "copyPath": "Copy path",
+        "rescan": "Rescan",
+        "rescanHint": "Discard previous results and rescan the whole folder"
+      },
+      "dropdown": {
+        "title": "DropdownMenu",
+        "description": "Every item type: plain, with shortcut, checkbox, radio, submenu, disabled and destructive.",
+        "trigger": "Project options",
+        "openFolder": "Open folder",
+        "copyPath": "Copy path",
+        "exportReport": "Export report",
+        "showDev": "Show devDependencies",
+        "showPeer": "Show peerDependencies",
+        "sortBy": "Sort by",
+        "sort": {
+          "name": "Name",
+          "size": "Size"
+        },
+        "runScript": "Run script",
+        "deleteNodeModules": "Delete node_modules…"
+      }
+    },
+    "dangerous": {
+      "title": "Dangerous actions: Preview → Confirm",
+      "description": "Deleting files, changing global versions or switching Node.js always takes two steps. The UI never calls execute before the user has seen the preview.",
+      "steps": {
+        "preview": "Call the <code>preview</code> API to get the exact list of affected items.",
+        "dialog": "Show a confirmation dialog listing every item. Cancel uses secondary; the confirm button uses destructive.",
+        "execute": "Only after the user confirms, call <code>execute</code> with <code>confirm: true</code>."
+      },
+      "alertDialog": {
+        "title": "AlertDialog",
+        "description": "Demo only: no API call, nothing is actually deleted."
+      },
+      "demo": {
+        "trigger": "Clean up demo-app…",
+        "dialogTitle": "{count, plural, one {Delete # item?} other {Delete # items?}}",
+        "dialogDescription": "The folders below will be permanently deleted, freeing {size}. This can't be undone.",
+        "listLabel": "Items to delete",
+        "confirm": "{count, plural, one {Delete # item} other {Delete # items}}",
+        "toastTitle": "{count, plural, one {Deleted # item} other {Deleted # items}}",
+        "toastDescription": "This is a demo — no files were actually deleted."
+      }
+    }
   }
 }

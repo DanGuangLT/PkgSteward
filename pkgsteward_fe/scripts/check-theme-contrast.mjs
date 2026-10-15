@@ -30,6 +30,7 @@ const PAIRS = [
   ["input", "background", 3],
   ["ring", "background", 3],
   ["primary", "background", 3],
+  ["primary", "popover", 3],
 ]
 
 function parseBlocks(css) {
