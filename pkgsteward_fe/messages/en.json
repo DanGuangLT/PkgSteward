@@ -155,7 +155,7 @@
       "description": "Cards, tables, tabs, and loading and empty states.",
       "card": {
         "title": "Card",
-        "description": "Cream background, no border, no shadow. Sizes default and sm.",
+        "description": "Card background (cream in light mode), no border, no shadow. Sizes default and sm.",
         "outdated": "{count} outdated",
         "summary": "{count, plural, one {# direct dependency} other {# direct dependencies}}",
         "details": "View details",

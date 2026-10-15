@@ -155,7 +155,7 @@
       "description": "Card, bảng, tab và các trạng thái đang tải, trống.",
       "card": {
         "title": "Card",
-        "description": "Nền kem, không viền, không bóng. Size default và sm.",
+        "description": "Nền card (màu kem ở chế độ sáng), không viền, không bóng. Size default và sm.",
         "outdated": "{count} cần cập nhật",
         "summary": "{count} dependency trực tiếp",
         "details": "Xem chi tiết",
