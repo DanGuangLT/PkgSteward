@@ -46,7 +46,7 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 | `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | Tiền tố URL, ví dụ `/api/v1` |
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Origin của frontend được CORS cho phép |
 | `SCAN_ROOT_PATHS` | *(trống)* | Các thư mục gốc để quét, phân cách bằng dấu phẩy, hoặc `*` để quét mọi ổ đĩa cố định; đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
-| `MAX_SCAN_DEPTH` | `4` | Độ sâu tối đa khi quét |
+| `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
 
 > [!IMPORTANT]

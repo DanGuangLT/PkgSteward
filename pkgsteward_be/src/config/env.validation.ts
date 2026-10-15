@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Min,
   validateSync,
 } from 'class-validator';
 
@@ -47,10 +48,14 @@ export class EnvironmentVariables {
   @IsOptional()
   SCAN_ROOT_PATHS?: string;
 
+  // 0 = no depth limit
   @Type(() => Number)
   @IsInt({ message: 'MAX_SCAN_DEPTH must be an integer' })
+  @Min(0, {
+    message: 'MAX_SCAN_DEPTH must be 0 (no limit) or a positive integer',
+  })
   @IsOptional()
-  MAX_SCAN_DEPTH?: number = 4;
+  MAX_SCAN_DEPTH?: number = 0;
 
   @Type(() => Number)
   @IsInt({ message: 'NPM_COMMAND_TIMEOUT_MS must be an integer' })
