@@ -42,7 +42,7 @@ export async function ShapeSection() {
                 className={cn("size-20 border border-border bg-secondary", radius.className)}
               />
               <TokenName className="text-foreground">{radius.token}</TokenName>
-              <TokenName>{radius.scale}</TokenName>
+              <TokenName className="whitespace-nowrap">{radius.scale}</TokenName>
               <p className="text-body-sm">{t(`radius.${radius.id}`)}</p>
             </div>
           ))}
