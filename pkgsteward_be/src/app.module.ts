@@ -8,9 +8,10 @@ import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EnvConfigModule } from '@/core/env-config.module';
 import { ThrottlerConfigModule } from '@/core/throttler-config.module';
+import { AppPathsModule } from '@/core/app-paths/app-paths.module';
 
 @Module({
-  imports: [EnvConfigModule, ThrottlerConfigModule],
+  imports: [EnvConfigModule, ThrottlerConfigModule, AppPathsModule],
   controllers: [AppController],
   providers: [
     AppService,
