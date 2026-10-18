@@ -9,9 +9,15 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { EnvConfigModule } from '@/core/env-config.module';
 import { ThrottlerConfigModule } from '@/core/throttler-config.module';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
+import { PlatformModule } from '@/platform/platform.module';
 
 @Module({
-  imports: [EnvConfigModule, ThrottlerConfigModule, AppPathsModule],
+  imports: [
+    EnvConfigModule,
+    ThrottlerConfigModule,
+    AppPathsModule,
+    PlatformModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,
