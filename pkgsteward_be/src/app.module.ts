@@ -10,6 +10,7 @@ import { EnvConfigModule } from '@/core/env-config.module';
 import { ThrottlerConfigModule } from '@/core/throttler-config.module';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
 import { PlatformModule } from '@/platform/platform.module';
+import { PathGuardModule } from '@/core/path-guard/path-guard.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PlatformModule } from '@/platform/platform.module';
     ThrottlerConfigModule,
     AppPathsModule,
     PlatformModule,
+    PathGuardModule,
   ],
   controllers: [AppController],
   providers: [
