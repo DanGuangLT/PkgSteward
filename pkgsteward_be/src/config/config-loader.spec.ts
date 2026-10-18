@@ -1,12 +1,16 @@
 import 'reflect-metadata';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import path, { join } from 'path';
 import {
   loadAppConfig,
   mergeConfigSources,
   readSettingsFile,
 } from '@/config/config-loader';
+import {
+  findPackageRoot,
+  findSourceCheckoutDir,
+} from '@/core/app-paths/app-paths.util';
 
 describe('mergeConfigSources', () => {
   it('applies CLI over settings.json over env', () => {
@@ -121,19 +125,13 @@ describe('loadAppConfig', () => {
       loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } }),
     ).toThrow(/MAX_SCAN_DEPTH/);
   });
-  it('rejects a relative PKGSTEWARD_DATA_DIR before touching the disk', () => {
-    const readFile = jest.fn();
-    expect(() =>
-      loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: 'data' }, readFile }),
-    ).toThrow(/PKGSTEWARD_DATA_DIR must be an absolute path/);
-    expect(readFile).not.toHaveBeenCalled();
-  });
   it('reads settings.json from %LOCALAPPDATA%\\PkgSteward when no override is set', () => {
     const readFile = jest.fn(() => {
       throw Object.assign(new Error('nope'), { code: 'ENOENT' });
     });
     loadAppConfig({
       env: { LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' },
+      projectDir: null,
       platform: 'win32',
       homeDir: 'C:\\Users\\a',
       readFile,
@@ -141,5 +139,93 @@ describe('loadAppConfig', () => {
     expect(readFile).toHaveBeenCalledWith(
       'C:\\Users\\a\\AppData\\Local\\PkgSteward\\settings.json',
     );
+  });
+
+  describe('PKGSTEWARD_DATA_DIR resolution', () => {
+    const projectDir = 'D:\\Coding\\PkgSteward';
+    const enoent = () =>
+      jest.fn(() => {
+        throw Object.assign(new Error('nope'), { code: 'ENOENT' });
+      });
+    const winOptions = { platform: 'win32' as const, homeDir: 'C:\\Users\\a' };
+
+    it('resolves a relative PKGSTEWARD_DATA_DIR against the project folder', () => {
+      const readFile = enoent();
+      const config = loadAppConfig({
+        env: { PKGSTEWARD_DATA_DIR: '../PkgStewardLog' },
+        projectDir,
+        readFile,
+        ...winOptions,
+      });
+      expect(readFile).toHaveBeenCalledWith(
+        'D:\\Coding\\PkgStewardLog\\settings.json',
+      );
+      expect(config.PKGSTEWARD_DATA_DIR).toBe('D:\\Coding\\PkgStewardLog');
+    });
+    it.each([undefined, '', '   '])(
+      'defaults %p to a PkgStewardLog folder inside the project folder',
+      (value) => {
+        const readFile = enoent();
+        const config = loadAppConfig({
+          env: value === undefined ? {} : { PKGSTEWARD_DATA_DIR: value },
+          projectDir,
+          readFile,
+          ...winOptions,
+        });
+        expect(readFile).toHaveBeenCalledWith(
+          'D:\\Coding\\PkgSteward\\PkgStewardLog\\settings.json',
+        );
+        expect(config.PKGSTEWARD_DATA_DIR).toBe(
+          'D:\\Coding\\PkgSteward\\PkgStewardLog',
+        );
+      },
+    );
+    it('keeps an absolute PKGSTEWARD_DATA_DIR', () => {
+      const config = loadAppConfig({
+        env: { PKGSTEWARD_DATA_DIR: 'E:\\pkg-data' },
+        projectDir,
+        readFile: enoent(),
+        ...winOptions,
+      });
+      expect(config.PKGSTEWARD_DATA_DIR).toBe('E:\\pkg-data');
+    });
+    it.each(['C:data', '\\data', '/data', '\\\\server\\share'])(
+      'rejects %s before touching the disk',
+      (value) => {
+        const readFile = jest.fn();
+        expect(() =>
+          loadAppConfig({
+            env: { PKGSTEWARD_DATA_DIR: value },
+            projectDir,
+            readFile,
+            ...winOptions,
+          }),
+        ).toThrow(
+          /must be an absolute path .* or a path relative to the project folder/,
+        );
+        expect(readFile).not.toHaveBeenCalled();
+      },
+    );
+    it('rejects a relative PKGSTEWARD_DATA_DIR when there is no project folder', () => {
+      const readFile = jest.fn();
+      expect(() =>
+        loadAppConfig({
+          env: { PKGSTEWARD_DATA_DIR: 'logs' },
+          projectDir: null,
+          readFile,
+          ...winOptions,
+        }),
+      ).toThrow(/no project folder/);
+      expect(readFile).not.toHaveBeenCalled();
+    });
+    it('derives the project folder from the backend package location, not the cwd', () => {
+      const base = findSourceCheckoutDir(findPackageRoot(__dirname));
+      expect(base).not.toBeNull();
+      const readFile = enoent();
+      loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: 'x-data' }, readFile });
+      expect(readFile).toHaveBeenCalledWith(
+        path.join(path.resolve(base as string, 'x-data'), 'settings.json'),
+      );
+    });
   });
 });

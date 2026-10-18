@@ -7,6 +7,8 @@ import {
 } from '@/common/utils/path.util';
 import { SETTINGS_FILE_KEYS, validateEnv } from '@/config/env.validation';
 import {
+  findPackageRoot,
+  findSourceCheckoutDir,
   resolveDataDir,
   SETTINGS_FILE_NAME,
 } from '@/core/app-paths/app-paths.util';
@@ -83,16 +85,47 @@ export const readSettingsFile = (
   return parsed as ConfigSource;
 };
 
+// Dữ liệu runtime khi chạy từ mã nguồn nằm trong thư mục dự án (đã git-ignore).
+export const DEFAULT_DATA_DIR = 'PkgStewardLog';
+
 export interface ILoadAppConfigOptions {
   env: ConfigSource;
   cli?: ConfigSource; // D4: {} cho đến khi đóng gói npx (sau v1.0)
   platform?: NodeJS.Platform;
   homeDir?: string;
   readFile?: (filePath: string) => string;
+  // Thư mục dự án (repo root) để tính đường dẫn tương đối; null = bản cài đặt (không có).
+  projectDir?: string | null;
 }
 
 const nonBlank = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+
+// Tương đối thuần: win32 không bắt đầu bằng ổ đĩa hay dấu gạch chéo; posix không bắt đầu bằng /. Cho phép "..".
+const isPlainRelativePath = (value: string, platform: 'win32' | 'posix') =>
+  platform === 'win32'
+    ? !/^([A-Za-z]:|[\\/])/.test(value)
+    : !value.startsWith('/');
+
+const resolveDataDirOverride = (
+  raw: string | undefined,
+  projectDir: string | null,
+  pathPlatform: 'win32' | 'posix',
+): string | undefined => {
+  if (raw === undefined) return undefined;
+  if (isFullyQualifiedPath(raw, pathPlatform)) return raw;
+  if (!isPlainRelativePath(raw, pathPlatform)) {
+    throw new Error(
+      `Environment validation failed: PKGSTEWARD_DATA_DIR must be an absolute path (e.g. D:\\PkgStewardData) or a path relative to the project folder (e.g. ../PkgStewardLog) (got "${raw}")`,
+    );
+  }
+  if (projectDir === null) {
+    throw new Error(
+      `Environment validation failed: PKGSTEWARD_DATA_DIR "${raw}" is relative, but there is no project folder to resolve it against; use an absolute path`,
+    );
+  }
+  return pathApi(pathPlatform).resolve(projectDir, raw);
+};
 
 export const loadAppConfig = ({
   env,
@@ -100,18 +133,16 @@ export const loadAppConfig = ({
   platform = process.platform,
   homeDir = homedir(),
   readFile,
+  projectDir = findSourceCheckoutDir(findPackageRoot(__dirname)),
 }: ILoadAppConfigOptions) => {
   const pathPlatform = toPathPlatform(platform);
   // dataDir chỉ lấy từ CLI/env: settings.json nằm bên trong nó.
-  const override =
-    nonBlank(cli.PKGSTEWARD_DATA_DIR) ?? nonBlank(env.PKGSTEWARD_DATA_DIR);
-  if (override !== undefined && !isFullyQualifiedPath(override, pathPlatform)) {
-    throw new Error(
-      `Environment validation failed: PKGSTEWARD_DATA_DIR must be an absolute path (got "${override}")`,
-    );
-  }
+  const raw =
+    nonBlank(cli.PKGSTEWARD_DATA_DIR) ??
+    nonBlank(env.PKGSTEWARD_DATA_DIR) ??
+    (projectDir !== null ? DEFAULT_DATA_DIR : undefined);
   const dataDir = resolveDataDir({
-    override,
+    override: resolveDataDirOverride(raw, projectDir, pathPlatform),
     localAppData: nonBlank(env.LOCALAPPDATA),
     homeDir,
     platform,
@@ -120,5 +151,8 @@ export const loadAppConfig = ({
     pathApi(pathPlatform).join(dataDir, SETTINGS_FILE_NAME),
     readFile,
   );
-  return validateEnv(mergeConfigSources({ cli, settings, env }), pathPlatform);
+  const merged = mergeConfigSources({ cli, settings, env });
+  // ConfigService/AppPathsService phải thấy đúng thư mục tuyệt đối mà loader đã dùng.
+  merged.PKGSTEWARD_DATA_DIR = dataDir;
+  return validateEnv(merged, pathPlatform);
 };
