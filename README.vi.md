@@ -42,15 +42,19 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `MODE` | `development` | `development` bật Swagger |
-| `HOST`, `PORT` | `localhost`, `24681` | Địa chỉ lắng nghe |
+| `HOST`, `PORT` | `127.0.0.1`, `24681` | Địa chỉ lắng nghe; `HOST` chỉ nhận địa chỉ loopback (`127.0.0.1`, `localhost` hoặc `::1`) |
 | `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | Tiền tố URL, ví dụ `/api/v1` |
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Origin của frontend được CORS cho phép |
-| `SCAN_ROOT_PATHS` | *(trống)* | Các thư mục gốc để quét, phân cách bằng dấu phẩy, hoặc `*` để quét mọi ổ đĩa cố định; đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
+| `SCAN_ROOT_PATHS` | `*` | Các thư mục gốc (đường dẫn tuyệt đối, VD `D:\Projects`) để quét, phân cách bằng dấu phẩy, hoặc `*` (hay để trống) để quét mọi ổ đĩa cố định; `*` phải đứng một mình. Đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
+| `SCAN_TIMEOUT_MS` | `900000` | Giới hạn thời gian (ms) cho một lần quét (tối thiểu `1000`) |
+| `PKGSTEWARD_DATA_DIR` | *(trống)* | Thư mục dữ liệu runtime (log, cache, `settings.json`); trống = `%LOCALAPPDATA%\PkgSteward` |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
 
+Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
+
 > [!IMPORTANT]
-> API không có xác thực theo thiết kế. Giữ `HOST=localhost`, không mở API ra mạng.
+> API không có xác thực theo thiết kế. Giữ `HOST` là địa chỉ loopback (mặc định `127.0.0.1`), không mở API ra mạng.
 
 ### 3. Chạy
 

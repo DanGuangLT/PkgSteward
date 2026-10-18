@@ -34,13 +34,17 @@ Full list in `.env.example`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `MODE` | `development` | `development` enables Swagger |
-| `HOST`, `PORT` | `localhost`, `24681` | Listen address |
+| `HOST`, `PORT` | `127.0.0.1`, `24681` | Listen address; `HOST` must be a loopback address (`127.0.0.1`, `localhost` or `::1`) |
 | `GLOBAL_PREFIX`, `VERSION` | `api`, `1` | URL prefix, e.g. `/api/v1` |
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Frontend origin allowed by CORS |
-| `EXPORT_SWAGGER_API_JSON` | `true` | Export `docs_API/swagger.json` in development (this folder is not committed) |
-| `SCAN_ROOT_PATHS` | *(empty)* | Comma-separated root folders to scan, or `*` for every local fixed drive; also the path allowlist (system folders are always excluded) |
+| `EXPORT_SWAGGER_API_JSON` | `true` | `true` / `false`: export `docs_API/swagger.json` inside the backend folder in development (this folder is not committed) |
+| `SCAN_ROOT_PATHS` | `*` | Comma-separated absolute root folders to scan (e.g. `D:\Projects`), or `*` (also when empty) for every local fixed drive; `*` must be used alone. Also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `0` | Maximum folder depth below each scan root (below each drive root for `*`); `0` means no limit |
+| `SCAN_TIMEOUT_MS` | `900000` | Time limit for one scan in milliseconds (minimum `1000`) |
+| `PKGSTEWARD_DATA_DIR` | *(empty)* | Folder for runtime data (logs, cache, `settings.json`); empty means `%LOCALAPPDATA%\PkgSteward` |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout for npm / pnpm / Yarn commands |
+
+Values in settings.json inside the data folder override environment variables.
 
 ## Documentation
 
