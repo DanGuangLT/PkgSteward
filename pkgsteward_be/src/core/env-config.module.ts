@@ -1,4 +1,4 @@
-import { validateEnv } from '@/config/env.validation';
+import { loadAppConfig } from '@/config/config-loader';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -12,7 +12,7 @@ import { ConfigModule } from '@nestjs/config';
         '.env.local',
         '.env',
       ],
-      validate: validateEnv,
+      validate: (env) => loadAppConfig({ env }),
     }),
   ],
 })
