@@ -25,6 +25,9 @@ pkgsteward_be/docs_API/
 logs/
 *.log
 
+# Dữ liệu runtime khi chạy từ mã nguồn (PKGSTEWARD_DATA_DIR mặc định)
+/PkgStewardLog/
+
 # OS
 .DS_Store
 Thumbs.db

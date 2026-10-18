@@ -1,12 +1,38 @@
-import { plainToInstance, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   Min,
   validateSync,
 } from 'class-validator';
+import { isFullyQualifiedPath, toPathPlatform } from '@/common/utils/path.util';
+import type { PathPlatform } from '@/common/utils/path.util';
+import { parseScanRootPaths, SCAN_ALL_FIXED_DRIVES } from '@/config/scan-roots';
+
+// D6: API không có auth → chỉ lắng nghe trên loopback.
+export const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '::1'];
+
+// D4: khoá được phép trong settings.json = tên biến env, trừ PKGSTEWARD_DATA_DIR
+// (settings.json nằm ngay trong thư mục đó).
+export const SETTINGS_FILE_KEYS: readonly string[] = [
+  'MODE',
+  'HOST',
+  'PORT',
+  'GLOBAL_PREFIX',
+  'VERSION',
+  'LIST_ORIGIN_CORS',
+  'EXPORT_SWAGGER_API_JSON',
+  'SCAN_ROOT_PATHS',
+  'MAX_SCAN_DEPTH',
+  'SCAN_TIMEOUT_MS',
+  'NPM_COMMAND_TIMEOUT_MS',
+];
+
+const blankToUndefined = ({ value }: { value: unknown }) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
 
 export enum AppMode {
   Development = 'development',
@@ -20,9 +46,14 @@ export class EnvironmentVariables {
   @IsOptional()
   MODE?: AppMode = AppMode.Development;
 
-  @IsString()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsIn(LOOPBACK_HOSTS, {
+    message: 'HOST must be one of: localhost, 127.0.0.1, ::1 (loopback only)',
+  })
   @IsOptional()
-  HOST?: string = 'localhost';
+  HOST?: string = '127.0.0.1'; // C5: mặc định IPv4 loopback (vẫn nhận localhost / ::1)
 
   @Type(() => Number)
   @IsInt({ message: 'PORT must be an integer' })
@@ -44,9 +75,27 @@ export class EnvironmentVariables {
   @IsOptional()
   EXPORT_SWAGGER_API_JSON?: boolean | string = true;
 
+  // D5: trống hoặc không đặt = "*" (mọi ổ cố định); "*" đứng một mình và path tuyệt đối kiểm ở validatePathSettings.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() === ''
+      ? SCAN_ALL_FIXED_DRIVES
+      : value,
+  )
   @IsString()
   @IsOptional()
-  SCAN_ROOT_PATHS?: string;
+  SCAN_ROOT_PATHS?: string = SCAN_ALL_FIXED_DRIVES;
+
+  @Type(() => Number)
+  @IsInt({ message: 'SCAN_TIMEOUT_MS must be an integer' })
+  @Min(1000, { message: 'SCAN_TIMEOUT_MS must be at least 1000 (1 second)' })
+  @IsOptional()
+  SCAN_TIMEOUT_MS?: number = 900000;
+
+  // D3: thư mục dữ liệu runtime; không đặt = %LOCALAPPDATA%\PkgSteward.
+  @Transform(blankToUndefined)
+  @IsString()
+  @IsOptional()
+  PKGSTEWARD_DATA_DIR?: string;
 
   // 0 = no depth limit
   @Type(() => Number)
@@ -63,7 +112,40 @@ export class EnvironmentVariables {
   NPM_COMMAND_TIMEOUT_MS?: number = 360000;
 }
 
-export const validateEnv = (config: Record<string, unknown>) => {
+type FieldErrors = { field: string; messages: string[] }[];
+
+// Kiểm path phụ thuộc nền tảng (Windows cần "X:\"), nên không viết bằng decorator.
+const validatePathSettings = (
+  config: EnvironmentVariables,
+  platform: PathPlatform,
+): FieldErrors => {
+  const errors: FieldErrors = [];
+  if (typeof config.SCAN_ROOT_PATHS === 'string') {
+    try {
+      parseScanRootPaths(config.SCAN_ROOT_PATHS, platform);
+    } catch (error) {
+      errors.push({
+        field: 'SCAN_ROOT_PATHS',
+        messages: [(error as Error).message],
+      });
+    }
+  }
+  if (
+    typeof config.PKGSTEWARD_DATA_DIR === 'string' &&
+    !isFullyQualifiedPath(config.PKGSTEWARD_DATA_DIR, platform)
+  ) {
+    errors.push({
+      field: 'PKGSTEWARD_DATA_DIR',
+      messages: ['PKGSTEWARD_DATA_DIR must be an absolute path'],
+    });
+  }
+  return errors;
+};
+
+export const validateEnv = (
+  config: Record<string, unknown>,
+  platform: PathPlatform = toPathPlatform(),
+) => {
   const validatedConfig = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });
@@ -72,11 +154,13 @@ export const validateEnv = (config: Record<string, unknown>) => {
     skipMissingProperties: false,
   });
 
-  if (errors.length > 0) {
-    const errorMessages = errors.map((error) => ({
-      field: error.property,
-      messages: Object.values(error.constraints || {}),
-    }));
+  const errorMessages: FieldErrors = errors.map((error) => ({
+    field: error.property,
+    messages: Object.values(error.constraints || {}),
+  }));
+  errorMessages.push(...validatePathSettings(validatedConfig, platform));
+
+  if (errorMessages.length > 0) {
     throw new Error(
       `Environment validation failed: ${JSON.stringify(errorMessages)}`,
     );
