@@ -41,7 +41,7 @@ Full list in `.env.example`.
 | `SCAN_ROOT_PATHS` | `*` | Comma-separated absolute root folders to scan (e.g. `D:\Projects`), or `*` (also when empty) for every local fixed drive; `*` must be used alone. Also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `0` | Maximum folder depth below each scan root (below each drive root for `*`); `0` means no limit |
 | `SCAN_TIMEOUT_MS` | `900000` | Time limit for one scan in milliseconds (minimum `1000`) |
-| `PKGSTEWARD_DATA_DIR` | *(empty)* | Folder for runtime data (logs, cache, `settings.json`); empty means `%LOCALAPPDATA%\PkgSteward` |
+| `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Folder for runtime data (logs, cache, `settings.json`): an absolute path, or a path relative to the project folder. The default is a `PkgStewardLog` folder inside the project folder |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout for npm / pnpm / Yarn commands |
 
 Values in settings.json inside the data folder override environment variables.

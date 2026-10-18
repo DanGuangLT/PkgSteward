@@ -48,7 +48,7 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 | `SCAN_ROOT_PATHS` | `*` | Các thư mục gốc (đường dẫn tuyệt đối, VD `D:\Projects`) để quét, phân cách bằng dấu phẩy, hoặc `*` (hay để trống) để quét mọi ổ đĩa cố định; `*` phải đứng một mình. Đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
 | `SCAN_TIMEOUT_MS` | `900000` | Giới hạn thời gian (ms) cho một lần quét (tối thiểu `1000`) |
-| `PKGSTEWARD_DATA_DIR` | *(trống)* | Thư mục dữ liệu runtime (log, cache, `settings.json`); trống = `%LOCALAPPDATA%\PkgSteward` |
+| `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Thư mục dữ liệu runtime (log, cache, `settings.json`): đường dẫn tuyệt đối, hoặc tương đối tính từ thư mục gốc dự án. Mặc định là thư mục `PkgStewardLog` trong thư mục dự án |
 | `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
