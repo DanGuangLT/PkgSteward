@@ -3,6 +3,8 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import { PathGuardService } from '@/core/path-guard/path-guard.service';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -20,6 +22,13 @@ describe('AppController (e2e)', () => {
     if (app) {
       await app.close();
     }
+  });
+
+  it('wires the shared PathGuardService', () => {
+    const guard = app.get(PathGuardService);
+    expect(
+      guard.isInsideProtectedTree(app.get(AppPathsService).appInstallDir),
+    ).toBe(true);
   });
 
   it('/ (GET)', () => {

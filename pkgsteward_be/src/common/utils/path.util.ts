@@ -20,3 +20,28 @@ export const isFullyQualifiedPath = (
   platform === 'win32'
     ? WIN32_DRIVE_ABSOLUTE.test(value)
     : value.startsWith('/');
+
+// D10: chặn traversal — có đoạn ".." là từ chối luôn (không client hợp lệ nào gửi).
+export const hasTraversalSegment = (value: string): boolean =>
+  value.split(/[\\/]+/).some((segment) => segment === '..');
+
+/** Dạng để so sánh: resolve (bỏ "." và dấu "\" cuối), Windows thì chữ thường. Input phải tuyệt đối. */
+export const toComparable = (
+  absolutePath: string,
+  platform: PathPlatform,
+): string => {
+  const resolved = pathApi(platform).resolve(absolutePath);
+  return platform === 'win32' ? resolved.toLowerCase() : resolved;
+};
+
+/** true nếu `child` trùng hoặc nằm trong `parent` (cả hai đã qua toComparable). */
+export const isSameOrInside = (
+  child: string,
+  parent: string,
+  platform: PathPlatform,
+): boolean => {
+  if (child === parent) return true;
+  const sep = pathApi(platform).sep;
+  const prefix = parent.endsWith(sep) ? parent : parent + sep;
+  return child.startsWith(prefix);
+};
