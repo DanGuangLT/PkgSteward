@@ -5,6 +5,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { configureApp } from '@/config/configure-app';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -15,7 +16,8 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    configureApp(app);
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {
@@ -31,9 +33,9 @@ describe('AppController (e2e)', () => {
     ).toBe(true);
   });
 
-  it('/ (GET)', () => {
+  it('/api/v1 (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api/v1')
       .expect(200)
       .expect((res) => {
         expect(res.body).toMatchObject({

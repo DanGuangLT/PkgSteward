@@ -1,13 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '@/app.module';
-import { NestExpressApplication } from '@nestjs/platform-express';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
-import SwaggerConfig from '@/config/swagger.config';
-import { setupCors } from '@/config/cors.config';
-import { validationConfig } from '@/config/validation.config';
-import { setupAppConfig } from '@/config/app-setup.config';
-import * as os from 'os';
+import { configureApp } from '@/config/configure-app';
+
+// "::1" phải viết "[::1]" trong URL.
+const formatHostForUrl = (host: string) =>
+  host.includes(':') ? `[${host}]` : host;
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -18,36 +18,19 @@ async function bootstrap() {
   // Cho phép đóng app an toàn và giải phóng tài nguyên khi có tín hiệu terminate
   app.enableShutdownHooks();
 
-  if (configService.get<string>('MODE') === 'development') {
-    SwaggerConfig.setup(app);
-    logger.log('Swagger documentation is enabled in development mode');
-  }
+  const { globalPrefix, version, swaggerEnabled } = configureApp(app);
 
-  // Setup versioning (mặc định v1) và global prefix (mặc định api)
-  const { globalPrefix, version } = setupAppConfig(app);
-
-  // Custom Validation Pipe với format error chuẩn theo field
-  validationConfig(app);
-
-  // Setup CORS cho frontend Next.js kết nối
-  setupCors(app);
-
-  const host = configService.get<string>('HOST') ?? 'localhost';
+  const host = configService.get<string>('HOST') ?? '127.0.0.1';
   const port = configService.get<number>('PORT') ?? 24681;
-  const lanIp = Object.values(os.networkInterfaces())
-    .flat()
-    .find((iface) => iface?.family === 'IPv4' && !iface.internal)?.address;
 
   await app.listen(port, host);
 
+  const baseUrl = `http://${formatHostForUrl(host)}:${port}`;
   logger.log(
-    `Application is running on: http://${host}:${port}/${globalPrefix}/v${version}`,
+    `Application is running on: ${baseUrl}/${globalPrefix}/v${version}`,
   );
-  logger.log(`Swagger is running on: http://${host}:${port}/swagger`);
-  if (lanIp) {
-    logger.log(
-      `Application is also accessible on local network at: http://${lanIp}:${port}/${globalPrefix}/v${version}`,
-    );
+  if (swaggerEnabled) {
+    logger.log(`Swagger is running on: ${baseUrl}/swagger`);
   }
 }
 
