@@ -1,31 +1,58 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { existsSync, mkdtempSync, rmSync } from 'fs';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import request from 'supertest';
 import { AppModule } from '@/app.module';
 import { configureApp } from '@/config/configure-app';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import { createTestAppPaths } from './create-test-app-paths';
 
 describe('Host/Origin guard (e2e)', () => {
   let app: INestApplication<Server>;
   let port: number;
+  let tmpInstallDir: string;
 
   beforeAll(async () => {
+    tmpInstallDir = mkdtempSync(join(tmpdir(), 'pkgsteward-host-origin-e2e-'));
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(AppPathsService)
+      .useFactory({
+        factory: (configService: ConfigService) =>
+          createTestAppPaths(configService, tmpInstallDir),
+        inject: [ConfigService],
+      })
+      .compile();
     app = moduleFixture.createNestApplication();
+    app.get(ConfigService).set('EXPORT_SWAGGER_API_JSON', true);
     configureApp(app);
     await app.listen(0, '127.0.0.1');
     port = (app.getHttpServer().address() as AddressInfo).port;
   });
 
   afterAll(async () => {
-    if (app) await app.close();
+    try {
+      if (app) await app.close();
+    } finally {
+      if (tmpInstallDir)
+        rmSync(tmpInstallDir, { recursive: true, force: true });
+    }
   });
 
   const server = () => app.getHttpServer();
+
+  it('exports Swagger JSON inside the temporary installation directory', () => {
+    expect(existsSync(join(tmpInstallDir, 'docs_API', 'swagger.json'))).toBe(
+      true,
+    );
+  });
 
   it.each(['localhost', '127.0.0.1', '[::1]'])(
     'serves the API for Host %s:<port>',
@@ -67,6 +94,20 @@ describe('Host/Origin guard (e2e)', () => {
       .set('Host', `localhost:${port}`)
       .expect(200);
   });
+
+  it.each(['/swagger-json', '/swagger-yaml', '/api/v1/does-not-exist'])(
+    'rejects a foreign Host on %s',
+    (path) =>
+      request(server()).get(path).set('Host', 'evil.example:24681').expect(403),
+  );
+
+  it('rejects a foreign Host on OPTIONS before CORS', () =>
+    request(server())
+      .options('/api/v1')
+      .set('Host', 'evil.example:24681')
+      .set('Origin', 'http://localhost:24680')
+      .set('Access-Control-Request-Method', 'POST')
+      .expect(403));
 
   it('rejects a POST from a foreign Origin', () =>
     request(server())
@@ -111,6 +152,18 @@ describe('Host/Origin guard (e2e)', () => {
         expect(res.headers['access-control-allow-origin']).toBe(
           'http://localhost:24680',
         );
+        expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+      }));
+
+  it('does not allow a foreign Origin in CORS preflight', () =>
+    request(server())
+      .options('/api/v1')
+      .set('Host', `localhost:${port}`)
+      .set('Origin', 'http://evil.example')
+      .set('Access-Control-Request-Method', 'POST')
+      .expect(204)
+      .expect((res) => {
+        expect(res.headers['access-control-allow-origin']).toBeUndefined();
         expect(res.headers['access-control-allow-credentials']).toBeUndefined();
       }));
 });
