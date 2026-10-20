@@ -12,6 +12,6 @@ export const setupCors = (app: INestApplication) => {
   app.enableCors({
     origin: originCors ?? false, // Allow requests only from the specified origins in the environment variable LIST_ORIGIN_CORS. If not set, CORS is disabled.
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    credentials: true,
+    credentials: false, // Không có cookie/auth (D6)
   });
 };
