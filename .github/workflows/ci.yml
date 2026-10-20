@@ -70,4 +70,5 @@ jobs:
       - run: pnpm lint
       - run: pnpm theme:check
       - run: pnpm i18n:check
+      - run: pnpm test
       - run: pnpm build
