@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
@@ -10,7 +10,10 @@ import {
   SkipThrottleAll,
 } from '@/common/decorators/throttle.decorator';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
-import { ThrottlerConfigModule } from '@/core/throttler-config.module';
+import {
+  THROTTLER_NAMES,
+  ThrottlerConfigModule,
+} from '@/core/throttler-config.module';
 
 @Controller('t')
 class ProbeController {
@@ -21,13 +24,13 @@ class ProbeController {
 
   @PollingEndpoint()
   @Get('poll')
-  poll() {
+  poll(this: void) {
     return 'ok';
   }
 
   @SkipThrottleAll()
   @Get('skip')
-  skip() {
+  skip(this: void) {
     return 'ok';
   }
 }
@@ -66,5 +69,20 @@ describe('throttle decorators', () => {
 
   it.each(['/t/poll', '/t/skip'])('%s skips every throttler', async (path) =>
     expect((await hit(path, 30)).every((s) => s === 200)).toBe(true),
+  );
+
+  it.each(['poll', 'skip'] as const)(
+    '%s sets skip metadata for every configured throttler',
+    (handler) => {
+      const reflector = new Reflector();
+      for (const name of THROTTLER_NAMES) {
+        expect(
+          reflector.get<boolean>(
+            `THROTTLER:SKIP${name}`,
+            ProbeController.prototype[handler],
+          ),
+        ).toBe(true);
+      }
+    },
   );
 });
