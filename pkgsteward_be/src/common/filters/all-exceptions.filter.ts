@@ -84,7 +84,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method: request.method,
       path: request.url,
       statusCode,
-      message,
+      message: exception instanceof Error ? message : exception,
       code,
     };
     if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
@@ -101,11 +101,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
      */
     response.status(statusCode).json({
       statusCode,
-      message,
+      message:
+        statusCode >= HttpStatus.INTERNAL_SERVER_ERROR
+          ? 'Internal server error'
+          : message,
       code,
       timestamp: new Date().toISOString(),
       path: request.url,
-      ...(details !== undefined && { details }),
+      ...(statusCode < HttpStatus.INTERNAL_SERVER_ERROR &&
+        details !== undefined && { details }),
     });
   }
 }
