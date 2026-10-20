@@ -63,7 +63,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = String(exceptionResponse);
       }
 
-      code = 'HTTP_EXCEPTION';
+      // D7: route không tồn tại → NOT_FOUND, 429 → RATE_LIMITED, còn lại HTTP_EXCEPTION
+      code =
+        statusCode === HttpStatus.NOT_FOUND
+          ? 'NOT_FOUND'
+          : statusCode === HttpStatus.TOO_MANY_REQUESTS
+            ? 'RATE_LIMITED'
+            : 'HTTP_EXCEPTION';
     } else if (exception instanceof Error) {
       /**
        * 3. Unknown Error
@@ -72,16 +78,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     /**
-     * Logging
+     * Logging (D7): 4xx → warn, không stack; 5xx → error, kèm stack
      */
-    this.logger.error({
+    const logPayload = {
       method: request.method,
       path: request.url,
       statusCode,
       message,
       code,
-      stack: exception instanceof Error ? exception.stack : null,
-    });
+    };
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error({
+        ...logPayload,
+        stack: exception instanceof Error ? exception.stack : null,
+      });
+    } else {
+      this.logger.warn(logPayload);
+    }
 
     /**
      * Standard Response

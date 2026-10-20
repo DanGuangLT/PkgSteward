@@ -51,6 +51,14 @@ describe('AppController (e2e)', () => {
     expect(guard.isInsideProtectedTree(appPaths.appInstallDir)).toBe(true);
   });
 
+  it('answers an unknown route with NOT_FOUND', () =>
+    request(app.getHttpServer())
+      .get('/api/v1/does-not-exist')
+      .expect(404)
+      .expect((res) =>
+        expect((res.body as { code: unknown }).code).toBe('NOT_FOUND'),
+      ));
+
   it('/api/v1 (GET)', () => {
     return request(app.getHttpServer())
       .get('/api/v1')
