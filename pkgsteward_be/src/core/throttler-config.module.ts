@@ -1,15 +1,18 @@
 import { Module } from '@nestjs/common';
 import { seconds, ThrottlerModule } from '@nestjs/throttler';
 
+export const THROTTLERS = [
+  { name: 'default', ttl: seconds(60), limit: 100 },
+  { name: 'short-term', ttl: seconds(10), limit: 20 },
+  { name: 'medium-term', ttl: seconds(300), limit: 500 },
+  { name: 'long-term', ttl: seconds(3600), limit: 1000 },
+];
+export const THROTTLER_NAMES = THROTTLERS.map((throttler) => throttler.name);
+
 @Module({
   imports: [
     ThrottlerModule.forRoot({
-      throttlers: [
-        { name: 'default', ttl: seconds(60), limit: 100 },
-        { name: 'short-term', ttl: seconds(10), limit: 20 },
-        { name: 'medium-term', ttl: seconds(300), limit: 500 },
-        { name: 'long-term', ttl: seconds(3600), limit: 1000 },
-      ],
+      throttlers: THROTTLERS,
       errorMessage(context, throttlerLimitDetail) {
         return `You have made ${throttlerLimitDetail.totalHits} requests. Rate limit exceeded, Try again in ${throttlerLimitDetail.timeToExpire} seconds. `;
       },

@@ -121,8 +121,9 @@ export class PathGuard {
     }
   }
 
-  isInsideProtectedTree(absolutePath: string): boolean {
-    const { platform, denylist } = this.deps;
+  async isInsideProtectedTree(absolutePath: string): Promise<boolean> {
+    const { platform } = this.deps;
+    const denylist = await this.effectiveDenylist();
     return isInsideProtectedTree(
       toComparable(absolutePath, platform),
       denylist,
@@ -199,8 +200,13 @@ export class PathGuard {
       result.add(toComparable(root, platform));
       try {
         result.add(toComparable(await fs.realpath(root), platform));
-      } catch {
-        // D5: gốc không tồn tại → bỏ qua, không làm lỗi.
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        // D5: chỉ bỏ qua gốc không tồn tại; lỗi khác phải chặn kiểm tra.
+        if (code === 'ENOENT' || code === 'ENOTDIR') continue;
+        throw new InternalServerException(
+          `Cannot resolve scan root ${root}: ${(error as Error).message}`,
+        );
       }
     }
     return [...result];
