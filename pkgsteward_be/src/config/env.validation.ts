@@ -1,5 +1,6 @@
 import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -33,6 +34,24 @@ export const SETTINGS_FILE_KEYS: readonly string[] = [
 
 const blankToUndefined = ({ value }: { value: unknown }) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+// Đọc giá trị gốc: implicit conversion biến "false" thành true trước khi @Transform chạy.
+const toBooleanFlag = ({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}) => {
+  const raw = obj[key];
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'string') {
+    const value = raw.trim().toLowerCase();
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+  }
+  return raw; // để @IsBoolean báo lỗi
+};
 
 export enum AppMode {
   Development = 'development',
@@ -72,8 +91,10 @@ export class EnvironmentVariables {
   @IsOptional()
   LIST_ORIGIN_CORS?: string = 'http://localhost:24680';
 
+  @Transform(toBooleanFlag)
+  @IsBoolean({ message: 'EXPORT_SWAGGER_API_JSON must be true or false' })
   @IsOptional()
-  EXPORT_SWAGGER_API_JSON?: boolean | string = true;
+  EXPORT_SWAGGER_API_JSON?: boolean = true;
 
   // D5: trống hoặc không đặt = "*" (mọi ổ cố định); "*" đứng một mình và path tuyệt đối kiểm ở validatePathSettings.
   @Transform(({ value }: { value: unknown }) =>

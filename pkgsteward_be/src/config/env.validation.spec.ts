@@ -2,6 +2,29 @@ import 'reflect-metadata';
 import { validateEnv } from '@/config/env.validation';
 
 describe('validateEnv', () => {
+  describe('EXPORT_SWAGGER_API_JSON', () => {
+    it('defaults to true', () =>
+      expect(validateEnv({}, 'win32').EXPORT_SWAGGER_API_JSON).toBe(true));
+    it.each([
+      [true, true],
+      [false, false],
+      ['true', true],
+      ['false', false],
+      [' FALSE ', false],
+      ['True', true],
+    ])('reads %p as %p', (value, expected) =>
+      expect(
+        validateEnv({ EXPORT_SWAGGER_API_JSON: value }, 'win32')
+          .EXPORT_SWAGGER_API_JSON,
+      ).toBe(expected),
+    );
+    it.each(['yes', '1', ''])('rejects %p', (value) =>
+      expect(() =>
+        validateEnv({ EXPORT_SWAGGER_API_JSON: value }, 'win32'),
+      ).toThrow(/EXPORT_SWAGGER_API_JSON must be true or false/),
+    );
+  });
+
   describe('MAX_SCAN_DEPTH', () => {
     it('defaults to 0 (no depth limit) when not set', () => {
       expect(validateEnv({}).MAX_SCAN_DEPTH).toBe(0);
