@@ -12,6 +12,24 @@ test("accepts loopback hosts on the frontend port, any case", () => {
   }
 })
 
+test("accepts only SP and HTAB as surrounding optional whitespace", () => {
+  for (const host of [" localhost:24680 ", "\t127.0.0.1:24680\t", " \t[::1]:24680\t "]) {
+    assert.equal(isAllowedHost(host), true, JSON.stringify(host))
+  }
+})
+
+test("rejects NBSP surrounding a loopback host", () => {
+  for (const host of ["\u00a0localhost:24680\u00a0", "\u00a0localhost:24680", "localhost:24680\u00a0"]) {
+    assert.equal(isAllowedHost(host), false, JSON.stringify(host))
+  }
+})
+
+test("rejects embedded whitespace and userinfo in a loopback host", () => {
+  for (const host of ["local host:24680", "local\thost:24680", "localhost: 24680", "localhost:\t24680", "user@localhost:24680"]) {
+    assert.equal(isAllowedHost(host), false, JSON.stringify(host))
+  }
+})
+
 test("rejects foreign, portless, wrong-port and look-alike hosts", () => {
   for (const host of [
     "evil.example:24680",

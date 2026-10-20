@@ -9,7 +9,7 @@ export function isAllowedHost(
   port: number = FRONTEND_PORT
 ): boolean {
   if (!host) return false
-  const value = host.trim().toLowerCase()
+  const value = host.replace(/^[ \t]+|[ \t]+$/g, "").toLowerCase()
   return LOOPBACK_HOSTNAMES.some((name) => value === `${name}:${port}`)
 }
 
