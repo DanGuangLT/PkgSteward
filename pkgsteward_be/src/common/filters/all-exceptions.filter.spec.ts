@@ -2,12 +2,14 @@ import 'reflect-metadata';
 import type { ArgumentsHost } from '@nestjs/common';
 import {
   BadRequestException,
+  HttpException,
   Logger,
   NotFoundException as NestNotFoundException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { IsString } from 'class-validator';
 import {
+  AppException,
   ConflictException,
   InternalServerException,
 } from '@/common/exceptions/app.exception';
@@ -86,38 +88,127 @@ describe('AllExceptionsFilter', () => {
 
   it('logs 4xx AppExceptions at warn without a stack', () => {
     const { body } = run(new ConflictException('busy'));
-    expect(body).toMatchObject({ statusCode: 409, code: 'CONFLICT' });
+    expect(body).toMatchObject({
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'busy',
+    });
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).not.toHaveProperty('stack');
     expect(error).not.toHaveBeenCalled();
   });
 
   it('logs 5xx AppExceptions at error with the stack', () => {
-    run(new InternalServerException('boom'));
+    const exception = new InternalServerException('boom');
+    const { body } = run(exception);
+    expect(body).toMatchObject({
+      statusCode: 500,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
+    });
+    expect(body).not.toHaveProperty('details');
     expect(error).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 500,
-        stack: expect.any(String) as unknown,
+        message: 'boom',
+        stack: exception.stack,
       }),
     );
     expect(warn).not.toHaveBeenCalled();
   });
 
   it('turns a bare Error into INTERNAL_SERVER_ERROR and logs it with the stack', () => {
-    const { status, body } = run(new Error('kaboom'));
+    const exception = new Error('TEST_INTERNAL');
+    const { status, body } = run(exception);
     expect(status).toHaveBeenCalledWith(500);
     expect(body).toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
-      message: 'kaboom',
+      statusCode: 500,
+      message: 'Internal server error',
     });
+    expect(body).not.toHaveProperty('details');
     expect(error).toHaveBeenCalledWith(
-      expect.objectContaining({ stack: expect.any(String) as unknown }),
+      expect.objectContaining({
+        message: 'TEST_INTERNAL',
+        stack: exception.stack,
+      }),
     );
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it('handles non-Error throws', () =>
-    expect(run('weird').body).toMatchObject({
+  it.each([
+    {
+      name: 'AppException with a custom code and internal details',
+      exception: new AppException(500, 'TEST_APP_INTERNAL', 'TEST_FAILURE', {
+        diagnostic: 'TEST_APP_DETAILS',
+      }),
       statusCode: 500,
-      message: 'Internal Server Error',
-    }));
+      code: 'TEST_FAILURE',
+      logMessage: 'TEST_APP_INTERNAL',
+    },
+    {
+      name: 'HttpException 503 with internal validation details',
+      exception: new HttpException(
+        {
+          message: 'TEST_HTTP_INTERNAL',
+          errors: [{ diagnostic: 'TEST_HTTP_DETAILS' }],
+        },
+        503,
+      ),
+      statusCode: 503,
+      code: 'HTTP_EXCEPTION',
+      logMessage: 'TEST_HTTP_INTERNAL',
+    },
+  ])('redacts $name while preserving diagnostics in the error log', (test) => {
+    const { status, body } = run(test.exception);
+    expect(status).toHaveBeenCalledWith(test.statusCode);
+    expect(body).toEqual({
+      statusCode: test.statusCode,
+      message: 'Internal server error',
+      code: test.code,
+      timestamp: expect.any(String) as unknown,
+      path: '/api/v1/things',
+    });
+    expect(body).not.toHaveProperty('details');
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith({
+      method: 'POST',
+      path: '/api/v1/things',
+      statusCode: test.statusCode,
+      message: test.logMessage,
+      code: test.code,
+      stack: test.exception.stack,
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'a string', value: 'TEST_NON_ERROR' },
+    { name: 'an object', value: { diagnostic: 'TEST_NON_ERROR_OBJECT' } },
+    { name: 'null', value: null },
+    { name: 'undefined', value: undefined },
+  ])(
+    'redacts non-Error throws ($name) and logs the original value without a stack',
+    ({ value }) => {
+      const { status, body } = run(value);
+      expect(status).toHaveBeenCalledWith(500);
+      expect(body).toEqual({
+        statusCode: 500,
+        message: 'Internal server error',
+        code: 'INTERNAL_SERVER_ERROR',
+        timestamp: expect.any(String) as unknown,
+        path: '/api/v1/things',
+      });
+      expect(body).not.toHaveProperty('details');
+      expect(error).toHaveBeenCalledWith({
+        method: 'POST',
+        path: '/api/v1/things',
+        statusCode: 500,
+        message: value,
+        code: 'INTERNAL_SERVER_ERROR',
+        stack: null,
+      });
+      expect(warn).not.toHaveBeenCalled();
+    },
+  );
 });
