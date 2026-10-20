@@ -53,7 +53,7 @@ export class PathGuardService implements IPathGuardService {
     return this.guard.assertAllowed(inputPath);
   }
 
-  isInsideProtectedTree(absolutePath: string): boolean {
+  isInsideProtectedTree(absolutePath: string): Promise<boolean> {
     return this.guard.isInsideProtectedTree(absolutePath);
   }
 }

@@ -202,6 +202,38 @@ describe('PathGuard (win32)', () => {
     });
   });
 
+  it.each(['EACCES', 'EIO'])(
+    'fails closed when the scan root realpath returns %s',
+    async (code) => {
+      const fs = makeFs();
+      fs.realpath.mockImplementation((p: string) =>
+        p === 'D:\\Scan' ? Promise.reject(errno(code)) : Promise.resolve(p),
+      );
+      const { guard } = makeGuard({ fs });
+      await expect(guard.check('D:\\Scan\\app')).rejects.toBeInstanceOf(
+        InternalServerException,
+      );
+      expect(fs.lstat).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['ENOENT', 'ENOTDIR'])(
+    'keeps other scan roots usable when a root realpath returns %s',
+    async (code) => {
+      const fs = makeFs();
+      fs.realpath.mockImplementation((p: string) =>
+        p === 'E:\\Missing' ? Promise.reject(errno(code)) : Promise.resolve(p),
+      );
+      const { guard } = makeGuard({
+        scanRoots: { kind: 'paths', paths: ['E:\\Missing', 'D:\\Scan'] },
+        fs,
+      });
+      await expect(guard.check('D:\\Scan\\app')).resolves.toMatchObject({
+        allowed: true,
+      });
+    },
+  );
+
   it.each([
     'projects\\app',
     'C:foo',
@@ -284,10 +316,12 @@ describe('PathGuard (win32)', () => {
     });
   });
 
-  it('isInsideProtectedTree accepts raw absolute paths', () => {
+  it('isInsideProtectedTree accepts raw absolute paths', async () => {
     const { guard } = makeGuard();
-    expect(guard.isInsideProtectedTree('C:\\Windows\\System32')).toBe(true);
-    expect(guard.isInsideProtectedTree('C:\\Users')).toBe(false);
+    expect(await guard.isInsideProtectedTree('C:\\Windows\\System32')).toBe(
+      true,
+    );
+    expect(await guard.isInsideProtectedTree('C:\\Users')).toBe(false);
   });
 });
 
@@ -311,6 +345,39 @@ describe('PathGuard denylist junction regressions', () => {
       }),
       fs,
     });
+
+  describe('Scanner pruning with canonical protected paths', () => {
+    const makePruningGuard = () =>
+      makeDataGuard(
+        makeFs({
+          'd:\\datalink': 'E:\\Protected\\ActualData',
+          'd:\\tools\\pkgsteward\\pkgsteward_be': 'E:\\Protected\\ActualApp',
+        }),
+      );
+
+    it.each(['E:\\Protected\\ActualData', 'E:\\Protected\\ActualApp'])(
+      'prunes the real protected directory %s and its children',
+      async (target) => {
+        const guard = makePruningGuard();
+        expect(await guard.isInsideProtectedTree(target)).toBe(true);
+        expect(await guard.isInsideProtectedTree(`${target}\\child`)).toBe(
+          true,
+        );
+      },
+    );
+
+    it.each([
+      'E:\\Protected',
+      'E:\\',
+      'C:\\Users',
+      'C:\\Users\\alice',
+      'C:\\Users\\alice\\Projects',
+    ])('still walks into %s', async (target) => {
+      expect(await makePruningGuard().isInsideProtectedTree(target)).toBe(
+        false,
+      );
+    });
+  });
 
   it('blocks direct access to the real data directory through a junction', async () => {
     const fs = makeFs({ 'd:\\datalink': 'E:\\ActualData' });

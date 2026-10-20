@@ -43,12 +43,14 @@ describe('AppController (e2e)', () => {
     }
   });
 
-  it('wires the shared PathGuardService', () => {
+  it('wires the shared PathGuardService', async () => {
     const guard = app.get(PathGuardService);
     const appPaths = app.get(AppPathsService);
     expect(appPaths).toBeInstanceOf(AppPathsService);
     expect(appPaths.appInstallDir).toBe(tmpInstallDir);
-    expect(guard.isInsideProtectedTree(appPaths.appInstallDir)).toBe(true);
+    expect(await guard.isInsideProtectedTree(appPaths.appInstallDir)).toBe(
+      true,
+    );
   });
 
   it('answers an unknown route with NOT_FOUND', () =>
