@@ -46,6 +46,28 @@ Full list in `.env.example`.
 
 Values in settings.json inside the data folder override environment variables.
 
+## Scan API
+
+Scanning finds every folder with a `package.json` under `SCAN_ROOT_PATHS`. A scan runs in the background:
+start it, poll its progress, then read the result.
+
+| Endpoint | Result |
+|---|---|
+| `POST /api/v1/scans` | `202` with `{ scanId, status }`. Only one scan runs at a time: while one is running, the same job is returned |
+| `GET /api/v1/scans/:scanId` | Job status and progress (`visitedDirs`, `foundProjects`, `skippedCount`). Not rate limited, meant for polling |
+| `POST /api/v1/scans/:scanId/cancel` | Cancels a running scan; a finished job is returned unchanged |
+| `GET /api/v1/scans/latest` | Latest result: roots, projects and orphan `node_modules` folders. `404` until a scan has finished |
+
+- `status` is `running`, `completed`, `cancelled`, `timed_out` or `failed`. `partial` is `true` when the scan
+  did not finish normally. Only `completed` and `timed_out` scans replace the latest result.
+- Each project reports its path, `name`, package manager (from the lockfile: `pnpm-lock.yaml`, `yarn.lock`,
+  `package-lock.json`), `hasLockfile`, `lastActivityAt` and its `node_modules` folder. `sizeBytes` is `null`
+  until disk usage is implemented.
+- Skipped folders: `node_modules`, `dist`, folders whose name starts with `.`, `AppData`, protected system
+  folders, and symbolic links / junctions inside the scan roots. Only `package.json` files are read.
+- The latest result is kept in memory and in `cache/last-scan.json` inside the data folder, and is loaded
+  again on startup. It is dropped when `SCAN_ROOT_PATHS` or `MAX_SCAN_DEPTH` changes. Results are not paginated.
+
 ## Documentation
 
 - Project overview and setup: [`README.md`](../README.md)

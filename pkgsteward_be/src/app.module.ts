@@ -11,6 +11,7 @@ import { ThrottlerConfigModule } from '@/core/throttler-config.module';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
 import { PlatformModule } from '@/platform/platform.module';
 import { PathGuardModule } from '@/core/path-guard/path-guard.module';
+import { ScannerModule } from '@/scanner/scanner.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { PathGuardModule } from '@/core/path-guard/path-guard.module';
     AppPathsModule,
     PlatformModule,
     PathGuardModule,
+    ScannerModule,
   ],
   controllers: [AppController],
   providers: [
