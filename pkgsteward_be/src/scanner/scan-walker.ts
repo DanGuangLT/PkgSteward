@@ -7,6 +7,7 @@ import type {
 import { inspectScanDirectory } from '@/scanner/project-metadata';
 
 export const SCAN_CONCURRENCY = 8;
+export const SCAN_WALKER = Symbol('SCAN_WALKER');
 
 interface IQueuedDirectory {
   path: string;
