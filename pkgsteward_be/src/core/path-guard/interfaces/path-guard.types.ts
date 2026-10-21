@@ -20,6 +20,9 @@ export type PathCheckResult =
   | { allowed: true; path: IGuardedPath }
   | { allowed: false; code: PathCheckFailureCode; message: string };
 
+/** Predicate cắt nhánh đồng bộ trên denylist đã chụp (xem createProtectedTreeMatcher). */
+export type ProtectedTreeMatcher = (absolutePath: string) => boolean;
+
 export interface IPathGuardFs {
   realpath(filePath: string): Promise<string>;
   lstat(filePath: string): Promise<{ isSymbolicLink(): boolean }>;

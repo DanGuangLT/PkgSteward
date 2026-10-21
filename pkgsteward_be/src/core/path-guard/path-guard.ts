@@ -23,6 +23,7 @@ import type {
   IPathGuardFs,
   PathCheckFailureCode,
   PathCheckResult,
+  ProtectedTreeMatcher,
 } from '@/core/path-guard/interfaces/path-guard.types';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 
@@ -121,14 +122,23 @@ export class PathGuard {
     }
   }
 
-  async isInsideProtectedTree(absolutePath: string): Promise<boolean> {
+  /**
+   * D10 — Scanner cắt nhánh: chụp denylist (kèm đích thật của junction) MỘT lần, trả predicate đồng bộ.
+   * Chỉ dùng trong một lần quét; KHÔNG dùng để cấp quyền thao tác (dùng check()/assertAllowed()).
+   */
+  async createProtectedTreeMatcher(): Promise<ProtectedTreeMatcher> {
     const { platform } = this.deps;
     const denylist = await this.effectiveDenylist();
-    return isInsideProtectedTree(
-      toComparable(absolutePath, platform),
-      denylist,
-      platform,
-    );
+    return (absolutePath) =>
+      isInsideProtectedTree(
+        toComparable(absolutePath, platform),
+        denylist,
+        platform,
+      );
+  }
+
+  async isInsideProtectedTree(absolutePath: string): Promise<boolean> {
+    return (await this.createProtectedTreeMatcher())(absolutePath);
   }
 
   private evaluate(
