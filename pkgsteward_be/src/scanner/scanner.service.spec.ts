@@ -92,8 +92,10 @@ function fixture(
     listFixedDrives: jest.fn(() => Promise.resolve([root])),
   };
   const detect = jest.spyOn(detector, 'listFixedDrives');
+  const matcher = jest.fn<boolean, [string]>(() => false);
   const guard = {
     isInsideProtectedTree: jest.fn(() => Promise.resolve(false)),
+    createProtectedTreeMatcher: jest.fn(() => Promise.resolve(matcher)),
   };
   const walks: {
     task: ReturnType<typeof deferred<IWalkSnapshot>>;
@@ -124,6 +126,7 @@ function fixture(
     detector,
     detect,
     guard,
+    matcher,
     walker,
     walks,
   };
@@ -170,8 +173,43 @@ describe('ScannerService', () => {
     ]);
     expect(f.walker.mock.calls[0][1]).toBe(2);
     await f.walks[0].deps.isInsideProtectedTree(root);
-    expect(f.guard.isInsideProtectedTree).toHaveBeenCalledWith(root);
+    expect(f.matcher).toHaveBeenCalledWith(root);
+    expect(f.guard.isInsideProtectedTree).not.toHaveBeenCalled();
     f.service.cancelScan(scan.scanId);
+  });
+
+  it('creates one protected-tree matcher per scan and reuses it for every directory', async () => {
+    const f = fixture();
+    const first = f.service.startScan();
+    await tick();
+    for (const dir of [root, `${root}/a`, `${root}/b`]) {
+      expect(await f.walks[0].deps.isInsideProtectedTree(dir)).toBe(false);
+    }
+    expect(f.guard.createProtectedTreeMatcher).toHaveBeenCalledTimes(1);
+    expect(f.matcher).toHaveBeenCalledTimes(3);
+    f.service.cancelScan(first.scanId);
+    await tick();
+    f.service.startScan();
+    await tick();
+    expect(f.guard.createProtectedTreeMatcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails the scan without walking when the matcher cannot be created', async () => {
+    const f = fixture();
+    f.guard.createProtectedTreeMatcher.mockRejectedValueOnce(
+      new Error('private guard error'),
+    );
+    const scan = f.service.startScan();
+    await tick();
+    expect(f.service.getScan(scan.scanId)).toEqual(
+      expect.objectContaining({ status: 'failed', partial: true }),
+    );
+    expect(JSON.stringify(f.service.getScan(scan.scanId))).not.toMatch(
+      /private/i,
+    );
+    expect(f.walker).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('discovers default all-fixed roots once and starts timestamp/timer before discovery', async () => {

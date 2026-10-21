@@ -150,6 +150,9 @@ export class ScannerService
         ? active.roots.paths
         : await this.detector.listFixedDrives();
     if (!this.isRunning(active)) return;
+    // Chụp denylist một lần cho cả lần quét; lỗi → failed (fail closed).
+    const isProtected = await this.pathGuard.createProtectedTreeMatcher();
+    if (!this.isRunning(active)) return;
     const snapshot = await this.walker(
       roots,
       active.key.maxDepth,
@@ -158,7 +161,7 @@ export class ScannerService
         platform: this.platform,
         fs: scanFs,
         isInsideProtectedTree: (directory) =>
-          this.pathGuard.isInsideProtectedTree(directory),
+          Promise.resolve(isProtected(directory)),
         onProgress: (progress) => {
           if (this.isRunning(active)) active.job.progress = { ...progress };
         },

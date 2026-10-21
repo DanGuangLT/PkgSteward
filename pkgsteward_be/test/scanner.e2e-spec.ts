@@ -283,6 +283,9 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
     const app = await openApp({ walker });
     const scans = await Promise.all([start(app), start(app)]);
     expect(scans[0]).toEqual(scans[1]);
+    // Walker chạy sau bước dò gốc + tạo matcher (I/O bất đồng bộ): chờ có giới hạn thay vì giả định thời điểm.
+    for (let i = 0; i < 200 && walker.mock.calls.length === 0; i++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
     expect(walker).toHaveBeenCalledTimes(1);
     // Polling must bypass all configured throttlers, including short-term.
     for (let i = 0; i < 24; i++)
