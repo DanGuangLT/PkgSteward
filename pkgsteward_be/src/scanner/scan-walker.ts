@@ -45,12 +45,22 @@ export const walkScan: ScanWalker = (roots, maxDepth, signal, deps) =>
     const stop = () => {
       stopped = true;
       signal.removeEventListener('abort', onAbort);
+      // Worker đang chờ I/O vẫn giữ closure; bỏ dữ liệu của lượt quét ngay.
+      queue.length = 0;
+      next = 0;
+      snapshot.roots.length = 0;
+      snapshot.projects.length = 0;
+      snapshot.orphanNodeModules.length = 0;
+      rootKeys.clear();
+      projectKeys.clear();
+      orphanKeys.clear();
       work.abort();
     };
     const complete = () => {
       if (stopped) return;
+      const result = copy();
       stop();
-      resolve(copy());
+      resolve(result);
     };
     const fail = (error: unknown) => {
       if (stopped) return;
@@ -129,8 +139,10 @@ export const walkScan: ScanWalker = (roots, maxDepth, signal, deps) =>
         skip(canonical, error);
         return;
       }
-      snapshot.progress.visitedDirs++;
       if (item.isRoot) snapshot.roots.push(canonical);
+      snapshot.progress.visitedDirs++;
+      publish();
+      if (stopped) return;
 
       let metadataError: unknown;
       let metadataFailed = false;

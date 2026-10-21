@@ -440,6 +440,96 @@ describe('walkScan', () => {
     }
   });
 
+  it.each(['abort', 'fail'] as const)(
+    'releases queued work and deduplication sets on %s with workers still blocked',
+    async (termination) => {
+      const f = fixture();
+      f.file(f.api.join(f.root, 'package.json'));
+      for (let i = 0; i < 1500; i++) f.dir(f.api.join(f.root, `child${i}`));
+      const orphan = f.dir(f.api.join(f.root, 'child0', 'node_modules'));
+      const gate = deferred<boolean>();
+      const failure = deferred<boolean>();
+      let blocked = 0;
+      f.deps.isInsideProtectedTree = (p) => {
+        const index = /child(\d+)$/.exec(p)?.[1];
+        if (index !== undefined && Number(index) >= 1100) {
+          blocked++;
+          return Number(index) === 1100 ? failure.promise : gate.promise;
+        }
+        return Promise.resolve(false);
+      };
+      const splice = jest.spyOn(Array.prototype, 'splice');
+      const add = jest.spyOn(Set.prototype, 'add');
+      const clone = jest.spyOn(globalThis, 'structuredClone');
+      try {
+        const pending = f.run().then(
+          (result) => ({ result, error: null }),
+          (error: unknown) => ({ result: null, error }),
+        );
+        await settle();
+        expect(blocked).toBe(8);
+        // Tham chiếu đến chính queue đã compact, không thêm hook vào production.
+        const queue = splice.mock.contexts[0] as unknown[];
+        expect(queue.length).toBeGreaterThan(0);
+        const keySets = (add.mock.contexts as Set<unknown>[]).filter(
+          (_, index) =>
+            [f.key(f.root), f.key(orphan)].includes(
+              add.mock.calls[index][0] as string,
+            ),
+        );
+        expect(keySets).toHaveLength(3);
+        const error = new Error('guard failed');
+        if (termination === 'abort') f.controller.abort();
+        else failure.reject(error);
+        const terminal = await pending;
+
+        expect(queue).toHaveLength(0);
+        expect(keySets.map((set) => set.size)).toEqual([0, 0, 0]);
+        if (termination === 'abort') {
+          expect(terminal.result?.projects).toHaveLength(1);
+          expect(terminal.result?.orphanNodeModules).toHaveLength(1);
+          expect(terminal.result?.roots).toEqual([f.root]);
+          const retained = clone.mock.calls[0][0] as IWalkSnapshot;
+          expect(retained.projects).toHaveLength(0);
+          expect(retained.orphanNodeModules).toHaveLength(0);
+          expect(retained.roots).toHaveLength(0);
+        } else {
+          expect(terminal.error).toBe(error);
+        }
+      } finally {
+        f.controller.abort();
+        failure.resolve(false);
+        gate.resolve(false);
+        await settle();
+        clone.mockRestore();
+        add.mockRestore();
+        splice.mockRestore();
+      }
+    },
+  );
+
+  it('publishes a successful readdir before package metadata can block', async () => {
+    const f = fixture();
+    f.file(f.api.join(f.root, 'package.json'));
+    const gate = deferred<string>();
+    f.fs.readFile.mockReturnValue(gate.promise);
+    const pending = f.run();
+    await settle();
+    const progress = f.onProgress.mock.calls.at(-1)?.[0];
+    f.controller.abort();
+    const result = await pending;
+    gate.resolve('{"name":"late"}');
+    await settle();
+
+    expect(progress).toEqual({
+      visitedDirs: 1,
+      foundProjects: 0,
+      skippedCount: 0,
+    });
+    expect(result.progress).toEqual(progress);
+    expect(result.projects).toEqual([]);
+  });
+
   it.each(['readdir', 'readFile'] as const)(
     'bounds workers across pending %s IO',
     async (operation) => {
@@ -596,15 +686,21 @@ describe('walkScan', () => {
     try {
       result = await f.run();
       expect(clone).toHaveBeenCalledTimes(1);
+      const retained = clone.mock.calls[0][0] as IWalkSnapshot;
+      expect(retained.projects).toHaveLength(0);
+      expect(retained.orphanNodeModules).toHaveLength(0);
+      expect(retained.roots).toHaveLength(0);
     } finally {
       clone.mockRestore();
     }
     expect(progress).toEqual([
+      { visitedDirs: 1, foundProjects: 0, skippedCount: 0 },
       { visitedDirs: 1, foundProjects: 1, skippedCount: 0 },
+      { visitedDirs: 2, foundProjects: 1, skippedCount: 0 },
       { visitedDirs: 2, foundProjects: 1, skippedCount: 0 },
     ]);
     progress[0].visitedDirs = 999;
-    expect(progress[1].visitedDirs).toBe(2);
+    expect(progress[1].visitedDirs).toBe(1);
     expect(result.progress.visitedDirs).toBe(2);
     expect(result.projects[0].name).toBe('app');
     expect(result.projects[0].nodeModules.exists).toBe(false);

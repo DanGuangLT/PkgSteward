@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Dirent } from 'node:fs';
 import { toPathPlatform, pathApi } from '@/common/utils/path.util';
 import { NotFoundException } from '@/common/exceptions/app.exception';
 import type { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -8,7 +9,9 @@ import { UnsupportedDriveDetector } from '@/platform/unsupported-drive-detector'
 import { ScannerCache, makeScanCacheKey } from '@/scanner/scanner-cache';
 import { parseScanRootPaths } from '@/config/scan-roots';
 import { ScannerService } from '@/scanner/scanner.service';
+import { walkScan } from '@/scanner/scan-walker';
 import type {
+  IScanFs,
   IScanCacheEntry,
   IScanResult,
   IWalkerDeps,
@@ -327,6 +330,54 @@ describe('ScannerService', () => {
     await tick();
     expect(f.save).toHaveBeenCalledTimes(1);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('keeps visitedDirs in a timed-out job when real walker metadata is blocked', async () => {
+    const f = fixture();
+    const reading = deferred<void>();
+    const content = deferred<string>();
+    const fs: IScanFs = {
+      realpath: (p) => Promise.resolve(p),
+      readdir: () =>
+        Promise.resolve([
+          {
+            name: 'package.json',
+            isFile: () => true,
+            isSymbolicLink: () => false,
+          } as Dirent,
+        ]),
+      lstat: (p) =>
+        Promise.resolve({
+          mtimeMs: 1000,
+          isDirectory: () => p === root,
+          isFile: () => p !== root,
+          isSymbolicLink: () => false,
+        }),
+      readFile: () => {
+        reading.resolve();
+        return content.promise;
+      },
+    };
+    f.walker.mockImplementation((roots, depth, signal, deps) =>
+      walkScan(roots, depth, signal, { ...deps, fs }),
+    );
+    const scan = f.service.startScan();
+    await reading.promise;
+    jest.advanceTimersByTime(1000);
+    await tick();
+    const terminal = f.service.getScan(scan.scanId);
+    content.resolve('{"name":"late"}');
+    await tick();
+
+    expect(terminal.status).toBe('timed_out');
+    expect(terminal.progress).toEqual({
+      visitedDirs: 1,
+      foundProjects: 0,
+      skippedCount: 0,
+    });
+    expect(f.service.getScan(scan.scanId)).toEqual(terminal);
+    expect(f.service.getLatest().projects).toEqual([]);
+    expect(f.save).toHaveBeenCalledTimes(1);
   });
 
   it.each(['cancel', 'timeout'] as const)(
