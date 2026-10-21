@@ -3,6 +3,12 @@ import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
+import { plainToInstance } from 'class-transformer';
+import {
+  ScanJobEntity,
+  ScanResultEntity,
+  ScanStartEntity,
+} from '@/scanner/entities/scan.entity';
 import { NotFoundException } from '@/common/exceptions/app.exception';
 import { toPathPlatform } from '@/common/utils/path.util';
 import { parseScanRootPaths } from '@/config/scan-roots';
@@ -72,7 +78,10 @@ export class ScannerService
 
   startScan(): IScanStart {
     if (this.current?.job.status === 'running') {
-      return { scanId: this.current.job.scanId, status: 'running' };
+      return plainToInstance(ScanStartEntity, {
+        scanId: this.current.job.scanId,
+        status: 'running',
+      });
     }
     const active: IActiveScan = {
       ...this.configuration(),
@@ -100,22 +109,28 @@ export class ScannerService
         this.finish(active, 'failed');
       }
     });
-    return { scanId: active.job.scanId, status: active.job.status };
+    return plainToInstance(ScanStartEntity, {
+      scanId: active.job.scanId,
+      status: active.job.status,
+    });
   }
 
   getScan(scanId: string): IScanJob {
-    return structuredClone(this.requireScan(scanId).job);
+    return plainToInstance(
+      ScanJobEntity,
+      structuredClone(this.requireScan(scanId).job),
+    );
   }
 
   cancelScan(scanId: string): IScanJob {
     const active = this.requireScan(scanId);
     this.finish(active, 'cancelled');
-    return structuredClone(active.job);
+    return plainToInstance(ScanJobEntity, structuredClone(active.job));
   }
 
   getLatest(): IScanResult {
     if (!this.latest) throw new NotFoundException('Latest scan');
-    return structuredClone(this.latest);
+    return plainToInstance(ScanResultEntity, structuredClone(this.latest));
   }
 
   private requireScan(scanId: string): IActiveScan {
