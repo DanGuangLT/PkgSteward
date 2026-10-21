@@ -32,6 +32,7 @@ import type {
   IWalkSnapshot,
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
+import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { SCAN_WALKER } from '@/scanner/scan-walker';
 import { ScannerService } from '@/scanner/scanner.service';
 import { createTestAppPaths } from './create-test-app-paths';
@@ -314,6 +315,10 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
 
   it('times out through the real service and publishes a partial latest result', async () => {
     const app = await openApp({ walker: heldWalker(), timeout: 1000 });
+    // Timeout 1s: tạo matcher thật (I/O) không được ăn vào ngân sách này.
+    jest
+      .spyOn(app.get(PathGuardService), 'createProtectedTreeMatcher')
+      .mockResolvedValue(() => false);
     const scan = await start(app);
     expect(await poll(app, scan.scanId)).toMatchObject({
       status: 'timed_out',

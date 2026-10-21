@@ -191,7 +191,10 @@ describe('ScannerController', () => {
         },
         {
           provide: PathGuardService,
-          useValue: { isInsideProtectedTree: () => Promise.resolve(false) },
+          useValue: {
+            isInsideProtectedTree: () => Promise.resolve(false),
+            createProtectedTreeMatcher: () => Promise.resolve(() => false),
+          },
         },
         { provide: DRIVE_DETECTOR, useValue: { listFixedDrives: jest.fn() } },
         {
