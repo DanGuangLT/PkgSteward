@@ -93,3 +93,28 @@ export type ScanWalker = (
   signal: AbortSignal,
   deps: IWalkerDeps,
 ) => Promise<IWalkSnapshot>;
+
+export interface IScanCacheKey {
+  roots: '*' | string[];
+  maxDepth: number;
+}
+
+export interface IScanCacheEntry {
+  schemaVersion: 1;
+  key: IScanCacheKey;
+  result: IScanResult;
+}
+
+export interface IScanCacheFs {
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  unlink(path: string): Promise<void>;
+}
+
+export interface IScanCacheDeps {
+  cacheFilePath: string;
+  fs: IScanCacheFs;
+  ensureCacheDir(): Promise<string>;
+  warn(message: string, error?: unknown): void;
+}
