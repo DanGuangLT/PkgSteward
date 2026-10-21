@@ -57,7 +57,8 @@ export async function inspectScanDirectory(
     const content = await fs.readFile(packagePath, signal);
     signal.throwIfAborted();
     try {
-      const value: unknown = JSON.parse(content);
+      // Trình soạn thảo trên Windows có thể lưu kèm BOM; npm cũng bỏ qua BOM.
+      const value: unknown = JSON.parse(content.replace(/^\uFEFF/, ''));
       if (value !== null && typeof value === 'object' && 'name' in value) {
         if (typeof value.name === 'string' && value.name.trim() !== '') {
           name = value.name;

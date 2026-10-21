@@ -74,6 +74,11 @@ describe('inspectScanDirectory', () => {
     expect((await fixture(content).inspect()).orphan).toBeNull();
   });
 
+  it('reads the name from a package.json saved with a UTF-8 BOM', async () => {
+    const result = await fixture('\uFEFF{"name":"with-bom"}').inspect();
+    expect(result.project?.name).toBe('with-bom');
+  });
+
   it('returns the candidate node_modules path when it is absent', async () => {
     const result = await fixture().inspect([entry('package.json')]);
     expect(result.project?.nodeModules).toEqual({
