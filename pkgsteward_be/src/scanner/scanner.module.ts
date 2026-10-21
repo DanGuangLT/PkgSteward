@@ -26,7 +26,10 @@ import { ScannerService } from '@/scanner/scanner.service';
             rename: (from, to) => fs.rename(from, to),
             unlink: (file) => fs.unlink(file),
           },
-          warn: (message, error) => logger.warn(message, error),
+          warn: (message, error) =>
+            error === undefined
+              ? logger.warn(message)
+              : logger.warn(message, error),
         });
       },
     },
