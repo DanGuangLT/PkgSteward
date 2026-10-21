@@ -51,6 +51,9 @@ describe('AppController (e2e)', () => {
     expect(await guard.isInsideProtectedTree(appPaths.appInstallDir)).toBe(
       true,
     );
+    expect(
+      (await guard.createProtectedTreeMatcher())(appPaths.appInstallDir),
+    ).toBe(true);
   });
 
   it('answers an unknown route with NOT_FOUND', () =>
