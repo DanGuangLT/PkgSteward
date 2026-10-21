@@ -77,12 +77,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    // originalUrl giữ cả tiền tố route (404 của route lạ bị Express cắt mất tiền tố trong request.url).
+    const path = request.originalUrl ?? request.url;
+
     /**
      * Logging (D7): 4xx → warn, không stack; 5xx → error, kèm stack
      */
     const logPayload = {
       method: request.method,
-      path: request.url,
+      path,
       statusCode,
       message: exception instanceof Error ? message : exception,
       code,
@@ -107,7 +110,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : message,
       code,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path,
       ...(statusCode < HttpStatus.INTERNAL_SERVER_ERROR &&
         details !== undefined && { details }),
     });
