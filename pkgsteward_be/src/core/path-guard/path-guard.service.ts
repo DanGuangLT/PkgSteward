@@ -10,6 +10,7 @@ import type { IPathGuardService } from '@/core/path-guard/interfaces/path-guard.
 import type {
   IGuardedPath,
   PathCheckResult,
+  ProtectedTreeMatcher,
 } from '@/core/path-guard/interfaces/path-guard.types';
 import { PathGuard } from '@/core/path-guard/path-guard';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
@@ -55,5 +56,9 @@ export class PathGuardService implements IPathGuardService {
 
   isInsideProtectedTree(absolutePath: string): Promise<boolean> {
     return this.guard.isInsideProtectedTree(absolutePath);
+  }
+
+  createProtectedTreeMatcher(): Promise<ProtectedTreeMatcher> {
+    return this.guard.createProtectedTreeMatcher();
   }
 }

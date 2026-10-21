@@ -60,6 +60,160 @@ const makeGuard = ({
 };
 const ALL = { kind: 'all-fixed-drives' } as ScanRoots;
 
+describe('PathGuard protected-tree matcher', () => {
+  const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+
+  it.each([
+    ['C:\\', false],
+    ['C:\\Users', false],
+    ['C:\\Users\\alice', false],
+    ['C:\\Users\\alice\\Projects', false],
+    ['D:\\Tools', false],
+    ['C:\\Windows', true],
+    ['C:\\Windows\\x', true],
+    ['E:\\Program Files\\y', true],
+    ['D:\\Tools\\PkgSteward\\pkgsteward_be', true],
+    ['D:\\Tools\\PkgSteward\\pkgsteward_be\\src', true],
+    ['C:\\Users\\alice\\AppData\\Local\\PkgSteward', true],
+    ['C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs', true],
+    ['E:\\Protected\\ActualApp', true],
+    ['e:/PROTECTED/ActualApp/child/', true],
+    ['E:\\Protected', false],
+    ['E:\\Protected\\ActualAppOther', false],
+  ])('matches win32 pruning for %s', async (target, expected) => {
+    const fs = makeFs({ [protectedPath]: 'E:\\Protected\\ActualApp' });
+    const { guard } = makeGuard({ fs });
+    const matcher = await guard.createProtectedTreeMatcher();
+
+    expect(matcher(target)).toBe(expected);
+    expect(matcher(target)).toBe(await guard.isInsideProtectedTree(target));
+  });
+
+  it.each([
+    ['/', false],
+    ['/home', false],
+    ['/home/alice', false],
+    ['/home/alice/code', false],
+    ['/opt/pkgsteward/pkgsteward_be', true],
+    ['/opt/pkgsteward/pkgsteward_be/src', true],
+    ['/opt/PkgSteward/pkgsteward_be', false],
+    ['/home/alice/.local/share/PkgSteward/cache', true],
+    ['/srv/protected/app', true],
+    ['/srv/protected/app/child', true],
+    ['/srv/protected', false],
+  ])('matches posix pruning for %s', async (target, expected) => {
+    const guard = new PathGuard({
+      platform: 'posix',
+      scanRoots: { kind: 'paths', paths: ['/home/alice/code'] },
+      driveDetector: { listFixedDrives: jest.fn() },
+      denylist: buildDenylist({
+        platform: 'posix',
+        env: {},
+        homeDir: '/home/alice',
+        appInstallDir: '/opt/pkgsteward/pkgsteward_be',
+        sourceCheckoutDir: null,
+        dataDir: '/home/alice/.local/share/PkgSteward',
+      }),
+      fs: makeFs({ '/opt/pkgsteward/pkgsteward_be': '/srv/protected/app' }),
+    });
+    const matcher = await guard.createProtectedTreeMatcher();
+
+    expect(matcher(target)).toBe(expected);
+    expect(matcher(target)).toBe(await guard.isInsideProtectedTree(target));
+  });
+
+  it('resolves each deny entry once and performs no I/O in the predicate', async () => {
+    const fs = makeFs();
+    const { guard, driveDetector } = makeGuard({ fs });
+    const matcher = await guard.createProtectedTreeMatcher();
+    expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
+    expect(fs.realpath.mock.calls.map(([p]) => p)).toEqual(
+      denylist.map((entry) => entry.path),
+    );
+
+    for (let i = 0; i < 100; i++) {
+      expect(matcher(`C:\\Windows\\child-${i}`)).toBe(true);
+    }
+    expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
+    expect(fs.lstat).not.toHaveBeenCalled();
+    expect(driveDetector.listFixedDrives).not.toHaveBeenCalled();
+  });
+
+  it.each(['ENOENT', 'ENOTDIR'])(
+    'keeps lexical protection and other entries when realpath returns %s',
+    async (code) => {
+      // dataDir: không có mục subtree cha nào trong denylist che hộ, nên bảo vệ lexical phải tự đứng.
+      const dataPath = 'c:\\users\\alice\\appdata\\local\\pkgsteward';
+      const fs = makeFs();
+      fs.realpath.mockImplementation((p: string) =>
+        p === dataPath ? Promise.reject(errno(code)) : Promise.resolve(p),
+      );
+      const matcher = await makeGuard({
+        fs,
+      }).guard.createProtectedTreeMatcher();
+
+      expect(matcher('C:\\Users\\alice\\AppData\\Local\\PkgSteward')).toBe(
+        true,
+      );
+      expect(
+        matcher('C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs'),
+      ).toBe(true);
+      expect(matcher('D:\\Tools\\PkgSteward\\pkgsteward_be\\src')).toBe(true);
+      expect(matcher('D:\\Scan\\app')).toBe(false);
+      expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
+    },
+  );
+
+  it.each(['EACCES', 'EIO'])(
+    'fails closed when creating a matcher encounters %s',
+    async (code) => {
+      const fs = makeFs();
+      fs.realpath.mockImplementation((p: string) =>
+        p === protectedPath ? Promise.reject(errno(code)) : Promise.resolve(p),
+      );
+      await expect(
+        makeGuard({ fs }).guard.createProtectedTreeMatcher(),
+      ).rejects.toBeInstanceOf(InternalServerException);
+    },
+  );
+
+  it('still resolves every deny entry on each async pruning call', async () => {
+    const fs = makeFs();
+    const { guard } = makeGuard({ fs });
+    expect(await guard.isInsideProtectedTree('C:\\Windows')).toBe(true);
+    expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
+    expect(await guard.isInsideProtectedTree('D:\\Scan')).toBe(false);
+    expect(fs.realpath).toHaveBeenCalledTimes(2 * denylist.length);
+  });
+
+  it('rechecks junction targets for authorization independently of an existing matcher', async () => {
+    const links = { [protectedPath]: 'E:\\Protected\\Old' };
+    const { guard } = makeGuard({ scanRoots: ALL, fs: makeFs(links) });
+    const matcher = await guard.createProtectedTreeMatcher();
+    await expect(
+      guard.check('E:\\Protected\\Old\\child'),
+    ).resolves.toMatchObject({
+      allowed: false,
+      code: 'DENYLISTED',
+    });
+
+    links[protectedPath] = 'E:\\Protected\\New';
+    await expect(
+      guard.check('E:\\Protected\\Old\\child'),
+    ).resolves.toMatchObject({
+      allowed: true,
+    });
+    await expect(
+      guard.check('E:\\Protected\\New\\child'),
+    ).resolves.toMatchObject({
+      allowed: false,
+      code: 'DENYLISTED',
+    });
+    expect(matcher('E:\\Protected\\Old\\child')).toBe(true);
+    expect(matcher('E:\\Protected\\New\\child')).toBe(false);
+  });
+});
+
 describe('PathGuard (win32)', () => {
   it('allows a folder inside a scan root', async () => {
     const { guard } = makeGuard();
