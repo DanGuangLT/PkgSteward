@@ -55,10 +55,13 @@ describe('AppController (e2e)', () => {
 
   it('answers an unknown route with NOT_FOUND', () =>
     request(app.getHttpServer())
-      .get('/api/v1/does-not-exist')
+      .get('/api/v1/does-not-exist?x=1')
       .expect(404)
       .expect((res) =>
-        expect((res.body as { code: unknown }).code).toBe('NOT_FOUND'),
+        expect(res.body).toMatchObject({
+          code: 'NOT_FOUND',
+          path: '/api/v1/does-not-exist?x=1',
+        }),
       ));
 
   it('/api/v1 (GET)', () => {
