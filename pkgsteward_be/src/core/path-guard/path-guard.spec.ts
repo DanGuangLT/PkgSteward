@@ -142,18 +142,23 @@ describe('PathGuard protected-tree matcher', () => {
   it.each(['ENOENT', 'ENOTDIR'])(
     'keeps lexical protection and other entries when realpath returns %s',
     async (code) => {
+      // dataDir: không có mục subtree cha nào trong denylist che hộ, nên bảo vệ lexical phải tự đứng.
+      const dataPath = 'c:\\users\\alice\\appdata\\local\\pkgsteward';
       const fs = makeFs();
       fs.realpath.mockImplementation((p: string) =>
-        p === protectedPath ? Promise.reject(errno(code)) : Promise.resolve(p),
+        p === dataPath ? Promise.reject(errno(code)) : Promise.resolve(p),
       );
       const matcher = await makeGuard({
         fs,
       }).guard.createProtectedTreeMatcher();
 
-      expect(matcher('D:\\Tools\\PkgSteward\\pkgsteward_be\\src')).toBe(true);
+      expect(matcher('C:\\Users\\alice\\AppData\\Local\\PkgSteward')).toBe(
+        true,
+      );
       expect(
         matcher('C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs'),
       ).toBe(true);
+      expect(matcher('D:\\Tools\\PkgSteward\\pkgsteward_be\\src')).toBe(true);
       expect(matcher('D:\\Scan\\app')).toBe(false);
       expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
     },

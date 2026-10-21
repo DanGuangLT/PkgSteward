@@ -20,7 +20,11 @@ export type PathCheckResult =
   | { allowed: true; path: IGuardedPath }
   | { allowed: false; code: PathCheckFailureCode; message: string };
 
-/** Predicate cắt nhánh đồng bộ trên denylist đã chụp (xem createProtectedTreeMatcher). */
+/**
+ * Predicate cắt nhánh đồng bộ trên denylist đã chụp (xem createProtectedTreeMatcher).
+ * Tiền điều kiện: path tuyệt đối đã resolve (Scanner). Không phải bộ kiểm path: đầu vào tương đối,
+ * rỗng hay chứa NUL có thể trả false — mọi path từ client phải qua check()/assertAllowed().
+ */
 export type ProtectedTreeMatcher = (absolutePath: string) => boolean;
 
 export interface IPathGuardFs {
