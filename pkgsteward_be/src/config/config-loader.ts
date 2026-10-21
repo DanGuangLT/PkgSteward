@@ -48,6 +48,7 @@ export const readSettingsFile = (
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
     throw new Error(
       `Cannot read settings file ${filePath}: ${(error as Error).message}`,
+      { cause: error },
     );
   }
 
@@ -57,6 +58,7 @@ export const readSettingsFile = (
   } catch (error) {
     throw new Error(
       `Invalid JSON in settings file ${filePath}: ${(error as Error).message}`,
+      { cause: error },
     );
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
