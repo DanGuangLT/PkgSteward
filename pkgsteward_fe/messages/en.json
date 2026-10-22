@@ -29,11 +29,96 @@
   "locale": {
     "label": "Language"
   },
-  "home": {
+  "projects": {
     "title": "Projects",
-    "emptyTitle": "No data yet",
-    "emptyDescription": "Node.js projects found on this machine will show up here once the ScannerModule (backend) is done.",
-    "viewDesignSystem": "View design system"
+    "listLabel": "Scanned projects",
+    "empty": {
+      "title": "No scan results yet",
+      "description": "Scan for Node.js projects in your configured root folders. Results will appear here."
+    },
+    "noProjects": {
+      "title": "No projects found",
+      "description": "The latest scan found no Node.js projects. Check your configured root folders, then scan again."
+    },
+    "noMatch": {
+      "title": "No matching projects",
+      "description": "Try another name or path, or clear the filter to see all projects."
+    },
+    "summary": {
+      "scannedAt": "Scanned at",
+      "projects": "{count, plural, one {{formattedCount} project} other {{formattedCount} projects}}",
+      "orphans": "{count, plural, one {{formattedCount} node_modules folder without a project} other {{formattedCount} node_modules folders without a project}}",
+      "skipped": "{count, plural, one {{formattedCount} skipped item} other {{formattedCount} skipped items}}"
+    },
+    "partial": {
+      "title": "Incomplete scan results",
+      "description": "These are partial results from the latest scan. Scan again to find more projects."
+    },
+    "search": {
+      "label": "Find projects",
+      "placeholder": "Search by name or path",
+      "clear": "Clear filter",
+      "results": "{count, plural, one {Showing {formattedCount} project} other {Showing {formattedCount} projects}}"
+    },
+    "sort": {
+      "label": "Sort by",
+      "activity": "Recent activity",
+      "name": "Name A–Z"
+    },
+    "columns": {
+      "project": "Project / path",
+      "manager": "Package manager",
+      "lockfile": "Lockfile",
+      "nodeModules": "node_modules",
+      "activity": "Recent activity"
+    },
+    "lockfile": {
+      "present": "Lockfile present",
+      "missing": "Missing lockfile"
+    },
+    "manager": {
+      "unknown": "Unknown"
+    },
+    "nodeModules": {
+      "present": "Present",
+      "missing": "Not present"
+    },
+    "actions": {
+      "first": "Scan projects",
+      "rescan": "Rescan",
+      "cancel": "Cancel scan",
+      "retryPoll": "Retry progress check"
+    },
+    "progress": {
+      "visitedDirs": "{count, plural, one {{formattedCount} folder visited} other {{formattedCount} folders visited}}",
+      "foundProjects": "{count, plural, one {{formattedCount} project found} other {{formattedCount} projects found}}",
+      "skippedCount": "{count, plural, one {{formattedCount} skipped item} other {{formattedCount} skipped items}}"
+    },
+    "status": {
+      "starting": "Starting scan…",
+      "running": "Scanning…",
+      "cancelling": "Cancelling scan…",
+      "refreshing": "Loading new results…",
+      "completed": "Scan complete",
+      "cancelled": "Scan cancelled",
+      "timedOut": "Scan timed out",
+      "failed": "Scan failed"
+    },
+    "toasts": {
+      "completed": "Scan complete. The project list has been updated.",
+      "partial": "Scan timed out. Partial results have been updated.",
+      "cancelled": "Scan cancelled. Previous results have been kept.",
+      "failed": "Scan failed. Previous results have been kept."
+    },
+    "errors": {
+      "title": "Couldn't load projects",
+      "backendUnavailable": "Couldn't connect to the backend on this machine.",
+      "rateLimited": "Too many requests. Please wait a moment and try again.",
+      "invalidResponse": "The backend returned invalid data. Please try again.",
+      "generic": "Something went wrong. Please try again.",
+      "pollFailed": "Couldn't check scan progress. Retry the check or cancel the scan.",
+      "backendHint": "Make sure the PkgSteward backend is running, then reload this page."
+    }
   },
   "designSystem": {
     "metaTitle": "Design system · PkgSteward",

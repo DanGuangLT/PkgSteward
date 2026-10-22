@@ -29,11 +29,96 @@
   "locale": {
     "label": "Ngôn ngữ"
   },
-  "home": {
+  "projects": {
     "title": "Dự án",
-    "emptyTitle": "Chưa có dữ liệu",
-    "emptyDescription": "Danh sách dự án Node.js quét được trên máy sẽ hiện ở đây khi ScannerModule (backend) hoàn thành.",
-    "viewDesignSystem": "Xem design system"
+    "listLabel": "Danh sách dự án quét được",
+    "empty": {
+      "title": "Chưa có kết quả quét",
+      "description": "Quét dự án để tìm các dự án Node.js trong những thư mục gốc đã cấu hình. Kết quả sẽ hiện ở đây."
+    },
+    "noProjects": {
+      "title": "Chưa tìm thấy dự án",
+      "description": "Lần quét gần nhất không tìm thấy dự án Node.js. Kiểm tra thư mục gốc đã cấu hình rồi quét lại."
+    },
+    "noMatch": {
+      "title": "Không có dự án phù hợp",
+      "description": "Thử tên hoặc đường dẫn khác, hoặc xoá bộ lọc để xem tất cả dự án."
+    },
+    "summary": {
+      "scannedAt": "Quét lúc",
+      "projects": "{formattedCount} dự án",
+      "orphans": "{formattedCount} thư mục node_modules không có dự án",
+      "skipped": "{formattedCount} mục đã bỏ qua"
+    },
+    "partial": {
+      "title": "Kết quả quét chưa đầy đủ",
+      "description": "Đây là kết quả một phần của lần quét gần nhất. Quét lại để tìm thêm dự án."
+    },
+    "search": {
+      "label": "Tìm dự án",
+      "placeholder": "Tìm theo tên hoặc đường dẫn",
+      "clear": "Xoá bộ lọc",
+      "results": "Đang hiển thị {formattedCount} dự án"
+    },
+    "sort": {
+      "label": "Sắp xếp theo",
+      "activity": "Hoạt động gần nhất",
+      "name": "Tên A–Z"
+    },
+    "columns": {
+      "project": "Dự án / đường dẫn",
+      "manager": "Trình quản lý gói",
+      "lockfile": "Lockfile",
+      "nodeModules": "node_modules",
+      "activity": "Hoạt động gần nhất"
+    },
+    "lockfile": {
+      "present": "Có lockfile",
+      "missing": "Thiếu lockfile"
+    },
+    "manager": {
+      "unknown": "Chưa xác định"
+    },
+    "nodeModules": {
+      "present": "Đã có",
+      "missing": "Chưa có"
+    },
+    "actions": {
+      "first": "Quét dự án",
+      "rescan": "Quét lại",
+      "cancel": "Huỷ quét",
+      "retryPoll": "Thử kiểm tra lại"
+    },
+    "progress": {
+      "visitedDirs": "{formattedCount} thư mục đã duyệt",
+      "foundProjects": "{formattedCount} dự án đã tìm thấy",
+      "skippedCount": "{formattedCount} mục đã bỏ qua"
+    },
+    "status": {
+      "starting": "Đang bắt đầu quét…",
+      "running": "Đang quét…",
+      "cancelling": "Đang huỷ quét…",
+      "refreshing": "Đang tải kết quả mới…",
+      "completed": "Quét hoàn tất",
+      "cancelled": "Đã huỷ quét",
+      "timedOut": "Quét hết thời gian",
+      "failed": "Quét thất bại"
+    },
+    "toasts": {
+      "completed": "Quét hoàn tất. Đã cập nhật danh sách dự án.",
+      "partial": "Quét hết thời gian. Đã cập nhật kết quả một phần.",
+      "cancelled": "Đã huỷ quét. Kết quả trước đó được giữ lại.",
+      "failed": "Quét thất bại. Kết quả trước đó được giữ lại."
+    },
+    "errors": {
+      "title": "Không tải được danh sách dự án",
+      "backendUnavailable": "Không kết nối được tới backend trên máy này.",
+      "rateLimited": "Có quá nhiều yêu cầu. Vui lòng chờ một chút rồi thử lại.",
+      "invalidResponse": "Backend trả về dữ liệu không hợp lệ. Vui lòng thử lại.",
+      "generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
+      "pollFailed": "Chưa kiểm tra được tiến độ quét. Thử kiểm tra lại hoặc huỷ quét.",
+      "backendHint": "Hãy bảo đảm backend PkgSteward đang chạy, rồi tải lại trang."
+    }
   },
   "designSystem": {
     "metaTitle": "Design system · PkgSteward",
