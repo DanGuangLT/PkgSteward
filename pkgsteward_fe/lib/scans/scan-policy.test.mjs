@@ -1,7 +1,18 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { shouldPoll, terminalAction } from "./scan-policy.ts"
+import { pollFailureAction, shouldPoll, terminalAction } from "./scan-policy.ts"
+
+for (const [code, action] of [
+  ["NOT_FOUND", "abandon"],
+  ["BACKEND_UNAVAILABLE", "pause"],
+  ["RATE_LIMITED", "pause"],
+  ["UNKNOWN", "pause"],
+]) {
+  test(`${code} ${action}s`, () => {
+    assert.equal(pollFailureAction(code), action)
+  })
+}
 
 test("visible running polls", () => {
   assert.equal(shouldPoll("running", true), true)

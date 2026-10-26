@@ -106,7 +106,8 @@
     },
     "toasts": {
       "completed": "Quét hoàn tất. Đã cập nhật danh sách dự án.",
-      "partial": "Quét hết thời gian. Đã cập nhật kết quả một phần.",
+      "partial": "Quét hết thời gian trước khi xong. Kết quả có thể chưa đầy đủ.",
+      "lost": "Không còn theo dõi được lần quét này (backend có thể đã khởi động lại). Kết quả trước đó được giữ lại.",
       "cancelled": "Đã huỷ quét. Kết quả trước đó được giữ lại.",
       "failed": "Quét thất bại. Kết quả trước đó được giữ lại."
     },

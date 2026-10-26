@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "@/lib/api/scan-browser"
 import { ApiError } from "@/lib/api/response"
 import type { ScanJob } from "@/lib/api/types"
-import { shouldPoll, terminalAction } from "@/lib/scans/scan-policy"
+import { pollFailureAction, shouldPoll, terminalAction } from "@/lib/scans/scan-policy"
 
 export type ScanUiState = { phase: "idle" } | { phase: "starting" }
   | { phase: "tracking"; scanId: string; job: ScanJob | null;
@@ -59,6 +59,18 @@ export function useScan(): ScanController {
       : code === "BACKEND_UNAVAILABLE" ? t("errors.backendUnavailable")
         : t("errors.generic"))
   }, [t])
+
+  const abandon = useCallback((scanId: string) => {
+    const active = current.current
+    if (!mounted.current || active.phase !== "tracking" || active.scanId !== scanId) return
+
+    stopRequest()
+    if (notifiedScanId.current !== scanId) {
+      notifiedScanId.current = scanId
+      toast.warning(t("toasts.lost"))
+    }
+    publish({ phase: "idle" })
+  }, [publish, stopRequest, t])
 
   const applyJob = useCallback((job: ScanJob) => {
     const active = current.current
@@ -113,7 +125,9 @@ export function useScan(): ScanController {
       if (!mounted.current || controller.signal.aborted || request.current !== controller || isAbort(error)) return
       const latest = current.current
       if (latest.phase === "tracking" && latest.scanId === active.scanId) {
-        publish({ ...latest, pollErrorCode: errorCode(error) })
+        const code = errorCode(error)
+        if (pollFailureAction(code) === "abandon") abandon(active.scanId)
+        else publish({ ...latest, pollErrorCode: code })
       }
     } finally {
       if (request.current === controller) request.current = null
@@ -128,7 +142,7 @@ export function useScan(): ScanController {
         void pollOnce()
       }, 1000)
     }
-  }, [applyJob, publish])
+  }, [abandon, applyJob, publish])
 
   useEffect(() => {
     function pausePoll() {
@@ -188,7 +202,10 @@ export function useScan(): ScanController {
       applyJob(job)
     } catch (error) {
       if (!mounted.current || controller.signal.aborted || request.current !== controller) return
-      if (!isAbort(error)) notifyError(error)
+      if (!isAbort(error)) {
+        if (pollFailureAction(errorCode(error)) === "abandon") abandon(active.scanId)
+        else notifyError(error)
+      }
     } finally {
       if (request.current === controller) {
         request.current = null
@@ -199,7 +216,7 @@ export function useScan(): ScanController {
         }
       }
     }
-  }, [applyJob, notifyError, poll, publish, stopRequest])
+  }, [abandon, applyJob, notifyError, poll, publish, stopRequest])
 
   const retryPoll = useCallback(() => {
     const active = current.current
