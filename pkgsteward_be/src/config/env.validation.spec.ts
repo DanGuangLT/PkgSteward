@@ -86,6 +86,35 @@ describe('validateEnv', () => {
       ));
   });
 
+  describe('NPM_COMMAND_TIMEOUT_MS', () => {
+    it('defaults to undefined (no time limit) when not set', () =>
+      expect(validateEnv({}, 'win32').NPM_COMMAND_TIMEOUT_MS).toBeUndefined());
+    it.each(['', '  '])('treats %p as no time limit', (value) =>
+      expect(
+        validateEnv({ NPM_COMMAND_TIMEOUT_MS: value }, 'win32')
+          .NPM_COMMAND_TIMEOUT_MS,
+      ).toBeUndefined(),
+    );
+    it('accepts 1000', () =>
+      expect(
+        validateEnv({ NPM_COMMAND_TIMEOUT_MS: '1000' }, 'win32')
+          .NPM_COMMAND_TIMEOUT_MS,
+      ).toBe(1000));
+    it.each(['999', '0', '-1', 'abc'])(
+      'rejects %s and explains how to remove the time limit',
+      (value) =>
+        expect(() =>
+          validateEnv({ NPM_COMMAND_TIMEOUT_MS: value }, 'win32'),
+        ).toThrow(
+          /NPM_COMMAND_TIMEOUT_MS must be at least 1000 \(1 second\); leave it empty for no time limit/,
+        ),
+    );
+    it('rejects a fractional timeout', () =>
+      expect(() =>
+        validateEnv({ NPM_COMMAND_TIMEOUT_MS: '1000.5' }, 'win32'),
+      ).toThrow(/NPM_COMMAND_TIMEOUT_MS must be an integer/));
+  });
+
   describe('SCAN_ROOT_PATHS', () => {
     it.each([undefined, '', '  '])('%p means "*"', (v) =>
       expect(

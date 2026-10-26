@@ -35,6 +35,17 @@ export const SETTINGS_FILE_KEYS: readonly string[] = [
 const blankToUndefined = ({ value }: { value: unknown }) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
 
+// Kiểm giá trị gốc: chuyển kiểu số biến chuỗi trống thành 0 trước @Transform.
+const toOptionalTimeout = ({
+  obj,
+  key,
+  value,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+  value: unknown;
+}) => (blankToUndefined({ value: obj[key] }) === undefined ? undefined : value);
+
 // Đọc giá trị gốc: implicit conversion biến "false" thành true trước khi @Transform chạy.
 const toBooleanFlag = ({
   obj,
@@ -106,13 +117,7 @@ export class EnvironmentVariables {
   @IsOptional()
   SCAN_ROOT_PATHS?: string = SCAN_ALL_FIXED_DRIVES;
 
-  // Kiểm giá trị gốc: chuyển kiểu số biến chuỗi trống thành 0 trước @Transform.
-  @Transform(
-    ({ obj, value }: { obj: Record<string, unknown>; value: unknown }) =>
-      blankToUndefined({ value: obj.SCAN_TIMEOUT_MS }) === undefined
-        ? undefined
-        : value,
-  )
+  @Transform(toOptionalTimeout)
   @Type(() => Number)
   @IsInt({ message: 'SCAN_TIMEOUT_MS must be an integer' })
   @Min(1000, {
@@ -137,10 +142,15 @@ export class EnvironmentVariables {
   @IsOptional()
   MAX_SCAN_DEPTH?: number = 0;
 
+  @Transform(toOptionalTimeout)
   @Type(() => Number)
   @IsInt({ message: 'NPM_COMMAND_TIMEOUT_MS must be an integer' })
+  @Min(1000, {
+    message:
+      'NPM_COMMAND_TIMEOUT_MS must be at least 1000 (1 second); leave it empty for no time limit',
+  })
   @IsOptional()
-  NPM_COMMAND_TIMEOUT_MS?: number = 360000;
+  NPM_COMMAND_TIMEOUT_MS?: number;
 }
 
 type FieldErrors = { field: string; messages: string[] }[];

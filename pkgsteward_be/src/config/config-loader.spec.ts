@@ -95,6 +95,7 @@ describe('loadAppConfig', () => {
   it('fills defaults when no source sets a value', () => {
     const config = loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } });
     expect(config.SCAN_TIMEOUT_MS).toBeUndefined();
+    expect(config.NPM_COMMAND_TIMEOUT_MS).toBeUndefined();
     expect(config.SCAN_ROOT_PATHS).toBe('*');
   });
   it.each(['', '  '])(
@@ -111,6 +112,21 @@ describe('loadAppConfig', () => {
     writeSettings({ SCAN_TIMEOUT_MS: 1000 });
     const config = loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } });
     expect(config.SCAN_TIMEOUT_MS).toBe(1000);
+  });
+  it.each(['', '  '])(
+    'lets a blank settings.json command timeout %p remove an env time limit',
+    (timeout) => {
+      writeSettings({ NPM_COMMAND_TIMEOUT_MS: timeout });
+      const config = loadAppConfig({
+        env: { PKGSTEWARD_DATA_DIR: dataDir, NPM_COMMAND_TIMEOUT_MS: '1000' },
+      });
+      expect(config.NPM_COMMAND_TIMEOUT_MS).toBeUndefined();
+    },
+  );
+  it('accepts a numeric command timeout from settings.json', () => {
+    writeSettings({ NPM_COMMAND_TIMEOUT_MS: 1000 });
+    const config = loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } });
+    expect(config.NPM_COMMAND_TIMEOUT_MS).toBe(1000);
   });
   it('lets settings.json override env', () => {
     writeSettings({ MAX_SCAN_DEPTH: 3, PORT: 25000 });
