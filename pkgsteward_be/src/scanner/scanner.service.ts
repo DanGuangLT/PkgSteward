@@ -94,12 +94,16 @@ export class ScannerService
       },
       controller: new AbortController(),
     };
-    // Giữ slot và đặt timeout trước cả bước phát hiện ổ đĩa.
+    // Giữ slot và đặt timeout (nếu có) trước cả bước phát hiện ổ đĩa.
     this.current = active;
-    active.timer = setTimeout(
-      () => this.finish(active, 'timed_out'),
-      Number(this.config.get<number>('SCAN_TIMEOUT_MS') ?? 900000),
-    );
+    const timeout = this.config.get<number>('SCAN_TIMEOUT_MS');
+    // Khi giá trị đã validate là undefined, ConfigService có thể trả lại chuỗi process.env.
+    if (typeof timeout === 'number') {
+      active.timer = setTimeout(
+        () => this.finish(active, 'timed_out'),
+        timeout,
+      );
+    }
     void this.run(active).catch((error: unknown) => {
       if (this.isRunning(active)) {
         this.logger.error(

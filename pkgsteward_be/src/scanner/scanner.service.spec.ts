@@ -71,7 +71,9 @@ function fixture(
       ? {}
       : { SCAN_ROOT_PATHS: options.roots ?? root }),
     MAX_SCAN_DEPTH: options.depth ?? 0,
-    SCAN_TIMEOUT_MS: options.timeout ?? 1000,
+    ...(options.timeout === undefined
+      ? {}
+      : { SCAN_TIMEOUT_MS: options.timeout }),
   });
   config.skipProcessEnv = true;
   const cache = new ScannerCache({
@@ -215,7 +217,7 @@ describe('ScannerService', () => {
   it('discovers default all-fixed roots once and starts timestamp/timer before discovery', async () => {
     const discovery = deferred<string[]>();
     const detector = { listFixedDrives: jest.fn(() => discovery.promise) };
-    const f = fixture({ roots: null, detector });
+    const f = fixture({ roots: null, detector, timeout: 1000 });
     const scan = f.service.startScan();
     expect(f.service.startScan()).toEqual(scan);
     expect(detector.listFixedDrives).toHaveBeenCalledTimes(1);
@@ -330,8 +332,59 @@ describe('ScannerService', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('timeout captures the walker snapshot resolved on abort, then freezes it', async () => {
+  it('keeps running beyond 900000 ms without a configured timeout and completes normally', async () => {
     const f = fixture();
+    const scan = f.service.startScan();
+    await tick();
+    jest.advanceTimersByTime(900001);
+    await tick();
+    expect(f.service.getScan(scan.scanId)).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        partial: false,
+        finishedAt: undefined,
+      }),
+    );
+    expect(f.walks[0].signal.aborted).toBe(false);
+    expect(() => f.service.getLatest()).toThrow(NotFoundException);
+    const value = snapshot();
+    f.walks[0].task.resolve(value);
+    await tick();
+    expect(f.service.getScan(scan.scanId).status).toBe('completed');
+    expect(f.service.getLatest()).toEqual(
+      expect.objectContaining({
+        status: 'completed',
+        partial: false,
+        projects: value.projects,
+        finishedAt: '2026-10-21T00:15:00.001Z',
+      }),
+    );
+    expect(f.save).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('keeps waiting for drive discovery beyond 900000 ms without a configured timeout', async () => {
+    const discovery = deferred<string[]>();
+    const f = fixture({
+      roots: '*',
+      detector: { listFixedDrives: () => discovery.promise },
+    });
+    const scan = f.service.startScan();
+    jest.advanceTimersByTime(900001);
+    await tick();
+    expect(f.service.getScan(scan.scanId).status).toBe('running');
+    discovery.resolve([root]);
+    await tick();
+    expect(f.walker).toHaveBeenCalledTimes(1);
+    expect(f.service.cancelScan(scan.scanId)).toEqual(
+      expect.objectContaining({ status: 'cancelled', partial: true }),
+    );
+    expect(f.walks[0].signal.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('timeout captures the walker snapshot resolved on abort, then freezes it', async () => {
+    const f = fixture({ timeout: 1000 });
     const scan = f.service.startScan();
     await tick();
     const value = snapshot();
@@ -371,7 +424,7 @@ describe('ScannerService', () => {
   });
 
   it('keeps visitedDirs in a timed-out job when real walker metadata is blocked', async () => {
-    const f = fixture();
+    const f = fixture({ timeout: 1000 });
     const reading = deferred<void>();
     const content = deferred<string>();
     const fs: IScanFs = {
@@ -424,6 +477,7 @@ describe('ScannerService', () => {
       const discovery = deferred<string[]>();
       const f = fixture({
         roots: '*',
+        timeout: action === 'timeout' ? 1000 : undefined,
         detector: { listFixedDrives: jest.fn(() => discovery.promise) },
       });
       const scan = f.service.startScan();
@@ -445,7 +499,7 @@ describe('ScannerService', () => {
 
   it('preserves latest and cache when timeout happens during hung discovery', async () => {
     const discovery = deferred<string[]>();
-    const f = fixture({ roots: '*' });
+    const f = fixture({ roots: '*', timeout: 1000 });
     f.detect
       .mockResolvedValueOnce([root])
       .mockReturnValueOnce(discovery.promise);
@@ -516,7 +570,7 @@ describe('ScannerService', () => {
   );
 
   it('waits for a real walker snapshot before publishing a timed-out result', async () => {
-    const f = fixture();
+    const f = fixture({ timeout: 1000 });
     const scan = f.service.startScan();
     await tick();
     jest.advanceTimersByTime(1000);
@@ -541,7 +595,7 @@ describe('ScannerService', () => {
   it.each(['resolve first', 'cancel first', 'timeout first'] as const)(
     'settles terminal race once: %s',
     async (order) => {
-      const f = fixture();
+      const f = fixture({ timeout: 1000 });
       const scan = f.service.startScan();
       await tick();
       if (order === 'resolve first') {
