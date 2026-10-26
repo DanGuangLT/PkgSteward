@@ -21,9 +21,8 @@ export const listPackageTargets = async (
   const rootKey = toComparable(root, platform);
   const rows: IDiskUsageRow[] = [];
   const targets = new Map<string, IDiskUsageRow>();
-  let limited = false;
   const add = (row: IDiskUsageRow) => {
-    if (signal.aborted || limited) return;
+    if (signal.aborted) return;
     if (row.canonicalPath) {
       const key = toComparable(row.canonicalPath, platform);
       const existing = targets.get(key);
@@ -31,11 +30,6 @@ export const listPackageTargets = async (
         existing.aliases.push(...row.aliases);
         return;
       }
-    }
-    if (rows.length === DISK_ROW_LIMIT) {
-      limited = true;
-      deps.onRowLimit?.();
-      return;
     }
     rows.push(row);
     if (row.canonicalPath) {
@@ -58,22 +52,34 @@ export const listPackageTargets = async (
     row.reason = reason;
     add(row);
   };
-  const inspect = async (path: string, name: string, scope = false) => {
+  const inspect = async (
+    entry: Dirent,
+    path: string,
+    name: string,
+    scope = false,
+  ) => {
     const row = rowFor(path, name);
     if (isProtected(path)) {
       exclude(row, 'protected');
       return null;
     }
     let canonical: string;
+    let directory = entry.isDirectory();
+    let link = entry.isSymbolicLink();
     try {
       if (signal.aborted) return null;
-      const stats = await fs.lstat(path, signal);
-      if (signal.aborted) return null;
-      if (scope && stats.isSymbolicLink()) {
+      if (!directory && !link) {
+        const stats = await fs.lstat(path, signal);
+        if (signal.aborted) return null;
+        if (stats.isFile()) return null;
+        directory = stats.isDirectory();
+        link = stats.isSymbolicLink();
+      }
+      if (scope && link) {
         exclude(row, 'link_skipped');
         return null;
       }
-      if (!stats.isDirectory() && !stats.isSymbolicLink()) {
+      if (!directory && !link) {
         exclude(row, 'unsupported');
         return null;
       }
@@ -97,41 +103,50 @@ export const listPackageTargets = async (
       return null;
     }
     if (scope) return canonical;
-    // Chỉ stat đích sau containment/matcher; không mở cây qua alias.
-    try {
-      const target = await fs.lstat(canonical, signal);
-      if (signal.aborted) return null;
-      if (!target.isDirectory() || target.isSymbolicLink()) {
-        exclude(row, 'unsupported');
+    // Alias không có Dirent của đích: chỉ stat đích sau containment/matcher.
+    if (link) {
+      try {
+        const target = await fs.lstat(canonical, signal);
+        if (signal.aborted) return null;
+        if (!target.isDirectory() || target.isSymbolicLink()) {
+          exclude(row, 'unsupported');
+          return null;
+        }
+      } catch {
+        if (!signal.aborted) exclude(row, 'unreadable');
         return null;
       }
-    } catch {
-      if (!signal.aborted) exclude(row, 'unreadable');
-      return null;
     }
     row.canonicalPath = canonical;
     add(row);
     return canonical;
   };
 
+  const candidate = (entry: Dirent) =>
+    !entry.isFile() &&
+    !entry.isBlockDevice() &&
+    !entry.isCharacterDevice() &&
+    !entry.isFIFO() &&
+    !entry.isSocket();
+
   if (signal.aborted) return rows;
   for await (const entry of fs.entries(root, signal)) {
-    if (signal.aborted || limited) break;
+    if (signal.aborted) break;
     if (entry.name.startsWith('.')) continue;
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (!candidate(entry)) continue;
     const path = api.join(root, entry.name);
     if (!entry.name.startsWith('@')) {
-      await inspect(path, entry.name);
+      await inspect(entry, path, entry.name);
       if (signal.aborted) break;
       continue;
     }
-    const scope = await inspect(path, entry.name, true);
-    if (signal.aborted || limited) break;
+    const scope = await inspect(entry, path, entry.name, true);
+    if (signal.aborted) break;
     if (!scope) continue;
     // Scope chỉ một cấp; junction scope bị loại trước khi enumerate.
     const iterator = fs.entries(scope, signal)[Symbol.asyncIterator]();
     try {
-      while (!signal.aborted && !limited) {
+      while (!signal.aborted) {
         let result: IteratorResult<Dirent>;
         try {
           result = await iterator.next();
@@ -142,8 +157,9 @@ export const listPackageTargets = async (
         if (signal.aborted || result.done) break;
         const child = result.value;
         if (child.name.startsWith('.')) continue;
-        if (!child.isDirectory() && !child.isSymbolicLink()) continue;
+        if (!candidate(child)) continue;
         await inspect(
+          child,
           api.join(scope, child.name),
           `${entry.name}/${child.name}`,
         );

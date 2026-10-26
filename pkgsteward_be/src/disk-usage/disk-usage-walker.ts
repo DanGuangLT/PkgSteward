@@ -142,6 +142,7 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
     const job = structuredClone(initial);
     const work = new AbortController();
     const total = makeBucket(null);
+    const rows: IDiskUsageRow[] = [];
     const buckets: IBucket[] = [];
     const directRows = new Map<string, IBucket>();
     const packageTargets = new Map<string, IBucket[]>();
@@ -153,7 +154,25 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
     let incomplete = false;
     let identities = 0;
     let lastPublished = 0;
-    let rowLimited = false;
+    let rootEntries: Dirent[] | undefined;
+
+    const outputRows = (listing = false): IDiskUsageRow[] => {
+      if (listing) return rows.slice(0, DISK_ROW_LIMIT);
+      return [...rows]
+        .sort((left, right) => {
+          if (left.sizeBytes === null || right.sizeBytes === null) {
+            if (left.sizeBytes !== null) return -1;
+            if (right.sizeBytes !== null) return 1;
+            // Sort ổn định giữ thứ tự listing cho các hàng còn pending.
+            if (job.status === 'running') return 0;
+          } else if (left.sizeBytes !== right.sizeBytes) {
+            return right.sizeBytes - left.sizeBytes;
+          }
+          if (left.name !== right.name) return left.name < right.name ? -1 : 1;
+          return left.path === right.path ? 0 : left.path < right.path ? -1 : 1;
+        })
+        .slice(0, DISK_ROW_LIMIT);
+    };
 
     const updateNumbers = () => {
       job.sizeBytes = Number(total.bytes);
@@ -171,8 +190,10 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
       const now = Date.now();
       if (!listing && now - lastPublished < 250) return;
       if (!listing) updateNumbers();
-      lastPublished = now;
-      deps.onSnapshot(structuredClone(job));
+      deps.onSnapshot(
+        structuredClone({ ...job, children: outputRows(listing) }),
+      );
+      lastPublished = Date.now();
     };
     const finish = (
       status: IDiskUsageJob['status'],
@@ -182,13 +203,19 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
       if (stopped) return;
       stopped = true;
       signal.removeEventListener('abort', onAbort);
+      const traversalComplete =
+        status === 'completed' && (reason === null || reason === 'row_limit');
+      const stopReason =
+        reason ??
+        (status === 'completed' && rows.length > DISK_ROW_LIMIT
+          ? 'row_limit'
+          : null);
       updateNumbers();
       for (const bucket of buckets) {
         const row = bucket.row;
         if (!row || row.state === 'excluded') continue;
         if (!bucket.visited) {
-          row.state =
-            status === 'completed' && !reason ? 'excluded' : 'partial';
+          row.state = traversalComplete ? 'excluded' : 'partial';
           if (row.state === 'excluded') {
             row.canonicalPath = null;
             row.reason = 'unreadable';
@@ -197,26 +224,34 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
           }
         } else {
           row.state =
-            bucket.partial || status !== 'completed' || reason
-              ? 'partial'
-              : 'complete';
+            bucket.partial || !traversalComplete ? 'partial' : 'complete';
+        }
+      }
+      if (!traversalComplete) {
+        for (const row of rows) {
+          if (row.state === 'pending' || row.state === 'measuring') {
+            row.state = 'partial';
+          }
         }
       }
       job.status = status;
-      job.stopReason = reason;
+      job.stopReason = stopReason;
       job.failureCode = failureCode;
-      job.partial = incomplete || status !== 'completed' || reason !== null;
+      job.partial = incomplete || status !== 'completed' || stopReason !== null;
       job.finishedAt = new Date().toISOString();
       job.measuredAt = status === 'completed' ? job.finishedAt : null;
-      const result = terminalSnapshot(job);
+      const result = terminalSnapshot({ ...job, children: outputRows() });
       work.abort();
       queue.length = 0;
+      if (rootEntries) rootEntries.length = 0;
+      rootEntries = undefined;
       directRows.clear();
       packageTargets.clear();
       visitedDirectories.clear();
       total.identities.clear();
       for (const bucket of buckets) bucket.identities.clear();
       buckets.length = 0;
+      rows.length = 0;
       job.children = [];
       try {
         deps.onSnapshot(terminalSnapshot(result));
@@ -319,6 +354,7 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
 
     const inspectChild = async (
       input: string,
+      entry: Dirent,
       parentBuckets: IBucket[],
     ): Promise<void> => {
       if (stopped) return;
@@ -327,29 +363,56 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
         markIssue(parentBuckets, 'protected', direct, true);
         return;
       }
-      let stats: BigIntStats;
-      try {
-        stats = await fs.lstat(input, work.signal);
-      } catch {
-        if (!stopped) markIssue(parentBuckets, 'unreadable', direct);
-        return;
+      let kind: 'file' | 'directory' | 'link' | 'unsupported' | null =
+        entry.isSymbolicLink()
+          ? 'link'
+          : entry.isDirectory()
+            ? 'directory'
+            : entry.isFile()
+              ? 'file'
+              : entry.isBlockDevice() ||
+                  entry.isCharacterDevice() ||
+                  entry.isFIFO() ||
+                  entry.isSocket()
+                ? 'unsupported'
+                : null;
+      let stats: BigIntStats | undefined;
+      if (kind === 'file' || kind === null) {
+        try {
+          stats = await fs.lstat(input, work.signal);
+        } catch {
+          if (!stopped) markIssue(parentBuckets, 'unreadable', direct);
+          return;
+        }
+        if (stopped) return;
+        if (stats.isSymbolicLink()) kind = 'link';
+        else if (kind === null) {
+          kind = stats.isDirectory()
+            ? 'directory'
+            : stats.isFile()
+              ? 'file'
+              : 'unsupported';
+        } else if (!stats.isFile()) kind = 'unsupported';
       }
       if (stopped) return;
-      if (stats.isSymbolicLink()) {
+      if (kind === 'link') {
+        if (direct?.row) direct.row.kind = 'link';
         job.progress.skippedLinks++;
         markIssue(parentBuckets, 'link_skipped', direct, true);
         return;
       }
-      if (!stats.isDirectory() && !stats.isFile()) {
+      if (kind !== 'directory' && kind !== 'file') {
         markIssue(parentBuckets, 'unsupported', direct, true);
         return;
       }
-      let canonical: string;
-      try {
-        canonical = api.resolve(await fs.realpath(input, work.signal));
-      } catch {
-        if (!stopped) markIssue(parentBuckets, 'unreadable', direct);
-        return;
+      let canonical = input;
+      if (kind === 'directory') {
+        try {
+          canonical = api.resolve(await fs.realpath(input, work.signal));
+        } catch {
+          if (!stopped) markIssue(parentBuckets, 'unreadable', direct);
+          return;
+        }
       }
       if (stopped) return;
       const key = toComparable(canonical, platform);
@@ -368,14 +431,17 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
       ]) {
         if (!affected.includes(bucket)) affected.push(bucket);
       }
-      if (direct?.row) direct.row.canonicalPath = canonical;
-      if (stats.isFile()) {
+      if (direct?.row) {
+        direct.row.kind = kind;
+        direct.row.canonicalPath = canonical;
+      }
+      if (kind === 'file' && stats) {
         for (const bucket of affected) {
           bucket.visited = true;
           if (bucket.row?.state === 'pending') bucket.row.state = 'measuring';
         }
         addFile(stats, affected, direct);
-      } else if (!visitedDirectories.has(key)) {
+      } else if (kind === 'directory' && !visitedDirectories.has(key)) {
         visitedDirectories.add(key);
         queue.push({ path: canonical, buckets: affected, root: false });
         schedule();
@@ -416,7 +482,11 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
           }
           if (!entry || stopped) break;
           job.progress.visitedEntries++;
-          await inspectChild(api.join(item.path, entry.name), item.buckets);
+          await inspectChild(
+            api.join(item.path, entry.name),
+            entry,
+            item.buckets,
+          );
           if (stopped) return;
           publish();
         }
@@ -470,24 +540,16 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
       }
       let entries: Dirent[] | undefined;
       if (job.view === 'packages') {
-        const rows = await listPackageTargets(root, work.signal, {
-          ...deps,
-          onRowLimit: () => {
-            rowLimited = true;
-          },
-        });
+        const targets = await listPackageTargets(root, work.signal, deps);
         if (stopped) return;
-        job.children = rows;
+        // Không spread mảng lớn vào push (có thể vượt giới hạn số argument).
+        for (const row of targets) rows.push(row);
       } else {
-        entries = [];
+        entries = rootEntries = [];
         for await (const entry of fs.entries(root, work.signal)) {
           if (stopped) return;
-          if (job.children.length === DISK_ROW_LIMIT) {
-            rowLimited = true;
-            break;
-          }
           entries.push(entry);
-          job.children.push({
+          rows.push({
             path: api.join(root, entry.name),
             name: entry.name,
             kind: entry.isSymbolicLink()
@@ -505,7 +567,7 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
         }
       }
       if (stopped) return;
-      for (const row of job.children) {
+      for (const row of rows) {
         const bucket = makeBucket(row);
         buckets.push(bucket);
         if (row.state === 'excluded') {
@@ -520,15 +582,12 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
           packageTargets.set(key, targets);
         }
       }
+      job.stopReason = rows.length > DISK_ROW_LIMIT ? 'row_limit' : null;
       publish(true);
       if (stopped) return;
       job.phase = 'measuring';
-      if (rowLimited) {
-        finish('completed', 'row_limit');
-        return;
-      }
       visitedDirectories.add(rootKey);
-      queue.push({ path: root, buckets: [], entries, root: true });
+      queue.push({ path: canonical, buckets: [], entries, root: true });
       schedule();
     };
     signal.addEventListener('abort', onAbort, { once: true });

@@ -73,6 +73,7 @@ const fixture = (view: DiskView = 'directory') => {
   const key = (p: string) => path.resolve(p).toLowerCase();
   interface INode {
     kind: 'directory' | 'file' | 'link' | 'special';
+    unknownDirent?: boolean;
     size: bigint;
     ino: bigint;
     dev: bigint;
@@ -116,14 +117,26 @@ const fixture = (view: DiskView = 'directory') => {
       isSymbolicLink: () => node.kind === 'link',
     }) as BigIntStats;
   const fs = {
-    entries: jest.fn(async function* (p: string, signal: AbortSignal) {
+    entries: jest.fn(async function* (
+      p: string,
+      signal: AbortSignal,
+    ): AsyncGenerator<Dirent> {
       await Promise.resolve();
       for (const child of get(p).children) {
         if (signal.aborted) return;
+        const node = get(child);
+        const kind = node.unknownDirent ? null : node.kind;
         yield {
           name: path.basename(child),
-          ...stat(get(child)),
-        } as unknown as Dirent;
+          parentPath: p,
+          isDirectory: () => kind === 'directory',
+          isFile: () => kind === 'file',
+          isSymbolicLink: () => kind === 'link',
+          isBlockDevice: () => false,
+          isCharacterDevice: () => false,
+          isFIFO: () => kind === 'special',
+          isSocket: () => false,
+        };
       }
     }),
     lstat: jest.fn((p: string) => Promise.resolve(stat(get(p)))),
@@ -472,24 +485,196 @@ describe('walkDiskUsage', () => {
   });
 
   it.each<DiskView>(['directory', 'packages'])(
-    'returns row_limit partial when %s has more than 2000 rows',
+    '%s row limit still measures every child and keeps the 2000 largest rows',
     async (view) => {
       const f = fixture(view);
-      for (let i = 0; i <= DISK_ROW_LIMIT; i++) {
-        f.dir(path.join(f.root, `pkg-${i}`));
+      for (let i = 0; i < 2002; i++) {
+        const child = f.dir(path.join(f.root, `pkg-${i}`));
+        f.file(path.join(child, 'data'), BigInt(i + 1));
       }
       const result = await f.run();
       expect(result).toMatchObject({
         status: 'completed',
         partial: true,
         stopReason: 'row_limit',
+        sizeBytes: 2_005_003,
+        fileCount: 2002,
       });
-      expect(result.children.length).toBeLessThanOrEqual(DISK_ROW_LIMIT);
+      expect(result.progress.visitedDirs).toBe(2003);
+      expect(result.children).toHaveLength(2000);
+      expect(result.children.map((row) => row.sizeBytes)).toEqual(
+        Array.from({ length: 2000 }, (_, i) => 2002 - i),
+      );
+      expect(result.children[0]).toMatchObject({
+        name: 'pkg-2001',
+        state: 'complete',
+        sizeBytes: 2002,
+        fileCount: 1,
+      });
+      expect(result.children[1999]).toMatchObject({
+        name: 'pkg-2',
+        sizeBytes: 3,
+        fileCount: 1,
+      });
+      const listing = f.snapshots.find(
+        (snapshot) =>
+          snapshot.status === 'running' && snapshot.phase === 'listing',
+      );
+      expect(listing?.children.map((row) => row.name)).toEqual(
+        Array.from({ length: 2000 }, (_, i) => `pkg-${i}`),
+      );
+      expect(
+        listing?.children.every(
+          (row) => row.state === 'pending' && row.sizeBytes === null,
+        ),
+      ).toBe(true);
       for (const snapshot of f.snapshots) {
         expect(snapshot.children.length).toBeLessThanOrEqual(DISK_ROW_LIMIT);
       }
     },
   );
+
+  it.each<DiskView>(['directory', 'packages'])(
+    '%s orders equal-sized rows by name independently of listing order',
+    async (view) => {
+      const f = fixture(view);
+      for (const name of ['zeta', 'alpha', 'middle']) {
+        const child = f.dir(path.join(f.root, name));
+        f.file(path.join(child, 'data'), 5n);
+      }
+      const result = await f.run();
+      expect(result).toMatchObject({
+        status: 'completed',
+        partial: false,
+        stopReason: null,
+        sizeBytes: 15,
+        fileCount: 3,
+      });
+      expect(result.children.map((row) => row.name)).toEqual([
+        'alpha',
+        'middle',
+        'zeta',
+      ]);
+    },
+  );
+
+  it('lstats regular files but never realpaths them', async () => {
+    const f = fixture();
+    const nested = f.dir(path.join(f.root, 'nested'));
+    const files = [
+      f.file(path.join(f.root, 'top'), 7n),
+      f.file(path.join(nested, 'data'), 11n),
+    ];
+    const result = await f.run();
+    expect(result).toMatchObject({
+      sizeBytes: 18,
+      fileCount: 2,
+      partial: false,
+    });
+    for (const file of files) {
+      expect(f.fs.lstat.mock.calls.filter(([p]) => p === file)).toHaveLength(1);
+      expect(f.fs.realpath.mock.calls.map(([p]) => p)).not.toContain(file);
+    }
+    expect(result.children.find((row) => row.name === 'top')).toMatchObject({
+      canonicalPath: files[0],
+      sizeBytes: 7,
+    });
+  });
+
+  it('skips links identified by Dirent without metadata syscalls', async () => {
+    const f = fixture();
+    const outside = f.dir('E:\\TEST\\outside');
+    f.file(path.join(outside, 'secret'), 100n);
+    const alias = f.link(path.join(f.root, 'alias'), outside);
+    f.file(path.join(f.root, 'good'), 7n);
+    const result = await f.run();
+    expect(result).toMatchObject({ sizeBytes: 7, fileCount: 1 });
+    expect(result.progress.skippedLinks).toBe(1);
+    expect(result.children.find((row) => row.path === alias)).toMatchObject({
+      state: 'excluded',
+      reason: 'link_skipped',
+      canonicalPath: null,
+      sizeBytes: null,
+    });
+    for (const path of [alias, outside]) {
+      expect(f.fs.lstat.mock.calls.map(([p]) => p)).not.toContain(path);
+      expect(f.fs.realpath.mock.calls.map(([p]) => p)).not.toContain(path);
+    }
+    expect(f.fs.entries.mock.calls.map(([p]) => p)).toEqual([f.root]);
+  });
+
+  it('realpaths directories identified by Dirent without lstat', async () => {
+    const f = fixture();
+    const first = f.dir(path.join(f.root, 'first'));
+    const second = f.dir(path.join(first, 'second'));
+    f.file(path.join(second, 'data'), 13n);
+    const result = await f.run();
+    expect(result).toMatchObject({
+      sizeBytes: 13,
+      fileCount: 1,
+      partial: false,
+    });
+    for (const directory of [first, second]) {
+      expect(f.fs.lstat.mock.calls.map(([p]) => p)).not.toContain(directory);
+      expect(
+        f.fs.realpath.mock.calls.filter(([p]) => p === directory),
+      ).toHaveLength(1);
+      expect(f.fs.entries.mock.calls.map(([p]) => p)).toContain(directory);
+    }
+  });
+
+  it.each(['file', 'directory', 'link'] as const)(
+    'falls back to lstat for unknown Dirent type (%s)',
+    async (kind) => {
+      const f = fixture();
+      const entry = path.join(f.root, 'unknown');
+      if (kind === 'directory') {
+        f.dir(entry);
+        f.file(path.join(entry, 'data'), 7n);
+      } else if (kind === 'file') {
+        f.file(entry, 7n);
+      } else {
+        f.link(entry, 'E:\\TEST\\outside');
+      }
+      f.nodes.get(f.key(entry))!.unknownDirent = true;
+      const result = await f.run();
+      expect(result).toMatchObject({
+        status: 'completed',
+        sizeBytes: kind === 'link' ? 0 : 7,
+        fileCount: kind === 'link' ? 0 : 1,
+      });
+      expect(f.fs.lstat.mock.calls.filter(([p]) => p === entry)).toHaveLength(
+        1,
+      );
+      if (kind === 'link') {
+        expect(result.progress.skippedLinks).toBe(1);
+        expect(f.fs.realpath.mock.calls.map(([p]) => p)).not.toContain(entry);
+      }
+    },
+  );
+
+  it('skips a regular file that became a link before lstat', async () => {
+    const f = fixture();
+    const changed = f.file(path.join(f.root, 'changed'), 100n);
+    f.file(path.join(f.root, 'good'), 7n);
+    const lstat = f.fs.lstat.getMockImplementation()!;
+    f.fs.lstat.mockImplementation((p) =>
+      p === changed
+        ? Promise.resolve(
+            f.stat({ ...f.nodes.get(f.key(changed))!, kind: 'link' }),
+          )
+        : lstat(p),
+    );
+    const result = await f.run();
+    expect(result).toMatchObject({ sizeBytes: 7, fileCount: 1 });
+    expect(result.progress.skippedLinks).toBe(1);
+    expect(result.children.find((row) => row.path === changed)).toMatchObject({
+      state: 'excluded',
+      reason: 'link_skipped',
+      sizeBytes: null,
+    });
+    expect(f.fs.realpath.mock.calls.map(([p]) => p)).not.toContain(changed);
+  });
 
   it('has no entry ceiling for a wide directory below the shallow row ceiling', async () => {
     const f = fixture();
@@ -631,15 +816,15 @@ describe('walkDiskUsage', () => {
     const f = fixture();
     const child = f.dir(path.join(f.root, 'slow'));
     const gate = deferred<void>();
-    const lstat = f.fs.lstat.getMockImplementation()!;
-    f.fs.lstat.mockImplementation(async (p) => {
+    const realpath = f.fs.realpath.getMockImplementation()!;
+    f.fs.realpath.mockImplementation(async (p) => {
       if (p === child) await gate.promise;
-      return lstat(p);
+      return realpath(p);
     });
     const pending = f.run();
     try {
       await settle();
-      expect(f.fs.lstat.mock.calls.map(([p]) => p)).toContain(child);
+      expect(f.fs.realpath.mock.calls.map(([p]) => p)).toContain(child);
       f.controller.abort();
       let result: IDiskUsageJob | undefined;
       void pending.then((value) => (result = value)).catch(() => undefined);
@@ -665,15 +850,15 @@ describe('walkDiskUsage', () => {
   it('catches late IO rejection after cancellation without a second terminal snapshot', async () => {
     const f = fixture();
     const child = f.dir(path.join(f.root, 'slow'));
-    const gate = deferred<BigIntStats>();
-    const lstat = f.fs.lstat.getMockImplementation()!;
-    f.fs.lstat.mockImplementation((p) =>
-      p === child ? gate.promise : lstat(p),
+    const gate = deferred<string>();
+    const realpath = f.fs.realpath.getMockImplementation()!;
+    f.fs.realpath.mockImplementation((p) =>
+      p === child ? gate.promise : realpath(p),
     );
     const pending = f.run();
     try {
       await settle();
-      expect(f.fs.lstat.mock.calls.map(([p]) => p)).toContain(child);
+      expect(f.fs.realpath.mock.calls.map(([p]) => p)).toContain(child);
       f.controller.abort();
       let done = false;
       void pending.then(() => (done = true)).catch(() => undefined);
@@ -684,7 +869,7 @@ describe('walkDiskUsage', () => {
       await settle();
       expect(f.onSnapshot).toHaveBeenCalledTimes(callbacks);
     } finally {
-      gate.resolve(f.stat(f.nodes.get(f.key(child))!));
+      gate.resolve(child);
     }
     expect((await pending).status).toBe('cancelled');
   });

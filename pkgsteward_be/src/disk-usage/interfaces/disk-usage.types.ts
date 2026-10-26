@@ -74,8 +74,6 @@ export interface IDiskWalkDeps {
   platform: PathPlatform;
   isProtected: ProtectedTreeMatcher;
   onSnapshot(snapshot: IDiskUsageJob): void;
-  // Báo phần listing bị cắt mà không thêm hàng thứ 2001 vào snapshot.
-  onRowLimit?(): void;
 }
 
 export type DiskWalker = (

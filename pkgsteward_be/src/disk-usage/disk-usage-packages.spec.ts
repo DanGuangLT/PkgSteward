@@ -16,6 +16,7 @@ const fixture = () => {
   const key = (p: string) => path.resolve(p).toLowerCase();
   interface INode {
     kind: 'directory' | 'file' | 'link';
+    unknownDirent?: boolean;
     target?: string;
     error?: string;
     children: string[];
@@ -37,16 +38,32 @@ const fixture = () => {
     isSymbolicLink: () => node.kind === 'link',
   });
   const fs = {
-    entries: jest.fn(async function* (p: string, signal: AbortSignal) {
+    entries: jest.fn(async function* (
+      p: string,
+      signal: AbortSignal,
+    ): AsyncGenerator<Dirent> {
       await Promise.resolve();
       const node = get(p);
       if (node.error) throw errno(node.error);
       for (const child of node.children) {
         if (signal.aborted) return;
+        const childNode = get(child);
         yield {
           name: path.basename(child),
-          ...kindStats(get(child)),
-        } as Dirent;
+          parentPath: p,
+          ...kindStats(childNode),
+          isBlockDevice: () => false,
+          isCharacterDevice: () => false,
+          isFIFO: () => false,
+          isSocket: () => false,
+          ...(childNode.unknownDirent
+            ? {
+                isDirectory: () => false,
+                isFile: () => false,
+                isSymbolicLink: () => false,
+              }
+            : {}),
+        };
       }
     }),
     lstat: jest.fn((p: string) =>
@@ -235,13 +252,64 @@ describe('listPackageTargets', () => {
     expect(await f.run()).toEqual([]);
   });
 
-  it('caps canonical rows at 2000 rather than returning an unbounded listing', async () => {
+  it('lists every canonical target beyond the snapshot limit for later measurement', async () => {
     const f = fixture();
     expect(DISK_ROW_LIMIT).toBe(2000);
-    for (let i = 0; i <= DISK_ROW_LIMIT; i++) {
+    for (let i = 0; i < DISK_ROW_LIMIT + 2; i++) {
       f.dir(path.join(f.root, `pkg-${i}`));
     }
-    expect(await f.run()).toHaveLength(DISK_ROW_LIMIT);
+    const rows = await f.run();
+    expect(rows).toHaveLength(2002);
+    expect(rows[0].name).toBe('pkg-0');
+    expect(rows[2001]).toMatchObject({
+      name: 'pkg-2001',
+      state: 'pending',
+      sizeBytes: null,
+      fileCount: null,
+    });
+  });
+
+  it('still groups aliases discovered after more than 2000 canonical targets', async () => {
+    const f = fixture();
+    const first = f.dir(path.join(f.root, 'first'));
+    for (let i = 0; i < 2000; i++) f.dir(path.join(f.root, `pkg-${i}`));
+    f.link(path.join(f.root, 'late-alias'), first);
+    const rows = await f.run();
+    expect(rows).toHaveLength(2001);
+    expect(rows.find((row) => row.name === 'first')).toMatchObject({
+      canonicalPath: first,
+      aliases: ['first', 'late-alias'],
+    });
+  });
+
+  it('realpaths known package and scope directories without lstat', async () => {
+    const f = fixture();
+    const plain = f.dir(path.join(f.root, 'plain'));
+    const scope = f.dir(path.join(f.root, '@scope'));
+    const scoped = f.dir(path.join(scope, 'name'));
+    const rows = await f.run();
+    expect(rows.map((row) => row.name)).toEqual(['plain', '@scope/name']);
+    expect(f.fs.lstat).not.toHaveBeenCalled();
+    expect(f.fs.realpath.mock.calls.map(([p]) => p)).toEqual([
+      plain,
+      scope,
+      scoped,
+    ]);
+  });
+
+  it('falls back to lstat for an unknown package directory Dirent', async () => {
+    const f = fixture();
+    const target = f.dir(path.join(f.root, 'unknown'));
+    f.nodes.get(f.key(target))!.unknownDirent = true;
+    expect(await f.run()).toEqual([
+      expect.objectContaining({
+        name: 'unknown',
+        canonicalPath: target,
+        state: 'pending',
+      }),
+    ]);
+    expect(f.fs.lstat.mock.calls.map(([p]) => p)).toContain(target);
+    expect(f.fs.realpath.mock.calls.map(([p]) => p)).toContain(target);
   });
 
   it('does no IO for an already aborted listing', async () => {
