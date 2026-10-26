@@ -94,8 +94,23 @@ describe('loadAppConfig', () => {
 
   it('fills defaults when no source sets a value', () => {
     const config = loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } });
-    expect(config.SCAN_TIMEOUT_MS).toBe(900000);
+    expect(config.SCAN_TIMEOUT_MS).toBeUndefined();
     expect(config.SCAN_ROOT_PATHS).toBe('*');
+  });
+  it.each(['', '  '])(
+    'lets a blank settings.json timeout %p remove an env time limit',
+    (timeout) => {
+      writeSettings({ SCAN_TIMEOUT_MS: timeout });
+      const config = loadAppConfig({
+        env: { PKGSTEWARD_DATA_DIR: dataDir, SCAN_TIMEOUT_MS: '1000' },
+      });
+      expect(config.SCAN_TIMEOUT_MS).toBeUndefined();
+    },
+  );
+  it('accepts a numeric timeout from settings.json', () => {
+    writeSettings({ SCAN_TIMEOUT_MS: 1000 });
+    const config = loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } });
+    expect(config.SCAN_TIMEOUT_MS).toBe(1000);
   });
   it('lets settings.json override env', () => {
     writeSettings({ MAX_SCAN_DEPTH: 3, PORT: 25000 });

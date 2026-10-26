@@ -106,11 +106,21 @@ export class EnvironmentVariables {
   @IsOptional()
   SCAN_ROOT_PATHS?: string = SCAN_ALL_FIXED_DRIVES;
 
+  // Kiểm giá trị gốc: chuyển kiểu số biến chuỗi trống thành 0 trước @Transform.
+  @Transform(
+    ({ obj, value }: { obj: Record<string, unknown>; value: unknown }) =>
+      blankToUndefined({ value: obj.SCAN_TIMEOUT_MS }) === undefined
+        ? undefined
+        : value,
+  )
   @Type(() => Number)
   @IsInt({ message: 'SCAN_TIMEOUT_MS must be an integer' })
-  @Min(1000, { message: 'SCAN_TIMEOUT_MS must be at least 1000 (1 second)' })
+  @Min(1000, {
+    message:
+      'SCAN_TIMEOUT_MS must be at least 1000 (1 second); leave it empty for no time limit',
+  })
   @IsOptional()
-  SCAN_TIMEOUT_MS?: number = 900000;
+  SCAN_TIMEOUT_MS?: number;
 
   // D3: thư mục dữ liệu runtime; không đặt = %LOCALAPPDATA%\PkgSteward.
   @Transform(blankToUndefined)
