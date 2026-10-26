@@ -24,6 +24,24 @@ pnpm dev        # http://localhost:24680
 | `pnpm theme:check` | Check WCAG 2.1 AA contrast for every preset in `styles/themes/` |
 | `pnpm i18n:check` | Compare each locale's keys with the default locale (`vi`): extra keys fail, missing keys only warn |
 
+## Backend connection
+
+In `pkgsteward_fe/`, copy `.env.example` to `.env.local` before starting the frontend:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+`API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host and port must match
+`HOST` and `PORT` in `pkgsteward_be/.env`; use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
+This variable is read only on the server; do not add the `NEXT_PUBLIC_` prefix.
+Start the backend first by running `pnpm dev` in `pkgsteward_be/`, then start the frontend as above.
+
+The server loads the initial scan results. Browser scan requests use same-origin Route Handlers at
+`/api/scans`, `/api/scans/[id]` and `/api/scans/[id]/cancel`; the server calls the backend.
+Backend requests time out after 10 seconds. If the backend is offline or a request times out, the page
+shows a localized `BACKEND_UNAVAILABLE` error state instead of crashing.
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:
@@ -55,11 +73,16 @@ To add a language: copy `messages/en.json` to `messages/<code>.json` and transla
 
 ```
 app/                  Routes, root layout, global styles
+app/api/              Same-origin scan Route Handlers
 components/ui/        shadcn/ui components (adapted to the theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
 i18n/, messages/      next-intl config and translations
+hooks/                Client scan polling and cancellation
+lib/api/              Backend client, transport, contracts and scan requests
+lib/projects/         Project filtering, sorting and display helpers
+lib/scans/            Scan polling and completion policy
 lib/theme/            Theme preset registry
 styles/               Theme presets and tokens
 scripts/              theme:check and i18n:check

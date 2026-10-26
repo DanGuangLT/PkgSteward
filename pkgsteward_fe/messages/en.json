@@ -106,7 +106,8 @@
     },
     "toasts": {
       "completed": "Scan complete. The project list has been updated.",
-      "partial": "Scan timed out. Partial results have been updated.",
+      "partial": "The scan timed out before finishing. Results may be incomplete.",
+      "lost": "This scan can no longer be tracked (the backend may have restarted). Previous results are kept.",
       "cancelled": "Scan cancelled. Previous results have been kept.",
       "failed": "Scan failed. Previous results have been kept."
     },

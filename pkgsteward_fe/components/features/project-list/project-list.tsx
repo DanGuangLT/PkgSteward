@@ -5,6 +5,7 @@ import { AlertTriangleIcon, FolderSearchIcon } from "lucide-react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 
 import { ProjectItems } from "@/components/features/project-list/project-items"
+import { ScanControls } from "@/components/features/project-list/scan-controls"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ScanResult } from "@/lib/api/types"
+import { useScan } from "@/hooks/use-scan"
 import { selectProjects, type ProjectSort } from "@/lib/projects/project-list"
 
 export type ProjectSnapshot = Pick<ScanResult, "scanId" | "finishedAt" | "partial" | "skippedCount" | "projects">
@@ -65,6 +67,7 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
   const sortId = useId()
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<ProjectSort>("activity")
+  const scanController = useScan()
 
   const snapshot = initial.kind === "ready" ? initial.snapshot : null
   const projects = snapshot ? selectProjects(snapshot.projects, query, sort, locale) : []
@@ -100,6 +103,9 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
               })}</li>
             </ul>
           </div>
+        ) : null}
+        {initial.kind !== "error" ? (
+          <ScanControls controller={scanController} mode={initial.kind === "empty" ? "first" : "rescan"} />
         ) : null}
       </div>
 
