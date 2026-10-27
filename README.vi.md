@@ -53,6 +53,19 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
 
+Biến của frontend đặt trong `pkgsteward_fe/.env.local` hoặc `pkgsteward_fe/.env` (sao chép từ `.env.example` của frontend):
+
+| Biến | Mặc định khi trống hoặc không đặt | Ý nghĩa |
+|---|---|---|
+| `PORT` | `24680` | Cổng lắng nghe của frontend; số nguyên thập phân từ `1` đến `65535` |
+| `HOST` | `127.0.0.1` | Địa chỉ lắng nghe của frontend; chỉ `127.0.0.1`, `localhost` hoặc `::1` |
+| `API_BASE_URL` | `http://127.0.0.1:24681/api/v1` | URL backend, chỉ đọc phía server; phải khớp địa chỉ backend |
+
+Với `PORT`/`HOST` của frontend, giá trị không rỗng đầu tiên được dùng: biến môi trường thật → `.env.local` → `.env` → mặc định.
+Giá trị chỉ có khoảng trắng tính là rỗng; giá trị sai sẽ dừng khởi động. Đổi `PORT` hoặc `HOST` của frontend thì sửa
+`LIST_ORIGIN_CORS` của backend cho khớp origin mở trên trình duyệt (ví dụ `http://localhost:24680`). Đổi `PORT` hoặc
+`HOST` của backend thì sửa `API_BASE_URL` của frontend.
+
 > [!IMPORTANT]
 > API không có xác thực theo thiết kế. Giữ `HOST` là địa chỉ loopback (mặc định `127.0.0.1`), không mở API ra mạng.
 

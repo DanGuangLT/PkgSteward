@@ -24,6 +24,22 @@ pnpm dev        # http://localhost:24680
 | `pnpm theme:check` | Check WCAG 2.1 AA contrast for every preset in `styles/themes/` |
 | `pnpm i18n:check` | Compare each locale's keys with the default locale (`vi`): extra keys fail, missing keys only warn |
 
+## Frontend listen address
+
+Set these variables in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env`:
+
+| Variable | Default when empty or unset | Allowed values |
+|---|---|---|
+| `PORT` | `24680` | Decimal integer from `1` to `65535` |
+| `HOST` | `127.0.0.1` | `127.0.0.1`, `localhost` or `::1` only |
+
+For each variable, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
+Whitespace-only values count as empty. `pnpm dev` and `pnpm start` validate the address before starting Next.js;
+invalid values stop startup with an error. The Host/Origin checks follow the configured port.
+
+When changing the frontend's `PORT` or `HOST`, update the backend's `LIST_ORIGIN_CORS` to match the frontend
+origin used in your browser (for example, `http://localhost:24680`; IPv6 uses `http://[::1]:24680`).
+
 ## Backend connection
 
 In `pkgsteward_fe/`, copy `.env.example` to `.env.local` before starting the frontend:
@@ -33,7 +49,8 @@ Copy-Item .env.example .env.local
 ```
 
 `API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host and port must match
-`HOST` and `PORT` in `pkgsteward_be/.env`; use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
+`HOST` and `PORT` in `pkgsteward_be/.env`; update `API_BASE_URL` whenever the backend address changes.
+Use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
 This variable is read only on the server; do not add the `NEXT_PUBLIC_` prefix.
 Start the backend first by running `pnpm dev` in `pkgsteward_be/`, then start the frontend as above.
 
