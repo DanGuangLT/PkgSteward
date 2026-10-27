@@ -1,12 +1,10 @@
-// Cổng FE cố định — phải trùng `-p 24680` trong script dev/start của package.json.
-export const FRONTEND_PORT = 24680
-
+// Cổng FE không cố định: proxy truyền vào cổng đang chạy (PORT đã cấu hình).
 const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "[::1]"]
 
 // Chặn DNS rebinding: chỉ nhận Host loopback đúng cổng FE, không phân biệt hoa thường.
 export function isAllowedHost(
   host: string | null | undefined,
-  port: number = FRONTEND_PORT
+  port: number
 ): boolean {
   if (!host) return false
   const value = host.replace(/^[ \t]+|[ \t]+$/g, "").toLowerCase()
@@ -15,9 +13,9 @@ export function isAllowedHost(
 
 const WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"]
 
-export const FRONTEND_ORIGINS: readonly string[] = LOOPBACK_HOSTNAMES.map(
-  (name) => `http://${name}:${FRONTEND_PORT}`
-)
+export function frontendOrigins(port: number): string[] {
+  return LOOPBACK_HOSTNAMES.map((name) => `http://${name}:${port}`)
+}
 
 export interface IApiWriteRequest {
   method: string
@@ -30,9 +28,12 @@ const isApiPath = (pathname: string) => pathname === "/api" || pathname.startsWi
 
 // Chặn CSRF vào Route Handler /api/*: request ghi bị từ chối khi (a) có Origin không phải FE,
 // hoặc (b) trình duyệt đánh dấu Sec-Fetch-Site: cross-site. Không có Origin (curl) thì cho qua.
-export function isAllowedApiWrite({ method, pathname, origin, secFetchSite }: IApiWriteRequest): boolean {
+export function isAllowedApiWrite(
+  { method, pathname, origin, secFetchSite }: IApiWriteRequest,
+  port: number
+): boolean {
   if (!WRITE_METHODS.includes(method.toUpperCase()) || !isApiPath(pathname)) return true
   if (secFetchSite !== null && secFetchSite.trim().toLowerCase() === "cross-site") return false
   if (origin === null) return true
-  return FRONTEND_ORIGINS.includes(origin.trim().toLowerCase())
+  return frontendOrigins(port).includes(origin.trim().toLowerCase())
 }

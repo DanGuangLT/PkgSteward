@@ -53,6 +53,19 @@ Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PAT
 
 Values in settings.json inside the data folder override environment variables.
 
+Frontend variables go in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env` (copy the frontend's `.env.example`):
+
+| Variable | Default when empty or unset | Purpose |
+|---|---|---|
+| `PORT` | `24680` | Frontend listen port; decimal integer from `1` to `65535` |
+| `HOST` | `127.0.0.1` | Frontend listen host; only `127.0.0.1`, `localhost` or `::1` |
+| `API_BASE_URL` | `http://127.0.0.1:24681/api/v1` | Server-only backend URL; must match the backend address |
+
+For frontend `PORT`/`HOST`, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
+Whitespace-only values count as empty; invalid values stop startup. When changing the frontend `PORT` or `HOST`,
+update the backend's `LIST_ORIGIN_CORS` to match the origin used in the browser (for example,
+`http://localhost:24680`). When changing the backend `PORT` or `HOST`, update the frontend's `API_BASE_URL`.
+
 > [!IMPORTANT]
 > The API has no authentication by design. Keep `HOST` on a loopback address (default `127.0.0.1`) and do not expose it to a network.
 
