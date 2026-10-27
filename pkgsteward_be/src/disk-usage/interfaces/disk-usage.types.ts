@@ -38,6 +38,11 @@ export interface IDiskUsageStart {
   status: DiskStatus;
 }
 
+export interface ICompletedDiskSize {
+  sizeBytes: number;
+  measuredAt: string;
+}
+
 export interface IDiskUsageProgress {
   visitedDirs: number;
   visitedEntries: number;
