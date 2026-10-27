@@ -1,8 +1,10 @@
 "use client"
 
 import { AlertTriangleIcon, CheckIcon, MinusIcon } from "lucide-react"
+import Link from "next/link"
 import { useFormatter, useTranslations } from "next-intl"
 
+import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ScannedProject } from "@/lib/api/types"
+import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
 import { projectDisplayName } from "@/lib/projects/project-list"
 
 interface ProjectItemsProps {
@@ -38,11 +41,24 @@ function ProjectManager({ project }: { project: ScannedProject }) {
 
 function ProjectNodeModules({ project }: { project: ScannedProject }) {
   const t = useTranslations("projects")
+  const format = useFormatter()
+  const { exists, path, sizeBytes, sizeMeasuredAt } = project.nodeModules
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {project.nodeModules.exists ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : <MinusIcon aria-hidden="true" className="size-4 shrink-0" />}
-      {project.nodeModules.exists ? t("nodeModules.present") : t("nodeModules.missing")}
-    </span>
+    <div className="min-w-0 space-y-2 text-body-sm">
+      <span className="inline-flex items-center gap-1.5">
+        {exists ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : <MinusIcon aria-hidden="true" className="size-4 shrink-0" />}
+        {exists ? t("nodeModules.present") : t("nodeModules.missing")}
+      </span>
+      {exists && sizeBytes != null ? (
+        <p>{t("nodeModules.size")} <DiskSize bytes={sizeBytes} /></p>
+      ) : null}
+      {exists && sizeBytes != null && sizeMeasuredAt ? (
+        <p className="text-caption text-muted-foreground [overflow-wrap:anywhere]">
+          {t("nodeModules.measuredAt")} <time dateTime={sizeMeasuredAt}>{format.dateTime(new Date(sizeMeasuredAt), { dateStyle: "medium", timeStyle: "short" })}</time>
+        </p>
+      ) : null}
+      {exists ? <Link href={diskUsageHref(path, "packages")} className="inline-block max-w-full rounded-sm text-ink-soft underline focus-ring [overflow-wrap:anywhere]">{t("nodeModules.viewSize")}</Link> : null}
+    </div>
   )
 }
 

@@ -15,6 +15,7 @@
     "mainNavigation": "Điều hướng chính",
     "openMenu": "Mở menu",
     "projects": "Dự án",
+    "diskUsage": "Dung lượng",
     "designSystem": "Design system"
   },
   "theme": {
@@ -81,7 +82,10 @@
     },
     "nodeModules": {
       "present": "Đã có",
-      "missing": "Chưa có"
+      "missing": "Chưa có",
+      "size": "Dung lượng tham khảo:",
+      "viewSize": "Xem dung lượng",
+      "measuredAt": "Đo lúc"
     },
     "actions": {
       "first": "Quét dự án",
@@ -119,6 +123,88 @@
       "generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
       "pollFailed": "Chưa kiểm tra được tiến độ quét. Thử kiểm tra lại hoặc huỷ quét.",
       "backendHint": "Hãy bảo đảm backend PkgSteward đang chạy, rồi tải lại trang."
+    }
+  },
+  "diskUsage": {
+    "title": "Dung lượng thư mục và thư viện",
+    "description": "Đo khi bạn yêu cầu, xem một tầng mỗi lần. Thao tác này chỉ đọc dữ liệu.",
+    "controls": {
+      "path": "Đường dẫn thư mục",
+      "view": "Chế độ xem",
+      "hint": "Chọn một thư mục được phép quét. Chế độ thư viện chỉ dùng cho đường dẫn node_modules. Huỷ lần đo hiện tại trước khi đổi mục tiêu."
+    },
+    "views": { "directory": "Thư mục", "packages": "Thư viện trong node_modules" },
+    "actions": {
+      "measure": "Tính dung lượng",
+      "recalculate": "Tính lại kết quả đang xem",
+      "cancel": "Huỷ đo",
+      "retryPoll": "Thử kiểm tra lại",
+      "follow": "Theo dõi lần đo đang chạy",
+      "expand": "Xem bên trong",
+      "expandName": "Xem bên trong {name}",
+      "backTo": "Quay lại kết quả đã đo: {path}",
+      "projects": "Về danh sách dự án"
+    },
+    "status": {
+      "idle": "Chưa bắt đầu đo.",
+      "starting": "Đang bắt đầu đo…",
+      "running": "Đang đo…",
+      "cancelling": "Đang huỷ đo…",
+      "completed": "Đo hoàn tất.",
+      "cancelled": "Đã huỷ đo.",
+      "timed_out": "Lần đo đã hết thời gian.",
+      "failed": "Đo thất bại."
+    },
+    "progress": "Đã duyệt {formattedDirs} thư mục, {formattedEntries} mục; bỏ qua {formattedSkipped} mục và {formattedLinks} liên kết.",
+    "breadcrumbs": "Các kết quả đã xem",
+    "results": "Kết quả đo",
+    "previousSnapshot": "Đang giữ kết quả trước trong khi chờ số liệu của lần đo mới.",
+    "listLabel": "Dung lượng từng mục",
+    "columns": { "name": "Tên", "path": "Đường dẫn", "size": "Dung lượng", "fileCount": "Số tệp", "status": "Trạng thái" },
+    "size": { "pending": "Chưa có số liệu", "value": "{value} {unit}", "lowerBound": "Tối thiểu {size}" },
+    "fileCount": "{formattedCount} tệp",
+    "aliases": "Tên liên kết: {names}",
+    "kinds": { "file": "Tệp", "directory": "Thư mục", "link": "Liên kết", "package": "Thư viện" },
+    "rows": { "pending": "Đang chờ", "measuring": "Đang đo — kết quả một phần", "complete": "Đã đo đầy đủ", "partial": "Kết quả một phần", "excluded": "Đã loại khỏi phép đo" },
+    "reasons": {
+      "protected": "Thư mục được bảo vệ",
+      "link_skipped": "Không đi theo liên kết",
+      "outside_root": "Đích nằm ngoài thư mục đang đo",
+      "unreadable": "Không đọc được mục này",
+      "unsupported": "Loại tệp chưa được hỗ trợ",
+      "identity_unavailable": "Không xác định được danh tính tệp"
+    },
+    "total": "Tổng:",
+    "metric": "Dung lượng biểu kiến của các tệp duy nhất trong phạm vi đo; hardlink được khử trùng. Đây không phải dung lượng sẽ giải phóng khi xoá.",
+    "overlap": "Tổng có thể không bằng cộng các hàng: các hàng có thể dùng chung tệp, và có mục không xuất hiện trong bảng.",
+    "measuredAt": "Đo lúc",
+    "cacheHit": "Đang dùng kết quả trong bộ nhớ đệm.",
+    "cacheHint": "Kết quả tham khảo có thể cũ khi tệp con thay đổi. Bấm Tính lại để đo mới và bỏ bộ nhớ đệm.",
+    "partial": "Kết quả chưa đầy đủ; dung lượng có số liệu là giới hạn dưới.",
+    "packagesHint": "Chỉ hiển thị thư viện cấp trên cùng. Các phụ thuộc gián tiếp trong .pnpm vẫn được tính vào tổng; dùng chế độ Thư mục để xem. Liên kết ra ngoài phạm vi bị loại.",
+    "stops": {
+      "cancelled": "Bạn đã huỷ lần đo này.",
+      "row_limit": "Đã đạt giới hạn hàng; danh sách chưa đầy đủ.",
+      "identity_limit": "Đã đạt giới hạn theo dõi danh tính tệp.",
+      "numeric_limit": "Dung lượng vượt giới hạn số an toàn."
+    },
+    "failures": { "NOT_FOUND": "Đường dẫn không còn tồn tại.", "FORBIDDEN": "Không thể truy cập đường dẫn này.", "INTERNAL_SERVER_ERROR": "Không hoàn tất được phép đo. Vui lòng thử tính lại." },
+    "empty": {
+      "initial": "Nhập đường dẫn và bấm Tính dung lượng để bắt đầu. Mở trang hoặc tải lại không tự chạy phép đo.",
+      "listing": "Đang chờ danh sách một tầng từ lần đo…",
+      "rows": "Không có hàng được trả về. Xem tổng, trạng thái và cảnh báo của lần đo ở trên."
+    },
+    "errors": {
+      "conflict": "Một đường dẫn khác đang được đo. Theo dõi lần đo đó để xem hoặc huỷ, rồi thử lại đường dẫn của bạn.",
+      "notFound": "Không tìm thấy đường dẫn hoặc lần đo được yêu cầu.",
+      "lost": "Đã dừng theo dõi; backend có thể đã khởi động lại hoặc thay lần đo. Bản kết quả trước được giữ lại. Bấm Tính lại để bắt đầu phép đo mới.",
+      "forbidden": "Đường dẫn bị bảo vệ hoặc nằm ngoài phạm vi được phép quét.",
+      "validation": "Kiểm tra đường dẫn và chế độ xem. Chế độ thư viện cần thư mục node_modules.",
+      "rateLimited": "Có quá nhiều yêu cầu. Chờ một chút rồi thử lại.",
+      "backendUnavailable": "Không kết nối được tới backend trên máy này.",
+      "invalidResponse": "Backend trả về dữ liệu không hợp lệ.",
+      "pollPaused": "Đã dừng kiểm tra tiến độ. Bấm Thử kiểm tra lại hoặc Huỷ đo; sẽ không tự gửi lại yêu cầu.",
+      "generic": "Yêu cầu chưa thành công. Vui lòng thử lại."
     }
   },
   "designSystem": {
