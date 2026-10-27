@@ -262,16 +262,16 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
     };
     const onAbort = () => finish('cancelled', 'cancelled');
     const fail = (error: unknown) => {
+      if (stopped) return;
       const code = errorCode(error);
-      finish(
-        'failed',
-        null,
+      const failureCode =
         code === 'ENOENT'
           ? 'NOT_FOUND'
           : code === 'EPERM' || code === 'EACCES'
             ? 'FORBIDDEN'
-            : 'INTERNAL_SERVER_ERROR',
-      );
+            : 'INTERNAL_SERVER_ERROR';
+      if (failureCode === 'INTERNAL_SERVER_ERROR') deps.onError?.(error);
+      finish('failed', null, failureCode);
     };
     const markIssue = (
       affected: IBucket[],

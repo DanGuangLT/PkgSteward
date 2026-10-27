@@ -79,6 +79,7 @@ export interface IDiskWalkDeps {
   platform: PathPlatform;
   isProtected: ProtectedTreeMatcher;
   onSnapshot(snapshot: IDiskUsageJob): void;
+  onError?(error: unknown): void;
 }
 
 export type DiskWalker = (

@@ -164,6 +164,90 @@ describe('DiskUsageService', () => {
     jest.restoreAllMocks();
   });
 
+  it('rejects starts after shutdown before authorization or IO', async () => {
+    const f = fixture();
+    f.service.onModuleDestroy();
+    await expect(
+      f.service.start({ path: root, force: true }),
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Disk usage service is shutting down',
+    });
+    expect(f.guard.assertAllowed).not.toHaveBeenCalled();
+    expect(f.fs.lstat).not.toHaveBeenCalled();
+    expect(f.getCached).not.toHaveBeenCalled();
+    expect(f.clearCached).not.toHaveBeenCalled();
+    expect(f.walker).not.toHaveBeenCalled();
+  });
+
+  it('rejects a start whose authorization resolves after shutdown without starting IO', async () => {
+    const f = fixture();
+    const allowed = deferred<IGuardedPath>();
+    f.guard.assertAllowed.mockReturnValueOnce(allowed.promise);
+    const started = f.service.start({ path: root, force: true });
+    const rejected = expect(started).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Disk usage service is shutting down',
+    });
+    f.service.onModuleDestroy();
+    allowed.resolve({
+      inputPath: root,
+      resolvedPath: root,
+      realPath: root,
+      isSymbolicLink: false,
+    });
+    await rejected;
+    expect(f.fs.lstat).not.toHaveBeenCalled();
+    expect(f.getCached).not.toHaveBeenCalled();
+    expect(f.clearCached).not.toHaveBeenCalled();
+    expect(f.putCached).not.toHaveBeenCalled();
+    expect(f.guard.createProtectedTreeMatcher).not.toHaveBeenCalled();
+    expect(f.walker).not.toHaveBeenCalled();
+  });
+
+  it('rejects a start whose root stat resolves after shutdown without touching cache or walking', async () => {
+    const f = fixture();
+    const stat = deferred<BigIntStats>();
+    f.fs.lstat.mockReturnValueOnce(stat.promise);
+    const started = f.service.start({ path: root, force: true });
+    const rejected = expect(started).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Disk usage service is shutting down',
+    });
+    await tick();
+    expect(f.fs.lstat).toHaveBeenCalledTimes(1);
+    f.service.onModuleDestroy();
+    stat.resolve(directory());
+    await rejected;
+    expect(f.getCached).not.toHaveBeenCalled();
+    expect(f.clearCached).not.toHaveBeenCalled();
+    expect(f.putCached).not.toHaveBeenCalled();
+    expect(f.guard.createProtectedTreeMatcher).not.toHaveBeenCalled();
+    expect(f.walker).not.toHaveBeenCalled();
+  });
+
+  it('closes before abort listeners can attempt to start another job', async () => {
+    const f = fixture();
+    await f.service.start({ path: root });
+    await tick();
+    let restarted: ReturnType<DiskUsageService['start']> | undefined;
+    f.walks[0].signal.addEventListener('abort', () => {
+      restarted = f.service.start({ path: root });
+      void restarted.catch(() => undefined);
+    });
+    f.service.onModuleDestroy();
+    expect(restarted).toBeDefined();
+    await expect(restarted).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    expect(f.guard.assertAllowed).toHaveBeenCalledTimes(1);
+    expect(f.walker).toHaveBeenCalledTimes(1);
+  });
+
   it('injects the walker and filesystem tokens without using real IO', async () => {
     const f = fixture();
     const module = await Test.createTestingModule({
@@ -505,6 +589,88 @@ describe('DiskUsageService', () => {
     expect(errors).toHaveBeenCalled();
     expect(JSON.stringify(f.service.get(start.jobId))).not.toContain('private');
   });
+
+  it.each([
+    ['ENOENT', 'NOT_FOUND'],
+    ['ENOTDIR', 'NOT_FOUND'],
+    ['EACCES', 'FORBIDDEN'],
+    ['EPERM', 'FORBIDDEN'],
+    ['EIO', 'INTERNAL_SERVER_ERROR'],
+  ])(
+    'maps final root stat %s to %s and preserves the measured snapshot',
+    async (code, failureCode) => {
+      const f = fixture();
+      const start = await f.service.start({ path: root });
+      await tick();
+      const error = Object.assign(new Error('private final root detail'), {
+        code,
+      });
+      f.fs.lstat.mockRejectedValueOnce(error);
+      f.walks[0].task.resolve(done(f.walks[0].initial));
+      await tick();
+      const result = f.service.get(start.jobId);
+      expect(result).toMatchObject({
+        status: 'failed',
+        failureCode,
+        partial: true,
+        sizeBytes: 42,
+        fileCount: 1,
+        children: [{ name: 'pkg', sizeBytes: 42 }],
+        progress: { visitedDirs: 2, visitedEntries: 2 },
+      });
+      expect(f.putCached).not.toHaveBeenCalled();
+      expect(JSON.stringify(result)).not.toContain('private final root detail');
+      if (failureCode === 'INTERNAL_SERVER_ERROR') {
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(errors).toHaveBeenCalledWith(expect.any(String), error.stack);
+      } else {
+        expect(errors).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('ignores a final root stat rejection after cancellation', async () => {
+    const f = fixture();
+    const start = await f.service.start({ path: root });
+    await tick();
+    const stat = deferred<BigIntStats>();
+    f.fs.lstat.mockReturnValueOnce(stat.promise);
+    f.walks[0].task.resolve(done(f.walks[0].initial));
+    await tick();
+    const cancelled = f.service.cancel(start.jobId);
+    stat.reject(
+      Object.assign(new Error('late final stat error'), { code: 'EIO' }),
+    );
+    await tick();
+    expect(f.service.get(start.jobId)).toEqual(cancelled);
+    expect(errors).not.toHaveBeenCalled();
+    expect(f.putCached).not.toHaveBeenCalled();
+  });
+
+  it.each(['running', 'cancelled'] as const)(
+    'accepts walker diagnostics but logs only for a running job: %s',
+    async (status) => {
+      const f = fixture();
+      const start = await f.service.start({ path: root });
+      await tick();
+      // The optional extension keeps this regression spec compilable on the old source.
+      const deps: IDiskWalkDeps & { onError?: (error: unknown) => void } =
+        f.walks[0].deps;
+      expect(typeof deps.onError).toBe('function');
+      if (status === 'cancelled') f.service.cancel(start.jobId);
+      const error = new Error('private walker diagnostic');
+      deps.onError?.(error);
+      if (status === 'running') {
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(errors).toHaveBeenCalledWith(expect.any(String), error.stack);
+      } else {
+        expect(errors).not.toHaveBeenCalled();
+      }
+      expect(JSON.stringify(f.service.get(start.jobId))).not.toContain(
+        'private walker diagnostic',
+      );
+    },
+  );
 
   it('completes and caches when the walker publishes a terminal snapshot before resolving', async () => {
     const f = fixture();

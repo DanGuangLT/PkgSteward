@@ -186,6 +186,69 @@ const fixture = (view: DiskView = 'directory') => {
 describe('walkDiskUsage', () => {
   afterEach(() => jest.useRealTimers());
 
+  it.each([
+    ['EIO', 'INTERNAL_SERVER_ERROR'],
+    ['ENOENT', 'NOT_FOUND'],
+    ['EACCES', 'FORBIDDEN'],
+    ['EPERM', 'FORBIDDEN'],
+  ])(
+    'handles root opendir %s with %s and reports only unexpected errors',
+    async (code, failureCode) => {
+      const f = fixture();
+      const raw = jest.mocked(nodeFs);
+      const error = Object.assign(new Error('private opendir detail'), {
+        code,
+      });
+      raw.lstat
+        .mockReset()
+        .mockResolvedValue(f.stat(f.nodes.get(f.key(f.root))!));
+      raw.realpath.mockReset().mockResolvedValue(f.root);
+      raw.opendir.mockReset().mockRejectedValue(error);
+      f.deps.fs = createDiskFs();
+      const order: string[] = [];
+      const onError = jest.fn<void, [unknown]>(() => {
+        order.push('error');
+      });
+      Object.assign(f.deps, { onError });
+      const onSnapshot = f.onSnapshot;
+      f.deps.onSnapshot = (snapshot) => {
+        if (snapshot.status !== 'running') order.push('terminal');
+        onSnapshot(snapshot);
+      };
+      const result = await f.run();
+      expect(raw.opendir).toHaveBeenCalledWith(f.root);
+      expect(result).toMatchObject({
+        status: 'failed',
+        failureCode,
+        partial: true,
+      });
+      expect(JSON.stringify(result)).not.toContain('private opendir detail');
+      if (failureCode === 'INTERNAL_SERVER_ERROR') {
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onError.mock.calls[0][0]).toBe(error);
+        expect(order).toEqual(['error', 'terminal']);
+      } else {
+        expect(onError).not.toHaveBeenCalled();
+        expect(order).toEqual(['terminal']);
+      }
+    },
+  );
+
+  it('does not report an unexpected root error that settles after abort', async () => {
+    const f = fixture();
+    const canonical = deferred<string>();
+    f.fs.realpath.mockReturnValueOnce(canonical.promise);
+    const onError = jest.fn<void, [unknown]>();
+    Object.assign(f.deps, { onError });
+    const pending = f.run();
+    await settle();
+    f.controller.abort();
+    expect(await pending).toMatchObject({ status: 'cancelled' });
+    canonical.reject(errno('EIO'));
+    await settle();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('publishes shallow pending rows before blocked deep IO', async () => {
     const f = fixture();
     const child = f.dir(path.join(f.root, 'child'));

@@ -39,6 +39,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
   private readonly logger = new Logger(DiskUsageService.name);
   private readonly platform = toPathPlatform();
   private current?: IActiveMeasurement;
+  private closed = false;
 
   constructor(
     private readonly pathGuard: PathGuardService,
@@ -52,7 +53,9 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     view = 'directory',
     force = false,
   }: IStartDiskUsage): Promise<IDiskUsageStart> {
+    this.assertOpen();
     const { realPath } = await this.pathGuard.assertAllowed(path);
+    this.assertOpen();
     const basename = pathApi(this.platform).basename(path);
     if (
       view === 'packages' &&
@@ -64,6 +67,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
       );
     }
     const root = await this.statRoot(realPath);
+    this.assertOpen();
     if (!root.isDirectory()) {
       throw new ValidationException('Disk usage path must be a directory');
     }
@@ -166,19 +170,38 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     return this.current === active && active.job.status === 'running';
   }
 
+  private assertOpen(): void {
+    if (this.closed) {
+      throw new AppException(
+        503,
+        'Disk usage service is shutting down',
+        'SERVICE_UNAVAILABLE',
+      );
+    }
+  }
+
+  private fsFailureCode(
+    error: unknown,
+  ): NonNullable<IDiskUsageJob['failureCode']> {
+    const code =
+      error !== null && typeof error === 'object' && 'code' in error
+        ? error.code
+        : null;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 'NOT_FOUND';
+    if (code === 'EACCES' || code === 'EPERM') return 'FORBIDDEN';
+    return 'INTERNAL_SERVER_ERROR';
+  }
+
   private async statRoot(path: string): Promise<BigIntStats> {
     try {
       return await this.fs.lstat(path);
     } catch (error) {
       if (error instanceof AppException) throw error;
-      const code =
-        error !== null && typeof error === 'object' && 'code' in error
-          ? error.code
-          : null;
-      if (code === 'ENOENT' || code === 'ENOTDIR') {
+      const failureCode = this.fsFailureCode(error);
+      if (failureCode === 'NOT_FOUND') {
         throw new NotFoundException('Disk usage path', path);
       }
-      if (code === 'EACCES' || code === 'EPERM') {
+      if (failureCode === 'FORBIDDEN') {
         throw new ForbiddenException('Disk usage path is not readable');
       }
       this.logger.error(
@@ -199,6 +222,13 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
         fs: this.fs,
         platform: this.platform,
         isProtected,
+        onError: (error) => {
+          if (!this.isRunning(active)) return;
+          this.logger.error(
+            'Disk usage measurement failed',
+            error instanceof Error ? error.stack : error,
+          );
+        },
         onSnapshot: (update) => {
           if (!this.isRunning(active) || update.jobId !== active.job.jobId) {
             return;
@@ -220,10 +250,25 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
       throw new InternalServerException('Disk usage walker did not finish');
     }
     if (result.status === 'completed' && !result.partial) {
-      const root = await this.fs.lstat(
-        active.job.path,
-        active.controller.signal,
-      );
+      let root: BigIntStats;
+      try {
+        root = await this.fs.lstat(active.job.path, active.controller.signal);
+      } catch (error) {
+        if (!this.isRunning(active)) return;
+        const failureCode = this.fsFailureCode(error);
+        if (failureCode === 'INTERNAL_SERVER_ERROR') {
+          this.logger.error(
+            'Disk usage measurement failed',
+            error instanceof Error ? error.stack : error,
+          );
+        }
+        this.finish(active, 'failed', {
+          ...result,
+          failureCode,
+          finishedAt: new Date().toISOString(),
+        });
+        return;
+      }
       // Huỷ hoặc thay job trong lúc stat phải chặn cả publish lẫn cache.
       if (!this.isRunning(active)) return;
       if (!root.isDirectory() || root.mtimeNs !== active.rootMtimeNs) {
@@ -265,6 +310,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
+    this.closed = true;
     if (this.current) this.finish(this.current, 'cancelled');
   }
 }
