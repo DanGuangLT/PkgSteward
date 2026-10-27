@@ -17,12 +17,18 @@ export interface IScannedProject {
   packageManager: PackageManager | null;
   hasLockfile: boolean;
   lastActivityAt: string;
-  nodeModules: { exists: boolean; path: string; sizeBytes: null };
+  nodeModules: {
+    exists: boolean;
+    path: string;
+    sizeBytes: number | null;
+    sizeMeasuredAt: string | null;
+  };
 }
 
 export interface IOrphanNodeModules {
   path: string;
-  sizeBytes: null;
+  sizeBytes: number | null;
+  sizeMeasuredAt: string | null;
   mtime: string;
 }
 
@@ -50,6 +56,34 @@ export interface IScanResult extends IScanStart {
   orphanNodeModules: IOrphanNodeModules[];
 }
 
+// Scan metadata and schema-1 files contain no measured sizes. Older files omit
+// sizeMeasuredAt; only the API copy requires this field and may contain numbers.
+export type IScanProjectMetadata = Omit<IScannedProject, 'nodeModules'> & {
+  nodeModules: Omit<
+    IScannedProject['nodeModules'],
+    'sizeBytes' | 'sizeMeasuredAt'
+  > & {
+    sizeBytes: null;
+    sizeMeasuredAt?: null;
+  };
+};
+
+export type IScanOrphanMetadata = Omit<
+  IOrphanNodeModules,
+  'sizeBytes' | 'sizeMeasuredAt'
+> & {
+  sizeBytes: null;
+  sizeMeasuredAt?: null;
+};
+
+export type IStoredScanResult = Omit<
+  IScanResult,
+  'projects' | 'orphanNodeModules'
+> & {
+  projects: IScanProjectMetadata[];
+  orphanNodeModules: IScanOrphanMetadata[];
+};
+
 export interface IScanFs {
   readdir(path: string): Promise<Dirent[]>;
   lstat(
@@ -68,14 +102,14 @@ export interface IMetadataDeps {
 }
 
 export interface IDirectoryMetadata {
-  project: IScannedProject | null;
-  orphan: IOrphanNodeModules | null;
+  project: IScanProjectMetadata | null;
+  orphan: IScanOrphanMetadata | null;
 }
 
 export interface IWalkSnapshot {
   roots: string[];
-  projects: IScannedProject[];
-  orphanNodeModules: IOrphanNodeModules[];
+  projects: IScanProjectMetadata[];
+  orphanNodeModules: IScanOrphanMetadata[];
   progress: IScanProgress;
 }
 
@@ -102,7 +136,7 @@ export interface IScanCacheKey {
 export interface IScanCacheEntry {
   schemaVersion: 1;
   key: IScanCacheKey;
-  result: IScanResult;
+  result: IStoredScanResult;
 }
 
 export interface IScanCacheFs {

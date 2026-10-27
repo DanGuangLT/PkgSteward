@@ -2,12 +2,14 @@ import { Logger, Module } from '@nestjs/common';
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import { DiskUsageModule } from '@/disk-usage/disk-usage.module';
 import { SCAN_WALKER, walkScan } from '@/scanner/scan-walker';
 import { ScannerCache } from '@/scanner/scanner-cache';
 import { ScannerController } from '@/scanner/scanner.controller';
 import { ScannerService } from '@/scanner/scanner.service';
 
 @Module({
+  imports: [DiskUsageModule],
   controllers: [ScannerController],
   providers: [
     ScannerService,

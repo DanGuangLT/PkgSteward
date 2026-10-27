@@ -26,6 +26,7 @@ import {
 } from '@/scanner/entities/scan.entity';
 import { ScannerController } from '@/scanner/scanner.controller';
 import { ScannerService } from '@/scanner/scanner.service';
+import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
 const scanId = 'e4261d1d-590f-48a4-a765-d6dedcff17e4';
 const startedAt = '2026-10-21T00:00:00.000Z';
@@ -168,6 +169,7 @@ describe('ScannerController', () => {
             path: '/fixture/app/node_modules',
             exists: false,
             sizeBytes: null,
+            sizeMeasuredAt: null,
           },
         },
       ],
@@ -175,6 +177,7 @@ describe('ScannerController', () => {
         {
           path: '/fixture/old/node_modules',
           sizeBytes: null,
+          sizeMeasuredAt: null,
           mtime: startedAt,
         },
       ],
@@ -182,6 +185,10 @@ describe('ScannerController', () => {
     const module = await Test.createTestingModule({
       providers: [
         ScannerService,
+        {
+          provide: DiskUsageService,
+          useValue: { peekCompletedSize: () => null },
+        },
         {
           provide: ConfigService,
           useValue: new ConfigService({
@@ -313,11 +320,31 @@ describe('ScannerController', () => {
         },
       });
       expect(doc.components?.schemas?.NodeModulesEntity).toMatchObject({
-        properties: { sizeBytes: { nullable: true, enum: [null] } },
+        properties: {
+          sizeBytes: { type: 'number', nullable: true },
+          sizeMeasuredAt: {
+            type: 'string',
+            nullable: true,
+            format: 'date-time',
+          },
+        },
       });
       expect(doc.components?.schemas?.OrphanNodeModulesEntity).toMatchObject({
-        properties: { sizeBytes: { nullable: true, enum: [null] } },
+        properties: {
+          sizeBytes: { type: 'number', nullable: true },
+          sizeMeasuredAt: {
+            type: 'string',
+            nullable: true,
+            format: 'date-time',
+          },
+        },
       });
+      expect(doc.components?.schemas?.NodeModulesEntity).not.toHaveProperty(
+        'properties.sizeBytes.enum',
+      );
+      expect(
+        doc.components?.schemas?.OrphanNodeModulesEntity,
+      ).not.toHaveProperty('properties.sizeBytes.enum');
     } finally {
       await app.close();
     }
