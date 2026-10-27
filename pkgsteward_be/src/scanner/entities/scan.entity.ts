@@ -52,10 +52,19 @@ export class NodeModulesEntity implements NodeModules {
   @ApiProperty({
     type: Number,
     nullable: true,
-    enum: [null],
-    description: 'Always null; scanning does not calculate disk usage',
+    description:
+      'From the completed DiskUsage cache; null when unmeasured or invalidated',
   })
-  sizeBytes!: null;
+  sizeBytes!: number | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    format: 'date-time',
+    description:
+      'Original DiskUsage measurement time; null when unmeasured or invalidated',
+  })
+  sizeMeasuredAt!: string | null;
 }
 
 export class ScannedProjectEntity implements IScannedProject {
@@ -90,10 +99,19 @@ export class OrphanNodeModulesEntity implements IOrphanNodeModules {
   @ApiProperty({
     type: Number,
     nullable: true,
-    enum: [null],
-    description: 'Always null; scanning does not calculate disk usage',
+    description:
+      'From the completed DiskUsage cache; null when unmeasured or invalidated',
   })
-  sizeBytes!: null;
+  sizeBytes!: number | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    format: 'date-time',
+    description:
+      'Original DiskUsage measurement time; null when unmeasured or invalidated',
+  })
+  sizeMeasuredAt!: string | null;
 
   @ApiProperty({ format: 'date-time' })
   mtime!: string;

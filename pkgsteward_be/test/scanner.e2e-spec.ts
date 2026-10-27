@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import {
   mkdtemp,
   mkdir,
@@ -35,6 +36,9 @@ import type {
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { SCAN_WALKER } from '@/scanner/scan-walker';
 import { ScannerService } from '@/scanner/scanner.service';
+import { DiskUsageService } from '@/disk-usage/disk-usage.service';
+import { DISK_WALKER } from '@/disk-usage/disk-usage-walker';
+import type { DiskWalker } from '@/disk-usage/interfaces/disk-usage.types';
 import { createTestAppPaths } from './create-test-app-paths';
 
 describe('Scanner HTTP flow and cache (e2e)', () => {
@@ -91,6 +95,7 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
       roots?: string;
       walker?: ScanWalker;
       timeout?: number;
+      diskWalker?: DiskWalker;
     } = {},
   ) => {
     const config = new ConfigService(
@@ -119,6 +124,8 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
       });
     if (options.walker)
       builder.overrideProvider(SCAN_WALKER).useValue(options.walker);
+    if (options.diskWalker)
+      builder.overrideProvider(DISK_WALKER).useValue(options.diskWalker);
     const module = await builder.compile();
     const app = module.createNestApplication<INestApplication<Server>>();
     app.useLogger(['error']);
@@ -236,6 +243,7 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
       {
         path: join(root, 'old', 'node_modules'),
         sizeBytes: null,
+        sizeMeasuredAt: null,
         mtime: expect.any(String) as unknown,
       },
     ]);
@@ -332,6 +340,137 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
     });
   });
 
+  it('documents D15 size and measurement timestamps as nullable rather than null-only', async () => {
+    const app = await openApp();
+    const doc = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().build(),
+    );
+    for (const name of ['NodeModulesEntity', 'OrphanNodeModulesEntity']) {
+      const schema = doc.components?.schemas?.[name];
+      expect(schema).toMatchObject({
+        properties: {
+          sizeBytes: { type: 'number', nullable: true },
+          sizeMeasuredAt: {
+            type: 'string',
+            nullable: true,
+            format: 'date-time',
+          },
+        },
+      });
+      expect(schema).not.toHaveProperty('properties.sizeBytes.enum');
+    }
+  });
+
+  it('enriches project and orphan sizes from RAM while last-scan stays null and reloads without measurements', async () => {
+    const app = await openApp();
+    const before = await completed(app);
+    const projectPath = before.projects.find(
+      (project) => project.name === 'app',
+    )!.nodeModules.path;
+    const orphanPath = before.orphanNodeModules[0].path;
+    const disk = app.get(DiskUsageService);
+    const measure = async (path: string) => {
+      const started = await disk.start({ path });
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const job = disk.get(started.jobId);
+        if (job.status !== 'running') {
+          expect(job.status).toBe('completed');
+          expect(job.partial).toBe(false);
+          return job;
+        }
+        await delay(10);
+      }
+      throw new Error('Measurement did not complete');
+    };
+    const projectSize = await measure(projectPath);
+    const orphanSize = await measure(orphanPath);
+    const enriched = await latest(app);
+    expect(
+      enriched.projects.find((project) => project.name === 'app')?.nodeModules,
+    ).toMatchObject({
+      sizeBytes: Buffer.byteLength('{"name":"vendor"}'),
+      sizeMeasuredAt: projectSize.measuredAt,
+    });
+    expect(enriched.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: 0,
+      sizeMeasuredAt: orphanSize.measuredAt,
+    });
+    expect(
+      enriched.projects.find((project) => project.name === 'child')
+        ?.nodeModules,
+    ).toMatchObject({ exists: false, sizeBytes: null, sizeMeasuredAt: null });
+    await closeApp(app);
+    const file = join(dataDir, 'cache', 'last-scan.json');
+    const saved = JSON.parse(await readFile(file, 'utf8')) as {
+      result: IScanResult;
+    };
+    for (const project of saved.result.projects) {
+      expect(project.nodeModules.sizeBytes).toBeNull();
+      expect(project.nodeModules).not.toHaveProperty(
+        'sizeMeasuredAt',
+        projectSize.measuredAt,
+      );
+    }
+    expect(saved.result.orphanNodeModules[0].sizeBytes).toBeNull();
+    expect(saved.result.orphanNodeModules[0]).not.toHaveProperty(
+      'sizeMeasuredAt',
+      orphanSize.measuredAt,
+    );
+    // Explicitly preserve compatibility with the pre-D15 schema-1 file.
+    const withoutMeasurement = JSON.stringify(
+      saved,
+      (key: string, value: unknown) =>
+        key === 'sizeMeasuredAt' ? undefined : value,
+    );
+    await writeFile(file, withoutMeasurement);
+    const restarted = await openApp();
+    const reloaded = await latest(restarted);
+    for (const project of reloaded.projects)
+      expect(project.nodeModules).toMatchObject({
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      });
+    expect(reloaded.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(
+      restarted.get(DiskUsageService).peekCompletedSize(projectPath),
+    ).toBeNull();
+  });
+
+  it('does not enrich from partial measurements or start a measurement when latest is read', async () => {
+    const diskWalker: DiskWalker = (initial) =>
+      Promise.resolve({
+        ...initial,
+        status: 'completed',
+        partial: true,
+        sizeBytes: 42,
+        stopReason: 'identity_limit',
+      });
+    const measured = jest.fn(diskWalker);
+    const app = await openApp({ diskWalker: measured });
+    const scanned = await completed(app);
+    const orphan = scanned.orphanNodeModules[0];
+    const disk = app.get(DiskUsageService);
+    const job = await disk.start({ path: orphan.path });
+    for (let i = 0; i < 200 && disk.get(job.jobId).status === 'running'; i++)
+      await delay(10);
+    expect(disk.get(job.jobId).partial).toBe(true);
+    expect(disk.peekCompletedSize(orphan.path)).toBeNull();
+    const startSpy = jest.spyOn(disk, 'start');
+    const enriched = await latest(app);
+    await latest(app);
+    expect(enriched.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(startSpy).not.toHaveBeenCalled();
+    expect(measured).toHaveBeenCalledTimes(1);
+  });
+
   it('loads latest from disk after restart without restoring the old job slot', async () => {
     const first = await openApp();
     const result = await completed(first);
@@ -382,7 +521,7 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
         const entry = JSON.parse(await readFile(file, 'utf8')) as {
           result: IScanResult;
         };
-        entry.result.projects[0].nodeModules.sizeBytes = 42 as unknown as null;
+        entry.result.projects[0].nodeModules.sizeBytes = 42;
         await writeFile(file, JSON.stringify(entry));
       }
       const second = await openApp();

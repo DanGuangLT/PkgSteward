@@ -1,19 +1,25 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
+import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { toPathPlatform, pathApi } from '@/common/utils/path.util';
 import { NotFoundException } from '@/common/exceptions/app.exception';
-import type { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 import { UnsupportedDriveDetector } from '@/platform/unsupported-drive-detector';
 import { ScannerCache, makeScanCacheKey } from '@/scanner/scanner-cache';
 import { parseScanRootPaths } from '@/config/scan-roots';
 import { ScannerService } from '@/scanner/scanner.service';
-import { walkScan } from '@/scanner/scan-walker';
+import { SCAN_WALKER, walkScan } from '@/scanner/scan-walker';
+import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
+import { DiskUsageService } from '@/disk-usage/disk-usage.service';
+import type { ICompletedDiskSize } from '@/disk-usage/interfaces/disk-usage.types';
 import type {
   IScanFs,
   IScanCacheEntry,
-  IScanResult,
+  IStoredScanResult,
   IWalkerDeps,
   IWalkSnapshot,
   ScanWalker,
@@ -42,6 +48,7 @@ const snapshot = (): IWalkSnapshot => ({
         exists: false,
         path: `${root}/app/node_modules`,
         sizeBytes: null,
+        sizeMeasuredAt: null,
       },
     },
   ],
@@ -50,6 +57,7 @@ const snapshot = (): IWalkSnapshot => ({
       path: `${root}/old/node_modules`,
       mtime: '2026-10-20T00:00:00.000Z',
       sizeBytes: null,
+      sizeMeasuredAt: null,
     },
   ],
   progress: { visitedDirs: 3, foundProjects: 1, skippedCount: 1 },
@@ -57,6 +65,192 @@ const snapshot = (): IWalkSnapshot => ({
 const tick = async () => {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 };
+
+describe('ScannerService D15 cached measurement enrichment', () => {
+  const measuredAt = '2026-10-27T00:00:00.000Z';
+  const modules: TestingModule[] = [];
+
+  async function measurementFixture() {
+    const f = fixture();
+    const disk = {
+      peekCompletedSize: jest.fn<ICompletedDiskSize | null, [string]>(
+        () => null,
+      ),
+      start: jest.fn(),
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        ScannerService,
+        { provide: ConfigService, useValue: f.config },
+        { provide: PathGuardService, useValue: f.guard },
+        { provide: DRIVE_DETECTOR, useValue: f.detector },
+        { provide: SCAN_WALKER, useValue: f.walker },
+        { provide: ScannerCache, useValue: f.cache },
+        { provide: DiskUsageService, useValue: disk },
+      ],
+    }).compile();
+    const service = module.get(ScannerService);
+    await module.init();
+    const scan = service.startScan();
+    await tick();
+    const value = snapshot();
+    value.projects[0].nodeModules.exists = true;
+    value.projects.push({
+      ...structuredClone(value.projects[0]),
+      path: `${root}/absent`,
+      nodeModules: {
+        exists: false,
+        path: `${root}/absent/node_modules`,
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      },
+    });
+    f.walks[0].task.resolve(value);
+    await tick();
+    expect(service.getScan(scan.scanId).status).toBe('completed');
+    const result = { ...f, service, module, disk, scan, value };
+    modules.push(module);
+    return result;
+  }
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    for (const module of modules.splice(0)) await module.close();
+  });
+
+  it('adds cached project and orphan sizes and their original measurement timestamps', async () => {
+    const f = await measurementFixture();
+    f.disk.peekCompletedSize.mockImplementation((path) => ({
+      sizeBytes: path === f.value.projects[0].nodeModules.path ? 0 : 2048,
+      measuredAt,
+    }));
+    const result = f.service.getLatest();
+    expect(result.projects[0].nodeModules).toMatchObject({
+      sizeBytes: 0,
+      sizeMeasuredAt: measuredAt,
+    });
+    expect(result.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: 2048,
+      sizeMeasuredAt: measuredAt,
+    });
+    expect(result.projects[1].nodeModules).toMatchObject({
+      exists: false,
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(f.disk.peekCompletedSize).not.toHaveBeenCalledWith(
+      f.value.projects[1].nodeModules.path,
+    );
+    expect(f.disk.peekCompletedSize).toHaveBeenCalledWith(
+      f.value.projects[0].nodeModules.path,
+    );
+    expect(f.disk.peekCompletedSize).toHaveBeenCalledWith(
+      f.value.orphanNodeModules[0].path,
+    );
+    // A caller changing an enriched response must not alter the next response.
+    result.projects[0].nodeModules.path = '/changed-by-caller';
+    expect(f.service.getLatest().projects[0].nodeModules.path).toBe(
+      f.value.projects[0].nodeModules.path,
+    );
+    f.disk.peekCompletedSize.mockReturnValue(null);
+    expect(f.service.getLatest().projects[0].nodeModules).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+  });
+
+  it('keeps missing measurements and absent node_modules null, without peeking absent paths', async () => {
+    const f = await measurementFixture();
+    f.disk.peekCompletedSize.mockClear();
+    const result = f.service.getLatest();
+    for (const project of result.projects)
+      expect(project.nodeModules).toMatchObject({
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      });
+    expect(result.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(f.disk.peekCompletedSize).not.toHaveBeenCalledWith(
+      f.value.projects[1].nodeModules.path,
+    );
+    expect(f.disk.peekCompletedSize).toHaveBeenCalledTimes(2);
+  });
+
+  it('does only RAM peeks on getLatest, without filesystem calls, guard calls or starting measurements', async () => {
+    const f = await measurementFixture();
+    f.disk.peekCompletedSize.mockClear();
+    f.guard.createProtectedTreeMatcher.mockClear();
+    f.guard.isInsideProtectedTree.mockClear();
+    f.walker.mockClear();
+    f.load.mockClear();
+    f.save.mockClear();
+    const reads = [
+      jest.spyOn(fs, 'readFile'),
+      jest.spyOn(fs, 'readdir'),
+      jest.spyOn(fs, 'lstat'),
+      jest.spyOn(fs, 'realpath'),
+      jest.spyOn(fs, 'stat'),
+      jest.spyOn(fs, 'opendir'),
+    ];
+    f.service.getLatest();
+    expect(f.disk.peekCompletedSize).toHaveBeenCalledTimes(2);
+    expect(f.disk.start).not.toHaveBeenCalled();
+    expect(f.walker).not.toHaveBeenCalled();
+    expect(f.guard.createProtectedTreeMatcher).not.toHaveBeenCalled();
+    expect(f.guard.isInsideProtectedTree).not.toHaveBeenCalled();
+    expect(f.load).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+    for (const read of reads) expect(read).not.toHaveBeenCalled();
+  });
+
+  it('keeps scan cache and walker data null while repeatedly enriching cloned responses', async () => {
+    const f = await measurementFixture();
+    f.disk.peekCompletedSize.mockReturnValue({ sizeBytes: 123, measuredAt });
+    expect(f.service.getLatest().orphanNodeModules[0]).toMatchObject({
+      sizeBytes: 123,
+      sizeMeasuredAt: measuredAt,
+    });
+    f.service.getLatest();
+    expect(f.save).toHaveBeenCalledTimes(1);
+    const saved = f.save.mock.calls[0][0];
+    for (const project of saved.result.projects) {
+      expect(project.nodeModules.sizeBytes).toBeNull();
+      expect(project.nodeModules).not.toHaveProperty(
+        'sizeMeasuredAt',
+        measuredAt,
+      );
+    }
+    expect(saved.result.orphanNodeModules[0].sizeBytes).toBeNull();
+    expect(f.value.projects[0].nodeModules.sizeBytes).toBeNull();
+    expect(f.value.orphanNodeModules[0].sizeBytes).toBeNull();
+  });
+
+  it('loads an older last-scan result without sizeMeasuredAt and supplies null timestamps', async () => {
+    const f = await measurementFixture();
+    const saved = structuredClone(f.save.mock.calls[0][0]);
+    for (const project of saved.result.projects)
+      delete project.nodeModules.sizeMeasuredAt;
+    for (const orphan of saved.result.orphanNodeModules)
+      delete orphan.sizeMeasuredAt;
+    f.load.mockResolvedValue(saved);
+    await f.service.onModuleInit();
+    const result = f.service.getLatest();
+    expect(result.projects[0].nodeModules).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(result.orphanNodeModules[0]).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(saved.result.projects[0].nodeModules).not.toHaveProperty(
+      'sizeMeasuredAt',
+    );
+    expect(f.disk.start).not.toHaveBeenCalled();
+  });
+});
 
 function fixture(
   options: {
@@ -66,7 +260,7 @@ function fixture(
     detector?: IDriveDetector;
   } = {},
 ) {
-  const config = new ConfigService({
+  const settings: Record<string, unknown> = {
     ...(options.roots === null
       ? {}
       : { SCAN_ROOT_PATHS: options.roots ?? root }),
@@ -74,8 +268,9 @@ function fixture(
     ...(options.timeout === undefined
       ? {}
       : { SCAN_TIMEOUT_MS: options.timeout }),
-  });
-  config.skipProcessEnv = true;
+  };
+  const config = new ConfigService();
+  jest.spyOn(config, 'get').mockImplementation((key: string) => settings[key]);
   const cache = new ScannerCache({
     cacheFilePath: '/unused',
     fs: {
@@ -117,6 +312,7 @@ function fixture(
     detector,
     walker,
     cache,
+    { peekCompletedSize: () => null } as unknown as DiskUsageService,
   );
   return {
     service,
@@ -674,7 +870,7 @@ describe('ScannerService', () => {
   it('loads only latest on restart without discovery, leaving old job IDs unknown', async () => {
     const f = fixture({ roots: '*' });
     const { progress, ...data } = snapshot();
-    const result: IScanResult = {
+    const result: IStoredScanResult = {
       ...data,
       scanId: '10000000-0000-4000-8000-000000000001',
       status: 'completed',

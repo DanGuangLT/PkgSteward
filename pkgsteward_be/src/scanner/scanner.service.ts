@@ -23,12 +23,14 @@ import type {
   IScanJob,
   IScanResult,
   IScanStart,
+  IStoredScanResult,
   IWalkSnapshot,
   ScanStatus,
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
 import { SCAN_WALKER } from '@/scanner/scan-walker';
 import { makeScanCacheKey, ScannerCache } from '@/scanner/scanner-cache';
+import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
 interface IActiveScan {
   job: IScanJob;
@@ -52,7 +54,7 @@ export class ScannerService
   private readonly logger = new Logger(ScannerService.name);
   private readonly platform = toPathPlatform();
   private current?: IActiveScan;
-  private latest?: IScanResult;
+  private latest?: IStoredScanResult;
 
   constructor(
     private readonly config: ConfigService,
@@ -60,6 +62,7 @@ export class ScannerService
     @Inject(DRIVE_DETECTOR) private readonly detector: IDriveDetector,
     @Inject(SCAN_WALKER) private readonly walker: ScanWalker,
     private readonly cache: ScannerCache,
+    private readonly diskUsage: DiskUsageService,
   ) {}
 
   private configuration() {
@@ -134,7 +137,33 @@ export class ScannerService
 
   getLatest(): IScanResult {
     if (!this.latest) throw new NotFoundException('Latest scan');
-    return plainToInstance(ScanResultEntity, structuredClone(this.latest));
+    const latest = structuredClone(this.latest);
+    const projects = latest.projects.map((project) => {
+      const size = project.nodeModules.exists
+        ? this.diskUsage.peekCompletedSize(project.nodeModules.path)
+        : null;
+      return {
+        ...project,
+        nodeModules: {
+          ...project.nodeModules,
+          sizeBytes: size?.sizeBytes ?? null,
+          sizeMeasuredAt: size?.measuredAt ?? null,
+        },
+      };
+    });
+    const orphanNodeModules = latest.orphanNodeModules.map((orphan) => {
+      const size = this.diskUsage.peekCompletedSize(orphan.path);
+      return {
+        ...orphan,
+        sizeBytes: size?.sizeBytes ?? null,
+        sizeMeasuredAt: size?.measuredAt ?? null,
+      };
+    });
+    return plainToInstance(ScanResultEntity, {
+      ...latest,
+      projects,
+      orphanNodeModules,
+    });
   }
 
   private requireScan(scanId: string): IActiveScan {
@@ -209,7 +238,7 @@ export class ScannerService
     status: 'completed' | 'timed_out',
     snapshot: IWalkSnapshot,
   ): void {
-    const result: IScanResult = {
+    const result: IStoredScanResult = {
       scanId: active.job.scanId,
       status,
       partial: status === 'timed_out',
