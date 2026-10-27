@@ -59,6 +59,32 @@ The server loads the initial scan results. Browser scan requests use same-origin
 Backend requests time out after 10 seconds. If the backend is offline or a request times out, the page
 shows a localized `BACKEND_UNAVAILABLE` error state instead of crashing.
 
+## Disk usage
+
+Open `/disk-usage`, enter an absolute directory path, choose `directory` or `packages`, then select **Measure size**.
+The `packages` view expects a `node_modules` path. The project list's **View size** link opens this form;
+`?path=...&view=...` only prefills it and never starts a measurement automatically.
+
+Browser requests use same-origin Route Handlers; the server calls the backend:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/disk-usage` | Start a measurement |
+| `GET /api/disk-usage/:id` | Read the current snapshot (`Cache-Control: no-store`) |
+| `POST /api/disk-usage/:id/cancel` | Cancel the measurement |
+
+Polling keeps one request in flight and waits 1 second after each response before polling again. It pauses while
+the tab is hidden, resumes when visible, and stops when the job ends. A polling error pauses polling until
+**Retry progress check** is selected. A `409 CONFLICT` offers to follow the running job. If a backend restart loses the
+job (`404 NOT_FOUND`), the UI keeps the last snapshot and offers **Recalculate displayed result** to measure again.
+
+Sizes are **unique apparent bytes**: each hardlinked file is counted once per measurement. They do not represent
+allocated disk space or reclaimable space. Partial results are lower bounds, and breakdown rows need not add up
+to the total because they can share hardlinks. Expand a directory or package only after the current job ends;
+each expansion starts a separate directory measurement. Breadcrumb history keeps up to 16 ancestor snapshots,
+and going back restores a snapshot without measuring again. **Recalculate displayed result** forces a fresh measurement and clears
+the backend size cache; ordinary measurements may reuse cached results.
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:
@@ -90,14 +116,15 @@ To add a language: copy `messages/en.json` to `messages/<code>.json` and transla
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin scan Route Handlers
+app/api/              Same-origin scan and disk usage Route Handlers
 components/ui/        shadcn/ui components (adapted to the theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
 i18n/, messages/      next-intl config and translations
-hooks/                Client scan polling and cancellation
-lib/api/              Backend client, transport, contracts and scan requests
+hooks/                Client scan and disk usage polling and cancellation
+lib/api/              Backend client, transport, contracts and scan / disk usage requests
+lib/disk-usage/       Measurement polling and presentation policy
 lib/projects/         Project filtering, sorting and display helpers
 lib/scans/            Scan polling and completion policy
 lib/theme/            Theme preset registry
