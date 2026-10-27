@@ -572,7 +572,8 @@ export const walkDiskUsage: DiskWalker = (initial, signal, deps) =>
         const bucket = makeBucket(row);
         buckets.push(bucket);
         if (row.state === 'excluded') {
-          incomplete = true;
+          // Link trỏ ra ngoài root không thuộc cây vật lý nên tổng root vẫn chính xác.
+          if (row.reason !== 'outside_root') incomplete = true;
           job.progress.skippedCount++;
         } else if (job.view === 'directory') {
           directRows.set(toComparable(row.path, platform), bucket);

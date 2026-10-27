@@ -114,6 +114,8 @@ windowsFixture(
       );
       const expected = await sizes();
       const result = await measure(modules, 'packages');
+      // The escaping link is excluded, but the physical root total stays exact.
+      expect(result.partial).toBe(false);
       expect(result.sizeBytes).toBe(expected.a + expected.b + expected.bin);
       expect(result.fileCount).toBe(5);
       const a = result.children.find((row) => row.aliases.includes('pkg-a'));

@@ -441,6 +441,32 @@ describe('walkDiskUsage', () => {
     for (const alias of aliases) expect(opened).not.toContain(alias);
   });
 
+  it('excludes an external package link without marking the exact root total partial', async () => {
+    const f = fixture('packages');
+    const store = f.dir(path.join(f.root, '.pnpm'));
+    const target = f.dir(path.join(store, 'pkg@1'));
+    f.file(path.join(target, 'index.js'), 37n);
+    f.link(path.join(f.root, 'pkg'), target);
+    // Workspace link kiểu pnpm: đích nằm ngoài node_modules, không thuộc cây vật lý.
+    const outside = f.dir('D:\\TEST\\packages\\lib');
+    f.file(path.join(outside, 'index.js'), 100n);
+    f.link(path.join(f.root, 'lib'), outside);
+    const result = await f.run();
+    expect(result).toMatchObject({
+      status: 'completed',
+      partial: false,
+      stopReason: null,
+      sizeBytes: 37,
+      fileCount: 1,
+    });
+    expect(result.children.find((row) => row.name === 'lib')).toMatchObject({
+      state: 'excluded',
+      reason: 'outside_root',
+      sizeBytes: null,
+    });
+    expect(f.fs.entries.mock.calls.map(([p]) => p)).not.toContain(outside);
+  });
+
   it('does not report an unseen canonical package target as a zero-byte success', async () => {
     const f = fixture('packages');
     const target = f.dir(path.join(f.root, '.pnpm'));

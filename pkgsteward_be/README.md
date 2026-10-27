@@ -88,7 +88,8 @@ boolean. Extra fields and string booleans such as `"false"` are rejected.
 
 - **Views:** `directory` lists one level of files, directories and links. `packages` requires a path named
   `node_modules` and lists direct and scoped packages, grouping aliases that have the same canonical target.
-  Internal package junctions can be attributed to their target; links escaping the measured root are excluded.
+  Internal package junctions can be attributed to their target; links escaping the measured root are excluded
+  as rows but do not make the result partial, because their targets are outside the measured tree.
   The root total includes the physical `.pnpm` tree and `.bin`, even though these are not package rows. The
   breakdown does not represent every transitive dependency. Expand a directory by starting a separate job for it.
 - **Jobs:** only one measurement runs at a time. Starting the same canonical path and view returns that job;
