@@ -84,7 +84,7 @@ in several breakdown rows, so adding row sizes does not necessarily equal the ro
 Responses use the standard `{ statusCode, message, code, data, timestamp, path }` envelope. `path` must be a
 nonempty absolute directory path of at most 32,768 characters, allowed by `SCAN_ROOT_PATHS` and the protected
 path rules. Job IDs are UUID v4. `view` defaults to `directory`; `force` defaults to `false` and must be a JSON
-boolean. Extra fields and string booleans such as `"false"` are rejected.
+boolean. Extra fields, `null` for `view` or `force`, and string booleans such as `"false"` are rejected.
 
 - **Views:** `directory` lists one level of files, directories and links. `packages` requires a path named
   `node_modules` and lists direct and scoped packages, grouping aliases that have the same canonical target.

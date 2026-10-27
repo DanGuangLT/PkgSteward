@@ -273,6 +273,8 @@ describe('DiskUsage HTTP flow (e2e)', () => {
       { path: root, view: 'invalid' },
       { path: root, force: 'false' },
       { path: root, force: 'true' },
+      { path: root, view: null },
+      { path: root, force: null },
       { path: root, extra: true },
     ]) {
       const response = await request(app.getHttpServer())

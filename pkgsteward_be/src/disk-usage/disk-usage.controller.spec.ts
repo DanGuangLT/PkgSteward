@@ -165,6 +165,8 @@ describe('DiskUsageController contract', () => {
       { path: '/fixture', force: 'false' },
       { path: '/fixture', force: 'true' },
       { path: '/fixture', force: 1 },
+      { path: '/fixture', view: null },
+      { path: '/fixture', force: null },
       { path: '/fixture', extra: true },
     ]) {
       expect(

@@ -3,9 +3,9 @@ import {
   IsBoolean,
   IsIn,
   IsNotEmpty,
-  IsOptional,
   IsString,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import type {
   DiskView,
@@ -26,14 +26,15 @@ export class StartDiskUsageDto implements IStartDiskUsage {
     enum: ['directory', 'packages'],
     default: 'directory',
   })
-  @IsOptional()
+  // Không dùng IsOptional: nó bỏ qua cả null; chỉ field không gửi mới lấy mặc định.
+  @ValidateIf((_, value) => value !== undefined)
   @IsIn(['directory', 'packages'], {
     message: 'view must be directory or packages',
   })
   view?: DiskView;
 
   @ApiPropertyOptional({ type: Boolean, default: false })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsBoolean({ message: 'force must be a boolean' })
   force?: boolean;
 }
