@@ -23,6 +23,7 @@ import type {
 
 export const DISK_CONCURRENCY = 8;
 export const DISK_WALKER = Symbol('DISK_WALKER');
+export const DISK_FS = Symbol('DISK_FS');
 
 let metadataActive = 0;
 const metadataWaiters: (() => void)[] = [];
