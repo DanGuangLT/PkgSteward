@@ -11,6 +11,7 @@ import {
 import * as pathUtil from '@/common/utils/path.util';
 import type { IGuardedPath } from '@/core/path-guard/interfaces/path-guard.types';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { DiskUsageCache } from '@/disk-usage/disk-usage-cache';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import {
@@ -130,13 +131,16 @@ const fixture = () => {
   const putCached = jest.spyOn(cache, 'put');
   const clearCached = jest.spyOn(cache, 'clear');
   const peekCached = jest.spyOn(cache, 'peekCompletedSize');
+  const gate = new MutationGateService();
   const service = new DiskUsageService(
     guard as unknown as PathGuardService,
     walker,
     fs,
     cache,
+    gate,
   );
   return {
+    gate,
     guard,
     matcher,
     fs,
@@ -162,6 +166,142 @@ describe('DiskUsageService', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+  });
+
+  describe('mutation gate', () => {
+    const conflict = {
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: 'A file operation is in progress',
+    };
+
+    it('rejects when the gate is acquired during path authorization, then starts after release', async () => {
+      const f = fixture();
+      let token: symbol | null = null;
+      f.guard.assertAllowed.mockImplementationOnce((path) => {
+        token = f.gate.tryEnter();
+        return Promise.resolve({
+          inputPath: path,
+          resolvedPath: path,
+          realPath: root,
+          isSymbolicLink: false,
+        });
+      });
+      await expect(f.service.start({ path: root })).rejects.toMatchObject(
+        conflict,
+      );
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      expect(f.walker).not.toHaveBeenCalled();
+      expect(f.guard.createProtectedTreeMatcher).not.toHaveBeenCalled();
+      expect(f.getCached).not.toHaveBeenCalled();
+
+      f.gate.leave(token!);
+      const start = await f.service.start({ path: root });
+      expect(start.status).toBe('running');
+      expect(f.service.hasRunningMeasurement()).toBe(true);
+      await tick();
+      expect(f.walker).toHaveBeenCalledTimes(1);
+      f.service.cancel(start.jobId);
+    });
+
+    it('rechecks the gate after the awaited root stat before cache or slot changes', async () => {
+      const f = fixture();
+      const stat = deferred<BigIntStats>();
+      f.fs.lstat.mockReturnValueOnce(stat.promise);
+      const started = f.service.start({ path: root, force: true });
+      await tick();
+      expect(f.fs.lstat).toHaveBeenCalledTimes(1);
+      const token = f.gate.tryEnter()!;
+      const rejected = expect(started).rejects.toMatchObject(conflict);
+      stat.resolve(directory());
+      await rejected;
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      expect(f.getCached).not.toHaveBeenCalled();
+      expect(f.clearCached).not.toHaveBeenCalled();
+      expect(f.walker).not.toHaveBeenCalled();
+      f.gate.leave(token);
+    });
+
+    it('rejects a cache hit without replacing the completed job or clearing cache', async () => {
+      const f = fixture();
+      const first = await f.service.start({ path: root });
+      await tick();
+      f.walks[0].task.resolve(done(f.walks[0].initial));
+      await tick();
+      const before = f.service.get(first.jobId);
+      expect(before.status).toBe('completed');
+      expect(f.cache.get(root, 'directory', 10n)).not.toBeNull();
+      f.getCached.mockClear();
+
+      const token = f.gate.tryEnter()!;
+      await expect(f.service.start({ path: root })).rejects.toMatchObject(
+        conflict,
+      );
+      await expect(
+        f.service.start({ path: root, force: true }),
+      ).rejects.toMatchObject(conflict);
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      expect(f.service.get(first.jobId)).toEqual(before);
+      expect(f.getCached).not.toHaveBeenCalled();
+      expect(f.clearCached).not.toHaveBeenCalled();
+      expect(f.walker).toHaveBeenCalledTimes(1);
+      f.gate.leave(token);
+      const cached = await f.service.start({ path: root });
+      expect(f.service.get(cached.jobId).cacheHit).toBe(true);
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+    });
+
+    it('checks the gate before reusing a running measurement and preserves the job', async () => {
+      const f = fixture();
+      const first = await f.service.start({ path: root });
+      await tick();
+      const before = f.service.get(first.jobId);
+      const token = f.gate.tryEnter()!;
+      await expect(f.service.start({ path: root })).rejects.toMatchObject(
+        conflict,
+      );
+      expect(f.service.get(first.jobId)).toEqual(before);
+      expect(f.service.hasRunningMeasurement()).toBe(true);
+      expect(f.walker).toHaveBeenCalledTimes(1);
+      f.gate.leave(token);
+      expect(await f.service.start({ path: root })).toEqual(first);
+      f.service.cancel(first.jobId);
+    });
+
+    it('reports idle initially and after completion, and running after reserving the slot', async () => {
+      const f = fixture();
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      const first = await f.service.start({ path: root });
+      expect(f.service.hasRunningMeasurement()).toBe(true);
+      await tick();
+      f.walks[0].task.resolve(done(f.walks[0].initial));
+      await tick();
+      expect(f.service.get(first.jobId).status).toBe('completed');
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+    });
+
+    it('reports idle after cancellation even while the walker is unsettled', async () => {
+      const f = fixture();
+      const first = await f.service.start({ path: root });
+      expect(f.service.hasRunningMeasurement()).toBe(true);
+      await tick();
+      f.service.cancel(first.jobId);
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      f.walks[0].task.resolve(done(f.walks[0].initial));
+      await tick();
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+    });
+
+    it('reports idle when the measurement fails', async () => {
+      const f = fixture();
+      const first = await f.service.start({ path: root });
+      expect(f.service.hasRunningMeasurement()).toBe(true);
+      await tick();
+      f.walks[0].task.reject(new Error('TEST failure'));
+      await tick();
+      expect(f.service.get(first.jobId).status).toBe('failed');
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+    });
   });
 
   it('rejects starts after shutdown before authorization or IO', async () => {
@@ -257,6 +397,7 @@ describe('DiskUsageService', () => {
         { provide: DISK_WALKER, useValue: f.walker },
         { provide: DISK_FS, useValue: f.fs },
         { provide: DiskUsageCache, useValue: f.cache },
+        { provide: MutationGateService, useValue: f.gate },
       ],
     }).compile();
     try {
@@ -887,6 +1028,7 @@ describe('DiskUsageService', () => {
       walker,
       adapter,
       f.cache,
+      f.gate,
     );
     let next: ReturnType<DiskUsageService['start']> | undefined;
     try {

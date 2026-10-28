@@ -15,6 +15,7 @@ import {
   toPathPlatform,
 } from '@/common/utils/path.util';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { DiskUsageCache } from '@/disk-usage/disk-usage-cache';
 import { DISK_FS, DISK_WALKER } from '@/disk-usage/disk-usage-walker';
 import type { IDiskUsageService } from '@/disk-usage/interfaces/disk-usage.service.interface';
@@ -46,6 +47,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     @Inject(DISK_WALKER) private readonly walker: DiskWalker,
     @Inject(DISK_FS) private readonly fs: IDiskFs,
     private readonly cache: DiskUsageCache,
+    private readonly gate: MutationGateService,
   ) {}
 
   async start({
@@ -71,6 +73,8 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     if (!root.isDirectory()) {
       throw new ValidationException('Disk usage path must be a directory');
     }
+    // Check after authorization/stat awaits; keep cache lookup and slot reservation synchronous.
+    this.gate.assertIdle();
     if (this.current?.job.status === 'running') {
       const running = this.current.job;
       if (
@@ -143,6 +147,10 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
       });
     }
     return { jobId, status: job.status };
+  }
+
+  hasRunningMeasurement(): boolean {
+    return this.current?.job.status === 'running';
   }
 
   get(jobId: string): IDiskUsageJob {

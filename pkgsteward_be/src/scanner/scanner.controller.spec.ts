@@ -26,6 +26,7 @@ import {
 } from '@/scanner/entities/scan.entity';
 import { ScannerController } from '@/scanner/scanner.controller';
 import { ScannerService } from '@/scanner/scanner.service';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
 const scanId = 'e4261d1d-590f-48a4-a765-d6dedcff17e4';
@@ -185,6 +186,7 @@ describe('ScannerController', () => {
     const module = await Test.createTestingModule({
       providers: [
         ScannerService,
+        MutationGateService,
         {
           provide: DiskUsageService,
           useValue: { peekCompletedSize: () => null },
