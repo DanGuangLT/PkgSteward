@@ -7,6 +7,11 @@ import {
 import type { ScanRoots } from '@/config/scan-roots';
 import { buildDenylist } from '@/core/path-guard/denylist';
 import { PathGuard } from '@/core/path-guard/path-guard';
+import { ConfigService } from '@nestjs/config';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import type { IPathGuardDeps } from '@/core/path-guard/path-guard';
+import type { PathCheckResult } from '@/core/path-guard/interfaces/path-guard.types';
+import { PathGuardService } from '@/core/path-guard/path-guard.service';
 
 const denylist = buildDenylist({
   platform: 'win32',
@@ -59,6 +64,297 @@ const makeGuard = ({
   };
 };
 const ALL = { kind: 'all-fixed-drives' } as ScanRoots;
+
+describe('PathGuard.checkMany', () => {
+  // A separately typed fixture keeps the pre-existing makeGuard TS2322 issue out of new cases.
+  const batchFixture = (
+    options: Partial<
+      Pick<IPathGuardDeps, 'scanRoots' | 'platform' | 'denylist'>
+    > & {
+      fs?: ReturnType<typeof makeFs>;
+    } = {},
+  ) => {
+    const fs = options.fs ?? makeFs();
+    const driveDetector = {
+      listFixedDrives: jest.fn(() => Promise.resolve(['C:\\', 'D:\\', 'E:\\'])),
+    };
+    const guard = new PathGuard({
+      platform: options.platform ?? 'win32',
+      scanRoots: options.scanRoots ?? ALL,
+      denylist: options.denylist ?? denylist,
+      driveDetector,
+      fs,
+    });
+    return { guard, driveDetector, fs };
+  };
+  const inputs = ['D:\\Scan\\one', 'D:\\Scan\\two', 'D:\\Scan\\three'] as const;
+  const noIO = (f: ReturnType<typeof batchFixture>) => {
+    expect(f.driveDetector.listFixedDrives).not.toHaveBeenCalled();
+    expect(f.fs.realpath).not.toHaveBeenCalled();
+    expect(f.fs.lstat).not.toHaveBeenCalled();
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('shares one fixed-drive discovery and one resolution of each deny entry per batch', async () => {
+    const f = batchFixture();
+    const results = await f.guard.checkMany(inputs);
+    expect(results).toHaveLength(3);
+    expect(results.every((result) => result.allowed)).toBe(true);
+    expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(1);
+    for (const entry of denylist) {
+      expect(
+        f.fs.realpath.mock.calls.filter(([p]) => p === entry.path),
+      ).toHaveLength(1);
+    }
+    // Roots and deny entries use distinct raw casing in this fixture.
+    for (const root of ['C:\\', 'D:\\', 'E:\\']) {
+      expect(f.fs.realpath.mock.calls.filter(([p]) => p === root)).toHaveLength(
+        1,
+      );
+    }
+    expect(f.fs.lstat.mock.calls.map(([p]) => p)).toEqual(inputs);
+  });
+
+  it('resolves each explicit scan root only once for multiple valid targets', async () => {
+    const f = batchFixture({
+      scanRoots: { kind: 'paths', paths: ['D:\\Scan', 'E:\\Scan'] },
+    });
+    await f.guard.checkMany(inputs);
+    expect(f.driveDetector.listFixedDrives).not.toHaveBeenCalled();
+    for (const root of ['D:\\Scan', 'E:\\Scan']) {
+      expect(f.fs.realpath.mock.calls.filter(([p]) => p === root)).toHaveLength(
+        1,
+      );
+    }
+  });
+
+  it('refreshes drives and protected junction targets on every call', async () => {
+    const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+    const links = { [protectedPath]: 'E:\\Protected\\Old' };
+    const f = batchFixture({ fs: makeFs(links) });
+    const paths = [
+      'E:\\Protected\\Old\\child',
+      'E:\\Protected\\New\\child',
+      'D:\\Scan\\app',
+    ];
+    expect(await f.guard.checkMany(paths)).toMatchObject([
+      { allowed: false, code: 'DENYLISTED' },
+      { allowed: true },
+      { allowed: true },
+    ]);
+    links[protectedPath] = 'E:\\Protected\\New';
+    f.driveDetector.listFixedDrives.mockResolvedValue(['E:\\']);
+    expect(await f.guard.checkMany(paths)).toMatchObject([
+      { allowed: true },
+      { allowed: false, code: 'DENYLISTED' },
+      { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+    ]);
+    expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(2);
+    for (const entry of denylist) {
+      expect(
+        f.fs.realpath.mock.calls.filter(([p]) => p === entry.path),
+      ).toHaveLength(2);
+    }
+  });
+
+  it('returns an empty result without filesystem or drive discovery calls', async () => {
+    const f = batchFixture();
+    expect(await f.guard.checkMany([])).toEqual([]);
+    noIO(f);
+  });
+
+  it('rejects invalid inputs in place without any IO', async () => {
+    const f = batchFixture();
+    const paths = [
+      '',
+      '  ',
+      'relative',
+      'D:app',
+      '\\Windows',
+      'D:\\Scan\\..\\app',
+      'D:\\Scan\\a\0b',
+    ];
+    const expected = await Promise.all(
+      paths.map((path) => f.guard.check(path)),
+    );
+    expect(await f.guard.checkMany(paths)).toEqual(expected);
+    expect(expected).toHaveLength(paths.length);
+    expect(
+      expected.every(
+        (result) => !result.allowed && result.code === 'INVALID_PATH',
+      ),
+    ).toBe(true);
+    noIO(f);
+  });
+
+  it('preserves order, duplicates, messages and guarded-path metadata exactly like individual checks', async () => {
+    const f = batchFixture({
+      scanRoots: { kind: 'paths', paths: ['D:\\Scan'] },
+      fs: makeFs(
+        {
+          'D:\\Scan\\alias': 'D:\\Scan\\real',
+          'D:\\Scan\\protected-link': 'C:\\Windows\\Temp',
+          'D:\\Scan\\escape': 'E:\\Other',
+        },
+        ['D:\\Scan\\missing'],
+      ),
+    });
+    const paths = Object.freeze([
+      'D:/Scan/app/',
+      'relative',
+      'D:\\Scan\\..\\other',
+      'C:\\Windows',
+      'E:\\Other',
+      'D:\\Scan\\missing',
+      'D:\\Scan\\protected-link',
+      'D:\\Scan\\alias',
+      'D:/Scan/app/',
+      'D:\\Scan\\escape',
+    ]);
+    const expected = await Promise.all(
+      paths.map((path) => f.guard.check(path)),
+    );
+    expect(expected).toMatchObject([
+      {
+        allowed: true,
+        path: {
+          inputPath: paths[0],
+          resolvedPath: 'D:\\Scan\\app',
+          isSymbolicLink: false,
+        },
+      },
+      { allowed: false, code: 'INVALID_PATH' },
+      { allowed: false, code: 'INVALID_PATH' },
+      { allowed: false, code: 'DENYLISTED' },
+      { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+      { allowed: false, code: 'NOT_FOUND' },
+      { allowed: false, code: 'DENYLISTED' },
+      {
+        allowed: true,
+        path: { realPath: 'D:\\Scan\\real', isSymbolicLink: true },
+      },
+      { allowed: true },
+      { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+    ]);
+    expect(await f.guard.checkMany(paths)).toEqual(expected);
+  });
+
+  it('keeps posix paths case-sensitive while sharing the batch snapshot', async () => {
+    const f = batchFixture({
+      platform: 'posix',
+      scanRoots: { kind: 'paths', paths: ['/TEST/scan'] },
+      denylist: [
+        {
+          path: '/TEST/scan/protected',
+          scope: 'subtree',
+          reason: 'TEST protected',
+        },
+      ],
+    });
+    const paths = [
+      '/TEST/scan/app',
+      '/test/scan/app',
+      '/TEST/scan/protected/child',
+    ];
+    const expected = await Promise.all(
+      paths.map((path) => f.guard.check(path)),
+    );
+    expect(expected).toMatchObject([
+      { allowed: true },
+      { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+      { allowed: false, code: 'DENYLISTED' },
+    ]);
+    expect(await f.guard.checkMany(paths)).toEqual(expected);
+  });
+
+  it.each([
+    'denylist',
+    'scan root',
+    'target realpath',
+    'target lstat',
+  ] as const)(
+    'rejects the entire batch when %s resolution fails with EACCES',
+    async (source) => {
+      const f = batchFixture({
+        scanRoots: { kind: 'paths', paths: ['D:\\Scan'] },
+      });
+      const failing =
+        source === 'denylist'
+          ? denylist[0].path
+          : source === 'scan root'
+            ? 'D:\\Scan'
+            : inputs[1];
+      if (source === 'target lstat') {
+        f.fs.lstat.mockImplementation((p) =>
+          p === failing
+            ? Promise.reject(errno('EACCES'))
+            : Promise.resolve({ isSymbolicLink: () => false }),
+        );
+      } else {
+        f.fs.realpath.mockImplementation((p) =>
+          p === failing ? Promise.reject(errno('EACCES')) : Promise.resolve(p),
+        );
+      }
+      await expect(f.guard.check(failing)).rejects.toBeInstanceOf(
+        InternalServerException,
+      );
+      await expect(f.guard.checkMany(inputs)).rejects.toBeInstanceOf(
+        InternalServerException,
+      );
+    },
+  );
+
+  it.each(['ENOENT', 'ENOTDIR'])(
+    'keeps per-target %s failures as NOT_FOUND and returns the other results',
+    async (code) => {
+      const f = batchFixture();
+      f.fs.lstat.mockImplementation((p) =>
+        p === inputs[1]
+          ? Promise.reject(errno(code))
+          : Promise.resolve({ isSymbolicLink: () => false }),
+      );
+      expect(await f.guard.checkMany(inputs)).toMatchObject([
+        { allowed: true },
+        { allowed: false, code: 'NOT_FOUND' },
+        { allowed: true },
+      ]);
+    },
+  );
+
+  it('fails closed when drive discovery fails', async () => {
+    const f = batchFixture();
+    f.driveDetector.listFixedDrives.mockRejectedValue(
+      new InternalServerException('TEST discovery failed'),
+    );
+    await expect(f.guard.checkMany(inputs)).rejects.toBeInstanceOf(
+      InternalServerException,
+    );
+    expect(f.fs.lstat).not.toHaveBeenCalled();
+  });
+
+  it('delegates PathGuardService.checkMany to its guard with the original ordered inputs', async () => {
+    const results: PathCheckResult[] = [
+      { allowed: false, code: 'INVALID_PATH', message: 'TEST invalid' },
+    ];
+    const checkMany = jest
+      .spyOn(PathGuard.prototype, 'checkMany')
+      .mockResolvedValue(results);
+    const service = new PathGuardService(
+      new ConfigService({ SCAN_ROOT_PATHS: '*' }),
+      {
+        appInstallDir: 'D:\\TEST\\install',
+        sourceCheckoutDir: null,
+        dataDir: 'D:\\TEST\\data',
+      } as AppPathsService,
+      { listFixedDrives: jest.fn() },
+    );
+    const paths = Object.freeze(['relative']);
+    expect(await service.checkMany(paths)).toBe(results);
+    expect(checkMany).toHaveBeenCalledTimes(1);
+    expect(checkMany).toHaveBeenCalledWith(paths);
+  });
+});
 
 describe('PathGuard protected-tree matcher', () => {
   const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
