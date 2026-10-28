@@ -7,7 +7,9 @@ import {
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 const job = { jobId: "TEST-job", status: "running" }
-const state = { phase: "tracking", jobId: job.jobId, job: null, cancelPending: false }
+const form = { path: "D:\\TEST", view: "directory" }
+const context = { requestTarget: null, form }
+const state = { ...context, phase: "tracking", jobId: job.jobId, job: null, target: form, cancelPending: false }
 
 test("running visible polls", () => {
   assert.equal(diskShouldPoll("running", true), true)
@@ -60,7 +62,7 @@ test("404 stops tracking and keeps the last snapshot", () => {
   const snapshot = { ...job, sizeBytes: 42 }
   for (const [code, status] of [["NOT_FOUND", 404], ["HTTP_EXCEPTION", 404]]) {
     const lost = diskPollFailure({ ...state, job: snapshot }, code, status)
-    assert.deepEqual(lost, { phase: "idle", job: snapshot })
+    assert.deepEqual(lost, { ...context, phase: "idle", job: snapshot })
     assert.equal(diskCanPoll(lost, true), false)
     assert.equal(diskCanPoll(diskRetryPoll(lost), true), false)
   }
@@ -68,7 +70,7 @@ test("404 stops tracking and keeps the last snapshot", () => {
 
 test("new job polls while the previous terminal snapshot is preserved", () => {
   const snapshot = { ...job, jobId: "TEST-previous", status: "completed", sizeBytes: 0 }
-  const tracking = diskTrackJob({ phase: "starting", job: snapshot }, job.jobId)
+  const tracking = diskTrackJob({ ...context, phase: "starting", job: snapshot }, job.jobId)
   assert.equal(tracking.job, snapshot)
   assert.equal(diskCanPoll(tracking, true), true)
   assert.equal(diskAcceptPoll(tracking, snapshot, 2, 2), false)

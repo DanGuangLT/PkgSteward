@@ -4,16 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { cancelBrowserDiskUsage, pollBrowserDiskUsage, startBrowserDiskUsage } from "@/lib/api/disk-usage-browser"
 import { ApiError } from "@/lib/api/response"
-import type { DiskUsageJob, StartDiskUsage } from "@/lib/api/types"
+import type { StartDiskUsage } from "@/lib/api/types"
 import {
   acceptDiskJob, diskAcceptPoll, diskBeginCancel, diskCanPoll,
-  diskPollFailure, diskRetryPoll, diskTrackJob, type DiskUiState,
+  diskEditTarget, diskPollFailure, diskReceiveJob, diskRequestError, diskRestoreSnapshot, diskRetryPoll, diskTrackJob,
+  type DiskError, type DiskRequestTarget, type DiskSnapshot, type DiskUiState,
 } from "@/lib/disk-usage/disk-usage-policy"
-
-export interface DiskError {
-  code: string
-  conflict?: { jobId: string; path: string }
-}
 
 export interface DiskController {
   state: DiskUiState
@@ -21,25 +17,15 @@ export interface DiskController {
   start(input: StartDiskUsage): Promise<void>
   cancel(): Promise<void>
   retryPoll(): void
-  follow(jobId: string): void
-  restore(job: DiskUsageJob): void
+  follow(conflict: { jobId: string; path: string }): void
+  restore(snapshot: DiskSnapshot): void
+  setTarget(target: DiskRequestTarget): void
 }
 
-function readError(error: unknown): DiskError {
-  if (!(error instanceof ApiError)) return { code: "UNKNOWN" }
-  const details = error.details
-  if (error.code === "CONFLICT" && typeof details === "object" && details !== null
-    && "jobId" in details && typeof details.jobId === "string"
-    && "path" in details && typeof details.path === "string") {
-    return { code: "CONFLICT", conflict: { jobId: details.jobId, path: details.path } }
-  }
-  return { code: error.code ?? (error.statusCode === 404 ? "NOT_FOUND" : "UNKNOWN") }
-}
-
-export function useDiskUsage(): DiskController {
-  const [state, setState] = useState<DiskUiState>({ phase: "idle", job: null })
+export function useDiskUsage(initialTarget: DiskRequestTarget): DiskController {
+  const [state, setState] = useState<DiskUiState>({ phase: "idle", job: null, requestTarget: null, form: initialTarget })
   const [error, setError] = useState<DiskError | null>(null)
-  const current = useRef<DiskUiState>({ phase: "idle", job: null })
+  const current = useRef<DiskUiState>(state)
   const mounted = useRef(false)
   const generation = useRef(0)
   const request = useRef<AbortController | null>(null)
@@ -78,16 +64,14 @@ export function useDiskUsage(): DiskController {
       const job = await pollBrowserDiskUsage(active.jobId, controller.signal)
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || !diskAcceptPoll(current.current, job, generation.current, responseGeneration)) return
-      publish(job.status === "running"
-        ? { phase: "tracking", jobId: job.jobId, job, cancelPending: false }
-        : { phase: "idle", job })
+      publish(diskReceiveJob(current.current, job))
     } catch (cause) {
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || generation.current !== responseGeneration) return
-      const failure = readError(cause)
+      const failure = diskRequestError(current.current, "poll", cause)
       const statusCode = cause instanceof ApiError ? cause.statusCode : undefined
       publish(diskPollFailure(current.current, failure.code, statusCode))
-      setError(statusCode === 404 ? { code: "NOT_FOUND" } : failure)
+      setError(failure)
     } finally {
       if (request.current === controller) request.current = null
     }
@@ -114,7 +98,8 @@ export function useDiskUsage(): DiskController {
     if (!mounted.current || request.current || active.phase !== "idle") return
     stopRequest()
     const responseGeneration = ++generation.current
-    publish({ phase: "starting", job: active.job })
+    const target: DiskRequestTarget = { path: input.path, view: input.view ?? "directory" }
+    publish({ ...active, phase: "starting", form: target })
     setError(null)
     const controller = new AbortController()
     request.current = controller
@@ -122,12 +107,12 @@ export function useDiskUsage(): DiskController {
       const started = await startBrowserDiskUsage(input, controller.signal)
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || generation.current !== responseGeneration) return
-      publish(diskTrackJob(current.current, started.jobId))
+      publish(diskTrackJob(current.current, started.jobId, target))
     } catch (cause) {
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || generation.current !== responseGeneration) return
-      setError(readError(cause))
-      publish({ phase: "idle", job: active.job })
+      setError(diskRequestError(current.current, "start", cause))
+      publish({ ...active, form: target })
     } finally {
       if (request.current === controller) {
         request.current = null
@@ -149,16 +134,14 @@ export function useDiskUsage(): DiskController {
       const job = await cancelBrowserDiskUsage(active.jobId, controller.signal)
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || !acceptDiskJob(current.current, job, generation.current, responseGeneration)) return
-      publish(job.status === "running"
-        ? { phase: "tracking", jobId: job.jobId, job, cancelPending: false }
-        : { phase: "idle", job })
+      publish(diskReceiveJob(current.current, job))
     } catch (cause) {
       if (!mounted.current || controller.signal.aborted || request.current !== controller
         || generation.current !== responseGeneration) return
-      const failure = readError(cause)
+      const failure = diskRequestError(current.current, "cancel", cause)
       const statusCode = cause instanceof ApiError ? cause.statusCode : undefined
       publish(diskPollFailure(current.current, failure.code, statusCode))
-      setError(statusCode === 404 ? { code: "NOT_FOUND" } : failure)
+      setError(failure)
     } finally {
       if (request.current === controller) {
         request.current = null
@@ -174,22 +157,26 @@ export function useDiskUsage(): DiskController {
     void poll()
   }, [poll, publish])
 
-  const follow = useCallback((jobId: string) => {
+  const follow = useCallback((conflict: { jobId: string; path: string }) => {
     if (!mounted.current || current.current.phase !== "idle" || request.current) return
     stopRequest()
     generation.current++
     setError(null)
-    publish(diskTrackJob(current.current, jobId))
+    publish(diskTrackJob(current.current, conflict.jobId, { path: conflict.path, view: null }))
     void poll()
   }, [poll, publish, stopRequest])
 
-  const restore = useCallback((job: DiskUsageJob) => {
-    if (!mounted.current || current.current.phase !== "idle" || job.status === "running") return
+  const restore = useCallback((snapshot: DiskSnapshot) => {
+    if (!mounted.current || current.current.phase !== "idle" || snapshot.job.status === "running") return
     stopRequest()
     generation.current++
     setError(null)
-    publish({ phase: "idle", job })
+    publish(diskRestoreSnapshot(snapshot))
   }, [publish, stopRequest])
 
-  return { state, error, start, cancel, retryPoll, follow, restore }
+  const setTarget = useCallback((target: DiskRequestTarget) => {
+    publish(diskEditTarget(current.current, target))
+  }, [publish])
+
+  return { state, error, start, cancel, retryPoll, follow, restore, setTarget }
 }

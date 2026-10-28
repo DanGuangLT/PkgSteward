@@ -8,51 +8,45 @@ import { DiskUsageControls } from "@/components/features/disk-usage/disk-usage-c
 import { DiskSize, DiskUsageItems } from "@/components/features/disk-usage/disk-usage-items"
 import { Button } from "@/components/ui/button"
 import { useDiskUsage } from "@/hooks/use-disk-usage"
-import type { DiskUsageJob, DiskUsageRow, DiskView } from "@/lib/api/types"
+import type { DiskUsageRow, DiskView } from "@/lib/api/types"
+import { diskExpandTarget, diskMeasurementInput, diskSaveSnapshot, diskStatusKey, type DiskSnapshot } from "@/lib/disk-usage/disk-usage-policy"
 
 export function DiskUsagePanel({ initialPath, initialView }: { initialPath: string; initialView: DiskView }) {
   const t = useTranslations("diskUsage")
   const format = useFormatter()
-  const controller = useDiskUsage()
+  const controller = useDiskUsage({ path: initialPath, view: initialView })
   const { state, error } = controller
   const job = state.job
   const busy = state.phase !== "idle"
   const previousSnapshot = job !== null && (state.phase === "starting"
     || (state.phase === "tracking" && state.jobId !== job.jobId))
-  const [path, setPath] = useState(initialPath)
-  const [view, setView] = useState(initialView)
-  const [history, setHistory] = useState<DiskUsageJob[]>([])
+  const { path, view } = state.form
+  const [history, setHistory] = useState<DiskSnapshot[]>([])
   const resultsId = useId()
   const headingId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
-  const ancestors = history.filter((entry) => entry.jobId !== job?.jobId)
+  const ancestors = history.filter((entry) => entry.job.jobId !== job?.jobId)
 
   function measure(force: boolean) {
     if (busy) return
-    const target = force && job ? { path: job.path, view: job.view } : { path, view }
-    setPath(target.path)
-    setView(target.view)
     if (!force) setHistory([])
     heading.current?.focus()
-    void controller.start({ ...target, force })
+    void controller.start(diskMeasurementInput(state, force))
   }
 
   function expand(row: DiskUsageRow) {
     if (busy || !job || job.status === "running" || row.state === "excluded") return
-    setHistory((previous) => [...previous.filter((entry) => entry.jobId !== job.jobId), job].slice(-16))
-    const target = row.canonicalPath ?? row.path
-    setPath(target)
-    setView("directory")
+    const snapshot = diskSaveSnapshot(state)
+    if (!snapshot) return
+    setHistory((previous) => [...previous.filter((entry) => entry.job.jobId !== job.jobId), snapshot].slice(-16))
     heading.current?.focus()
-    void controller.start({ path: target, view: "directory" })
+    void controller.start(diskExpandTarget(row))
   }
 
-  function back(snapshot: DiskUsageJob) {
+  function back(snapshot: DiskSnapshot) {
     if (busy) return
-    const index = history.findIndex((entry) => entry.jobId === snapshot.jobId)
+    const index = history.findIndex((entry) => entry.job.jobId === snapshot.job.jobId)
     setHistory((previous) => previous.slice(0, index))
-    setPath(snapshot.path)
-    setView(snapshot.view)
     controller.restore(snapshot)
     heading.current?.focus()
   }
@@ -74,12 +68,13 @@ export function DiskUsagePanel({ initialPath, initialView }: { initialPath: stri
     <section className="flex min-w-0 flex-col gap-6" aria-label={t("title")}>
       <p className="text-body-sm text-muted-foreground">{t("description")}</p>
       <DiskUsageControls controller={controller} path={path} view={view}
-        onPathChange={setPath} onViewChange={setView} onMeasure={measure} />
+        onPathChange={(path) => controller.setTarget({ path, view })}
+        onViewChange={(view) => controller.setTarget({ path, view })} onMeasure={measure} />
 
       {errorMessage ? (
         <div role="alert" className="min-w-0 space-y-3 rounded-md border border-border bg-muted p-4 text-body-sm">
           <p>{errorMessage}</p>
-          {error?.code === "NOT_FOUND" && state.phase === "idle" && job ? <p>{t("errors.lost")}</p> : null}
+          {error?.lost && job ? <p>{t("errors.lost")}</p> : null}
           {state.phase === "tracking" && state.errorCode !== undefined ? <p>{t("errors.pollPaused")}</p> : null}
           {error?.conflict ? (
             <>
@@ -87,9 +82,8 @@ export function DiskUsagePanel({ initialPath, initialView }: { initialPath: stri
               <Button type="button" variant="secondary" disabled={busy} onClick={() => {
                 if (!error.conflict) return
                 setHistory([])
-                setPath(error.conflict.path)
                 heading.current?.focus()
-                controller.follow(error.conflict.jobId)
+                controller.follow(error.conflict)
               }}>{t("actions.follow")}</Button>
             </>
           ) : null}
@@ -97,9 +91,7 @@ export function DiskUsagePanel({ initialPath, initialView }: { initialPath: stri
       ) : null}
 
       <p aria-live="polite" aria-atomic="true" className="text-body-sm">
-        {state.phase === "starting" ? t("status.starting")
-          : state.phase === "tracking" && state.cancelPending ? t("status.cancelling")
-            : state.phase === "tracking" ? t("status.running") : job ? t(`status.${job.status}`) : t("status.idle")}
+        {t(diskStatusKey(state))}
         {job && !previousSnapshot ? ` ${t("progress", {
           dirs: job.progress.visitedDirs, entries: job.progress.visitedEntries,
           skipped: job.progress.skippedCount, links: job.progress.skippedLinks,
@@ -112,12 +104,12 @@ export function DiskUsagePanel({ initialPath, initialView }: { initialPath: stri
         <nav aria-label={t("breadcrumbs")} className="min-w-0">
           <ol className="flex min-w-0 flex-col gap-2">
             {ancestors.map((snapshot) => (
-              <li key={snapshot.jobId} className="min-w-0">
+              <li key={snapshot.job.jobId} className="min-w-0">
                 <Button type="button" variant="secondary" disabled={busy}
-                  aria-label={t("actions.backTo", { path: snapshot.path })}
+                  aria-label={t("actions.backTo", { path: snapshot.job.path })}
                   aria-expanded={true} aria-controls={resultsId}
                   className="h-auto max-w-full justify-start py-2 text-left font-mono whitespace-normal [overflow-wrap:anywhere]"
-                  onClick={() => back(snapshot)}>{snapshot.path}</Button>
+                  onClick={() => back(snapshot)}>{snapshot.job.path}</Button>
               </li>
             ))}
             {job ? <li aria-current="page" className="font-mono text-body-sm [overflow-wrap:anywhere]">{job.path}</li> : null}

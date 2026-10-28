@@ -149,6 +149,7 @@
       "idle": "Chưa bắt đầu đo.",
       "starting": "Đang bắt đầu đo…",
       "running": "Đang đo…",
+      "untracked": "Đã dừng theo dõi lần đo.",
       "cancelling": "Đang huỷ đo…",
       "completed": "Đo hoàn tất.",
       "cancelled": "Đã huỷ đo.",

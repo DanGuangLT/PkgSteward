@@ -149,6 +149,7 @@
       "idle": "No measurement started.",
       "starting": "Starting measurement…",
       "running": "Measuring…",
+      "untracked": "Stopped tracking this measurement.",
       "cancelling": "Cancelling measurement…",
       "completed": "Measurement complete.",
       "cancelled": "Measurement cancelled.",
