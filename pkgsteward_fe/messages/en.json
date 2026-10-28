@@ -15,6 +15,7 @@
     "mainNavigation": "Main navigation",
     "openMenu": "Open menu",
     "projects": "Projects",
+    "diskUsage": "Disk usage",
     "designSystem": "Design system"
   },
   "theme": {
@@ -81,7 +82,10 @@
     },
     "nodeModules": {
       "present": "Present",
-      "missing": "Not present"
+      "missing": "Not present",
+      "size": "Reference size:",
+      "viewSize": "View size",
+      "measuredAt": "Measured at"
     },
     "actions": {
       "first": "Scan projects",
@@ -119,6 +123,89 @@
       "generic": "Something went wrong. Please try again.",
       "pollFailed": "Couldn't check scan progress. Retry the check or cancel the scan.",
       "backendHint": "Make sure the PkgSteward backend is running, then reload this page."
+    }
+  },
+  "diskUsage": {
+    "title": "Directory and package sizes",
+    "description": "Measure on request and explore one level at a time. This operation only reads data.",
+    "controls": {
+      "path": "Directory path",
+      "view": "View",
+      "hint": "Choose an allowed scan directory. Package view requires a node_modules path. Cancel the current measurement before changing targets."
+    },
+    "views": { "directory": "Directory", "packages": "Packages in node_modules" },
+    "actions": {
+      "measure": "Measure size",
+      "recalculate": "Recalculate displayed result",
+      "cancel": "Cancel measurement",
+      "retryPoll": "Retry progress check",
+      "follow": "Track the running measurement",
+      "expand": "Look inside",
+      "expandName": "Look inside {name}",
+      "backTo": "Return to saved measurement: {path}",
+      "projects": "Back to projects"
+    },
+    "status": {
+      "idle": "No measurement started.",
+      "starting": "Starting measurement…",
+      "running": "Measuring…",
+      "untracked": "Stopped tracking this measurement.",
+      "cancelling": "Cancelling measurement…",
+      "completed": "Measurement complete.",
+      "cancelled": "Measurement cancelled.",
+      "timed_out": "Measurement timed out.",
+      "failed": "Measurement failed."
+    },
+    "progress": "Visited {dirs, plural, one {{formattedDirs} directory} other {{formattedDirs} directories}} and {entries, plural, one {{formattedEntries} entry} other {{formattedEntries} entries}}; skipped {skipped, plural, one {{formattedSkipped} entry} other {{formattedSkipped} entries}} and {links, plural, one {{formattedLinks} link} other {{formattedLinks} links}}.",
+    "breadcrumbs": "Saved measurements",
+    "results": "Measurement results",
+    "previousSnapshot": "Keeping the previous result while waiting for the new measurement.",
+    "listLabel": "Sizes by entry",
+    "columns": { "name": "Name", "path": "Path", "size": "Size", "fileCount": "Files", "status": "Status" },
+    "size": { "pending": "Not measured", "value": "{value} {unit}", "lowerBound": "At least {size}" },
+    "fileCount": "{count, plural, one {{formattedCount} file} other {{formattedCount} files}}",
+    "aliases": "Aliases: {names}",
+    "kinds": { "file": "File", "directory": "Directory", "link": "Link", "package": "Package" },
+    "rows": { "pending": "Pending", "measuring": "Measuring — partial result", "complete": "Fully measured", "partial": "Partial result", "excluded": "Excluded from measurement" },
+    "reasons": {
+      "protected": "Protected directory",
+      "link_skipped": "Link not followed",
+      "outside_root": "Target is outside the measurement root",
+      "unreadable": "Entry could not be read",
+      "unsupported": "Unsupported file type",
+      "identity_unavailable": "File identity is unavailable"
+    },
+    "total": "Total:",
+    "metric": "Apparent size of unique files within the measured scope, deduplicating hardlinks. This is not the space that deleting them would free.",
+    "overlap": "The total may differ from the sum of rows: rows can share files, and some entries are not listed.",
+    "measuredAt": "Measured at",
+    "cacheHit": "Showing a cached measurement.",
+    "cacheHint": "This reference result can become stale when nested files change. Recalculate to measure again and clear the cache.",
+    "partial": "The result is incomplete; available sizes are lower bounds.",
+    "packagesHint": "Only top-level packages are listed. Indirect dependencies in .pnpm still count toward the total; use Directory view to explore them. Links outside the scope are excluded.",
+    "stops": {
+      "cancelled": "You cancelled this measurement.",
+      "row_limit": "The row limit was reached; the list is incomplete.",
+      "identity_limit": "The file identity tracking limit was reached.",
+      "numeric_limit": "The size exceeded the safe numeric limit."
+    },
+    "failures": { "NOT_FOUND": "The path no longer exists.", "FORBIDDEN": "The path cannot be accessed.", "INTERNAL_SERVER_ERROR": "The measurement could not finish. Try recalculating." },
+    "empty": {
+      "initial": "Enter a path and select Measure size to begin. Opening or reloading this page does not start a measurement.",
+      "listing": "Waiting for the measurement to list one level…",
+      "rows": "No rows were returned. Check the total, status and warnings above."
+    },
+    "errors": {
+      "conflict": "Another path is being measured. Track that measurement to view or cancel it, then retry your path.",
+      "notFound": "The requested path or measurement was not found.",
+      "lost": "Tracking stopped; the backend may have restarted or replaced the measurement. The previous snapshot is preserved. Recalculate to start a new measurement.",
+      "forbidden": "This path is protected or outside the allowed scan roots.",
+      "validation": "Check the path and view. Package view requires a node_modules directory.",
+      "rateLimited": "Too many requests. Wait a moment and try again.",
+      "backendUnavailable": "Cannot connect to the backend on this machine.",
+      "invalidResponse": "The backend returned invalid data.",
+      "pollPaused": "Progress checks have stopped. Retry the progress check or cancel the measurement; requests will not retry automatically.",
+      "generic": "The request did not succeed. Please try again."
     }
   },
   "designSystem": {
