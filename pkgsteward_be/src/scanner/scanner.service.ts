@@ -14,6 +14,7 @@ import { toPathPlatform } from '@/common/utils/path.util';
 import { parseScanRootPaths } from '@/config/scan-roots';
 import type { ScanRoots } from '@/config/scan-roots';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 import type { IScannerService } from '@/scanner/interfaces/scanner.service.interface';
@@ -63,6 +64,7 @@ export class ScannerService
     @Inject(SCAN_WALKER) private readonly walker: ScanWalker,
     private readonly cache: ScannerCache,
     private readonly diskUsage: DiskUsageService,
+    private readonly gate: MutationGateService,
   ) {}
 
   private configuration() {
@@ -80,6 +82,7 @@ export class ScannerService
   }
 
   startScan(): IScanStart {
+    this.gate.assertIdle();
     if (this.current?.job.status === 'running') {
       return plainToInstance(ScanStartEntity, {
         scanId: this.current.job.scanId,
@@ -120,6 +123,10 @@ export class ScannerService
       scanId: active.job.scanId,
       status: active.job.status,
     });
+  }
+
+  hasRunningScan(): boolean {
+    return this.current?.job.status === 'running';
   }
 
   getScan(scanId: string): IScanJob {

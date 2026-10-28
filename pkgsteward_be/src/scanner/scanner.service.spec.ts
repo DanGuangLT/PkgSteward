@@ -5,7 +5,11 @@ import type { TestingModule } from '@nestjs/testing';
 import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { toPathPlatform, pathApi } from '@/common/utils/path.util';
-import { NotFoundException } from '@/common/exceptions/app.exception';
+import {
+  AppException,
+  NotFoundException,
+} from '@/common/exceptions/app.exception';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 import { UnsupportedDriveDetector } from '@/platform/unsupported-drive-detector';
@@ -87,6 +91,7 @@ describe('ScannerService D15 cached measurement enrichment', () => {
         { provide: SCAN_WALKER, useValue: f.walker },
         { provide: ScannerCache, useValue: f.cache },
         { provide: DiskUsageService, useValue: disk },
+        { provide: MutationGateService, useValue: f.gate },
       ],
     }).compile();
     const service = module.get(ScannerService);
@@ -306,6 +311,7 @@ function fixture(
       return task.promise;
     },
   );
+  const gate = new MutationGateService();
   const service = new ScannerService(
     config,
     guard as unknown as PathGuardService,
@@ -313,9 +319,11 @@ function fixture(
     walker,
     cache,
     { peekCompletedSize: () => null } as unknown as DiskUsageService,
+    gate,
   );
   return {
     service,
+    gate,
     config,
     cache,
     load,
@@ -340,6 +348,104 @@ describe('ScannerService', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.restoreAllMocks();
+  });
+
+  describe('mutation gate', () => {
+    it('rejects a held gate before creating a job and starts after release', async () => {
+      const f = fixture();
+      const token = f.gate.tryEnter()!;
+      let thrown: unknown;
+      try {
+        f.service.startScan();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(AppException);
+      expect(thrown).toMatchObject({
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'A file operation is in progress',
+      });
+      expect(f.service.hasRunningScan()).toBe(false);
+      await tick();
+      expect(f.walker).not.toHaveBeenCalled();
+      expect(f.guard.createProtectedTreeMatcher).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+
+      f.gate.leave(token);
+      const start = f.service.startScan();
+      expect(start.status).toBe('running');
+      expect(f.service.hasRunningScan()).toBe(true);
+      await tick();
+      expect(f.walker).toHaveBeenCalledTimes(1);
+      f.service.cancelScan(start.scanId);
+    });
+
+    it('checks the gate before reusing a running job and preserves that job', async () => {
+      const f = fixture();
+      const start = f.service.startScan();
+      await tick();
+      const before = f.service.getScan(start.scanId);
+      const token = f.gate.tryEnter()!;
+      let thrown: unknown;
+      try {
+        f.service.startScan();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(AppException);
+      expect(thrown).toMatchObject({
+        statusCode: 409,
+        code: 'CONFLICT',
+        message: 'A file operation is in progress',
+      });
+      expect(f.service.getScan(start.scanId)).toEqual(before);
+      expect(f.service.hasRunningScan()).toBe(true);
+      expect(f.walker).toHaveBeenCalledTimes(1);
+      f.gate.leave(token);
+      expect(f.service.startScan()).toEqual(start);
+      f.service.cancelScan(start.scanId);
+    });
+
+    it('reports idle initially, running synchronously, and idle after completion', async () => {
+      const f = fixture();
+      expect(f.service.hasRunningScan()).toBe(false);
+      const start = f.service.startScan();
+      expect(f.service.hasRunningScan()).toBe(true);
+      await tick();
+      f.walks[0].task.resolve(snapshot());
+      await tick();
+      expect(f.service.getScan(start.scanId).status).toBe('completed');
+      expect(f.service.hasRunningScan()).toBe(false);
+    });
+
+    it('reports idle after cancellation even while the walker is unsettled', async () => {
+      const f = fixture();
+      const start = f.service.startScan();
+      expect(f.service.hasRunningScan()).toBe(true);
+      await tick();
+      f.service.cancelScan(start.scanId);
+      expect(f.service.hasRunningScan()).toBe(false);
+      f.walks[0].task.resolve(snapshot());
+      await tick();
+      expect(f.service.hasRunningScan()).toBe(false);
+    });
+
+    it.each(['failed', 'timed_out'] as const)(
+      'reports idle after a scan becomes %s',
+      async (status) => {
+        const f = fixture({ timeout: 1000 });
+        const start = f.service.startScan();
+        expect(f.service.hasRunningScan()).toBe(true);
+        await tick();
+        if (status === 'failed')
+          f.walks[0].task.reject(new Error('TEST failure'));
+        else jest.advanceTimersByTime(1000);
+        await tick();
+        expect(f.service.getScan(start.scanId).status).toBe(status);
+        expect(f.service.hasRunningScan()).toBe(false);
+      },
+    );
   });
 
   it('claims one slot synchronously, returns UUID v4 and starts only one walker', async () => {

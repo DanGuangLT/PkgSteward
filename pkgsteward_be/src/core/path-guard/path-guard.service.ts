@@ -50,6 +50,10 @@ export class PathGuardService implements IPathGuardService {
     return this.guard.check(inputPath);
   }
 
+  checkMany(inputPaths: readonly string[]): Promise<PathCheckResult[]> {
+    return this.guard.checkMany(inputPaths);
+  }
+
   assertAllowed(inputPath: string): Promise<IGuardedPath> {
     return this.guard.assertAllowed(inputPath);
   }

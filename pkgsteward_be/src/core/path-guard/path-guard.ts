@@ -50,8 +50,40 @@ const fail = (
 export class PathGuard {
   constructor(private readonly deps: IPathGuardDeps) {}
 
+  async checkMany(inputPaths: readonly string[]): Promise<PathCheckResult[]> {
+    const results: PathCheckResult[] = [];
+    // Snapshot only within this call; a later authorization must resolve roots/links again.
+    let context: { roots: string[]; denylist: IDenyEntry[] } | undefined;
+    for (const inputPath of inputPaths) {
+      const invalid = this.validateInput(inputPath);
+      if (invalid) {
+        results.push(invalid);
+        continue;
+      }
+      const resolvedPath = pathApi(this.deps.platform).resolve(inputPath);
+      if (!context) {
+        const roots = await this.allowedRoots();
+        const denylist = await this.effectiveDenylist();
+        context = { roots, denylist };
+      }
+      results.push(
+        await this.checkResolved(
+          inputPath,
+          resolvedPath,
+          context.roots,
+          context.denylist,
+        ),
+      );
+    }
+    return results;
+  }
+
   async check(inputPath: string): Promise<PathCheckResult> {
-    const { platform, fs } = this.deps;
+    return (await this.checkMany([inputPath]))[0];
+  }
+
+  private validateInput(inputPath: string): PathCheckFailure | null {
+    const { platform } = this.deps;
     if (
       typeof inputPath !== 'string' ||
       inputPath.trim() === '' ||
@@ -73,9 +105,16 @@ export class PathGuard {
       );
     }
 
-    const resolvedPath = pathApi(platform).resolve(inputPath);
-    const roots = await this.allowedRoots();
-    const denylist = await this.effectiveDenylist();
+    return null;
+  }
+
+  private async checkResolved(
+    inputPath: string,
+    resolvedPath: string,
+    roots: string[],
+    denylist: IDenyEntry[],
+  ): Promise<PathCheckResult> {
+    const { fs } = this.deps;
     const lexical = this.evaluate(resolvedPath, roots, denylist, '');
     if (lexical) return lexical;
 
