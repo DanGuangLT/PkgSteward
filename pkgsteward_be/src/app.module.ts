@@ -9,6 +9,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { EnvConfigModule } from '@/core/env-config.module';
 import { ThrottlerConfigModule } from '@/core/throttler-config.module';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
+import { AuditLogModule } from '@/core/audit-log/audit-log.module';
 import { PlatformModule } from '@/platform/platform.module';
 import { PathGuardModule } from '@/core/path-guard/path-guard.module';
 import { ScannerModule } from '@/scanner/scanner.module';
@@ -18,6 +19,7 @@ import { ScannerModule } from '@/scanner/scanner.module';
     EnvConfigModule,
     ThrottlerConfigModule,
     AppPathsModule,
+    AuditLogModule,
     PlatformModule,
     PathGuardModule,
     ScannerModule,
