@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { execa } from 'execa';
 import { toPathPlatform, type PathPlatform } from '@/common/utils/path.util';
+import { resolveGitExecutable } from '@/file-ops/git-executable';
 import type {
   GitStatusResult,
   GitTrackedResult,
@@ -15,7 +16,7 @@ export const GIT_FILTER_SCOPE_ARGS = [
   '--show-scope',
   '--name-only',
   '--get-regexp',
-  '^(filter\\.|remote\\..+\\.promisor$|extensions\\.partialclone$)',
+  '^(filter\\.|lfs\\..+\\.(clean|smudge)$|remote\\..+\\.promisor$|extensions\\.partialclone$)',
 ] as const;
 export const GIT_STATUS_ARGS = [
   '--no-optional-locks',
@@ -46,7 +47,8 @@ type GitProbeFailure = Extract<
 type GitCommandResult =
   { state: 'ok'; stdout: string } | { state: 'failed'; error: unknown };
 
-// Chỉ tin filter/partial-clone config ở system/global: repo có thể chạy lệnh qua filter hoặc lazy fetch.
+// Chỉ tin filter/LFS extension/partial-clone config ở system/global: repo có thể chạy lệnh qua filter,
+// lệnh clean của git-lfs extension, hoặc lazy fetch.
 // Chặn partial clone cả trên Git cũ chưa hỗ trợ GIT_NO_LAZY_FETCH.
 const TRUSTED_FILTER_LINE = /^(?:system|global)\t[^\t]+$/;
 
@@ -117,6 +119,7 @@ export class GitProbe implements IGitProbe {
   private readonly platform = toPathPlatform();
   private activeCount = 0;
   private readonly queue: Array<() => void> = [];
+  private gitPath?: string;
 
   async status(
     projectRoot: string,
@@ -196,8 +199,14 @@ export class GitProbe implements IGitProbe {
     args: readonly string[],
     signal?: AbortSignal,
   ): Promise<GitCommandResult> {
+    // Never spawn a bare "git": a missing install must not fall back to a lookup in the project.
+    this.gitPath ??=
+      (await resolveGitExecutable(process.env.PATH, this.platform)) ??
+      undefined;
+    if (this.gitPath === undefined)
+      return { state: 'failed', error: { code: 'ENOENT' } };
     try {
-      const { stdout } = await execa('git', args, {
+      const { stdout } = await execa(this.gitPath, args, {
         cwd: projectRoot,
         shell: false,
         timeout: GIT_PROBE_TIMEOUT_MS,

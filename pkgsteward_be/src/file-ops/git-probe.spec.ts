@@ -1,7 +1,12 @@
 jest.mock('execa', () => ({ execa: jest.fn() }));
+jest.mock('@/file-ops/git-executable', () => ({
+  resolveGitExecutable: jest.fn(),
+}));
 
 import { Logger } from '@nestjs/common';
 import { execa } from 'execa';
+import { toPathPlatform } from '@/common/utils/path.util';
+import { resolveGitExecutable } from '@/file-ops/git-executable';
 import {
   buildTrackedPathspecs,
   matchTrackedNames,
@@ -18,6 +23,9 @@ import type {
 } from '@/file-ops/interfaces/file-ops.types';
 
 const execaMock = execa as unknown as jest.Mock;
+const resolveGitMock = resolveGitExecutable as unknown as jest.Mock;
+const GIT = 'C:\\Program Files\\Git\\cmd\\git.exe';
+beforeEach(() => resolveGitMock.mockReset().mockResolvedValue(GIT));
 // Existing parser/queue tests control payload commands independently of preflight.
 const commandMock = jest.fn();
 const root = 'D:\\Dự án \'"$`; test';
@@ -58,8 +66,99 @@ const filterArgs = [
   '--show-scope',
   '--name-only',
   '--get-regexp',
-  '^(filter\\.|remote\\..+\\.promisor$|extensions\\.partialclone$)',
+  '^(filter\\.|lfs\\..+\\.(clean|smudge)$|remote\\..+\\.promisor$|extensions\\.partialclone$)',
 ];
+
+describe('GitProbe executable resolution', () => {
+  beforeEach(() => execaMock.mockReset());
+
+  // A bare "git" is looked up in the spawn cwd first on Windows, and cwd is an untrusted project.
+  it('spawns git by the path resolved from PATH for this platform', async () => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    await new GitProbe().status(root);
+
+    expect(resolveGitMock).toHaveBeenCalledWith(
+      process.env.PATH,
+      toPathPlatform(),
+    );
+    expect(execaMock).toHaveBeenCalledTimes(2);
+    for (const call of execaMock.mock.calls as unknown[][]) {
+      expect(call[0]).toBe(GIT);
+    }
+  });
+
+  it.each(['status', 'trackedNames'] as const)(
+    'reports git_missing from %s without spawning when git is not on PATH',
+    async (operation) => {
+      resolveGitMock.mockResolvedValue(null);
+      const probe = new GitProbe();
+      const result =
+        operation === 'status'
+          ? await probe.status(root)
+          : await probe.trackedNames(root, ['coverage']);
+
+      expect(result).toEqual({ state: 'unknown', reason: 'git_missing' });
+      expect(execaMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reuses a resolved git path', async () => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    const probe = new GitProbe();
+    await probe.status(root);
+    await probe.trackedNames(root, ['coverage']);
+
+    expect(resolveGitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('looks git up again after it was missing', async () => {
+    resolveGitMock.mockResolvedValueOnce(null);
+    execaMock.mockResolvedValue({ stdout: '' });
+    const probe = new GitProbe();
+
+    await expect(probe.status(root)).resolves.toEqual({
+      state: 'unknown',
+      reason: 'git_missing',
+    });
+    await expect(probe.status(root)).resolves.toEqual({ state: 'clean' });
+    expect(resolveGitMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// git-lfs runs lfs.extension.<name>.clean from repository config when status cleans a file.
+describe('GitProbe LFS extension protection', () => {
+  beforeEach(() => execaMock.mockReset());
+
+  const preflightPattern = async () => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    await new GitProbe().status(root);
+    const args = (
+      execaMock.mock.calls as unknown[][]
+    )[0][1] as readonly string[];
+    // --get-regexp is case-sensitive; only subsection names keep their case.
+    return new RegExp(args[args.indexOf('--get-regexp') + 1]);
+  };
+
+  it.each([
+    'lfs.extension.x.clean',
+    'lfs.extension.x.smudge',
+    'lfs.EXTENSION.X.clean',
+  ])(
+    'includes LFS extension command %s in the preflight query',
+    async (key) => {
+      expect((await preflightPattern()).test(key)).toBe(true);
+    },
+  );
+
+  it.each([
+    'lfs.repositoryformatversion',
+    'lfs.https://example.com/repo.git/info/lfs.access',
+    'lfs.https://example.com/repo.git/info/lfs.locksverify',
+    'lfs.fetchexclude',
+  ])('leaves ordinary LFS key %s out of the preflight query', async (key) => {
+    expect((await preflightPattern()).test(key)).toBe(false);
+  });
+});
 
 describe('GitProbe lazy-fetch protection', () => {
   beforeEach(() => execaMock.mockReset());
@@ -164,13 +263,13 @@ describe('GitProbe filter preflight', () => {
     expect(execaMock).toHaveBeenCalledTimes(2);
     expect(execaMock).toHaveBeenNthCalledWith(
       1,
-      'git',
+      GIT,
       filterArgs,
       options(controller.signal),
     );
     expect(execaMock).toHaveBeenNthCalledWith(
       2,
-      'git',
+      GIT,
       statusArgs,
       options(controller.signal),
     );
@@ -197,7 +296,7 @@ describe('GitProbe filter preflight', () => {
         reason: 'unsafe_config',
       });
       expect(execaMock).toHaveBeenCalledTimes(1);
-      expect(execaMock).toHaveBeenCalledWith('git', filterArgs, options());
+      expect(execaMock).toHaveBeenCalledWith(GIT, filterArgs, options());
     },
   );
 
@@ -215,12 +314,7 @@ describe('GitProbe filter preflight', () => {
         state: 'clean',
       });
       expect(execaMock).toHaveBeenCalledTimes(2);
-      expect(execaMock).toHaveBeenNthCalledWith(
-        2,
-        'git',
-        statusArgs,
-        options(),
-      );
+      expect(execaMock).toHaveBeenNthCalledWith(2, GIT, statusArgs, options());
     },
   );
 
@@ -234,8 +328,8 @@ describe('GitProbe filter preflight', () => {
       state: 'clean',
     });
     expect(execaMock).toHaveBeenCalledTimes(2);
-    expect(execaMock).toHaveBeenNthCalledWith(1, 'git', filterArgs, options());
-    expect(execaMock).toHaveBeenNthCalledWith(2, 'git', statusArgs, options());
+    expect(execaMock).toHaveBeenNthCalledWith(1, GIT, filterArgs, options());
+    expect(execaMock).toHaveBeenNthCalledWith(2, GIT, statusArgs, options());
   });
 
   it.each([
@@ -263,7 +357,7 @@ describe('GitProbe filter preflight', () => {
       );
       await expect(new GitProbe().status(root)).resolves.toEqual(expected);
       expect(execaMock).toHaveBeenCalledTimes(1);
-      expect(execaMock).toHaveBeenCalledWith('git', filterArgs, options());
+      expect(execaMock).toHaveBeenCalledWith(GIT, filterArgs, options());
     },
   );
 
@@ -284,7 +378,7 @@ describe('GitProbe filter preflight', () => {
       ).resolves.toEqual({ state: 'unknown', reason: 'cancelled' });
       expect(execaMock).toHaveBeenCalledTimes(1);
       expect(execaMock).toHaveBeenCalledWith(
-        'git',
+        GIT,
         filterArgs,
         options(controller.signal),
       );
@@ -446,7 +540,7 @@ describe('tracked pathspec policy', () => {
     expect(GIT_TRACKED_ARGS).not.toContain('--literal-pathspecs');
     expect(execaMock).toHaveBeenCalledTimes(1);
     expect(execaMock).toHaveBeenCalledWith(
-      'git',
+      GIT,
       [...trackedArgs, ...names.map(nativePathspec)],
       options(),
     );
@@ -484,7 +578,7 @@ describe('GitProbe', () => {
     ).resolves.toEqual({ state: 'clean' });
     expect(commandMock).toHaveBeenCalledTimes(1);
     expect(commandMock).toHaveBeenCalledWith(
-      'git',
+      GIT,
       statusArgs,
       options(controller.signal),
     );
@@ -537,7 +631,7 @@ describe('GitProbe', () => {
     });
     expect(commandMock).toHaveBeenCalledTimes(1);
     expect(commandMock).toHaveBeenCalledWith(
-      'git',
+      GIT,
       [...trackedArgs, ...names.map(nativePathspec)],
       options(controller.signal),
     );
@@ -715,7 +809,7 @@ describe('GitProbe', () => {
       expect(commandMock).toHaveBeenCalledTimes(5);
       expect(commandMock).toHaveBeenNthCalledWith(
         5,
-        'git',
+        GIT,
         statusArgs,
         expect.objectContaining({ cwd: 'D:\\five' }),
       );
@@ -724,7 +818,7 @@ describe('GitProbe', () => {
       expect(commandMock).toHaveBeenCalledTimes(6);
       expect(commandMock).toHaveBeenNthCalledWith(
         6,
-        'git',
+        GIT,
         [...trackedArgs, nativePathspec('.next')],
         expect.objectContaining({ cwd: 'D:\\six' }),
       );
@@ -768,7 +862,7 @@ describe('GitProbe', () => {
         expect(commandMock).toHaveBeenCalledTimes(5);
         expect(commandMock).toHaveBeenNthCalledWith(
           5,
-          'git',
+          GIT,
           statusArgs,
           expect.objectContaining({ cwd: 'D:\\next' }),
         );
