@@ -248,7 +248,7 @@ export async function classifyTargets(
     .map(({ target }) => target);
 }
 
-const errorCode = (error: unknown): unknown =>
+export const errorCode = (error: unknown): unknown =>
   error !== null && typeof error === 'object' && 'code' in error
     ? error.code
     : undefined;

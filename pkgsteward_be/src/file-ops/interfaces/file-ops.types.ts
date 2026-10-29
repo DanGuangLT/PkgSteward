@@ -1,5 +1,6 @@
 import type { PathCheckFailureCode } from '@/core/path-guard/interfaces/path-guard.types';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
+import type { RecycleFailureCode } from '@/platform/interfaces/recycle-bin.interface';
 import type { IScanFs } from '@/scanner/interfaces/scanner.types';
 
 export type GitStatusResult =
@@ -40,6 +41,23 @@ export type CleanupKind =
   'node_modules' | 'orphan_node_modules' | 'build_cache';
 
 export type FileOpsMethod = 'permanent' | 'recycle';
+
+export type DeleteErrorCode =
+  | 'FILE_IN_USE'
+  | 'ACCESS_DENIED'
+  | 'TARGET_GONE'
+  | 'PATH_TOO_LONG'
+  | 'DELETE_FAILED'
+  | RecycleFailureCode;
+
+export type DeleteOutcome =
+  | { method: FileOpsMethod; status: 'success' }
+  | {
+      method: FileOpsMethod;
+      status: 'failed';
+      errorCode: DeleteErrorCode;
+      mayBePartial: boolean;
+    };
 
 export type TargetFailureCode =
   | PathCheckFailureCode
