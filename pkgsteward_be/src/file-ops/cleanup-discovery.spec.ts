@@ -114,6 +114,89 @@ const fixture = (platform: PathPlatform = 'win32') => {
   };
 };
 
+describe('discoverCleanupCandidates nested repositories', () => {
+  // TEST fixtures only; not business requirements.
+  const root = 'D:\\TEST-cache-owner';
+  const marker = `${root}\\coverage\\.git`;
+  const setup = () => {
+    const f = fixture();
+    f.project(root);
+    f.entries(root, [dirent('coverage'), dirent('.next')]);
+    f.manifest(root, '{"devDependencies":{"jest":"1","next":"1"}}');
+    return f;
+  };
+
+  describe.each<GitTrackedResult>([
+    { state: 'ok', tracked: [] },
+    { state: 'not_repo' },
+    { state: 'unknown', reason: 'timeout' },
+  ])('with owner tracked lookup $state', (tracked) => {
+    it.each<EntryKind>(['directory', 'file', 'link'])(
+      'excludes a cache whose root .git is a %s',
+      async (kind) => {
+        const f = setup();
+        f.trackedNames.mockResolvedValue(tracked);
+        f.put(marker, stat(kind));
+        const result = await f.run({ includeKinds: ['build_cache'] });
+        expect(result.map(({ path }) => path)).toEqual([`${root}\\.next`]);
+        expect(f.fs.lstat).toHaveBeenCalledWith(marker);
+      },
+    );
+
+    it('retains a cache with unknown trackedCheck when .git lstat is denied', async () => {
+      const f = setup();
+      f.trackedNames.mockResolvedValue(tracked);
+      f.put(marker, errno('EACCES'));
+      const result = await f.run({ includeKinds: ['build_cache'] });
+      expect(result).toHaveLength(2);
+      expect(result.find(({ path }) => path === `${root}\\coverage`)).toEqual({
+        path: `${root}\\coverage`,
+        kind: 'build_cache',
+        ownerPath: root,
+        frameworkVerified: true,
+        trackedCheck: 'unknown',
+      });
+      expect(f.fs.lstat).toHaveBeenCalledWith(marker);
+    });
+
+    it.each(['ENOENT', 'ENOTDIR'])(
+      'preserves owner tracked evidence when .git is absent with %s',
+      async (code) => {
+        const f = setup();
+        f.trackedNames.mockResolvedValue(tracked);
+        f.put(marker, errno(code));
+        const result = await f.run({ includeKinds: ['build_cache'] });
+        expect(
+          result.find(({ path }) => path === `${root}\\coverage`),
+        ).toMatchObject({
+          kind: 'build_cache',
+          trackedCheck: tracked.state === 'ok' ? 'clean' : tracked.state,
+        });
+        expect(f.fs.lstat).toHaveBeenCalledWith(marker);
+      },
+    );
+  });
+
+  it.each([false, true])(
+    'preserves cancellation during .git lstat (reject=%s)',
+    async (reject) => {
+      const f = setup();
+      const reason = new Error('TEST cancelled nested-repository check');
+      const original = f.fs.lstat.getMockImplementation()!;
+      f.fs.lstat.mockImplementation((path) => {
+        if (path !== marker) return original(path);
+        f.controller.abort(reason);
+        return reject
+          ? Promise.reject(errno('EACCES'))
+          : Promise.resolve(stat('file'));
+      });
+      await expect(f.run({ includeKinds: ['build_cache'] })).rejects.toBe(
+        reason,
+      );
+    },
+  );
+});
+
 describe('discoverCleanupCandidates', () => {
   it('exports the approved framework markers', () => {
     expect(FRAMEWORK_MARKERS).toEqual({
@@ -204,7 +287,7 @@ describe('discoverCleanupCandidates', () => {
         (await f.run({ includeKinds: [kind] })).map((c) => c.kind),
       ).toEqual([kind]);
       if (kind === 'build_cache') {
-        expect(f.fs.lstat).not.toHaveBeenCalled();
+        expect(f.fs.lstat.mock.calls).toEqual([['D:\\p\\.next\\.git']]);
         expect(f.fs.readdir.mock.calls).toEqual([['D:\\p']]);
         expect(f.trackedNames).toHaveBeenCalledTimes(1);
         expect(f.fs.readFile).toHaveBeenCalledTimes(1);

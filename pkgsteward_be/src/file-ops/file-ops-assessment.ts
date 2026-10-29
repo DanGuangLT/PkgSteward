@@ -5,6 +5,7 @@ import {
 } from '@/common/utils/path.util';
 import type { PathCheckResult } from '@/core/path-guard/interfaces/path-guard.types';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
+import { checkCacheGitMarker } from '@/file-ops/cache-git-marker';
 import {
   verifyFrameworks,
   type ICleanupCandidate,
@@ -113,10 +114,24 @@ export async function assessTargets(
           ? tracked.tracked.map((name) => key(api.join(ownerPath, name)))
           : [],
       );
+      const unknownMarkers = new Set<string>();
       for (const target of group) {
         if (trackedKeys.has(key(target.path))) {
           target.kind = 'project_content';
           target.method = methodForKind('project_content');
+          continue;
+        }
+        const marker = await checkCacheGitMarker(target.path, {
+          platform,
+          fs: fs.files,
+          signal,
+        });
+        signal.throwIfAborted();
+        if (marker === 'present') {
+          target.kind = 'project_content';
+          target.method = methodForKind('project_content');
+        } else if (marker === 'unknown') {
+          unknownMarkers.add(key(target.path));
         }
       }
       const remaining = group.filter((target) => target.kind === 'build_cache');
@@ -135,7 +150,11 @@ export async function assessTargets(
       for (const target of remaining) {
         const name = matchBuildCacheName(api.basename(target.path), platform);
         cacheFacts.set(key(target.path), {
-          trackedCheck: tracked.state === 'ok' ? 'clean' : tracked.state,
+          trackedCheck: unknownMarkers.has(key(target.path))
+            ? 'unknown'
+            : tracked.state === 'ok'
+              ? 'clean'
+              : tracked.state,
           frameworkVerified: name !== null && frameworks.get(name) === true,
         });
       }

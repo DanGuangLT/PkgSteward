@@ -184,6 +184,128 @@ function fixture(platform: PathPlatform = 'win32') {
 
 afterEach(() => jest.restoreAllMocks());
 
+describe('assessTargets nested repositories in delete previews', () => {
+  describe.each<GitTrackedResult>([
+    { state: 'ok', tracked: [] },
+    { state: 'not_repo' },
+    { state: 'unknown', reason: 'timeout' },
+  ])('with owner tracked lookup $state', (tracked) => {
+    it.each(['directory', 'file', 'link'] as const)(
+      'recycles a cache whose root .git is a %s',
+      async (kind) => {
+        const f = fixture();
+        const path = f.add('.next');
+        const marker = f.api.join(path, '.git');
+        f.trackedNames.mockResolvedValue(tracked);
+        const original = f.fileLstat.getMockImplementation()!;
+        f.fileLstat.mockImplementation((candidate) =>
+          candidate === marker
+            ? Promise.resolve({
+                ...stat(kind === 'file'),
+                isDirectory: () => kind === 'directory',
+                isSymbolicLink: () => kind === 'link',
+              })
+            : original(candidate),
+        );
+        const [target] = await f.run([path]);
+        expect(target).toMatchObject({
+          kind: 'project_content',
+          method: 'recycle',
+          valid: true,
+          defaultSelected: false,
+        });
+        expect(target.risk.reasons.map(({ code }) => code)).toEqual([
+          'DELETE_PROJECT_CONTENT',
+        ]);
+        expect(f.facts.mock.calls[0][0]).toMatchObject({
+          trackedCheck: null,
+          frameworkVerified: null,
+        });
+        expect(f.fileLstat).toHaveBeenCalledWith(marker);
+      },
+    );
+
+    it('marks denied .git lstat as incomplete before assessing delete risk', async () => {
+      const f = fixture();
+      const path = f.add('.next');
+      const marker = f.api.join(path, '.git');
+      f.trackedNames.mockResolvedValue(tracked);
+      const original = f.fileLstat.getMockImplementation()!;
+      f.fileLstat.mockImplementation((candidate) =>
+        candidate === marker
+          ? Promise.reject(
+              Object.assign(new Error('TEST private nested repo'), {
+                code: 'EACCES',
+              }),
+            )
+          : original(candidate),
+      );
+      const [target] = await f.run([path]);
+      expect(target).toMatchObject({
+        kind: 'build_cache',
+        method: 'permanent',
+        risk: { level: 'medium' },
+      });
+      expect(target.risk.reasons.map(({ code }) => code)).toEqual([
+        'RISK_CHECK_INCOMPLETE',
+      ]);
+      expect(f.facts.mock.calls[0][0].trackedCheck).toBe('unknown');
+      expect(f.fileLstat).toHaveBeenCalledWith(marker);
+      expect(JSON.stringify(target)).not.toContain('TEST private');
+    });
+
+    it.each(['ENOENT', 'ENOTDIR'])(
+      'preserves owner tracked evidence when .git is absent with %s',
+      async (code) => {
+        const f = fixture();
+        const path = f.add('.next');
+        const marker = f.api.join(path, '.git');
+        f.trackedNames.mockResolvedValue(tracked);
+        const original = f.fileLstat.getMockImplementation()!;
+        f.fileLstat.mockImplementation((candidate) =>
+          candidate === marker
+            ? Promise.reject(Object.assign(new Error('TEST absent'), { code }))
+            : original(candidate),
+        );
+        const [target] = await f.run([path]);
+        expect(target).toMatchObject({
+          kind: 'build_cache',
+          method: 'permanent',
+        });
+        expect(f.facts.mock.calls[0][0].trackedCheck).toBe(
+          tracked.state === 'ok' ? 'clean' : tracked.state,
+        );
+        expect(target.risk.reasons.map(({ code }) => code)).toEqual(
+          tracked.state === 'unknown' ? ['RISK_CHECK_INCOMPLETE'] : [],
+        );
+        expect(f.fileLstat).toHaveBeenCalledWith(marker);
+      },
+    );
+  });
+
+  it.each([false, true])(
+    'preserves cancellation during .git lstat (reject=%s)',
+    async (reject) => {
+      const f = fixture();
+      const path = f.add('.next');
+      const marker = f.api.join(path, '.git');
+      const reason = new Error('TEST cancelled nested-repository check');
+      const original = f.fileLstat.getMockImplementation()!;
+      f.fileLstat.mockImplementation((candidate) => {
+        if (candidate !== marker) return original(candidate);
+        f.controller.abort(reason);
+        return reject
+          ? Promise.reject(
+              Object.assign(new Error('TEST denied'), { code: 'EACCES' }),
+            )
+          : Promise.resolve(stat(true));
+      });
+      await expect(f.run([path])).rejects.toBe(reason);
+      expect(f.facts).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('assessTargets', () => {
   it('shares owner activity, git status and tracked-name lookup within a batch', async () => {
     const f = fixture();

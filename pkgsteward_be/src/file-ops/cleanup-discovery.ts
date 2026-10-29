@@ -4,6 +4,7 @@ import {
   toComparable,
   type PathPlatform,
 } from '@/common/utils/path.util';
+import { checkCacheGitMarker } from '@/file-ops/cache-git-marker';
 import {
   BUILD_CACHE_DIR_NAMES,
   matchBuildCacheName,
@@ -128,7 +129,29 @@ export async function discoverCleanupCandidates(
     const excludedNames = new Set(
       tracked.state === 'ok' ? tracked.tracked : [],
     );
-    const remaining = ordered.filter((entry) => !excludedNames.has(entry.name));
+    const remaining: Array<
+      (typeof ordered)[number] & {
+        trackedCheck: ICleanupCandidate['trackedCheck'];
+      }
+    > = [];
+    for (const entry of ordered) {
+      if (excludedNames.has(entry.name)) continue;
+      const marker = await checkCacheGitMarker(
+        api.join(project.path, entry.name),
+        deps,
+      );
+      signal.throwIfAborted();
+      if (marker === 'present') continue;
+      remaining.push({
+        ...entry,
+        trackedCheck:
+          marker === 'unknown'
+            ? 'unknown'
+            : tracked.state === 'ok'
+              ? 'clean'
+              : tracked.state,
+      });
+    }
     if (remaining.length === 0) continue;
 
     const frameworks = await verifyFrameworks(
@@ -142,7 +165,7 @@ export async function discoverCleanupCandidates(
         kind: 'build_cache',
         ownerPath: project.path,
         frameworkVerified: frameworks.get(entry.cacheName)!,
-        trackedCheck: tracked.state === 'ok' ? 'clean' : tracked.state,
+        trackedCheck: entry.trackedCheck,
       });
     }
   }
