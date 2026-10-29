@@ -131,38 +131,17 @@ export async function discoverCleanupCandidates(
     const remaining = ordered.filter((entry) => !excludedNames.has(entry.name));
     if (remaining.length === 0) continue;
 
-    const dependencyNames = new Set<string>();
-    try {
-      const content = await fs.readFile(api.join(project.path, 'package.json'));
-      signal.throwIfAborted();
-      const manifest: unknown = JSON.parse(content.replace(/^\uFEFF/, ''));
-      if (isRecord(manifest)) {
-        for (const section of [
-          manifest.dependencies,
-          manifest.devDependencies,
-        ]) {
-          if (isRecord(section))
-            for (const name of Object.keys(section)) dependencyNames.add(name);
-        }
-      }
-    } catch {
-      signal.throwIfAborted();
-      // An unreadable or malformed manifest leaves each candidate unverified.
-    }
+    const frameworks = await verifyFrameworks(
+      project.path,
+      remaining.map((entry) => entry.cacheName),
+      deps,
+    );
     for (const entry of remaining) {
-      const frameworkVerified = FRAMEWORK_MARKERS[entry.cacheName].some(
-        (marker) =>
-          marker.endsWith('-*')
-            ? [...dependencyNames].some((name) =>
-                name.startsWith(marker.slice(0, -1)),
-              )
-            : dependencyNames.has(marker),
-      );
       candidates.push({
         path: api.join(project.path, entry.name),
         kind: 'build_cache',
         ownerPath: project.path,
-        frameworkVerified,
+        frameworkVerified: frameworks.get(entry.cacheName)!,
         trackedCheck: tracked.state === 'ok' ? 'clean' : tracked.state,
       });
     }
@@ -211,6 +190,44 @@ export async function discoverCleanupCandidates(
     }
   }
   return candidates;
+}
+
+/** Verify all cache names for an owner with one manifest read. */
+export async function verifyFrameworks(
+  projectPath: string,
+  cacheNames: readonly BuildCacheDirName[],
+  deps: Pick<ICleanupDiscoveryDeps, 'platform' | 'fs' | 'signal'>,
+): Promise<Map<BuildCacheDirName, boolean>> {
+  const { platform, fs, signal } = deps;
+  const dependencyNames = new Set<string>();
+  try {
+    const content = await fs.readFile(
+      pathApi(platform).join(projectPath, 'package.json'),
+    );
+    signal.throwIfAborted();
+    const manifest: unknown = JSON.parse(content.replace(/^\uFEFF/, ''));
+    if (isRecord(manifest)) {
+      for (const section of [manifest.dependencies, manifest.devDependencies]) {
+        if (isRecord(section))
+          for (const name of Object.keys(section)) dependencyNames.add(name);
+      }
+    }
+  } catch {
+    signal.throwIfAborted();
+    // An unreadable or malformed manifest leaves each candidate unverified.
+  }
+  return new Map(
+    cacheNames.map((cacheName) => [
+      cacheName,
+      FRAMEWORK_MARKERS[cacheName].some((marker) =>
+        marker.endsWith('-*')
+          ? [...dependencyNames].some((name) =>
+              name.startsWith(marker.slice(0, -1)),
+            )
+          : dependencyNames.has(marker),
+      ),
+    ]),
+  );
 }
 
 // JSON.parse can also produce arrays and primitives; only object maps contain dependencies.

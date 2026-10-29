@@ -1,4 +1,6 @@
 import type { PathCheckFailureCode } from '@/core/path-guard/interfaces/path-guard.types';
+import type { IRisk } from '@/core/risk/interfaces/risk.types';
+import type { IScanFs } from '@/scanner/interfaces/scanner.types';
 
 export type GitStatusResult =
   | { state: 'clean' }
@@ -103,4 +105,63 @@ export interface IFileTreeLevel {
   owner: { path: string; name: string | null };
   entries: ITreeEntry[];
   truncated: boolean;
+}
+
+export const FILE_OPS_FS = Symbol('FILE_OPS_FS');
+
+export interface IFileOpsFsBundle {
+  files: IFileOpsFs;
+  scan: IScanFs;
+}
+
+export type JobStatus = 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface ITargetSize {
+  status: 'pending' | 'measuring' | 'done' | 'failed' | 'cancelled';
+  apparentBytes: number | null;
+  sizeBytes: number | null;
+  reclaimableBytes: number | null;
+  sharedBytes: number | null;
+  fileCount: number | null;
+}
+
+export interface IFileOpsTarget {
+  path: string;
+  kind: FileOpsKind | null;
+  method: FileOpsMethod | null;
+  valid: boolean;
+  failureCode: string | null;
+  owner: { path: string; name: string | null } | null;
+  nestedProjects: string[];
+  hasLockfile: boolean | null;
+  lastActivityAt: string | null;
+  size: ITargetSize;
+  risk: IRisk;
+  defaultSelected: boolean;
+}
+
+export interface IFileOpsPreview {
+  previewId: string;
+  source: 'cleanup' | 'delete';
+  status: JobStatus;
+  scanId: string;
+  progress: { measuredTargets: number; totalTargets: number };
+  targets: IFileOpsTarget[];
+  risk: IRisk;
+  confirmText: string | null;
+  operationId: string | null;
+  startedAt: string;
+  finishedAt?: string;
+  failureCode: string | null;
+}
+
+export interface IPreviewSummary {
+  paths: string[];
+  risk: IRisk;
+  confirmText: string | null;
+  totals: {
+    targetCount: number;
+    reclaimableBytes: number;
+    recycleBytes: number;
+  };
 }
