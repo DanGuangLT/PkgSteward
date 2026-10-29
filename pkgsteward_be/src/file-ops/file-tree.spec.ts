@@ -143,6 +143,135 @@ const expectFailure = async (
   }
 };
 
+describe('readTreeLevel iterator failures', () => {
+  describe.each<[string, ExceptionClass, number, string]>([
+    ['ENOENT', NotFoundException, 404, 'Path'],
+    ['ENOTDIR', NotFoundException, 404, 'Path'],
+    ['EACCES', ForbiddenException, 403, 'Cannot read path'],
+    ['EPERM', ForbiddenException, 403, 'Cannot read path'],
+    ['EIO', InternalServerException, 500, 'Cannot read path'],
+  ])('maps %s', (code, exception, status, message) => {
+    it('sanitizes failure when opening the directory', async () => {
+      const f = fixture();
+      f.entries.mockImplementation(() => {
+        throw Object.assign(new Error(`PRIVATE_FS_DETAIL ${f.root}`), { code });
+      });
+      const request = f.run();
+      await expectFailure(request, exception, status);
+      await expect(request).rejects.toThrow(new exception(message));
+    });
+
+    it.each([0, 2])(
+      'rejects the entire listing after %i yielded entries',
+      async (yieldBeforeFailure) => {
+        const f = fixture();
+        const failure = Object.assign(
+          new Error(`PRIVATE_FS_DETAIL ${f.root}`),
+          { code },
+        );
+        let yielded = 0;
+        f.entries.mockImplementation(() => ({
+          [Symbol.asyncIterator]() {
+            return {
+              next(): Promise<IteratorResult<IFileOpsDirent>> {
+                if (yielded < yieldBeforeFailure) {
+                  const value = entry(`TEST-child-${yielded}`);
+                  yielded += 1;
+                  return Promise.resolve({ done: false, value });
+                }
+                return Promise.reject(failure);
+              },
+            };
+          },
+        }));
+        const request = f.run();
+        await expectFailure(request, exception, status);
+        await expect(request).rejects.toThrow(new exception(message));
+        expect(yielded).toBe(yieldBeforeFailure);
+      },
+    );
+  });
+
+  it.each([0, 2])(
+    'preserves abort reason over an iterator error after %i entries',
+    async (yieldBeforeFailure) => {
+      const f = fixture();
+      const reason = new Error('TEST cancelled iterator');
+      let yielded = 0;
+      f.entries.mockImplementation(() => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next(): Promise<IteratorResult<IFileOpsDirent>> {
+              if (yielded < yieldBeforeFailure) {
+                const value = entry(`TEST-child-${yielded}`);
+                yielded += 1;
+                return Promise.resolve({ done: false, value });
+              }
+              f.controller.abort(reason);
+              return Promise.reject(errno('EACCES'));
+            },
+          };
+        },
+      }));
+      await expect(f.run()).rejects.toBe(reason);
+    },
+  );
+
+  it('maps iterator cleanup failure when the entry limit closes the listing', async () => {
+    const f = fixture();
+    let yielded = 0;
+    const close = jest.fn(() => Promise.reject(errno('EACCES')));
+    f.entries.mockImplementation(() => ({
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<IFileOpsDirent>> {
+            yielded += 1;
+            return Promise.resolve({
+              done: false,
+              value: entry(`TEST-child-${yielded}`),
+            });
+          },
+          return: close,
+        };
+      },
+    }));
+    const request = f.run();
+    await expectFailure(request, ForbiddenException, 403);
+    await expect(request).rejects.toThrow(
+      new ForbiddenException('Cannot read path'),
+    );
+    expect(yielded).toBe(2_001);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('readTreeLevel disappearing entry limit', () => {
+  it.each([
+    [2_000, false, 2_000],
+    [2_001, true, 2_001],
+    [3_000, true, 2_001],
+  ] as const)(
+    'bounds a listing of %i files that disappear before lstat',
+    async (count, truncated, reads) => {
+      const f = fixture();
+      f.listing.set(
+        f.root,
+        Array.from({ length: count }, (_, i) =>
+          entry(`TEST-gone-${i}`, 'file'),
+        ),
+      );
+      const result = await f.run();
+      expect(result.entries).toEqual([]);
+      expect(result.truncated).toBe(truncated);
+      expect(f.yielded).toHaveBeenCalledTimes(reads);
+      expect(f.closed).toHaveBeenCalledTimes(1);
+      expect(f.lstat).not.toHaveBeenCalledWith(
+        f.api.join(f.root, 'TEST-gone-2000'),
+      );
+    },
+  );
+});
+
 describe('readTreeLevel', () => {
   it('declares the bounded listing limit', () => {
     expect(TREE_ENTRY_LIMIT).toBe(2_000);

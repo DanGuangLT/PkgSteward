@@ -93,54 +93,69 @@ export async function readTreeLevel(
 
   const entries: ITreeEntry[] = [];
   let truncated = false;
-  for await (const entry of fs.entries(target.path, signal)) {
-    signal.throwIfAborted();
-    if (entries.length === TREE_ENTRY_LIMIT) {
-      truncated = true;
-      break;
-    }
-    const path = api.join(target.path, entry.name);
-    if (entry.isSymbolicLink()) {
-      entries.push({
-        name: entry.name,
-        path,
-        type: 'link',
-        sizeBytes: null,
-        selectable: false,
-      });
-    } else if (entry.isDirectory()) {
-      entries.push({
-        name: entry.name,
-        path,
-        type: 'directory',
-        sizeBytes: null,
-        selectable: true,
-      });
-    } else {
-      let item: ITreeEntry;
-      try {
-        const stats = await fs.lstat(path);
-        signal.throwIfAborted();
-        if (stats.isSymbolicLink()) {
-          item = {
-            name: entry.name,
-            path,
-            type: 'link',
-            sizeBytes: null,
-            selectable: false,
-          };
-        } else if (stats.isFile()) {
-          item = {
-            name: entry.name,
-            path,
-            type: 'file',
-            sizeBytes:
-              stats.size <= BigInt(Number.MAX_SAFE_INTEGER)
-                ? Number(stats.size)
-                : null,
-            selectable: true,
-          };
-        } else {
+  let readCount = 0;
+  try {
+    for await (const entry of fs.entries(target.path, signal)) {
+      signal.throwIfAborted();
+      readCount += 1;
+      if (readCount > TREE_ENTRY_LIMIT) {
+        truncated = true;
+        break;
+      }
+      const path = api.join(target.path, entry.name);
+      if (entry.isSymbolicLink()) {
+        entries.push({
+          name: entry.name,
+          path,
+          type: 'link',
+          sizeBytes: null,
+          selectable: false,
+        });
+      } else if (entry.isDirectory()) {
+        entries.push({
+          name: entry.name,
+          path,
+          type: 'directory',
+          sizeBytes: null,
+          selectable: true,
+        });
+      } else {
+        let item: ITreeEntry;
+        try {
+          const stats = await fs.lstat(path);
+          signal.throwIfAborted();
+          if (stats.isSymbolicLink()) {
+            item = {
+              name: entry.name,
+              path,
+              type: 'link',
+              sizeBytes: null,
+              selectable: false,
+            };
+          } else if (stats.isFile()) {
+            item = {
+              name: entry.name,
+              path,
+              type: 'file',
+              sizeBytes:
+                stats.size <= BigInt(Number.MAX_SAFE_INTEGER)
+                  ? Number(stats.size)
+                  : null,
+              selectable: true,
+            };
+          } else {
+            item = {
+              name: entry.name,
+              path,
+              type: 'other',
+              sizeBytes: null,
+              selectable: false,
+            };
+          }
+        } catch (error) {
+          signal.throwIfAborted();
+          // Entry biến mất giữa lúc liệt kê thì bỏ; lỗi khác vẫn hiện nhưng không chọn được.
+          if (isMissing(error)) continue;
           item = {
             name: entry.name,
             path,
@@ -149,20 +164,19 @@ export async function readTreeLevel(
             selectable: false,
           };
         }
-      } catch (error) {
-        signal.throwIfAborted();
-        // Entry biến mất giữa lúc liệt kê thì bỏ; lỗi khác vẫn hiện nhưng không chọn được.
-        if (isMissing(error)) continue;
-        item = {
-          name: entry.name,
-          path,
-          type: 'other',
-          sizeBytes: null,
-          selectable: false,
-        };
+        entries.push(item);
       }
-      entries.push(item);
     }
+  } catch (error) {
+    signal.throwIfAborted();
+    if (isMissing(error)) throw new NotFoundException('Path');
+    const code =
+      error !== null && typeof error === 'object' && 'code' in error
+        ? error.code
+        : undefined;
+    if (code === 'EACCES' || code === 'EPERM')
+      throw new ForbiddenException('Cannot read path');
+    throw new InternalServerException('Cannot read path');
   }
   // DISK_FS entries() dừng im lặng khi abort: không trả danh sách thiếu như thể đủ.
   signal.throwIfAborted();
