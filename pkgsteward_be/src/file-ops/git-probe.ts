@@ -15,7 +15,7 @@ export const GIT_FILTER_SCOPE_ARGS = [
   '--show-scope',
   '--name-only',
   '--get-regexp',
-  '^filter\\.',
+  '^(filter\\.|remote\\..+\\.promisor$|extensions\\.partialclone$)',
 ] as const;
 export const GIT_STATUS_ARGS = [
   '--no-optional-locks',
@@ -46,7 +46,8 @@ type GitProbeFailure = Extract<
 type GitCommandResult =
   { state: 'ok'; stdout: string } | { state: 'failed'; error: unknown };
 
-// Chỉ filter do Git for Windows (system) hoặc user (global) đặt là tin được; filter của repo có thể chạy lệnh tuỳ ý khi status.
+// Chỉ tin filter/partial-clone config ở system/global: repo có thể chạy lệnh qua filter hoặc lazy fetch.
+// Chặn partial clone cả trên Git cũ chưa hỗ trợ GIT_NO_LAZY_FETCH.
 const TRUSTED_FILTER_LINE = /^(?:system|global)\t[^\t]+$/;
 
 // Global --literal-pathspecs cannot be combined with icase, so each pathspec carries its own magic.
@@ -121,7 +122,7 @@ export class GitProbe implements IGitProbe {
     projectRoot: string,
     signal?: AbortSignal,
   ): Promise<GitStatusResult> {
-    // Both commands share one slot: the filter check must gate the status it protects.
+    // Both commands share one slot: the unsafe-config check must gate status.
     return this.withSlot(signal, async (): Promise<GitStatusResult> => {
       const filters = await this.exec(
         projectRoot,
@@ -202,7 +203,7 @@ export class GitProbe implements IGitProbe {
         timeout: GIT_PROBE_TIMEOUT_MS,
         cancelSignal: signal,
         windowsHide: true,
-        env: { GIT_TERMINAL_PROMPT: '0' },
+        env: { GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
       });
       return { state: 'ok', stdout };
     } catch (error) {

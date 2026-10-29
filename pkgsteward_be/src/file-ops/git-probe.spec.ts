@@ -47,7 +47,7 @@ const options = (signal?: AbortSignal) => ({
   timeout: 30_000,
   cancelSignal: signal,
   windowsHide: true,
-  env: { GIT_TERMINAL_PROMPT: '0' },
+  env: { GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
 });
 const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
 const nativePathspec = (name: string) =>
@@ -58,8 +58,96 @@ const filterArgs = [
   '--show-scope',
   '--name-only',
   '--get-regexp',
-  '^filter\\.',
+  '^(filter\\.|remote\\..+\\.promisor$|extensions\\.partialclone$)',
 ];
+
+describe('GitProbe lazy-fetch protection', () => {
+  beforeEach(() => execaMock.mockReset());
+
+  it.each(['status', 'trackedNames'] as const)(
+    'disables lazy fetch for every command issued by %s',
+    async (operation) => {
+      execaMock.mockResolvedValue({ stdout: '' });
+      const probe = new GitProbe();
+      if (operation === 'status') await probe.status(root);
+      else await probe.trackedNames(root, ['coverage']);
+
+      expect(execaMock).toHaveBeenCalledTimes(operation === 'status' ? 2 : 1);
+      for (const call of execaMock.mock.calls as unknown[][]) {
+        expect(call[2]).toMatchObject({
+          env: { GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' },
+        });
+      }
+    },
+  );
+
+  it.each([
+    'remote.origin.promisor',
+    'remote.TEST.backup.promisor',
+    'REMOTE.origin.PROMISOR',
+    'extensions.partialClone',
+    'EXTENSIONS.PARTIALCLONE',
+    'filter.lfs.clean',
+    'filter.TEST.process',
+  ])('includes unsafe config key %s in the preflight query', async (key) => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    await new GitProbe().status(root);
+    const args = (
+      execaMock.mock.calls as unknown[][]
+    )[0][1] as readonly string[];
+    const pattern = args[args.indexOf('--get-regexp') + 1];
+    // Git config matches section and variable names without case sensitivity.
+    expect(new RegExp(pattern, 'i').test(key)).toBe(true);
+  });
+
+  describe.each(['local', 'worktree', 'command'])(
+    'partial-clone config in %s scope',
+    (scope) => {
+      it.each(['remote.origin.promisor', 'extensions.partialClone'])(
+        'refuses %s without running status',
+        async (key) => {
+          execaMock.mockImplementation(
+            (_command: string, args: readonly string[]) => {
+              if (!args.includes('config'))
+                return Promise.resolve({ stdout: '' });
+              const pattern = args[args.indexOf('--get-regexp') + 1];
+              // Honor the actual query: an unchanged filter-only regex must
+              // not accidentally receive a promisor key from this mock.
+              return new RegExp(pattern, 'i').test(key)
+                ? Promise.resolve({ stdout: `${scope}\t${key}\n` })
+                : Promise.reject(
+                    Object.assign(new Error('TEST no matching config'), {
+                      exitCode: 1,
+                      stdout: '',
+                    }),
+                  );
+            },
+          );
+          await expect(new GitProbe().status(root)).resolves.toEqual({
+            state: 'unknown',
+            reason: 'unsafe_config',
+          });
+          expect(execaMock).toHaveBeenCalledTimes(1);
+        },
+      );
+    },
+  );
+
+  it.each(['system', 'global'])(
+    'continues to trust partial-clone config in %s scope',
+    async (scope) => {
+      execaMock
+        .mockResolvedValueOnce({
+          stdout: `${scope}\tremote.origin.promisor\n${scope}\textensions.partialclone\n`,
+        })
+        .mockResolvedValueOnce({ stdout: '' });
+      await expect(new GitProbe().status(root)).resolves.toEqual({
+        state: 'clean',
+      });
+      expect(execaMock).toHaveBeenCalledTimes(2);
+    },
+  );
+});
 
 describe('GitProbe filter preflight', () => {
   beforeEach(() => execaMock.mockReset());
