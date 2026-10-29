@@ -6,7 +6,8 @@ export type GitStatusResult =
   | { state: 'not_repo' }
   | {
       state: 'unknown';
-      reason: 'git_missing' | 'timeout' | 'cancelled' | 'failed';
+      reason:
+        'git_missing' | 'timeout' | 'cancelled' | 'failed' | 'unsafe_config';
     };
 
 export type GitTrackedResult =
