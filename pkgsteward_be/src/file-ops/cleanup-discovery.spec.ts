@@ -17,6 +17,7 @@ type EntryKind = 'directory' | 'file' | 'link';
 const stat = (kind: EntryKind = 'directory'): IFileOpsStat => ({
   dev: 1n,
   ino: 1n,
+  size: 0n,
   isDirectory: () => kind === 'directory',
   isFile: () => kind === 'file',
   isSymbolicLink: () => kind === 'link',

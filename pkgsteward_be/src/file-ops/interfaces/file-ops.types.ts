@@ -51,6 +51,7 @@ export type TargetFailureCode =
 export interface IFileOpsStat {
   dev: bigint;
   ino: bigint;
+  size: bigint;
   isFile(): boolean;
   isDirectory(): boolean;
   isSymbolicLink(): boolean;
@@ -85,4 +86,21 @@ export interface IClassifiedTarget {
   owner: { path: string; name: string | null } | null;
   nestedProjects: string[];
   identity: ITargetIdentity | null;
+}
+
+export type TreeEntryType = 'directory' | 'file' | 'link' | 'other';
+
+export interface ITreeEntry {
+  name: string;
+  path: string;
+  type: TreeEntryType;
+  sizeBytes: number | null;
+  selectable: boolean;
+}
+
+export interface IFileTreeLevel {
+  path: string;
+  owner: { path: string; name: string | null };
+  entries: ITreeEntry[];
+  truncated: boolean;
 }
