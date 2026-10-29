@@ -224,13 +224,15 @@ describe('measureTarget', () => {
   it('walks 10,000 nested directories without recursion or real filesystem access', async () => {
     const root = '/r';
     const signal = new AbortController().signal;
-    const entries = jest.fn(async function* (
-      p: string,
-    ): AsyncGenerator<Dirent> {
+    // A counter, not jest.fn: recorded calls would keep 10,001 deep path strings alive
+    // (gigabytes, beyond the CI heap limit).
+    let entriesCalls = 0;
+    const entries = async function* (p: string): AsyncGenerator<Dirent> {
+      entriesCalls += 1;
       await Promise.resolve();
       const depth = (p.length - root.length) / 2;
       yield depth < 10_000 ? dirent('d', 'directory') : dirent('leaf');
-    });
+    };
     const lstat = jest.fn((p: string): Promise<BigIntStats> =>
       Promise.resolve(
         p === root ? stat('directory') : stat('file', { size: 1n }),
@@ -240,7 +242,7 @@ describe('measureTarget', () => {
     expect(
       await measureTarget(root, { fs, platform: 'posix', signal }),
     ).toEqual(done(1, 1, 1, 0, 1));
-    expect(entries).toHaveBeenCalledTimes(10_001);
+    expect(entriesCalls).toBe(10_001);
     expect(lstat).toHaveBeenCalledTimes(2);
     expect(lstat).toHaveBeenLastCalledWith(
       '/r' + '/d'.repeat(10_000) + '/leaf',
