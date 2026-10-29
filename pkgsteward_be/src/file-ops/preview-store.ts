@@ -91,6 +91,10 @@ export class PreviewStore {
     this.records.get(previewId)?.controller.abort();
   }
 
+  attachOperation(_previewId: string, _operationId: string): void {
+    throw new Error('not implemented');
+  }
+
   private trimTerminals(): void {
     const terminals = [...this.records.values()]
       .filter(({ preview }) => preview.status !== 'running')

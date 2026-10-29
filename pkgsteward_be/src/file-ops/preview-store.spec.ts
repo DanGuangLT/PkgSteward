@@ -96,6 +96,60 @@ function finish(
 }
 
 describe('PreviewStore', () => {
+  it.each(['completed', 'cancelled', 'failed'] as const)(
+    'attaches an operation to a %s preview without changing its facts',
+    (status) => {
+      const store = new PreviewStore();
+      const source = record('TEST-attach');
+      store.create(source);
+      const terminal = finish(
+        store,
+        source,
+        '2026-10-02T00:00:00.000Z',
+        status,
+      );
+      const facts = store.getFacts('TEST-attach');
+      store.attachOperation('TEST-attach', 'TEST-operation');
+      expect(store.get('TEST-attach')).toEqual({
+        ...terminal,
+        operationId: 'TEST-operation',
+      });
+      expect(store.getFacts('TEST-attach')).toEqual(facts);
+      // Delayed preview publication cannot remove the attached operation.
+      store.update('TEST-attach', source.preview);
+      expect(store.get('TEST-attach')!.operationId).toBe('TEST-operation');
+    },
+  );
+
+  it('rejects a second attachment and preserves the original operation', () => {
+    const store = new PreviewStore();
+    const source = record('TEST-attach');
+    store.create(source);
+    finish(store, source, '2026-10-02T00:00:00.000Z');
+    store.attachOperation('TEST-attach', 'TEST-first');
+    expect(() => store.attachOperation('TEST-attach', 'TEST-second')).toThrow(
+      Error,
+    );
+    expect(store.get('TEST-attach')!.operationId).toBe('TEST-first');
+  });
+
+  it('rejects missing and running previews without reserving an operation', () => {
+    const store = new PreviewStore();
+    expect(() => store.attachOperation('TEST-attach', 'TEST-missing')).toThrow(
+      Error,
+    );
+    expect(store.get('TEST-attach')).toBeUndefined();
+    const source = record('TEST-attach');
+    store.create(source);
+    expect(() => store.attachOperation('TEST-attach', 'TEST-running')).toThrow(
+      Error,
+    );
+    expect(store.get('TEST-attach')!.operationId).toBeNull();
+    finish(store, source, '2026-10-02T00:00:00.000Z');
+    store.attachOperation('TEST-attach', 'TEST-final');
+    expect(store.get('TEST-attach')!.operationId).toBe('TEST-final');
+  });
+
   it('allows one running record and rejects a second without losing the first', () => {
     const store = new PreviewStore();
     const first = record('TEST-first');

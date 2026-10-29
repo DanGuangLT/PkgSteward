@@ -5,24 +5,35 @@ import {
   ValidationException,
 } from '@/common/exceptions/app.exception';
 import * as paths from '@/common/utils/path.util';
+import type { AuditLogService } from '@/core/audit-log/audit-log.service';
+import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import type { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import type { PathGuardService } from '@/core/path-guard/path-guard.service';
+import type { PathCheckResult } from '@/core/path-guard/interfaces/path-guard.types';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
+import type { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { IDiskFs } from '@/disk-usage/interfaces/disk-usage.types';
 import * as discovery from '@/file-ops/cleanup-discovery';
+import * as deleter from '@/file-ops/file-deleter';
 import * as assessment from '@/file-ops/file-ops-assessment';
 import * as measurement from '@/file-ops/file-ops-measure';
 import { FileOpsService } from '@/file-ops/file-ops.service';
 import * as tree from '@/file-ops/file-tree';
 import type { GitProbe } from '@/file-ops/git-probe';
 import type {
+  DeleteOutcome,
+  IExecuteInput,
+  IFileOpsOperation,
   IFileOpsFsBundle,
   IFileOpsFs,
   IFileOpsStat,
   IGitProbe,
   ITargetSize,
 } from '@/file-ops/interfaces/file-ops.types';
+import { OperationStore } from '@/file-ops/operation-store';
+import { PreviewStore } from '@/file-ops/preview-store';
 import type { IProcessSnapshot } from '@/platform/interfaces/process-snapshot.interface';
+import type { IRecycleBin } from '@/platform/interfaces/recycle-bin.interface';
 import type { IScanResult } from '@/scanner/interfaces/scanner.types';
 import type { ScannerService } from '@/scanner/scanner.service';
 
@@ -45,6 +56,12 @@ jest.mock('node:fs/promises', () => ({
     .fn()
     .mockRejectedValue(new Error('Unexpected real filesystem access')),
   opendir: jest
+    .fn()
+    .mockRejectedValue(new Error('Unexpected real filesystem access')),
+  rm: jest
+    .fn()
+    .mockRejectedValue(new Error('Unexpected real filesystem access')),
+  appendFile: jest
     .fn()
     .mockRejectedValue(new Error('Unexpected real filesystem access')),
 }));
@@ -170,13 +187,35 @@ function fixture() {
       },
     ],
   };
-  const scanner = { getLatest: jest.fn(() => structuredClone(scan)) };
-  const gate = { assertIdle: jest.fn() };
+  const scanner = {
+    getLatest: jest.fn(() => structuredClone(scan)),
+    hasRunningScan: jest.fn(() => false),
+    applyDeletions: jest.fn<void, [readonly string[]]>(),
+  };
+  const gateToken = Symbol('TEST-mutation');
+  const gate = {
+    assertIdle: jest.fn(),
+    tryEnter: jest.fn<symbol | null, []>(() => gateToken),
+    leave: jest.fn<void, [symbol]>(),
+  };
+  const diskUsage = {
+    hasRunningMeasurement: jest.fn(() => false),
+    clearCache: jest.fn<void, []>(),
+  };
+  const audit = {
+    append: jest
+      .fn<Promise<void>, [IAuditRecord]>()
+      .mockResolvedValue(undefined),
+  };
+  const recycleBin: jest.Mocked<IRecycleBin> = {
+    recycle: jest.fn().mockRejectedValue(new Error('Unexpected recycling')),
+  };
   const guard = { checkMany: jest.fn().mockResolvedValue([]) };
   const fileLstat = jest
     .fn<ReturnType<IFileOpsFs['lstat']>, Parameters<IFileOpsFs['lstat']>>()
     .mockRejectedValue(new Error('Unexpected file I/O'));
   const fs: IFileOpsFsBundle = {
+    remove: jest.fn().mockRejectedValue(new Error('Unexpected removal')),
     files: {
       lstat: fileLstat,
       readdir: jest.fn().mockRejectedValue(new Error('Unexpected file I/O')),
@@ -238,6 +277,9 @@ function fixture() {
     diskFs,
     git as unknown as GitProbe,
     processes,
+    diskUsage as unknown as DiskUsageService,
+    audit as unknown as AuditLogService,
+    recycleBin,
   );
   return {
     service,
@@ -258,6 +300,10 @@ function fixture() {
     diskEntries,
     gitStatus,
     capture,
+    diskUsage,
+    audit,
+    recycleBin,
+    gateToken,
   };
 }
 
@@ -281,6 +327,1434 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+
+// Execute tests use the real preview/store/confirmation flow and mock I/O boundaries.
+const EXEC_A = 'D:\\TEST-app\\node_modules';
+const EXEC_B = 'D:\\TEST-app\\.next';
+const EXEC_C = 'D:\\TEST-app\\src';
+const MANIFEST = 'D:\\TEST-app\\package.json';
+const PRIVATE_ERROR =
+  'TEST private filesystem path / command line --token=secret';
+const MEDIUM: IRisk = {
+  level: 'medium',
+  reasons: [
+    { code: 'NO_LOCKFILE', level: 'medium', message: 'TEST no lockfile' },
+  ],
+};
+const CONTENT_RISK: IRisk = {
+  level: 'high',
+  reasons: [
+    { code: 'DELETE_PROJECT_CONTENT', level: 'high', message: 'TEST content' },
+  ],
+};
+const ioError = (code: string) =>
+  Object.assign(new Error(PRIVATE_ERROR), { code });
+const executeStat = (file = false, ino = '9007199254740993'): IFileOpsStat => ({
+  dev: 7n,
+  ino: BigInt(ino),
+  size: 100n,
+  isFile: () => file,
+  isDirectory: () => !file,
+  isSymbolicLink: () => false,
+});
+const allowedPath = (path: string): PathCheckResult => ({
+  allowed: true,
+  path: {
+    inputPath: path,
+    resolvedPath: path,
+    realPath: path,
+    isSymbolicLink: false,
+  },
+});
+
+async function executeFixture(
+  rows = [target(EXEC_A), target(EXEC_B, { kind: 'build_cache' })],
+  configure?: (f: ReturnType<typeof fixture>) => void,
+) {
+  const f = fixture();
+  const events: string[] = [];
+  const nodes = new Map<string, IFileOpsStat | Error>();
+  for (const row of rows) {
+    if (row.identity) {
+      nodes.set(paths.toComparable(row.path, 'win32'), {
+        ...executeStat(row.identity.type === 'file', row.identity.ino),
+        dev: BigInt(row.identity.dev),
+      });
+    }
+    if (row.owner)
+      nodes.set(
+        paths.toComparable(
+          paths.pathApi('win32').join(row.owner.path, 'package.json'),
+          'win32',
+        ),
+        executeStat(true),
+      );
+  }
+  f.fileLstat.mockImplementation((path) => {
+    events.push(`stat:${path}`);
+    const value =
+      nodes.get(paths.toComparable(path, 'win32')) ?? ioError('ENOENT');
+    return value instanceof Error
+      ? Promise.reject(value)
+      : Promise.resolve(value);
+  });
+  f.guard.checkMany.mockImplementation((selected: readonly string[]) => {
+    events.push(`guard:${selected.join('|')}`);
+    return Promise.resolve(selected.map(allowedPath));
+  });
+  f.assess.mockImplementation(() => Promise.resolve(structuredClone(rows)));
+  const deleteOne = jest
+    .spyOn(deleter, 'deleteTarget')
+    .mockImplementation((input) => {
+      events.push(`delete:${input.path}`);
+      return Promise.resolve({
+        status: 'success',
+        method:
+          input.kind === 'project' || input.kind === 'project_content'
+            ? 'recycle'
+            : 'permanent',
+      });
+    });
+  f.audit.append.mockImplementation((record) => {
+    events.push(`audit:${record.phase}:${record.targets.join('|')}`);
+    return Promise.resolve();
+  });
+  f.gate.tryEnter.mockImplementation(() => {
+    events.push('enter');
+    return f.gateToken;
+  });
+  f.gate.leave.mockImplementation(() => {
+    events.push('leave');
+  });
+  f.scanner.applyDeletions.mockImplementation(() => {
+    events.push('apply');
+  });
+  f.diskUsage.clearCache.mockImplementation(() => {
+    events.push('clear');
+  });
+  configure?.(f);
+  const { previewId } = f.service.startDeletePreview({
+    paths: rows.map(({ path }) => path),
+  });
+  await flush();
+  f.assess.mockClear();
+  f.measure.mockClear();
+  f.scanner.getLatest.mockClear();
+  events.length = 0;
+  const input: IExecuteInput = {
+    previewId,
+    paths: rows.filter((row) => row.valid).map(({ path }) => path),
+    confirm: true,
+  };
+  return { ...f, previewId, input, rows, nodes, deleteOne, events };
+}
+type ExecuteFixture = Awaited<ReturnType<typeof executeFixture>>;
+
+function expectNoDeletion(f: ExecuteFixture) {
+  expect(f.deleteOne).not.toHaveBeenCalled();
+  expect(f.fs.remove).not.toHaveBeenCalled();
+  expect(f.recycleBin.recycle).not.toHaveBeenCalled();
+}
+async function expectExecuteError(
+  f: ExecuteFixture,
+  input: IExecuteInput,
+  statusCode: number,
+  code: string,
+  entered = false,
+  details?: object,
+) {
+  await expect(f.service.startExecute(input)).rejects.toMatchObject({
+    statusCode,
+    code,
+    ...(details ? { details } : {}),
+  });
+  expectNoDeletion(f);
+  expect(f.audit.append).not.toHaveBeenCalled();
+  expect(f.service.getPreview(f.previewId).operationId).toBeNull();
+  if (entered) {
+    expect(f.gate.leave).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+  } else {
+    expect(f.gate.tryEnter).not.toHaveBeenCalled();
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    expect(f.assess).not.toHaveBeenCalled();
+  }
+}
+
+describe('FileOpsService execute validation and concurrency', () => {
+  it.each([
+    ['empty', [], []],
+    ['duplicate', [EXEC_A, EXEC_A], [EXEC_A]],
+    ['outside preview', [EXEC_A, 'D:\\TEST-outside'], ['D:\\TEST-outside']],
+    ['different spelling', [EXEC_A.toLowerCase()], [EXEC_A.toLowerCase()]],
+  ] satisfies [string, string[], string[]][])(
+    'rejects %s paths before acquiring the gate',
+    async (_name, selected, invalidPaths) => {
+      const f = await executeFixture();
+      await expectExecuteError(
+        f,
+        { ...f.input, paths: selected },
+        400,
+        'VALIDATION_ERROR',
+        false,
+        { paths: invalidPaths },
+      );
+      expect(f.scanner.getLatest).not.toHaveBeenCalled();
+    },
+  );
+
+  it('validates empty paths before looking up an unknown preview', async () => {
+    const f = await executeFixture();
+    await expectExecuteError(
+      f,
+      { ...f.input, previewId: 'TEST-missing', paths: [] },
+      400,
+      'VALIDATION_ERROR',
+      false,
+      { paths: [] },
+    );
+  });
+
+  it('returns 404 for a missing preview', async () => {
+    const f = await executeFixture();
+    await expectExecuteError(
+      f,
+      { ...f.input, previewId: 'TEST-missing' },
+      404,
+      'NOT_FOUND',
+    );
+  });
+
+  it('rejects a running preview', async () => {
+    const f = await executeFixture(undefined, (base) => {
+      base.measure.mockReturnValue(
+        deferred<measurement.MeasureResult>().promise,
+      );
+    });
+    await expectExecuteError(f, f.input, 409, 'CONFLICT');
+    f.service.cancelPreview(f.previewId);
+  });
+
+  it('rejects a failed preview', async () => {
+    const f = await executeFixture(undefined, (base) => {
+      base.assess.mockRejectedValue(new Error(PRIVATE_ERROR));
+    });
+    expect(f.service.getPreview(f.previewId).status).toBe('failed');
+    await expectExecuteError(f, f.input, 409, 'CONFLICT');
+  });
+
+  it('rejects an invalid preview target', async () => {
+    const f = await executeFixture([target(EXEC_A), invalid(EXEC_B)]);
+    await expectExecuteError(
+      f,
+      { ...f.input, paths: [EXEC_B] },
+      400,
+      'VALIDATION_ERROR',
+      false,
+      { paths: [EXEC_B] },
+    );
+  });
+
+  it.each(['failed', 'cancelled'] as const)(
+    'rejects a target whose size is %s',
+    async (status) => {
+      const f = await executeFixture(undefined, (base) => {
+        if (status === 'failed')
+          base.measure.mockResolvedValue({
+            status: 'failed',
+            reason: 'read_error',
+          });
+        else
+          base.measure.mockReturnValue(
+            deferred<measurement.MeasureResult>().promise,
+          );
+      });
+      if (status === 'cancelled') f.service.cancelPreview(f.previewId);
+      await expectExecuteError(
+        f,
+        { ...f.input, paths: [EXEC_A] },
+        400,
+        'VALIDATION_ERROR',
+        false,
+        { paths: [EXEC_A] },
+      );
+    },
+  );
+
+  it.each(['identities', 'measurements', 'record'] as const)(
+    'rejects missing server-side %s before entering the gate',
+    async (missing) => {
+      const f = await executeFixture();
+      const getFacts = PreviewStore.prototype.getFacts;
+      jest
+        .spyOn(PreviewStore.prototype, 'getFacts')
+        .mockImplementation(function (this: PreviewStore, id: string) {
+          const facts = getFacts.call(this, id);
+          if (missing === 'record') return undefined;
+          facts?.[missing].delete(EXEC_A);
+          return facts;
+        });
+      await expectExecuteError(
+        f,
+        { ...f.input, paths: [EXEC_A] },
+        400,
+        'VALIDATION_ERROR',
+        false,
+        { paths: [EXEC_A] },
+      );
+    },
+  );
+
+  it.each(['scan', 'measurement', 'preview'] as const)(
+    'rejects a running %s before preflight',
+    async (busy) => {
+      const f = await executeFixture();
+      if (busy === 'scan') f.scanner.hasRunningScan.mockReturnValue(true);
+      if (busy === 'measurement')
+        f.diskUsage.hasRunningMeasurement.mockReturnValue(true);
+      let otherPreview: string | undefined;
+      if (busy === 'preview') {
+        f.assess.mockReturnValue(
+          deferred<assessment.IAssessedTarget[]>().promise,
+        );
+        otherPreview = f.service.startDeletePreview({
+          paths: [EXEC_C],
+        }).previewId;
+        f.assess.mockClear();
+      }
+      await expectExecuteError(f, f.input, 409, 'CONFLICT');
+      if (otherPreview) f.service.cancelPreview(otherPreview);
+    },
+  );
+
+  it("does not release another operation's busy gate", async () => {
+    const f = await executeFixture();
+    f.gate.tryEnter.mockReturnValue(null);
+    await expect(f.service.startExecute(f.input)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CONFLICT',
+    });
+    expect(f.gate.tryEnter).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    expect(f.assess).not.toHaveBeenCalled();
+    expect(f.audit.append).not.toHaveBeenCalled();
+    expectNoDeletion(f);
+  });
+
+  it('checks readers and acquires the gate synchronously before awaiting preflight', async () => {
+    const f = await executeFixture();
+    const waiting = deferred<assessment.IAssessedTarget[]>();
+    f.scanner.hasRunningScan.mockImplementation(() => {
+      f.events.push('scan-idle');
+      return false;
+    });
+    f.diskUsage.hasRunningMeasurement.mockImplementation(() => {
+      f.events.push('disk-idle');
+      return false;
+    });
+    f.assess.mockImplementation(() => {
+      f.events.push('assess');
+      return waiting.promise;
+    });
+    f.gate.tryEnter
+      .mockImplementationOnce(() => {
+        f.events.push('enter');
+        return f.gateToken;
+      })
+      .mockReturnValue(null);
+    const first = f.service.startExecute(f.input);
+    // Attach a rejection observer immediately so the phase-1 stub cannot leak an unhandled rejection.
+    const observed = first.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    expect(f.scanner.hasRunningScan).toHaveBeenCalledTimes(1);
+    expect(f.diskUsage.hasRunningMeasurement).toHaveBeenCalledTimes(1);
+    expect(f.gate.tryEnter).toHaveBeenCalledTimes(1);
+    expect(f.events).toEqual(['scan-idle', 'disk-idle', 'enter', 'assess']);
+    await expect(f.service.startExecute(f.input)).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    expect(f.assess).toHaveBeenCalledTimes(1);
+    waiting.resolve(f.rows);
+    expect(await observed).toHaveProperty('value');
+    await flush();
+    expect(f.gate.leave).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FileOpsService execute preflight', () => {
+  it('rejects a changed latest scan before reassessment', async () => {
+    const f = await executeFixture();
+    f.scanner.getLatest.mockReturnValue({
+      ...f.scan,
+      scanId: 'TEST-replacement',
+    });
+    await expectExecuteError(f, f.input, 409, 'SCAN_CHANGED', true);
+    expect(f.assess).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['invalid', { valid: false, failureCode: 'PROJECT_CHANGED' }],
+    ['real path', { path: 'D:\\TEST-redirected' }],
+    ['kind', { kind: 'project_content' }],
+    ['method', { method: 'recycle' }],
+    [
+      'device',
+      { identity: { dev: '8', ino: '9007199254740993', type: 'directory' } },
+    ],
+    [
+      'inode',
+      { identity: { dev: '7', ino: '9007199254740994', type: 'directory' } },
+    ],
+    ['type', { identity: { dev: '7', ino: '9007199254740993', type: 'file' } }],
+    ['missing identity', { identity: null }],
+    ['wrong input path', { inputPath: EXEC_C }],
+  ] satisfies [string, Partial<assessment.IAssessedTarget>][])(
+    'rejects changed %s without consuming the preview',
+    async (_name, override) => {
+      const f = await executeFixture();
+      f.assess.mockResolvedValue([target(EXEC_A, override), f.rows[1]]);
+      await expectExecuteError(f, f.input, 409, 'TARGET_CHANGED', true, {
+        paths: [EXEC_A],
+      });
+    },
+  );
+
+  it('rejects a target omitted by reassessment', async () => {
+    const f = await executeFixture();
+    f.assess.mockResolvedValue([f.rows[1]]);
+    await expectExecuteError(f, f.input, 409, 'TARGET_CHANGED', true, {
+      paths: [EXEC_A],
+    });
+  });
+
+  it.each(['level increase', 'new code at same level'])(
+    'rejects risk %s even when the caller acknowledges it',
+    async (change) => {
+      const f = await executeFixture([target(EXEC_A, { risk: MEDIUM })]);
+      const risk: IRisk =
+        change === 'level increase'
+          ? HIGH
+          : {
+              level: 'medium',
+              reasons: [
+                ...MEDIUM.reasons,
+                {
+                  code: 'RECENTLY_ACTIVE',
+                  level: 'medium',
+                  message: 'TEST recent',
+                },
+              ],
+            };
+      f.assess.mockResolvedValue([target(EXEC_A, { risk })]);
+      await expectExecuteError(
+        f,
+        {
+          ...f.input,
+          acknowledgedRisks: [
+            'NO_LOCKFILE',
+            'RECENTLY_ACTIVE',
+            'DELETE_WHOLE_PROJECT',
+          ],
+          confirmText: 'DELETE 1',
+        },
+        409,
+        'RISK_CHANGED',
+        true,
+        { paths: [EXEC_A] },
+      );
+    },
+  );
+
+  it.each([undefined, false, 'true', null])(
+    'rejects confirm=%s with current low risk',
+    async (confirm) => {
+      const f = await executeFixture();
+      await expectExecuteError(
+        f,
+        { ...f.input, confirm },
+        400,
+        'VALIDATION_ERROR',
+        true,
+        { field: 'confirm' },
+      );
+    },
+  );
+
+  it('requires all medium-risk codes', async () => {
+    const f = await executeFixture([target(EXEC_A, { risk: MEDIUM })]);
+    await expectExecuteError(
+      f,
+      { ...f.input, acknowledgedRisks: [] },
+      400,
+      'VALIDATION_ERROR',
+      true,
+      { field: 'acknowledgedRisks', missingRisks: ['NO_LOCKFILE'] },
+    );
+  });
+
+  it('requires the exact project folder name for a single high-risk project', async () => {
+    const f = await executeFixture([
+      target('D:\\TEST-app', {
+        kind: 'project',
+        method: 'recycle',
+        risk: HIGH,
+      }),
+    ]);
+    await expectExecuteError(
+      f,
+      {
+        ...f.input,
+        acknowledgedRisks: ['DELETE_WHOLE_PROJECT'],
+        confirmText: 'DELETE 1',
+      },
+      400,
+      'VALIDATION_ERROR',
+      true,
+      { field: 'confirmText' },
+    );
+  });
+
+  it('requires LARGE_BATCH for the selected bytes, using retained measurements', async () => {
+    const f = await executeFixture(undefined, (base) => {
+      base.measure.mockResolvedValue(measured(5_000_000_000, 70));
+    });
+    await expectExecuteError(
+      f,
+      { ...f.input, paths: [EXEC_A], acknowledgedRisks: [] },
+      400,
+      'VALIDATION_ERROR',
+      true,
+      { field: 'acknowledgedRisks', missingRisks: ['LARGE_BATCH'] },
+    );
+    expect(f.measure).not.toHaveBeenCalled();
+  });
+
+  it('does not inherit LARGE_BATCH from unselected targets', async () => {
+    const f = await executeFixture(undefined, (base) => {
+      base.measure.mockImplementation((path) =>
+        Promise.resolve(measured(path === EXEC_A ? 100 : 5_000_000_000)),
+      );
+    });
+    f.assess.mockResolvedValue([f.rows[0]]);
+    const started = await f.service.startExecute({
+      ...f.input,
+      paths: [EXEC_A],
+    });
+    await flush();
+    expect(f.service.getOperation(started.operationId).status).toBe(
+      'completed',
+    );
+    expect(f.audit.append.mock.calls[0][0].risk).toEqual({
+      level: 'low',
+      codes: [],
+    });
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires LARGE_BATCH at twenty selected targets even when their bytes are small', async () => {
+    const rows = Array.from({ length: 21 }, (_, index) =>
+      target(`D:\\TEST-app\\TEST-cache-${index}`, { kind: 'build_cache' }),
+    );
+    const f = await executeFixture(rows);
+    const selected = rows.slice(0, 20);
+    f.assess.mockResolvedValue(selected);
+    await expectExecuteError(
+      f,
+      {
+        ...f.input,
+        paths: selected.map(({ path }) => path),
+        acknowledgedRisks: [],
+      },
+      400,
+      'VALIDATION_ERROR',
+      true,
+      {
+        field: 'acknowledgedRisks',
+        missingRisks: ['LARGE_BATCH'],
+      },
+    );
+  });
+
+  it('accepts a single high-risk project with the exact folder name and all codes', async () => {
+    const f = await executeFixture([
+      target('D:\\TEST-app', {
+        kind: 'project',
+        method: 'recycle',
+        risk: HIGH,
+      }),
+    ]);
+    const started = await f.service.startExecute({
+      ...f.input,
+      acknowledgedRisks: ['DELETE_WHOLE_PROJECT'],
+      confirmText: 'TEST-app',
+    });
+    await flush();
+    expect(f.service.getOperation(started.operationId)).toMatchObject({
+      status: 'completed',
+      results: [
+        { status: 'success', method: 'recycle', reclaimableBytes: null },
+      ],
+    });
+  });
+
+  it('accepts decreased risk and case-equivalent canonical paths', async () => {
+    const f = await executeFixture([target(EXEC_A, { risk: MEDIUM })]);
+    f.assess.mockResolvedValue([
+      target(EXEC_A, { path: EXEC_A.toLowerCase() }),
+    ]);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.getOperation(started.operationId).status).toBe(
+      'completed',
+    );
+    expect(f.audit.append.mock.calls[0][0].risk).toEqual({
+      level: 'low',
+      codes: [],
+    });
+  });
+
+  it('reassesses with fresh dependencies and scan metadata without cleanup facts or cached sizes', async () => {
+    const f = await executeFixture();
+    f.scanner.getLatest.mockReturnValue({
+      ...f.scan,
+      projects: [{ ...f.scan.projects[0], name: 'TEST-latest-metadata' }],
+    });
+    await f.service.startExecute(f.input);
+    await flush();
+    expect(f.assess).toHaveBeenCalledTimes(1);
+    const call = f.assess.mock.calls[0];
+    expect(call).toHaveLength(3);
+    expect(call[0]).toEqual([EXEC_A, EXEC_B]);
+    expect(call[1].projects[0]).toMatchObject({
+      name: 'TEST-latest-metadata',
+      nodeModules: {
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      },
+    });
+    expect(call[1].orphanNodeModules[0]).toMatchObject({
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(call[2]).toMatchObject({
+      fs: f.fs,
+      git: f.git,
+      processes: f.processes,
+      selfPid: process.pid,
+      platform: 'win32',
+      now: NOW,
+    });
+    expect(call[2].signal).toBeInstanceOf(AbortSignal);
+    expect(f.measure).not.toHaveBeenCalled();
+  });
+
+  it.each(['latest', 'assessment'] as const)(
+    'releases the gate when %s unexpectedly throws',
+    async (where) => {
+      const f = await executeFixture();
+      const error = new Error('TEST preflight failure');
+      if (where === 'latest')
+        f.scanner.getLatest.mockImplementation(() => {
+          throw error;
+        });
+      else f.assess.mockRejectedValue(error);
+      await expect(f.service.startExecute(f.input)).rejects.toBe(error);
+      expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+      expect(f.audit.append).not.toHaveBeenCalled();
+      expectNoDeletion(f);
+      expect(f.service.getPreview(f.previewId).operationId).toBeNull();
+    },
+  );
+
+  it('maps intent audit failure to a safe 500 and allows a later attempt', async () => {
+    const f = await executeFixture();
+    f.audit.append.mockRejectedValueOnce(new Error(PRIVATE_ERROR));
+    await expect(f.service.startExecute(f.input)).rejects.toMatchObject({
+      statusCode: 500,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Audit log is unavailable',
+    });
+    expectNoDeletion(f);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(f.service.getPreview(f.previewId).operationId).toBeNull();
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.getOperation(started.operationId).status).toBe(
+      'completed',
+    );
+    expect(f.deleteOne).toHaveBeenCalledTimes(2);
+    expect(f.gate.leave).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+  });
+
+  it.each(['create', 'attach'] as const)(
+    'releases the gate when operation %s throws after intent',
+    async (where) => {
+      const f = await executeFixture();
+      const error = new Error('TEST store failure');
+      if (where === 'create')
+        jest
+          .spyOn(OperationStore.prototype, 'create')
+          .mockImplementation(() => {
+            throw error;
+          });
+      else
+        jest
+          .spyOn(PreviewStore.prototype, 'attachOperation')
+          .mockImplementation(() => {
+            throw error;
+          });
+      await expect(f.service.startExecute(f.input)).rejects.toBe(error);
+      expect(f.audit.append).toHaveBeenCalledTimes(1);
+      expectNoDeletion(f);
+      expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+      expect(f.service.getPreview(f.previewId).operationId).toBeNull();
+    },
+  );
+});
+
+describe('FileOpsService execute operations and replay', () => {
+  it('waits for intent durability before attaching an operation or starting deletion', async () => {
+    const f = await executeFixture();
+    const intent = deferred<void>();
+    f.audit.append.mockReturnValueOnce(intent.promise);
+    const pending = f.service.startExecute(f.input);
+    const observed = pending.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    await flush();
+    expect(f.audit.append).toHaveBeenCalledTimes(1);
+    expect(f.service.getPreview(f.previewId).operationId).toBeNull();
+    expectNoDeletion(f);
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    intent.resolve(undefined);
+    const result = await observed;
+    expect(result).toHaveProperty('value');
+    await flush();
+    expect(f.service.getPreview(f.previewId).operationId).not.toBeNull();
+    expect(f.deleteOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for each result audit before deleting the next target', async () => {
+    const f = await executeFixture();
+    const resultAudit = deferred<void>();
+    f.audit.append
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(resultAudit.promise);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+    expect(f.service.getOperation(started.operationId).status).toBe('running');
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    resultAudit.resolve(undefined);
+    await flush();
+    expect(f.deleteOne).toHaveBeenCalledTimes(2);
+    expect(f.service.getOperation(started.operationId).status).toBe(
+      'completed',
+    );
+  });
+
+  it('publishes progress and deletes sequentially in preview order with matching audits', async () => {
+    const f = await executeFixture([
+      target(EXEC_A),
+      target(EXEC_C, {
+        kind: 'project_content',
+        method: 'recycle',
+        risk: CONTENT_RISK,
+      }),
+      target(EXEC_B, { kind: 'build_cache' }),
+    ]);
+    const waiting = deferred<DeleteOutcome>();
+    f.deleteOne.mockImplementationOnce((input) => {
+      f.events.push(`delete:${input.path}`);
+      return waiting.promise;
+    });
+    const started = await f.service.startExecute({
+      ...f.input,
+      paths: [EXEC_B, EXEC_C, EXEC_A],
+      acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+      confirmText: 'DELETE 3',
+    });
+    expect(started).toEqual({
+      operationId: expect.any(String),
+      status: 'running',
+    });
+    expect(f.service.getPreview(f.previewId).operationId).toBe(
+      started.operationId,
+    );
+    await flush();
+    const running = f.service.getOperation(started.operationId);
+    expect(running).toMatchObject({
+      previewId: f.previewId,
+      status: 'running',
+      currentPath: EXEC_A,
+      startedAt: NOW.toISOString(),
+      results: [
+        {
+          path: EXEC_A,
+          status: 'running',
+          errorCode: null,
+          mayBePartial: false,
+          reclaimableBytes: 70,
+        },
+        {
+          path: EXEC_C,
+          status: 'pending',
+          errorCode: null,
+          mayBePartial: false,
+          reclaimableBytes: null,
+        },
+        {
+          path: EXEC_B,
+          status: 'pending',
+          errorCode: null,
+          mayBePartial: false,
+          reclaimableBytes: 70,
+        },
+      ],
+    });
+    expect(running.finishedAt).toBeUndefined();
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    expect(f.audit.append).toHaveBeenCalledTimes(1);
+    expect(f.audit.append.mock.calls[0][0]).toEqual({
+      operation: 'file-ops.delete',
+      operationId: started.operationId,
+      phase: 'intent',
+      targets: [EXEC_A, EXEC_C, EXEC_B],
+      method: 'permanent+recycle',
+      risk: { level: 'high', codes: ['DELETE_PROJECT_CONTENT'] },
+      result: 'pending',
+      errorCode: null,
+    });
+    waiting.resolve({ method: 'permanent', status: 'success' });
+    await flush();
+    const completed = f.service.getOperation(started.operationId);
+    expect(completed).toMatchObject({
+      status: 'completed',
+      currentPath: null,
+      finishedAt: NOW.toISOString(),
+      results: [
+        {
+          path: EXEC_A,
+          status: 'success',
+          kind: 'node_modules',
+          method: 'permanent',
+          reclaimableBytes: 70,
+        },
+        {
+          path: EXEC_C,
+          status: 'success',
+          kind: 'project_content',
+          method: 'recycle',
+          reclaimableBytes: null,
+        },
+        {
+          path: EXEC_B,
+          status: 'success',
+          kind: 'build_cache',
+          method: 'permanent',
+          reclaimableBytes: 70,
+        },
+      ],
+    });
+    expect(f.deleteOne.mock.calls.map(([input]) => input)).toEqual([
+      { path: EXEC_A, kind: 'node_modules', apparentBytes: 120 },
+      { path: EXEC_C, kind: 'project_content', apparentBytes: 120 },
+      { path: EXEC_B, kind: 'build_cache', apparentBytes: 120 },
+    ]);
+    for (const [, deps] of f.deleteOne.mock.calls) {
+      expect(deps).toEqual({ rm: f.fs.remove, recycleBin: f.recycleBin });
+    }
+    expect(
+      f.audit.append.mock.calls.slice(1).map(([record]) => record),
+    ).toEqual([
+      {
+        operation: 'file-ops.delete',
+        operationId: started.operationId,
+        phase: 'result',
+        targets: [EXEC_A],
+        method: 'permanent',
+        risk: { level: 'low', codes: [] },
+        result: 'success',
+        errorCode: null,
+      },
+      {
+        operation: 'file-ops.delete',
+        operationId: started.operationId,
+        phase: 'result',
+        targets: [EXEC_C],
+        method: 'recycle',
+        risk: { level: 'high', codes: ['DELETE_PROJECT_CONTENT'] },
+        result: 'success',
+        errorCode: null,
+      },
+      {
+        operation: 'file-ops.delete',
+        operationId: started.operationId,
+        phase: 'result',
+        targets: [EXEC_B],
+        method: 'permanent',
+        risk: { level: 'low', codes: [] },
+        result: 'success',
+        errorCode: null,
+      },
+    ]);
+    expect(f.events.filter((event) => /^(audit|delete):/.test(event))).toEqual([
+      `audit:intent:${EXEC_A}|${EXEC_C}|${EXEC_B}`,
+      `delete:${EXEC_A}`,
+      `audit:result:${EXEC_A}`,
+      `delete:${EXEC_C}`,
+      `audit:result:${EXEC_C}`,
+      `delete:${EXEC_B}`,
+      `audit:result:${EXEC_B}`,
+    ]);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([
+      EXEC_A,
+      EXEC_C,
+      EXEC_B,
+    ]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(f.events.slice(-3)).toEqual(['apply', 'clear', 'leave']);
+    expect(running.results[0].status).toBe('running');
+    expect(f.measure).not.toHaveBeenCalled();
+  });
+
+  it('executes measured targets from a cancelled preview', async () => {
+    const f = await executeFixture(undefined, (base) => {
+      base.measure.mockImplementation((path) =>
+        path === EXEC_A
+          ? Promise.resolve(measured())
+          : deferred<measurement.MeasureResult>().promise,
+      );
+    });
+    f.service.cancelPreview(f.previewId);
+    f.assess.mockResolvedValue([f.rows[0]]);
+    const started = await f.service.startExecute({
+      ...f.input,
+      paths: [EXEC_A],
+    });
+    await flush();
+    expect(f.service.getOperation(started.operationId).results).toEqual([
+      expect.objectContaining({ path: EXEC_A, status: 'success' }),
+    ]);
+  });
+
+  it.each(['running', 'stopping', 'completed'] as const)(
+    'replays the same set in reverse order with the current %s status and no new work',
+    async (status) => {
+      const f = await executeFixture();
+      const waiting = deferred<DeleteOutcome>();
+      f.deleteOne.mockReturnValueOnce(waiting.promise);
+      const started = await f.service.startExecute(f.input);
+      await flush();
+      if (status === 'stopping') f.service.cancelOperation(started.operationId);
+      if (status === 'completed') {
+        waiting.resolve({ method: 'permanent', status: 'success' });
+        await flush();
+      }
+      const before = {
+        gate: f.gate.tryEnter.mock.calls.length,
+        audit: f.audit.append.mock.calls.length,
+        deletes: f.deleteOne.mock.calls.length,
+        assess: f.assess.mock.calls.length,
+      };
+      // Replay bypasses new confirmation and reader conflicts, since it cannot delete again.
+      f.scanner.hasRunningScan.mockReturnValue(true);
+      f.diskUsage.hasRunningMeasurement.mockReturnValue(true);
+      const replay = await f.service.startExecute({
+        previewId: f.previewId,
+        paths: [EXEC_B, EXEC_A],
+        confirm: false,
+      });
+      expect(replay).toEqual({ operationId: started.operationId, status });
+      expect(f.gate.tryEnter).toHaveBeenCalledTimes(before.gate);
+      expect(f.audit.append).toHaveBeenCalledTimes(before.audit);
+      expect(f.deleteOne).toHaveBeenCalledTimes(before.deletes);
+      expect(f.assess).toHaveBeenCalledTimes(before.assess);
+      if (status !== 'completed') {
+        waiting.resolve({ method: 'permanent', status: 'success' });
+        await flush();
+      }
+    },
+  );
+
+  it.each([
+    { name: 'subset', selected: [EXEC_A] },
+    { name: 'different spelling', selected: [EXEC_A.toLowerCase(), EXEC_B] },
+  ])(
+    'rejects replay with a different exact path set: $name',
+    async ({ selected }) => {
+      const f = await executeFixture();
+      await f.service.startExecute(f.input);
+      await flush();
+      f.gate.tryEnter.mockClear();
+      f.audit.append.mockClear();
+      f.deleteOne.mockClear();
+      f.assess.mockClear();
+      await expect(
+        f.service.startExecute({ ...f.input, paths: selected }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'CONFLICT',
+      });
+      expect(f.gate.tryEnter).not.toHaveBeenCalled();
+      expect(f.audit.append).not.toHaveBeenCalled();
+      expect(f.assess).not.toHaveBeenCalled();
+      expectNoDeletion(f);
+    },
+  );
+
+  it('refuses replay after the operation was evicted instead of deleting again', async () => {
+    const f = await executeFixture();
+    await f.service.startExecute(f.input);
+    await flush();
+    jest.spyOn(OperationStore.prototype, 'get').mockReturnValue(undefined);
+    f.gate.tryEnter.mockClear();
+    f.audit.append.mockClear();
+    f.deleteOne.mockClear();
+    await expect(f.service.startExecute(f.input)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CONFLICT',
+    });
+    expect(f.gate.tryEnter).not.toHaveBeenCalled();
+    expect(f.audit.append).not.toHaveBeenCalled();
+    expectNoDeletion(f);
+  });
+
+  it.each(['getOperation', 'cancelOperation'] as const)(
+    'returns 404 from %s for an unknown ID',
+    (method) => {
+      const f = fixture();
+      expect(failure(() => f.service[method]('TEST-missing'))).toMatchObject({
+        statusCode: 404,
+        code: 'NOT_FOUND',
+      });
+    },
+  );
+});
+
+describe('FileOpsService immediate target checks', () => {
+  it.each([
+    ['changed inode', 'TARGET_CHANGED'],
+    ['changed device', 'TARGET_CHANGED'],
+    ['changed type', 'TARGET_CHANGED'],
+    ['symbolic link', 'TARGET_CHANGED'],
+    ['ENOENT', 'TARGET_GONE'],
+    ['ENOTDIR', 'TARGET_GONE'],
+    ['EACCES', 'TARGET_CHANGED'],
+    ['guard denied', 'TARGET_CHANGED'],
+    ['guard throws', 'TARGET_CHANGED'],
+    ['guard link', 'TARGET_CHANGED'],
+    ['guard redirected', 'TARGET_CHANGED'],
+    ['guard empty', 'TARGET_CHANGED'],
+  ])(
+    'skips %s and continues with the next target',
+    async (problem, errorCode) => {
+      const f = await executeFixture();
+      const key = paths.toComparable(EXEC_A, 'win32');
+      if (problem === 'changed inode')
+        f.nodes.set(key, executeStat(false, '9007199254740994'));
+      if (problem === 'changed device')
+        f.nodes.set(key, { ...executeStat(), dev: 8n });
+      if (problem === 'changed type') f.nodes.set(key, executeStat(true));
+      if (problem === 'symbolic link')
+        f.nodes.set(key, { ...executeStat(), isSymbolicLink: () => true });
+      if (['ENOENT', 'ENOTDIR', 'EACCES'].includes(problem))
+        f.nodes.set(key, ioError(problem));
+      if (problem === 'guard denied')
+        f.guard.checkMany.mockResolvedValueOnce([
+          { allowed: false, code: 'DENYLISTED', message: PRIVATE_ERROR },
+        ]);
+      if (problem === 'guard throws')
+        f.guard.checkMany.mockRejectedValueOnce(ioError('ENOENT'));
+      if (problem === 'guard empty')
+        f.guard.checkMany.mockResolvedValueOnce([]);
+      if (problem === 'guard link' || problem === 'guard redirected') {
+        f.guard.checkMany.mockResolvedValueOnce([
+          {
+            allowed: true,
+            path: {
+              inputPath: EXEC_A,
+              resolvedPath: EXEC_A,
+              realPath: problem === 'guard redirected' ? EXEC_C : EXEC_A,
+              isSymbolicLink: problem === 'guard link',
+            },
+          },
+        ]);
+      }
+      const started = await f.service.startExecute(f.input);
+      await flush();
+      const operation = f.service.getOperation(started.operationId);
+      expect(operation).toMatchObject({
+        status: 'completed',
+        currentPath: null,
+        results: [
+          { path: EXEC_A, status: 'failed', errorCode, mayBePartial: false },
+          { path: EXEC_B, status: 'success', errorCode: null },
+        ],
+      });
+      expect(f.deleteOne.mock.calls.map(([input]) => input.path)).toEqual([
+        EXEC_B,
+      ]);
+      expect(f.guard.checkMany.mock.calls).toEqual([[[EXEC_A]], [[EXEC_B]]]);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
+      expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+      expect(JSON.stringify(operation)).not.toContain(PRIVATE_ERROR);
+      expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+    },
+  );
+
+  it('accepts case-equivalent guard real paths immediately before deletion', async () => {
+    const f = await executeFixture([target(EXEC_A)]);
+    f.guard.checkMany.mockResolvedValueOnce([
+      {
+        allowed: true,
+        path: {
+          inputPath: EXEC_A,
+          resolvedPath: EXEC_A,
+          realPath: EXEC_A.toLowerCase(),
+          isSymbolicLink: false,
+        },
+      },
+    ]);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.getOperation(started.operationId).results[0].status).toBe(
+      'success',
+    );
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['missing', 'directory', 'link', 'unreadable'])(
+    'refuses a target when its owner manifest is %s',
+    async (problem) => {
+      const f = await executeFixture([target(EXEC_A)]);
+      f.nodes.set(
+        paths.toComparable(MANIFEST, 'win32'),
+        problem === 'missing'
+          ? ioError('ENOENT')
+          : problem === 'unreadable'
+            ? ioError('EACCES')
+            : {
+                ...executeStat(problem === 'link'),
+                isSymbolicLink: () => problem === 'link',
+              },
+      );
+      const started = await f.service.startExecute(f.input);
+      await flush();
+      expect(
+        f.service.getOperation(started.operationId).results[0],
+      ).toMatchObject({
+        status: 'failed',
+        errorCode: 'TARGET_CHANGED',
+        mayBePartial: false,
+      });
+      expectNoDeletion(f);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([]);
+      expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('allows later targets when this operation successfully removed their owner manifest', async () => {
+    const f = await executeFixture([
+      target(MANIFEST, {
+        kind: 'project_content',
+        method: 'recycle',
+        risk: CONTENT_RISK,
+        identity: { dev: '7', ino: '9007199254740993', type: 'file' },
+      }),
+      target(EXEC_A, { owner: { path: 'd:\\test-app', name: 'TEST-app' } }),
+    ]);
+    f.deleteOne.mockImplementationOnce(() => {
+      f.nodes.set(paths.toComparable(MANIFEST, 'win32'), ioError('ENOENT'));
+      return Promise.resolve({ status: 'success', method: 'recycle' });
+    });
+    const started = await f.service.startExecute({
+      ...f.input,
+      acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+      confirmText: 'DELETE 2',
+    });
+    await flush();
+    expect(
+      f.service
+        .getOperation(started.operationId)
+        .results.map(({ status }) => status),
+    ).toEqual(['success', 'success']);
+    expect(f.deleteOne.mock.calls.map(([input]) => input.path)).toEqual([
+      MANIFEST,
+      EXEC_A,
+    ]);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([MANIFEST, EXEC_A]);
+  });
+
+  it('does not grant the D12 exemption after a failed manifest deletion', async () => {
+    const f = await executeFixture([
+      target(MANIFEST, {
+        kind: 'project_content',
+        method: 'recycle',
+        risk: CONTENT_RISK,
+        identity: { dev: '7', ino: '9007199254740993', type: 'file' },
+      }),
+      target(EXEC_A),
+    ]);
+    f.deleteOne.mockImplementationOnce(() => {
+      f.nodes.set(paths.toComparable(MANIFEST, 'win32'), ioError('ENOENT'));
+      return Promise.resolve({
+        status: 'failed',
+        method: 'recycle',
+        errorCode: 'RECYCLE_FAILED',
+        mayBePartial: false,
+      });
+    });
+    const started = await f.service.startExecute({
+      ...f.input,
+      acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+      confirmText: 'DELETE 2',
+    });
+    await flush();
+    expect(
+      f.service.getOperation(started.operationId).results[1],
+    ).toMatchObject({ status: 'failed', errorCode: 'TARGET_CHANGED' });
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['file', 'link', 'EACCES', 'ENOENT', 'ENOTDIR'])(
+    'checks an orphan parent manifest (%s)',
+    async (manifest) => {
+      const orphan = 'D:\\TEST-loose\\node_modules';
+      const f = await executeFixture([
+        target(orphan, { kind: 'orphan_node_modules', owner: null }),
+      ]);
+      f.nodes.set(
+        paths.toComparable('D:\\TEST-loose\\package.json', 'win32'),
+        manifest === 'file' || manifest === 'link'
+          ? { ...executeStat(true), isSymbolicLink: () => manifest === 'link' }
+          : ioError(manifest),
+      );
+      const started = await f.service.startExecute(f.input);
+      await flush();
+      const success = manifest === 'ENOENT' || manifest === 'ENOTDIR';
+      expect(
+        f.service.getOperation(started.operationId).results[0],
+      ).toMatchObject({
+        status: success ? 'success' : 'failed',
+        errorCode: success ? null : 'TARGET_CHANGED',
+        mayBePartial: false,
+      });
+      expect(f.deleteOne).toHaveBeenCalledTimes(success ? 1 : 0);
+    },
+  );
+});
+
+describe('FileOpsService stopping and finalization', () => {
+  it('lets the current target finish, then marks the rest not_started on cancellation', async () => {
+    const f = await executeFixture();
+    const waiting = deferred<DeleteOutcome>();
+    f.deleteOne.mockReturnValueOnce(waiting.promise);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    const stopping = f.service.cancelOperation(started.operationId);
+    expect(stopping).toMatchObject({
+      status: 'stopping',
+      currentPath: EXEC_A,
+      results: [{ status: 'running' }, { status: 'pending' }],
+    });
+    expect(f.service.cancelOperation(started.operationId)).toEqual(stopping);
+    expect(f.gate.leave).not.toHaveBeenCalled();
+    waiting.resolve({ method: 'permanent', status: 'success' });
+    await flush();
+    const final = f.service.getOperation(started.operationId);
+    expect(final).toMatchObject({
+      status: 'cancelled',
+      currentPath: null,
+      finishedAt: NOW.toISOString(),
+      results: [
+        { status: 'success', errorCode: null },
+        { status: 'not_started', errorCode: null, mayBePartial: false },
+      ],
+    });
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_A]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(f.service.cancelOperation(started.operationId)).toEqual(final);
+    await expect(
+      f.service.startExecute({ ...f.input, confirm: false }),
+    ).resolves.toEqual({
+      operationId: started.operationId,
+      status: 'cancelled',
+    });
+  });
+
+  it.each([
+    {
+      method: 'permanent',
+      status: 'failed',
+      errorCode: 'ACCESS_DENIED',
+      mayBePartial: true,
+    },
+    {
+      method: 'permanent',
+      status: 'failed',
+      errorCode: 'TARGET_GONE',
+      mayBePartial: false,
+    },
+    {
+      method: 'recycle',
+      status: 'failed',
+      errorCode: 'RECYCLE_FAILED',
+      mayBePartial: false,
+    },
+  ] satisfies DeleteOutcome[])(
+    'retains $errorCode and partial state while completing other targets',
+    async (outcome) => {
+      const recycle = outcome.method === 'recycle';
+      const f = await executeFixture([
+        target(
+          EXEC_A,
+          recycle
+            ? { kind: 'project_content', method: 'recycle', risk: CONTENT_RISK }
+            : {},
+        ),
+        target(EXEC_B, { kind: 'build_cache' }),
+      ]);
+      f.deleteOne.mockResolvedValueOnce(outcome);
+      const started = await f.service.startExecute({
+        ...f.input,
+        ...(recycle
+          ? {
+              acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+              confirmText: 'DELETE 2',
+            }
+          : {}),
+      });
+      await flush();
+      const final = f.service.getOperation(started.operationId);
+      expect(final).toMatchObject({
+        status: 'completed',
+        results: [
+          { ...outcome, reclaimableBytes: recycle ? null : 70 },
+          { status: 'success' },
+        ],
+      });
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
+      expect(f.deleteOne).toHaveBeenCalledTimes(2);
+      expect(f.audit.append.mock.calls[1][0]).toMatchObject({
+        phase: 'result',
+        targets: [EXEC_A],
+        result: 'failed',
+        errorCode: outcome.errorCode,
+      });
+      expect(f.service.cancelOperation(started.operationId)).toEqual(final);
+      expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    },
+  );
+
+  it('stops after a result audit fails, preserving successful deletion and failing remaining rows', async () => {
+    const f = await executeFixture();
+    f.audit.append
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error(PRIVATE_ERROR));
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    const final = f.service.getOperation(started.operationId);
+    expect(final).toMatchObject({
+      status: 'failed',
+      currentPath: null,
+      finishedAt: NOW.toISOString(),
+      results: [
+        { path: EXEC_A, status: 'success', errorCode: null },
+        {
+          path: EXEC_B,
+          status: 'not_started',
+          errorCode: 'AUDIT_WRITE_FAILED',
+          mayBePartial: false,
+        },
+      ],
+    });
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+    expect(f.audit.append).toHaveBeenCalledTimes(2);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_A]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(f.service.cancelOperation(started.operationId)).toEqual(final);
+    await expect(f.service.startExecute(f.input)).resolves.toEqual({
+      operationId: started.operationId,
+      status: 'failed',
+    });
+    expect(JSON.stringify(final)).not.toContain(PRIVATE_ERROR);
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+  });
+
+  it('contains unexpected deleter exceptions and never retries or exposes their details', async () => {
+    const f = await executeFixture();
+    f.deleteOne.mockRejectedValueOnce(new Error(PRIVATE_ERROR));
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    const final = f.service.getOperation(started.operationId);
+    expect(final).toMatchObject({
+      status: 'failed',
+      currentPath: null,
+      finishedAt: NOW.toISOString(),
+      results: [{ status: 'not_started' }, { status: 'not_started' }],
+    });
+    expect(f.deleteOne).toHaveBeenCalledTimes(1);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(f.log).toHaveBeenCalledWith('File operation failed');
+    expect(JSON.stringify(final)).not.toContain(PRIVATE_ERROR);
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+  });
+
+  it.each(['applyDeletions', 'clearCache'] as const)(
+    'still finalizes and leaves the gate when %s throws',
+    async (step) => {
+      const f = await executeFixture();
+      const fail = () => {
+        throw new Error(PRIVATE_ERROR);
+      };
+      if (step === 'applyDeletions')
+        f.scanner.applyDeletions.mockImplementation(fail);
+      else f.diskUsage.clearCache.mockImplementation(fail);
+      const started = await f.service.startExecute(f.input);
+      await flush();
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_A, EXEC_B]);
+      expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+      expect(f.gate.leave).toHaveBeenCalledTimes(1);
+      expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+      const final = f.service.getOperation(started.operationId);
+      expect(['completed', 'failed']).toContain(final.status);
+      expect(final.currentPath).toBeNull();
+      expect(final.finishedAt).toBe(NOW.toISOString());
+      expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+    },
+  );
+
+  it('still leaves the gate when publishing the terminal operation throws', async () => {
+    const f = await executeFixture();
+    const original = OperationStore.prototype.update;
+    jest.spyOn(OperationStore.prototype, 'update').mockImplementation(function (
+      this: OperationStore,
+      id: string,
+      operation: IFileOpsOperation,
+    ) {
+      if (operation.finishedAt) throw new Error(PRIVATE_ERROR);
+      return original.call(this, id, operation);
+    });
+    await f.service.startExecute(f.input);
+    await flush();
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_A, EXEC_B]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+  });
 });
 
 describe('FileOpsService preview start', () => {

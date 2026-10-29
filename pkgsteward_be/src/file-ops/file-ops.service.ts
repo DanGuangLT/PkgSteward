@@ -6,9 +6,11 @@ import {
   ValidationException,
 } from '@/common/exceptions/app.exception';
 import { toPathPlatform } from '@/common/utils/path.util';
+import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { DISK_FS } from '@/disk-usage/disk-usage-walker';
+import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { IDiskFs } from '@/disk-usage/interfaces/disk-usage.types';
 import { discoverCleanupCandidates } from '@/file-ops/cleanup-discovery';
 import {
@@ -26,7 +28,9 @@ import { GitProbe } from '@/file-ops/git-probe';
 import { FILE_OPS_FS } from '@/file-ops/interfaces/file-ops.types';
 import type {
   CleanupKind,
+  IExecuteInput,
   IFileOpsFsBundle,
+  IFileOpsOperation,
   IFileOpsPreview,
   IFileOpsTarget,
   IFileTreeLevel,
@@ -37,6 +41,8 @@ import type {
 import { PreviewStore, type IPreviewRecord } from '@/file-ops/preview-store';
 import { PROCESS_SNAPSHOT } from '@/platform/interfaces/process-snapshot.interface';
 import type { IProcessSnapshot } from '@/platform/interfaces/process-snapshot.interface';
+import { RECYCLE_BIN } from '@/platform/interfaces/recycle-bin.interface';
+import type { IRecycleBin } from '@/platform/interfaces/recycle-bin.interface';
 import { ScannerService } from '@/scanner/scanner.service';
 import type {
   IScanResult,
@@ -71,7 +77,24 @@ export class FileOpsService {
     @Inject(DISK_FS) private readonly diskFs: IDiskFs,
     private readonly git: GitProbe,
     @Inject(PROCESS_SNAPSHOT) private readonly processes: IProcessSnapshot,
+    private readonly diskUsage: DiskUsageService,
+    private readonly audit: AuditLogService,
+    @Inject(RECYCLE_BIN) private readonly recycleBin: IRecycleBin,
   ) {}
+
+  async startExecute(
+    _input: IExecuteInput,
+  ): Promise<{ operationId: string; status: 'running' }> {
+    throw new Error('not implemented');
+  }
+
+  getOperation(_operationId: string): IFileOpsOperation {
+    throw new Error('not implemented');
+  }
+
+  cancelOperation(_operationId: string): IFileOpsOperation {
+    throw new Error('not implemented');
+  }
 
   startCleanupPreview(input: ICleanupPreviewInput): {
     previewId: string;
