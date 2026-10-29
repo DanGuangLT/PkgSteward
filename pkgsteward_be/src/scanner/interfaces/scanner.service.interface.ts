@@ -10,4 +10,5 @@ export interface IScannerService {
   getScan(scanId: string): IScanJob;
   cancelScan(scanId: string): IScanJob;
   getLatest(): IScanResult;
+  applyDeletions(deletedPaths: readonly string[]): void;
 }

@@ -10,7 +10,12 @@ import {
   ScanStartEntity,
 } from '@/scanner/entities/scan.entity';
 import { NotFoundException } from '@/common/exceptions/app.exception';
-import { toPathPlatform } from '@/common/utils/path.util';
+import {
+  isSameOrInside,
+  pathApi,
+  toComparable,
+  toPathPlatform,
+} from '@/common/utils/path.util';
 import { parseScanRootPaths } from '@/config/scan-roots';
 import type { ScanRoots } from '@/config/scan-roots';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -171,6 +176,66 @@ export class ScannerService
       projects,
       orphanNodeModules,
     });
+  }
+
+  applyDeletions(deletedPaths: readonly string[]): void {
+    if (!this.latest || deletedPaths.length === 0) return;
+    const deleted = new Set(
+      deletedPaths.map((path) => toComparable(path, this.platform)),
+    );
+    const isDeleted = (path: string): boolean => {
+      const comparable = toComparable(path, this.platform);
+      for (const parent of deleted) {
+        if (isSameOrInside(comparable, parent, this.platform)) return true;
+      }
+      return false;
+    };
+    let changed = false;
+    const projects = this.latest.projects
+      .filter((project) => {
+        const manifest = toComparable(
+          pathApi(this.platform).join(project.path, 'package.json'),
+          this.platform,
+        );
+        if (isDeleted(project.path) || deleted.has(manifest)) {
+          changed = true;
+          return false;
+        }
+        return true;
+      })
+      .map((project) => {
+        if (project.nodeModules.exists && isDeleted(project.nodeModules.path)) {
+          changed = true;
+          return {
+            ...project,
+            nodeModules: { ...project.nodeModules, exists: false },
+          };
+        }
+        return project;
+      });
+    const orphanNodeModules = this.latest.orphanNodeModules.filter((orphan) => {
+      if (isDeleted(orphan.path)) {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+    if (!changed) return;
+    const result: IStoredScanResult = {
+      ...this.latest,
+      projects,
+      orphanNodeModules,
+    };
+    this.latest = result;
+    void this.cache
+      .save({
+        schemaVersion: 1,
+        key: this.configuration().key,
+        result: structuredClone(result),
+      })
+      .catch((error: unknown) =>
+        this.logger.warn('Could not save scan cache', error),
+      );
   }
 
   private requireScan(scanId: string): IActiveScan {

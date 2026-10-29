@@ -168,6 +168,72 @@ describe('DiskUsageService', () => {
     jest.restoreAllMocks();
   });
 
+  describe('clearCache', () => {
+    it('clears cached sizes in every view while preserving the completed job', async () => {
+      const f = fixture();
+      const start = await f.service.start({ path: root });
+      await tick();
+      f.walks[0].task.resolve(done(f.walks[0].initial));
+      await tick();
+      const completed = f.service.get(start.jobId);
+      expect(completed.status).toBe('completed');
+      f.cache.put({ ...completed, view: 'packages' }, 10n);
+      const otherPath = 'D:\\TEST\\other';
+      f.cache.put({ ...completed, path: otherPath }, 10n);
+      expect(f.service.peekCompletedSize(root)).toEqual({
+        sizeBytes: 42,
+        measuredAt: now,
+      });
+      expect(f.service.peekCompletedSize(otherPath)).not.toBeNull();
+
+      f.service.clearCache();
+
+      expect(f.clearCached).toHaveBeenCalledTimes(1);
+      expect(f.service.peekCompletedSize(root)).toBeNull();
+      expect(f.service.peekCompletedSize(otherPath)).toBeNull();
+      expect(f.cache.get(root, 'directory', 10n)).toBeNull();
+      expect(f.cache.get(root, 'packages', 10n)).toBeNull();
+      expect(f.service.get(start.jobId)).toEqual(completed);
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+      const next = await f.service.start({ path: root });
+      expect(next.status).toBe('running');
+      expect(f.service.get(next.jobId).cacheHit).toBe(false);
+      f.service.cancel(next.jobId);
+    });
+
+    it('clears cached sizes without cancelling or changing a running measurement', async () => {
+      const f = fixture();
+      const start = await f.service.start({ path: root });
+      await tick();
+      const before = f.service.get(start.jobId);
+      const otherPath = 'D:\\TEST\\previous';
+      f.cache.put({ ...done(f.walks[0].initial), path: otherPath }, 10n);
+      expect(f.service.peekCompletedSize(otherPath)).not.toBeNull();
+      try {
+        f.service.clearCache();
+        expect(f.clearCached).toHaveBeenCalledTimes(1);
+        expect(f.service.peekCompletedSize(otherPath)).toBeNull();
+        expect(f.service.get(start.jobId)).toEqual(before);
+        expect(f.service.hasRunningMeasurement()).toBe(true);
+        expect(f.walks[0].signal.aborted).toBe(false);
+        f.walks[0].task.resolve(done(f.walks[0].initial));
+        await tick();
+        expect(f.service.get(start.jobId).status).toBe('completed');
+      } finally {
+        f.service.cancel(start.jobId);
+      }
+    });
+
+    it('is safe and repeatable before any job or cached measurement exists', () => {
+      const f = fixture();
+      expect(() => f.service.clearCache()).not.toThrow();
+      expect(() => f.service.clearCache()).not.toThrow();
+      expect(f.clearCached).toHaveBeenCalledTimes(2);
+      expect(f.service.peekCompletedSize(root)).toBeNull();
+      expect(f.service.hasRunningMeasurement()).toBe(false);
+    });
+  });
+
   describe('mutation gate', () => {
     const conflict = {
       statusCode: 409,
