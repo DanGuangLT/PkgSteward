@@ -1,6 +1,6 @@
 {
   "name": "pkgsteward_be",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Backend for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages",
   "author": {
     "name": "LianHarman (LienThuan04)",

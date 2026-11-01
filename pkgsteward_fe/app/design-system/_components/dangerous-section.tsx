@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server"
 
 import { ConfirmDeleteDemo } from "./confirm-delete-demo"
+import { RiskConfirmDemo } from "./risk-confirm-demo"
 import { ShowcaseItem, ShowcaseSection } from "./showcase"
 
 const STEPS = ["preview", "dialog", "execute"] as const
@@ -23,6 +24,9 @@ export async function DangerousSection() {
       </ol>
       <ShowcaseItem title={t("alertDialog.title")} description={t("alertDialog.description")}>
         <ConfirmDeleteDemo />
+      </ShowcaseItem>
+      <ShowcaseItem title={t("riskDemo.title")} description={t("riskDemo.description")}>
+        <RiskConfirmDemo />
       </ShowcaseItem>
     </ShowcaseSection>
   )

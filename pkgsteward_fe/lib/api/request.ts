@@ -9,9 +9,16 @@ function transportError(callerSignal?: AbortSignal | null): ApiError | DOMExcept
     : new ApiError(503, "The backend is unavailable.", "BACKEND_UNAVAILABLE")
 }
 
-export async function requestApi<T>(url: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
-  const timeout = AbortSignal.timeout(API_TIMEOUT_MS)
-  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+// timeoutMs = null: backend có thể làm lâu (preflight xoá), không tự coi là mất kết nối.
+export async function requestApi<T>(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number | null = API_TIMEOUT_MS
+): Promise<ApiResponse<T>> {
+  const timeout = timeoutMs === null ? null : AbortSignal.timeout(timeoutMs)
+  const signal = timeout && init.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout ?? init.signal ?? undefined
   let response: Response
   try {
     response = await fetch(url, { ...init, cache: "no-store", signal })
@@ -22,7 +29,7 @@ export async function requestApi<T>(url: string, init: RequestInit = {}): Promis
     return await readApiResponse<T>(response)
   } catch (error) {
     // Fetch có thể đã nhận headers khi timeout/huỷ ngắt luồng đọc body.
-    if (signal.aborted) throw transportError(init.signal)
+    if (signal?.aborted) throw transportError(init.signal)
     throw error
   }
 }

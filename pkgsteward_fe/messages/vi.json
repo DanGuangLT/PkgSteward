@@ -16,6 +16,7 @@
     "openMenu": "Mở menu",
     "projects": "Dự án",
     "diskUsage": "Dung lượng",
+    "cleanup": "Dọn dẹp",
     "designSystem": "Design system"
   },
   "theme": {
@@ -88,6 +89,7 @@
       "measuredAt": "Đo lúc"
     },
     "actions": {
+      "manageFiles": "Quản lý file",
       "first": "Quét dự án",
       "rescan": "Quét lại",
       "cancel": "Huỷ quét",
@@ -206,6 +208,226 @@
       "invalidResponse": "Backend trả về dữ liệu không hợp lệ.",
       "pollPaused": "Đã dừng kiểm tra tiến độ. Bấm Thử kiểm tra lại hoặc Huỷ đo; sẽ không tự gửi lại yêu cầu.",
       "generic": "Yêu cầu chưa thành công. Vui lòng thử lại."
+    }
+  },
+  "fileOps": {
+    "cleanup": {
+      "title": "Dọn dẹp thư mục",
+      "description": "Tìm node_modules, node_modules không có dự án và thư mục cache trong lần quét gần nhất, đo dung lượng rồi tự chọn mục cần xoá. Mở hoặc tải lại trang không tự chạy gì."
+    },
+    "files": {
+      "title": "Quản lý file của dự án",
+      "description": "Chọn file hoặc thư mục cần xoá. Mọi thao tác đều qua xem trước và xác nhận.",
+      "noProject": {
+        "title": "Chưa chọn dự án",
+        "description": "Mở Quản lý file từ danh sách dự án."
+      },
+      "missingProject": {
+        "title": "Không tìm thấy dự án",
+        "description": "Dự án này không có trong lần quét gần nhất, có thể vừa bị xoá. Quét lại để cập nhật."
+      },
+      "otherPreview": "Bản xem trước này được bắt đầu ở nơi khác và có mục ngoài dự án đang mở. Kiểm tra kỹ đường dẫn trước khi xoá.",
+      "loadFailed": {
+        "title": "Không tải được dự án",
+        "description": "Không đọc được kết quả quét từ backend. Kiểm tra backend rồi tải lại trang."
+      }
+    },
+    "filters": {
+      "kinds": "Loại thư mục",
+      "olderThanDays": "Không hoạt động từ (ngày)",
+      "minSizeMib": "Dung lượng từ (MiB)",
+      "hint": "Để trống ô số nếu không cần lọc. Tìm và đo không xoá gì.",
+      "invalid": "Chọn ít nhất một loại thư mục. Số ngày và dung lượng phải là số nguyên không âm.",
+      "sort": "Sắp xếp theo",
+      "sortSize": "Giải phóng nhiều nhất",
+      "sortAge": "Lâu không dùng nhất"
+    },
+    "kinds": {
+      "project": "Toàn bộ dự án",
+      "node_modules": "node_modules",
+      "orphan_node_modules": "node_modules không có dự án",
+      "build_cache": "Thư mục cache",
+      "project_content": "Nội dung dự án"
+    },
+    "method": {
+      "permanent": "Xoá vĩnh viễn",
+      "recycle": "Vào Thùng rác"
+    },
+    "riskLevel": {
+      "low": "Rủi ro thấp",
+      "medium": "Rủi ro trung bình",
+      "high": "Rủi ro cao"
+    },
+    "risk": {
+      "ORPHAN_NODE_MODULES": "Thư mục node_modules này không còn package.json ở thư mục cha.",
+      "NO_LOCKFILE": "Dự án không có lockfile, cài lại có thể không ra đúng các phiên bản cũ.",
+      "UNCOMMITTED_GIT_CHANGES": "Dự án có thay đổi Git chưa commit.",
+      "RECENTLY_ACTIVE": "Dự án có hoạt động trong 7 ngày gần đây.",
+      "DEV_PROCESS_RUNNING": "Có vẻ một tiến trình đang dùng dự án này.",
+      "LARGE_BATCH": "Đợt xoá lớn: từ 20 mục hoặc từ 5 GB.",
+      "DELETE_WHOLE_PROJECT": "Xoá toàn bộ thư mục dự án.",
+      "MACHINE_WIDE": "Thay đổi ảnh hưởng toàn máy.",
+      "UNVERIFIED_CLEANUP_TARGET": "Tên thư mục giống cache build nhưng dự án không dùng công cụ tương ứng.",
+      "RISK_CHECK_INCOMPLETE": "Chưa kiểm tra được đầy đủ Git hoặc tiến trình đang chạy.",
+      "DELETE_PROJECT_CONTENT": "Xoá file hoặc thư mục mã nguồn của dự án."
+    },
+    "actions": {
+      "findAndMeasure": "Tìm và đo",
+      "stopMeasuring": "Dừng đo",
+      "stopDeleting": "Dừng sau mục đang xoá",
+      "review": "Xem lại và xoá {formattedCount} mục…",
+      "previewSelection": "Xem trước {formattedCount} mục đã chọn",
+      "clearSelection": "Bỏ chọn tất cả",
+      "selectAll": "Chọn tất cả mục đã đo",
+      "selectTarget": "Chọn {path}",
+      "retryPoll": "Thử kiểm tra lại",
+      "resend": "Gửi lại yêu cầu xoá",
+      "abandon": "Bỏ qua",
+      "startOver": "Làm lại từ đầu",
+      "toProjects": "Về danh sách dự án",
+      "deleteNodeModules": "Xoá node_modules",
+      "deleteProject": "Xoá project (vào Thùng rác)",
+      "backToTree": "Quay lại cây thư mục",
+      "expand": "Mở {name}",
+      "collapse": "Thu gọn {name}",
+      "retryTree": "Tải lại"
+    },
+    "status": {
+      "idle": "Chưa có thao tác nào.",
+      "starting": "Đang bắt đầu xem trước…",
+      "measuring": "Đang đo và đánh giá rủi ro. Chưa có gì bị xoá.",
+      "cancellingPreview": "Đang dừng đo…",
+      "previewCompleted": "Xem trước hoàn tất. Chưa có gì bị xoá.",
+      "previewCancelled": "Đã dừng đo. Các mục đã đo vẫn chọn được. Chưa có gì bị xoá.",
+      "previewFailed": "Không hoàn tất được xem trước. Chưa có gì bị xoá.",
+      "executing": "Đang kiểm tra lại trước khi xoá…",
+      "unconfirmed": "Chưa rõ yêu cầu xoá đã tới backend hay chưa.",
+      "deleting": "Đang xoá…",
+      "stopping": "Đang dừng sau mục đang xoá…",
+      "completed": "Đã xử lý xong.",
+      "completedWithFailures": "Đã xử lý xong, có mục bị lỗi. Xem danh sách bên dưới.",
+      "cancelled": "Đã dừng. Các mục chưa xoá vẫn còn nguyên.",
+      "failed": "Thao tác xoá dừng do lỗi.",
+      "untracked": "Đã mất theo dõi thao tác xoá."
+    },
+    "currentPath": "Đang xử lý: {path}",
+    "progress": "Đã đo {measured}/{total} mục",
+    "listLabel": "Các mục có thể xoá",
+    "columns": {
+      "select": "Chọn",
+      "target": "Mục",
+      "reclaimable": "Giải phóng ước tính",
+      "size": "Kích thước · dùng chung",
+      "activity": "Hoạt động gần nhất",
+      "risk": "Rủi ro"
+    },
+    "targets": {
+      "pending": "Đang chờ đo",
+      "measuring": "Đang đo…",
+      "failed": "Không đo được",
+      "cancelled": "Đã dừng đo",
+      "onEmptyBin": "Giải phóng khi dọn Thùng rác",
+      "noData": "Chưa có số liệu",
+      "shared": "dùng chung"
+    },
+    "selection": {
+      "count": "Đã chọn {formattedCount} mục",
+      "reclaimable": "Giải phóng ước tính:",
+      "recycle": "Giải phóng khi dọn Thùng rác:",
+      "estimateHint": "Ước tính chỉ tính file không còn liên kết nào ngoài các mục được xoá, nên file dùng chung với pnpm store không được tính.",
+      "tooMany": "Mỗi lần xoá tối đa {formattedLimit} mục. Bỏ bớt mục đã chọn."
+    },
+    "dialog": {
+      "title": "Xoá {formattedCount} mục?",
+      "description": "Kiểm tra từng mục trước khi xác nhận. Mục xoá vĩnh viễn không thể khôi phục; mục vào Thùng rác có thể khôi phục trong Windows.",
+      "acknowledge": "Xác nhận từng rủi ro",
+      "understand": "Tôi hiểu: {reason}",
+      "listLabel": "Các mục sẽ bị xoá",
+      "nestedProjects": "Xoá kèm {formattedCount} dự án con",
+      "typeText": "Gõ chính xác <code>{text}</code> để xác nhận",
+      "confirm": "Xoá {formattedCount} mục",
+      "sending": "Đang kiểm tra lại…"
+    },
+    "unconfirmed": {
+      "title": "Chưa rõ yêu cầu xoá đã được nhận",
+      "description": "Kết nối tới backend bị ngắt trong lúc gửi. Gửi lại an toàn: bản xem trước này chỉ chạy một lần, nên nếu backend đã nhận thì sẽ trả về đúng thao tác đó thay vì xoá thêm lần nữa."
+    },
+    "results": {
+      "label": "Kết quả xoá",
+      "counts": {
+        "success": "Thành công: {formattedCount}",
+        "failed": "Lỗi: {formattedCount}",
+        "notStarted": "Chưa xoá: {formattedCount}",
+        "remaining": "Đang chờ: {formattedCount}"
+      },
+      "reclaimed": "Đã giải phóng ước tính:",
+      "estimateHint": "Con số lấy từ bản xem trước, không phải đo lại sau khi xoá.",
+      "recycledHint": "{formattedCount} mục đã vào Thùng rác và có thể khôi phục trong Windows; dung lượng chỉ trống lại khi dọn Thùng rác.",
+      "mayBePartial": "Mục này có thể đã bị xoá một phần, có thể cần cài lại.",
+      "status": {
+        "success": "Thành công",
+        "failed": "Lỗi",
+        "not_started": "Chưa xoá",
+        "running": "Đang xoá",
+        "pending": "Đang chờ"
+      },
+      "errors": {
+        "FILE_IN_USE": "File đang được chương trình khác mở. Đóng chương trình đó rồi thử lại.",
+        "ACCESS_DENIED": "Không có quyền xoá mục này.",
+        "TARGET_GONE": "Mục không còn tồn tại.",
+        "TARGET_CHANGED": "Mục đã thay đổi sau khi xem trước nên không xoá.",
+        "PATH_TOO_LONG": "Đường dẫn quá dài để xoá.",
+        "DELETE_FAILED": "Không xoá được mục này.",
+        "RECYCLE_BIN_DISABLED": "Thùng rác của ổ đĩa này đang tắt nên không xoá.",
+        "RECYCLE_BIN_TOO_SMALL": "Mục lớn hơn dung lượng Thùng rác nên không xoá.",
+        "RECYCLE_FAILED": "Không chuyển được vào Thùng rác; mục vẫn còn nguyên.",
+        "RECYCLE_UNAVAILABLE": "Thùng rác không dùng được trên máy này; mục vẫn còn nguyên.",
+        "AUDIT_WRITE_FAILED": "Không ghi được nhật ký nên đã dừng các mục còn lại.",
+        "UNKNOWN": "Không xoá được mục này."
+      }
+    },
+    "failures": {
+      "INVALID_PATH": "Đường dẫn không hợp lệ.",
+      "NOT_FOUND": "Mục không còn tồn tại.",
+      "DENYLISTED": "Đường dẫn được bảo vệ.",
+      "OUTSIDE_ALLOWLIST": "Đường dẫn nằm ngoài phạm vi được phép.",
+      "IS_LINK": "Đây là liên kết nên không xoá.",
+      "OUTSIDE_SCANNED_PROJECT": "Mục không thuộc dự án đã quét.",
+      "PROJECT_CHANGED": "Dự án đã thay đổi sau lần quét. Quét lại để cập nhật.",
+      "NOT_ORPHAN": "Thư mục cha đã có package.json, không còn là node_modules không có dự án.",
+      "UNSUPPORTED_TYPE": "Loại mục này chưa được hỗ trợ.",
+      "STAT_FAILED": "Không đọc được mục này.",
+      "UNKNOWN": "Không dùng được mục này."
+    },
+    "errors": {
+      "noScan": "Chưa có kết quả quét. Quét dự án trước rồi thử lại.",
+      "previewLost": "Bản xem trước không còn, có thể backend vừa khởi động lại. Xem trước lại để tiếp tục; chưa có gì bị xoá từ bản này.",
+      "operationLost": "Không còn theo dõi được thao tác xoá, có thể backend vừa khởi động lại. Không biết chắc những gì đã bị xoá; quét lại để kiểm tra.",
+      "conflict": "Đang có lần quét, phép đo hoặc thao tác xoá khác chạy, hoặc bản xem trước này đã được dùng. Chờ xong rồi xem trước lại.",
+      "scanChanged": "Kết quả quét đã đổi sau khi xem trước. Xem trước lại; chưa có gì bị xoá.",
+      "riskChanged": "Rủi ro đã tăng sau khi xem trước. Xem trước lại; chưa có gì bị xoá.",
+      "targetChanged": "Một số mục đã thay đổi sau khi xem trước. Xem trước lại; chưa có gì bị xoá.",
+      "validation": "Xác nhận không khớp hoặc lựa chọn không hợp lệ. Kiểm tra lại rồi thử lại.",
+      "tooLarge": "Danh sách đã chọn quá lớn. Bỏ bớt mục rồi thử lại.",
+      "rateLimited": "Có quá nhiều yêu cầu. Chờ một chút rồi thử lại.",
+      "forbidden": "Đường dẫn bị bảo vệ hoặc nằm ngoài phạm vi được phép.",
+      "backendUnavailable": "Không kết nối được tới backend trên máy này.",
+      "invalidResponse": "Backend trả về dữ liệu không hợp lệ.",
+      "internal": "Backend gặp lỗi nội bộ nên chưa xoá gì. Kiểm tra quyền ghi nhật ký rồi thử lại.",
+      "generic": "Yêu cầu chưa thành công. Vui lòng thử lại.",
+      "pollPaused": "Đã dừng kiểm tra tiến độ; thao tác trên backend vẫn tiếp tục. Bấm Thử kiểm tra lại, sẽ không gửi lại lệnh xoá."
+    },
+    "empty": {
+      "noTargets": "Không có mục nào khớp bộ lọc.",
+    "stoppedEarly": "Đã dừng trước khi đo xong mục nào."
+    },
+    "tree": {
+      "loading": "Đang tải thư mục…",
+      "gone": "Thư mục không còn tồn tại.",
+      "failed": "Không tải được thư mục này.",
+      "empty": "Thư mục trống.",
+      "truncated": "Chỉ hiện {limit} mục đầu tiên của thư mục này.",
+      "link": "Liên kết, không chọn riêng được"
     }
   },
   "designSystem": {
@@ -422,6 +644,12 @@
         "confirm": "Xoá {count} mục",
         "toastTitle": "Đã xoá {count} mục",
         "toastDescription": "Đây là bản demo, không có file nào bị xoá thật."
+      },
+      "riskDemo": {
+        "title": "Xác nhận theo mức rủi ro",
+        "description": "Mức thấp chỉ cần bấm xác nhận; trung bình phải tick từng rủi ro; cao phải tick và gõ đúng chuỗi. Nút Huỷ được focus sẵn. Bản demo: không gọi API.",
+        "triggers": { "low": "Thử mức thấp", "medium": "Thử mức trung bình", "high": "Thử mức cao" },
+        "toast": "Đây là bản demo, không có file nào bị xoá thật."
       }
     }
   }

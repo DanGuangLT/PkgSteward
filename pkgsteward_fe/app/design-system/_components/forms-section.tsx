@@ -93,6 +93,12 @@ export async function FormsSection() {
                 </Label>
               </div>
             ))}
+            <div className="flex items-center gap-3">
+              <Checkbox id="ds-check-src" checked="indeterminate" />
+              <Label htmlFor="ds-check-src" className="font-mono text-body-sm font-normal">
+                src
+              </Label>
+            </div>
           </fieldset>
         </ShowcaseItem>
 

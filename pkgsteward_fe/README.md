@@ -85,6 +85,39 @@ each expansion starts a separate directory measurement. Breadcrumb history keeps
 and going back restores a snapshot without measuring again. **Recalculate displayed result** forces a fresh measurement and clears
 the backend size cache; ordinary measurements may reuse cached results.
 
+## File operations
+
+**Cleanup** (`/cleanup`) finds `node_modules`, `node_modules` without a project and build cache folders in the latest
+scan. **Project files** (`/files?path=...`, opened from **Manage files** in the project list) shows one folder level at a
+time, with checkboxes, plus shortcuts to delete `node_modules` or the whole project. Opening or reloading either page
+never starts anything.
+
+Every deletion follows the same steps:
+
+1. **Preview.** The backend measures each target and assesses its risk. Nothing is deleted. Measuring can be stopped;
+   measured items stay selectable.
+2. **Review.** Cleanup preselects what the backend recommends; items without a lockfile, cache folders and orphans start
+   unselected. Paths chosen in the file tree all start selected.
+3. **Confirm.** Low risk needs the confirm button, medium needs every risk ticked, and high also needs the exact text
+   shown in the dialog. Cancel has focus when the dialog opens.
+4. **Delete.** Items are deleted one at a time and each reports its own result. **Stop** takes effect after the current
+   item; that item cannot be interrupted.
+
+`node_modules` and build cache folders are deleted permanently. Whole projects and project content go to the Windows
+Recycle Bin and are never deleted permanently as a fallback.
+
+**Estimated space freed** counts only files with no links outside the deleted items, so files shared with the pnpm store
+are not included. Recycle Bin items free their space when the bin is emptied, so they are reported separately.
+
+Browser requests use same-origin Route Handlers under `/api/file-ops/`, which mirror the backend's file operations API.
+Polling works as it does for disk usage. The deletion request has no client timeout because the backend rechecks every
+target first. If its response is lost, the page says the outcome is unknown and never resends by itself: **Send the
+delete request again** is safe, because a preview runs only once and the backend returns the same operation.
+
+While the page is idle it checks about every 3 seconds for a running deletion, so a deletion started earlier, or in another
+tab, is picked up. After a reload the page also resumes a preview it started, using `sessionStorage`. A preview started in
+another tab cannot be resumed; wait for it to finish before starting a new one.
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:
@@ -116,15 +149,16 @@ To add a language: copy `messages/en.json` to `messages/<code>.json` and transla
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin scan and disk usage Route Handlers
+app/api/              Same-origin scan, disk usage and file operation Route Handlers
 components/ui/        shadcn/ui components (adapted to the theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
 i18n/, messages/      next-intl config and translations
-hooks/                Client scan and disk usage polling and cancellation
-lib/api/              Backend client, transport, contracts and scan / disk usage requests
+hooks/                Client scan, disk usage, file operation and file tree state
+lib/api/              Backend client, transport, contracts and feature requests
 lib/disk-usage/       Measurement polling and presentation policy
+lib/file-ops/         Selection, confirmation, deletion flow and list helpers
 lib/projects/         Project filtering, sorting and display helpers
 lib/scans/            Scan polling and completion policy
 lib/theme/            Theme preset registry

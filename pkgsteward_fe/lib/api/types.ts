@@ -113,3 +113,147 @@ export interface DiskUsageJob extends DiskUsageStart {
   cacheHit: boolean
   failureCode: "NOT_FOUND" | "FORBIDDEN" | "INTERNAL_SERVER_ERROR" | null
 }
+
+export type RiskLevel = "low" | "medium" | "high"
+export type RiskCode =
+  | "ORPHAN_NODE_MODULES"
+  | "NO_LOCKFILE"
+  | "UNCOMMITTED_GIT_CHANGES"
+  | "RECENTLY_ACTIVE"
+  | "DEV_PROCESS_RUNNING"
+  | "LARGE_BATCH"
+  | "DELETE_WHOLE_PROJECT"
+  | "MACHINE_WIDE"
+  | "UNVERIFIED_CLEANUP_TARGET"
+  | "RISK_CHECK_INCOMPLETE"
+  | "DELETE_PROJECT_CONTENT"
+
+export interface RiskReason {
+  code: RiskCode
+  level: RiskLevel
+  message: string
+}
+
+export interface Risk {
+  level: RiskLevel
+  reasons: RiskReason[]
+}
+
+export type FileOpsKind = "project" | "node_modules" | "orphan_node_modules" | "build_cache" | "project_content"
+export type CleanupKind = "node_modules" | "orphan_node_modules" | "build_cache"
+export type FileOpsMethod = "permanent" | "recycle"
+export type FileOpsPreviewStatus = "running" | "completed" | "cancelled" | "failed"
+export type FileOpsOperationStatus = "running" | "stopping" | "completed" | "cancelled" | "failed"
+
+export interface FileOpsOwner {
+  path: string
+  name: string | null
+}
+
+export interface CleanupPreviewInput {
+  includeKinds?: CleanupKind[]
+  olderThanDays?: number
+  minSizeBytes?: number
+  projectPaths?: string[]
+}
+
+export interface FileOpsPreviewStart {
+  previewId: string
+  status: FileOpsPreviewStatus
+}
+
+export interface FileOpsTargetSize {
+  status: "pending" | "measuring" | "done" | "failed" | "cancelled"
+  apparentBytes: number | null
+  sizeBytes: number | null
+  reclaimableBytes: number | null
+  sharedBytes: number | null
+  fileCount: number | null
+}
+
+export interface FileOpsTarget {
+  path: string
+  kind: FileOpsKind | null
+  method: FileOpsMethod | null
+  valid: boolean
+  failureCode: string | null
+  owner: FileOpsOwner | null
+  nestedProjects: string[]
+  hasLockfile: boolean | null
+  lastActivityAt: string | null
+  size: FileOpsTargetSize
+  risk: Risk
+  defaultSelected: boolean
+}
+
+export interface FileOpsPreview extends FileOpsPreviewStart {
+  source: "cleanup" | "delete"
+  scanId: string
+  progress: { measuredTargets: number; totalTargets: number }
+  targets: FileOpsTarget[]
+  risk: Risk
+  confirmText: string | null
+  operationId: string | null
+  startedAt: string
+  finishedAt?: string
+  failureCode: string | null
+}
+
+export interface FileOpsSummary {
+  paths: string[]
+  risk: Risk
+  confirmText: string | null
+  totals: {
+    targetCount: number
+    reclaimableBytes: number
+    recycleBytes: number
+  }
+}
+
+export interface FileOpsExecuteInput {
+  previewId: string
+  paths: string[]
+  confirm: true
+  acknowledgedRisks?: RiskCode[]
+  confirmText?: string
+}
+
+export interface FileOpsOperationStart {
+  operationId: string
+  status: FileOpsOperationStatus
+}
+
+export interface FileOpsTargetResult {
+  path: string
+  kind: FileOpsKind
+  method: FileOpsMethod
+  status: "pending" | "running" | "success" | "failed" | "not_started"
+  errorCode: string | null
+  mayBePartial: boolean
+  reclaimableBytes: number | null
+}
+
+export interface FileOpsOperation extends FileOpsOperationStart {
+  previewId: string
+  currentPath: string | null
+  results: FileOpsTargetResult[]
+  startedAt: string
+  finishedAt?: string
+}
+
+export type FileTreeEntryType = "directory" | "file" | "link" | "other"
+
+export interface FileTreeEntry {
+  name: string
+  path: string
+  type: FileTreeEntryType
+  sizeBytes: number | null
+  selectable: boolean
+}
+
+export interface FileTreeLevel {
+  path: string
+  owner: { path: string; name: string | null }
+  entries: FileTreeEntry[]
+  truncated: boolean
+}
