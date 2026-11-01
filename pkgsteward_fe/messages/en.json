@@ -16,6 +16,7 @@
     "openMenu": "Open menu",
     "projects": "Projects",
     "diskUsage": "Disk usage",
+    "cleanup": "Cleanup",
     "designSystem": "Design system"
   },
   "theme": {
@@ -88,6 +89,7 @@
       "measuredAt": "Measured at"
     },
     "actions": {
+      "manageFiles": "Manage files",
       "first": "Scan projects",
       "rescan": "Rescan",
       "cancel": "Cancel scan",
@@ -206,6 +208,224 @@
       "invalidResponse": "The backend returned invalid data.",
       "pollPaused": "Progress checks have stopped. Retry the progress check or cancel the measurement; requests will not retry automatically.",
       "generic": "The request did not succeed. Please try again."
+    }
+  },
+  "fileOps": {
+    "cleanup": {
+      "title": "Clean up folders",
+      "description": "Find node_modules, node_modules without a project and cache folders in the latest scan, measure them, then choose what to delete. Opening or reloading this page runs nothing."
+    },
+    "files": {
+      "title": "Project files",
+      "description": "Choose the files or folders to delete. Every action goes through a preview and a confirmation.",
+      "noProject": {
+        "title": "No project selected",
+        "description": "Open Manage files from the project list."
+      },
+      "missingProject": {
+        "title": "Project not found",
+        "description": "This project is not in the latest scan and may have just been deleted. Scan again to update."
+      },
+      "loadFailed": {
+        "title": "Could not load the project",
+        "description": "The scan result could not be read from the backend. Check the backend, then reload the page."
+      }
+    },
+    "filters": {
+      "kinds": "Folder types",
+      "olderThanDays": "Inactive for (days)",
+      "minSizeMib": "Size from (MiB)",
+      "hint": "Leave a number empty to skip that filter. Finding and measuring deletes nothing.",
+      "invalid": "Choose at least one folder type. Days and size must be whole numbers, zero or more.",
+      "sort": "Sort by",
+      "sortSize": "Most space freed",
+      "sortAge": "Longest unused"
+    },
+    "kinds": {
+      "project": "Whole project",
+      "node_modules": "node_modules",
+      "orphan_node_modules": "node_modules without a project",
+      "build_cache": "Cache folder",
+      "project_content": "Project content"
+    },
+    "method": {
+      "permanent": "Delete permanently",
+      "recycle": "To Recycle Bin"
+    },
+    "riskLevel": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "risk": {
+      "ORPHAN_NODE_MODULES": "This node_modules folder has no package.json in its parent folder.",
+      "NO_LOCKFILE": "The project has no lockfile, so reinstalling may not restore the same versions.",
+      "UNCOMMITTED_GIT_CHANGES": "The project has uncommitted Git changes.",
+      "RECENTLY_ACTIVE": "The project was active within the last 7 days.",
+      "DEV_PROCESS_RUNNING": "A running process appears to use this project.",
+      "LARGE_BATCH": "Large batch: 20 or more items, or 5 GB or more.",
+      "DELETE_WHOLE_PROJECT": "Deletes the whole project folder.",
+      "MACHINE_WIDE": "Changes something for the whole machine.",
+      "UNVERIFIED_CLEANUP_TARGET": "The folder name matches a build cache, but the project does not use the matching tool.",
+      "RISK_CHECK_INCOMPLETE": "Git or running processes could not be fully checked.",
+      "DELETE_PROJECT_CONTENT": "Deletes project source files or folders."
+    },
+    "actions": {
+      "findAndMeasure": "Find and measure",
+      "stopMeasuring": "Stop measuring",
+      "stopDeleting": "Stop after the current item",
+      "review": "{count, plural, one {Review and delete {formattedCount} item…} other {Review and delete {formattedCount} items…}}",
+      "previewSelection": "{count, plural, one {Preview {formattedCount} selected item} other {Preview {formattedCount} selected items}}",
+      "clearSelection": "Clear selection",
+      "selectAll": "Select all measured items",
+      "selectTarget": "Select {path}",
+      "retryPoll": "Retry progress check",
+      "resend": "Send the delete request again",
+      "abandon": "Dismiss",
+      "startOver": "Start over",
+      "toProjects": "Back to projects",
+      "deleteNodeModules": "Delete node_modules",
+      "deleteProject": "Delete project (to Recycle Bin)",
+      "backToTree": "Back to the file tree",
+      "expand": "Open {name}",
+      "collapse": "Collapse {name}",
+      "retryTree": "Reload"
+    },
+    "status": {
+      "idle": "Nothing is running.",
+      "starting": "Starting the preview…",
+      "measuring": "Measuring and assessing risk. Nothing has been deleted.",
+      "cancellingPreview": "Stopping the measurement…",
+      "previewCompleted": "Preview finished. Nothing has been deleted.",
+      "previewCancelled": "Measurement stopped. Measured items can still be selected. Nothing has been deleted.",
+      "previewFailed": "The preview could not finish. Nothing has been deleted.",
+      "executing": "Checking again before deleting…",
+      "unconfirmed": "It is not known whether the delete request reached the backend.",
+      "deleting": "Deleting…",
+      "stopping": "Stopping after the current item…",
+      "completed": "Finished.",
+      "completedWithFailures": "Finished, but some items failed. See the list below.",
+      "cancelled": "Stopped. Items not yet deleted are untouched.",
+      "failed": "Deletion stopped because of an error.",
+      "untracked": "Lost track of the delete operation."
+    },
+    "currentPath": "Working on: {path}",
+    "progress": "Measured {measured} of {total} items",
+    "listLabel": "Items that can be deleted",
+    "columns": {
+      "select": "Select",
+      "target": "Item",
+      "reclaimable": "Estimated space freed",
+      "size": "Size · shared",
+      "activity": "Latest activity",
+      "risk": "Risk"
+    },
+    "targets": {
+      "pending": "Waiting to measure",
+      "measuring": "Measuring…",
+      "failed": "Could not measure",
+      "cancelled": "Measurement stopped",
+      "onEmptyBin": "Freed when the Recycle Bin is emptied",
+      "noData": "No data yet",
+      "shared": "shared"
+    },
+    "selection": {
+      "count": "{count, plural, one {{formattedCount} item selected} other {{formattedCount} items selected}}",
+      "reclaimable": "Estimated space freed:",
+      "recycle": "Freed when the Recycle Bin is emptied:",
+      "estimateHint": "The estimate counts only files with no links outside the deleted items, so files shared with the pnpm store are not included.",
+      "tooMany": "You can delete at most {formattedLimit} items at once. Clear some of the selection."
+    },
+    "dialog": {
+      "title": "{count, plural, one {Delete {formattedCount} item?} other {Delete {formattedCount} items?}}",
+      "description": "Check each item before you confirm. Permanently deleted items cannot be restored; items in the Recycle Bin can be restored in Windows.",
+      "acknowledge": "Confirm each risk",
+      "understand": "I understand: {reason}",
+      "listLabel": "Items to delete",
+      "nestedProjects": "{count, plural, one {Also deletes {formattedCount} nested project} other {Also deletes {formattedCount} nested projects}}",
+      "typeText": "Type <code>{text}</code> exactly to confirm",
+      "confirm": "{count, plural, one {Delete {formattedCount} item} other {Delete {formattedCount} items}}",
+      "sending": "Checking again…"
+    },
+    "unconfirmed": {
+      "title": "The delete request may not have arrived",
+      "description": "The connection to the backend dropped while sending. Sending again is safe: this preview runs only once, so if the backend already received it you get that same operation instead of a second deletion."
+    },
+    "results": {
+      "label": "Deletion results",
+      "counts": {
+        "success": "Succeeded: {formattedCount}",
+        "failed": "Failed: {formattedCount}",
+        "notStarted": "Not deleted: {formattedCount}",
+        "remaining": "Waiting: {formattedCount}"
+      },
+      "reclaimed": "Estimated space freed:",
+      "estimateHint": "This number comes from the preview, not from measuring again after deletion.",
+      "recycledHint": "{count, plural, one {{formattedCount} item went to the Recycle Bin and can be restored in Windows} other {{formattedCount} items went to the Recycle Bin and can be restored in Windows}}; the space comes back when the Recycle Bin is emptied.",
+      "mayBePartial": "This item may be partly deleted and may need reinstalling.",
+      "status": {
+        "success": "Succeeded",
+        "failed": "Failed",
+        "not_started": "Not deleted",
+        "running": "Deleting",
+        "pending": "Waiting"
+      },
+      "errors": {
+        "FILE_IN_USE": "A file is open in another program. Close it, then try again.",
+        "ACCESS_DENIED": "You do not have permission to delete this item.",
+        "TARGET_GONE": "The item no longer exists.",
+        "TARGET_CHANGED": "The item changed after the preview, so it was not deleted.",
+        "PATH_TOO_LONG": "The path is too long to delete.",
+        "DELETE_FAILED": "This item could not be deleted.",
+        "RECYCLE_BIN_DISABLED": "The Recycle Bin is turned off on this drive, so nothing was deleted.",
+        "RECYCLE_BIN_TOO_SMALL": "The item is larger than the Recycle Bin, so it was not deleted.",
+        "RECYCLE_FAILED": "The item could not be moved to the Recycle Bin and is unchanged.",
+        "RECYCLE_UNAVAILABLE": "The Recycle Bin is not available on this machine; the item is unchanged.",
+        "AUDIT_WRITE_FAILED": "The log could not be written, so the remaining items were stopped.",
+        "UNKNOWN": "This item could not be deleted."
+      }
+    },
+    "failures": {
+      "INVALID_PATH": "The path is not valid.",
+      "NOT_FOUND": "The item no longer exists.",
+      "DENYLISTED": "This path is protected.",
+      "OUTSIDE_ALLOWLIST": "This path is outside the allowed scope.",
+      "IS_LINK": "This is a link, so it is not deleted.",
+      "OUTSIDE_SCANNED_PROJECT": "The item is not in a scanned project.",
+      "PROJECT_CHANGED": "The project changed after the scan. Scan again to update.",
+      "NOT_ORPHAN": "The parent folder now has a package.json, so this node_modules belongs to a project.",
+      "UNSUPPORTED_TYPE": "This type of item is not supported.",
+      "STAT_FAILED": "This item could not be read.",
+      "UNKNOWN": "This item cannot be used."
+    },
+    "errors": {
+      "noScan": "There is no scan result yet. Scan your projects, then try again.",
+      "previewLost": "The preview is gone; the backend may have restarted. Preview again to continue. Nothing was deleted from this preview.",
+      "operationLost": "The delete operation can no longer be tracked; the backend may have restarted. The results below may be out of date. Scan again to check.",
+      "conflict": "A scan, measurement or deletion is running, or this preview was already used. Wait for it to finish, then preview again.",
+      "scanChanged": "The scan result changed after the preview. Preview again. Nothing was deleted.",
+      "riskChanged": "The risk increased after the preview. Preview again. Nothing was deleted.",
+      "targetChanged": "Some items changed after the preview. Preview again. Nothing was deleted.",
+      "validation": "The confirmation does not match or the selection is not valid. Check it and try again.",
+      "tooLarge": "The selected list is too large. Remove some items and try again.",
+      "rateLimited": "Too many requests. Wait a moment, then try again.",
+      "forbidden": "This path is protected or outside the allowed scope.",
+      "backendUnavailable": "Could not reach the backend on this machine.",
+      "invalidResponse": "The backend returned invalid data.",
+      "internal": "The backend hit an internal error, so nothing was deleted. Check that the log can be written, then try again.",
+      "generic": "The request did not succeed. Please try again.",
+      "pollPaused": "Progress checks are paused; the backend keeps working. Select Retry progress check; the delete command is not sent again."
+    },
+    "empty": {
+      "noTargets": "No items match the filters."
+    },
+    "tree": {
+      "loading": "Loading folder…",
+      "gone": "The folder no longer exists.",
+      "failed": "This folder could not be loaded.",
+      "empty": "This folder is empty.",
+      "truncated": "Showing only the first {limit} items of this folder.",
+      "link": "Link, cannot be selected"
     }
   },
   "designSystem": {
@@ -422,6 +642,12 @@
         "confirm": "{count, plural, one {Delete # item} other {Delete # items}}",
         "toastTitle": "{count, plural, one {Deleted # item} other {Deleted # items}}",
         "toastDescription": "This is a demo — no files were actually deleted."
+      },
+      "riskDemo": {
+        "title": "Confirmation by risk level",
+        "description": "Low risk needs only the confirm button; medium needs each risk ticked; high needs the ticks and the exact text typed. Cancel has focus first. Demo: no API calls.",
+        "triggers": { "low": "Try low risk", "medium": "Try medium risk", "high": "Try high risk" },
+        "toast": "This is a demo — no files were actually deleted."
       }
     }
   }
