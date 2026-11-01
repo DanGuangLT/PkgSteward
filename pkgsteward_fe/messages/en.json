@@ -226,6 +226,7 @@
         "title": "Project not found",
         "description": "This project is not in the latest scan and may have just been deleted. Scan again to update."
       },
+      "otherPreview": "This preview was started elsewhere and includes items outside this project. Check the paths before deleting.",
       "loadFailed": {
         "title": "Could not load the project",
         "description": "The scan result could not be read from the backend. Check the backend, then reload the page."
@@ -401,7 +402,7 @@
     "errors": {
       "noScan": "There is no scan result yet. Scan your projects, then try again.",
       "previewLost": "The preview is gone; the backend may have restarted. Preview again to continue. Nothing was deleted from this preview.",
-      "operationLost": "The delete operation can no longer be tracked; the backend may have restarted. The results below may be out of date. Scan again to check.",
+      "operationLost": "The delete operation can no longer be tracked; the backend may have restarted. It is not known what was deleted. Scan again to check.",
       "conflict": "A scan, measurement or deletion is running, or this preview was already used. Wait for it to finish, then preview again.",
       "scanChanged": "The scan result changed after the preview. Preview again. Nothing was deleted.",
       "riskChanged": "The risk increased after the preview. Preview again. Nothing was deleted.",
@@ -417,7 +418,8 @@
       "pollPaused": "Progress checks are paused; the backend keeps working. Select Retry progress check; the delete command is not sent again."
     },
     "empty": {
-      "noTargets": "No items match the filters."
+      "noTargets": "No items match the filters.",
+    "stoppedEarly": "Stopped before any item was measured."
     },
     "tree": {
       "loading": "Loading folder…",

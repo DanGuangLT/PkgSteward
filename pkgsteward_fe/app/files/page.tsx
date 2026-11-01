@@ -22,13 +22,12 @@ export default async function FilesPage({ searchParams }: { searchParams: Promis
   const [query, t] = await Promise.all([searchParams, getTranslations("fileOps")])
   const path = typeof query.path === "string" ? query.path : ""
   const { project, failed } = path ? await findProject(path) : { project: null, failed: false }
-  const referenceTime = new Date().toISOString()
   const message = failed ? "loadFailed" : path ? "missingProject" : "noProject"
 
   return (
     <Container className="flex min-w-0 flex-1 flex-col gap-8 py-8 md:py-12 lg:py-16">
       <h1 className="text-heading-xl">{t("files.title")}</h1>
-      {project ? <FilesPanel key={project.path} project={project} referenceTime={referenceTime} /> : (
+      {project ? <FilesPanel key={project.path} project={project} /> : (
         <Empty>
           <EmptyHeader>
             <EmptyTitle>{t(`files.${message}.title`)}</EmptyTitle>

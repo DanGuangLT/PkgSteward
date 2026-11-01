@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { FileOpsJob } from "@/components/features/file-ops/file-ops-job"
@@ -11,9 +11,9 @@ import { Button } from "@/components/ui/button"
 import { useFileOps } from "@/hooks/use-file-ops"
 import { useFileTree } from "@/hooks/use-file-tree"
 import type { FileTreeEntry, ScannedProject } from "@/lib/api/types"
-import { MAX_DELETE_PATHS, toggleTreePath } from "@/lib/file-ops/tree-selection"
+import { MAX_DELETE_PATHS, isInsidePath, toggleTreePath } from "@/lib/file-ops/tree-selection"
 
-export function FilesPanel({ project, referenceTime }: { project: ScannedProject; referenceTime: string }) {
+export function FilesPanel({ project }: { project: ScannedProject }) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const router = useRouter()
@@ -21,8 +21,13 @@ export function FilesPanel({ project, referenceTime }: { project: ScannedProject
   const tree = useFileTree(project.path)
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set())
   const { state } = controller
-  const picking = state.operation === null && (state.phase === "idle" || state.phase === "starting")
+  const reviewAction = useRef<HTMLButtonElement>(null)
+  const picking = state.phase === "idle" || state.phase === "starting"
   const busy = state.phase === "starting"
+  // Job là toàn cục: preview bắt đầu ở /cleanup có thể nối lại ngay trên trang này.
+  const startedElsewhere = state.preview?.targets.some(({ path }) => (
+    path !== project.path && !isInsidePath(project.path, path)
+  ))
   const count = selected.size
   const tooMany = count > MAX_DELETE_PATHS
 
@@ -46,8 +51,9 @@ export function FilesPanel({ project, referenceTime }: { project: ScannedProject
       </div>
       <p className="text-body-sm text-muted-foreground">{t("files.description")}</p>
 
-      <FileOpsJob controller={controller} onStartOver={startOver} />
-      <PreviewReview controller={controller} referenceTime={referenceTime} />
+      <FileOpsJob controller={controller} returnFocusRef={reviewAction} onStartOver={startOver} />
+      {startedElsewhere ? <p role="status" className="text-body-sm font-semibold">{t("files.otherPreview")}</p> : null}
+      <PreviewReview controller={controller} actionRef={reviewAction} />
       {state.phase === "reviewing" ? (
         <Button type="button" variant="secondary" className="self-start" onClick={controller.reset}>{t("actions.backToTree")}</Button>
       ) : null}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslations } from "next-intl"
 
 import { CLEANUP_KINDS, CleanupFilters } from "@/components/features/file-ops/cleanup-filters"
@@ -9,10 +9,11 @@ import { PreviewReview } from "@/components/features/file-ops/preview-review"
 import { useFileOps } from "@/hooks/use-file-ops"
 import { cleanupPreviewInput, type CleanupFilterForm } from "@/lib/file-ops/file-ops-list"
 
-export function CleanupPanel({ referenceTime }: { referenceTime: string }) {
+export function CleanupPanel() {
   const t = useTranslations("fileOps")
   const controller = useFileOps()
   const { state } = controller
+  const reviewAction = useRef<HTMLButtonElement>(null)
   const [form, setForm] = useState<CleanupFilterForm>({ kinds: [...CLEANUP_KINDS], olderThanDays: "", minSizeMib: "" })
   const input = cleanupPreviewInput(form)
   const idle = state.phase === "idle" || state.phase === "reviewing" || state.phase === "finished"
@@ -22,8 +23,8 @@ export function CleanupPanel({ referenceTime }: { referenceTime: string }) {
       <p className="text-body-sm text-muted-foreground">{t("cleanup.description")}</p>
       <CleanupFilters form={form} disabled={!idle} invalid={input === null} onChange={setForm}
         onSubmit={() => { if (input) void controller.startCleanup(input) }} />
-      <FileOpsJob controller={controller} onStartOver={controller.reset} />
-      <PreviewReview controller={controller} referenceTime={referenceTime} />
+      <FileOpsJob controller={controller} returnFocusRef={reviewAction} onStartOver={controller.reset} />
+      <PreviewReview controller={controller} actionRef={reviewAction} />
     </section>
   )
 }

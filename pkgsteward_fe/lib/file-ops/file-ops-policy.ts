@@ -18,6 +18,8 @@ export type FileOpsUiState = FileOpsContext & (
   | { phase: "unconfirmed"; input: FileOpsExecuteInput; summary: FileOpsSummary | null }
   | { phase: "operating"; operationId: string; cancelPending: boolean; errorCode?: string }
   | { phase: "finished" }
+  // Backend đã mất dấu việc xoá có thể đã chạy: không được nói "chưa xoá gì".
+  | { phase: "lost" }
 )
 
 export interface FileOpsError {
@@ -59,8 +61,8 @@ export function fileOpsStatusKey(state: FileOpsUiState): `status.${FileOpsStatus
       return state.operation?.results.some(({ status }) => status === "failed")
         ? "status.completedWithFailures"
         : "status.completed"
-    case "idle":
-      return state.operation && !fileOpsOperationIsTerminal(state.operation.status) ? "status.untracked" : "status.idle"
+    case "lost": return "status.untracked"
+    case "idle": return "status.idle"
   }
 }
 
@@ -122,7 +124,7 @@ export function fileOpsBeginCancel(state: FileOpsUiState): FileOpsUiState {
 export function fileOpsPollFailure(state: FileOpsUiState, code: string, statusCode?: number): FileOpsUiState {
   if (state.phase !== "measuring" && state.phase !== "operating") return state
   if (code === "NOT_FOUND" || statusCode === 404) {
-    return { phase: "idle", preview: null, operation: state.operation }
+    return state.phase === "operating" ? { phase: "lost", preview: null, operation: state.operation } : fileOpsInitialState
   }
   return { ...state, cancelPending: false, errorCode: code }
 }
@@ -164,6 +166,8 @@ export function fileOpsBeginExecute(state: FileOpsUiState, input?: FileOpsExecut
 export function fileOpsExecuteFailure(state: FileOpsUiState, code: string): FileOpsUiState {
   if (state.phase !== "executing") return state
   const { preview, operation, input, summary } = state
+  // Gửi lại nhận 404: backend mất preview nên không còn gì chứng minh lần đầu chưa chạy.
+  if (state.resend && code === "NOT_FOUND") return { phase: "lost", preview: null, operation }
   if (STALE_PREVIEW_CODES.has(code)) return fileOpsInitialState
   // Lần gửi lại bị từ chối không cho biết lần đầu ra sao, trừ khi chính xác nhận bị sai.
   // CONFLICT: preflight của lần trước có thể vẫn đang giữ cổng.
@@ -187,10 +191,15 @@ export function fileOpsFollowOperation(state: FileOpsUiState, operation: FileOps
     : state
 }
 
+// Bản đo xong trong lúc rời trang vẫn dùng được: chỉ đọc, chưa execute lần nào.
 export function fileOpsResumePreview(state: FileOpsUiState, preview: FileOpsPreview): FileOpsUiState {
-  return state.phase === "idle" && preview.status === "running"
-    ? { phase: "measuring", previewId: preview.previewId, cancelPending: false, preview, operation: null }
-    : state
+  if (state.phase !== "idle") return state
+  if (preview.status === "running") {
+    return { phase: "measuring", previewId: preview.previewId, cancelPending: false, preview, operation: null }
+  }
+  return preview.status === "failed" || preview.operationId !== null
+    ? state
+    : { phase: "reviewing", preview, operation: null, summary: null, summarizing: false }
 }
 
 export function fileOpsAcceptOperation(
@@ -212,7 +221,7 @@ export function fileOpsReceiveOperation(state: FileOpsUiState, operation: FileOp
 }
 
 export function fileOpsReset(state: FileOpsUiState): FileOpsUiState {
-  return state.phase === "idle" || state.phase === "reviewing" || state.phase === "finished"
+  return state.phase === "idle" || state.phase === "reviewing" || state.phase === "finished" || state.phase === "lost"
     ? fileOpsInitialState
     : state
 }

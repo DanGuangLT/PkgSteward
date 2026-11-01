@@ -63,7 +63,7 @@ test("totals split permanent space from Recycle Bin space and ignore the unselec
     target("c", { method: "recycle", size: size({ sizeBytes: 7, reclaimableBytes: 2 }) }),
     target("d", { size: size({ reclaimableBytes: 100 }) }),
   ]
-  assert.deepEqual(reviewTotals(targets, new Set(["a", "b", "c"])), { count: 3, reclaimableBytes: 8, recycleBytes: 7 })
+  assert.deepEqual(reviewTotals(targets, new Set(["a", "b", "c"])), { count: 3, reclaimableBytes: 8, recycleBytes: 2 })
 })
 
 test("filters build the request, empty fields stay out", () => {
@@ -104,7 +104,7 @@ test("results count every status and estimate only successful permanent deletion
     ],
   }
   assert.deepEqual(operationCounts(operation), {
-    success: 2, failed: 1, notStarted: 1, remaining: 2, recycled: 1, partial: 1, reclaimedBytes: 5,
+    success: 2, failed: 1, notStarted: 1, remaining: 2, recycled: 1, reclaimedBytes: 5,
   })
 })
 
@@ -126,11 +126,13 @@ test("unknown codes fall back to the generic message", () => {
 })
 
 test("error messages depend on where the failure happened", () => {
-  const operation = { status: "running" }
   const key = (code, source, state = fileOpsInitialState) => fileOpsErrorKey({ code, paths: [], source }, state)
+  const lost = { ...fileOpsInitialState, phase: "lost" }
+  const reviewing = { ...fileOpsInitialState, phase: "reviewing" }
   assert.equal(key("NOT_FOUND", "start"), "errors.noScan")
   assert.equal(key("NOT_FOUND"), "errors.previewLost")
-  assert.equal(key("NOT_FOUND", undefined, { ...fileOpsInitialState, operation }), "errors.operationLost")
+  assert.equal(key("NOT_FOUND", undefined, lost), "errors.operationLost")
+  assert.equal(key("INTERNAL_SERVER_ERROR", undefined, { ...fileOpsInitialState, phase: "operating" }), "errors.generic")
   assert.equal(key("CONFLICT"), "errors.conflict")
   assert.equal(key("SCAN_CHANGED"), "errors.scanChanged")
   assert.equal(key("RISK_CHANGED"), "errors.riskChanged")
@@ -141,7 +143,7 @@ test("error messages depend on where the failure happened", () => {
   assert.equal(key("FORBIDDEN"), "errors.forbidden")
   assert.equal(key("BACKEND_UNAVAILABLE"), "errors.backendUnavailable")
   assert.equal(key("INVALID_RESPONSE"), "errors.invalidResponse")
-  assert.equal(key("INTERNAL_SERVER_ERROR"), "errors.internal")
+  assert.equal(key("INTERNAL_SERVER_ERROR", undefined, reviewing), "errors.internal")
   assert.equal(key("TEST_NEW_CODE"), "errors.generic")
 })
 

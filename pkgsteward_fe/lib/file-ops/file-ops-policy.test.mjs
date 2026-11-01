@@ -65,9 +65,31 @@ test("backend restart loses the preview and asks for a new one", () => {
 test("backend restart during an operation keeps the last results and stops tracking", () => {
   const seen = fileOpsReceiveOperation(operating, operation("running"))
   const lost = fileOpsPollFailure(seen, "NOT_FOUND", 404)
-  assert.equal(lost.phase, "idle")
+  assert.equal(lost.phase, "lost")
   assert.equal(lost.operation, seen.operation)
   assert.equal(fileOpsStatusKey(lost), "status.untracked")
+})
+
+test("an operation lost before its first poll is still lost, not a lost preview", () => {
+  const lost = fileOpsPollFailure(operating, "NOT_FOUND", 404)
+  assert.equal(lost.phase, "lost")
+  assert.equal(lost.operation, null)
+  assert.equal(fileOpsStatusKey(lost), "status.untracked")
+  assert.equal(fileOpsPollFailure(fileOpsBeginCancel(operating), "NOT_FOUND", 404).phase, "lost")
+})
+
+test("a resend answered 404 cannot prove the first send never ran", () => {
+  const again = fileOpsBeginExecute(fileOpsExecuteFailure(executing, "BACKEND_UNAVAILABLE"))
+  assert.equal(fileOpsExecuteFailure(again, "NOT_FOUND").phase, "lost")
+  assert.equal(fileOpsExecuteFailure(executing, "NOT_FOUND").phase, "idle")
+})
+
+test("a lost outcome can only be left by starting over", () => {
+  const lost = fileOpsPollFailure(operating, "NOT_FOUND", 404)
+  assert.equal(fileOpsBeginStart(lost), lost)
+  assert.equal(fileOpsCanPoll(lost, true), false)
+  assert.equal(fileOpsFollowOperation(lost, operation("running")), lost)
+  assert.deepEqual(fileOpsReset(lost), fileOpsInitialState)
 })
 
 test("cancel blocks stale polls; only the cancel response is accepted", () => {
@@ -186,8 +208,22 @@ test("a running preview resumes only from idle", () => {
   assert.equal(resumed.phase, "measuring")
   assert.equal(resumed.previewId, "TEST-preview")
   assert.equal(resumed.preview.status, "running")
-  assert.equal(fileOpsResumePreview(fileOpsInitialState, preview("completed")), fileOpsInitialState)
   assert.equal(fileOpsResumePreview(reviewing, preview("running")), reviewing)
+})
+
+test("a finished unused preview resumes for review, nothing else does", () => {
+  for (const status of ["completed", "cancelled"]) {
+    const resumed = fileOpsResumePreview(fileOpsInitialState, preview(status))
+    assert.equal(resumed.phase, "reviewing")
+    assert.equal(resumed.preview.status, status)
+    assert.equal(resumed.summary, null)
+  }
+  assert.equal(fileOpsResumePreview(fileOpsInitialState, preview("failed")), fileOpsInitialState)
+  assert.equal(
+    fileOpsResumePreview(fileOpsInitialState, { ...preview("completed"), operationId: "TEST-operation" }),
+    fileOpsInitialState
+  )
+  assert.equal(fileOpsResumePreview(reviewing, preview("completed")), reviewing)
 })
 
 test("completed with failed items has its own status", () => {

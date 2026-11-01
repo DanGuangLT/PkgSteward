@@ -52,7 +52,7 @@ function TargetFreed({ target }: { target: FileOpsTarget }) {
   if (size.status !== "done") return <>{t(`targets.${size.status}`)}</>
   return target.method === "recycle" ? (
     <span className="space-y-1">
-      <span className="block font-semibold"><DiskSize bytes={size.sizeBytes} /></span>
+      <span className="block font-semibold"><DiskSize bytes={size.reclaimableBytes} /></span>
       <span className="block text-caption text-muted-foreground">{t("targets.onEmptyBin")}</span>
     </span>
   ) : <span className="font-semibold"><DiskSize bytes={size.reclaimableBytes} /></span>

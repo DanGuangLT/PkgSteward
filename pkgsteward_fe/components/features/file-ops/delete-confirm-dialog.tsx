@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useState, type RefObject } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
@@ -29,11 +29,14 @@ interface DeleteConfirmDialogProps {
   targets: readonly FileOpsTarget[]
   pending: boolean
   errorMessage: string | null
+  returnFocusRef?: RefObject<HTMLElement | null>
   onConfirm(confirmation: ConfirmationInput): void
   onCancel(): void
 }
 
-function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Omit<DeleteConfirmDialogProps, "onCancel" | "previewId">) {
+type ConfirmBodyProps = Omit<DeleteConfirmDialogProps, "onCancel" | "previewId" | "returnFocusRef">
+
+function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: ConfirmBodyProps) {
   const t = useTranslations("fileOps")
   const tCommon = useTranslations("common")
   const format = useFormatter()
@@ -104,9 +107,14 @@ function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Omi
                   {target?.risk.level === "high" ? <RiskBadge level="high" /> : null}
                 </div>
                 {target && target.nestedProjects.length > 0 ? (
-                  <p className="text-caption text-muted-foreground">{t("dialog.nestedProjects", {
-                    count: target.nestedProjects.length, formattedCount: format.number(target.nestedProjects.length),
-                  })}</p>
+                  <div className="min-w-0 space-y-1 text-caption text-muted-foreground">
+                    <p>{t("dialog.nestedProjects", {
+                      count: target.nestedProjects.length, formattedCount: format.number(target.nestedProjects.length),
+                    })}</p>
+                    <ul className="min-w-0 font-mono [overflow-wrap:anywhere]">
+                      {target.nestedProjects.map((nested) => <li key={nested}>{nested}</li>)}
+                    </ul>
+                  </div>
                 ) : null}
               </li>
             )
@@ -142,7 +150,7 @@ function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Omi
  * Mở liên tục theo `summary`: nút xác nhận không tự đóng dialog (khác AlertDialogAction) để
  * lỗi từ backend hiện ngay trong dialog. Radix focus sẵn nút Huỷ.
  */
-export function DeleteConfirmDialog({ previewId, onCancel, ...body }: DeleteConfirmDialogProps) {
+export function DeleteConfirmDialog({ previewId, returnFocusRef, onCancel, ...body }: DeleteConfirmDialogProps) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const { summary, pending } = body
@@ -150,7 +158,13 @@ export function DeleteConfirmDialog({ previewId, onCancel, ...body }: DeleteConf
 
   return (
     <AlertDialog open onOpenChange={(open) => { if (!open && !pending) onCancel() }}>
-      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto data-[size=default]:sm:max-w-2xl">
+      {/* Không có AlertDialogTrigger: tự trả focus, nếu không bàn phím rơi về đầu trang. */}
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto data-[size=default]:sm:max-w-2xl"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return
+          event.preventDefault()
+          returnFocusRef.current.focus()
+        }}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("dialog.title", { count, formattedCount: format.number(count) })}</AlertDialogTitle>
           <AlertDialogDescription>{t("dialog.description")}</AlertDialogDescription>

@@ -1,7 +1,7 @@
 import type {
   CleanupKind, CleanupPreviewInput, FileOpsOperation, FileOpsPreview, FileOpsTarget, FileOpsTargetResult,
 } from "../api/types.ts"
-import { fileOpsOperationIsTerminal, type FileOpsError, type FileOpsUiState } from "./file-ops-policy.ts"
+import type { FileOpsError, FileOpsUiState } from "./file-ops-policy.ts"
 
 export type CleanupSort = "size" | "age"
 
@@ -54,11 +54,11 @@ export function resultErrorKey(code: string | null): `results.errors.${(typeof R
 
 export function fileOpsErrorKey(error: FileOpsError, state: FileOpsUiState): ErrorKey {
   if (error.code === "NOT_FOUND") {
-    if (error.source === "start") return "errors.noScan"
-    return state.operation && !fileOpsOperationIsTerminal(state.operation.status)
-      ? "errors.operationLost"
-      : "errors.previewLost"
+    if (state.phase === "lost") return "errors.operationLost"
+    return error.source === "start" ? "errors.noScan" : "errors.previewLost"
   }
+  // Câu "chưa xoá gì" chỉ đúng khi execute bị từ chối, không đúng cho poll lúc đang xoá.
+  if (error.code === "INTERNAL_SERVER_ERROR" && state.phase !== "reviewing") return "errors.generic"
   return error.code in ERROR_KEYS ? ERROR_KEYS[error.code as keyof typeof ERROR_KEYS] : "errors.generic"
 }
 
@@ -92,8 +92,9 @@ export function reviewTotals(targets: readonly FileOpsTarget[], selected: Readon
     reclaimableBytes: chosen.reduce(
       (total, { method, size }) => total + (method === "permanent" ? size.reclaimableBytes ?? 0 : 0), 0
     ),
+    // Dọn Thùng rác cũng chỉ trả lại phần không dùng chung, như xoá vĩnh viễn.
     recycleBytes: chosen.reduce(
-      (total, { method, size }) => total + (method === "recycle" ? size.sizeBytes ?? 0 : 0), 0
+      (total, { method, size }) => total + (method === "recycle" ? size.reclaimableBytes ?? 0 : 0), 0
     ),
   }
 }
@@ -126,7 +127,6 @@ export function operationCounts({ results }: Pick<FileOpsOperation, "results">) 
     notStarted: count(({ status }) => status === "not_started"),
     remaining: count(({ status }) => status === "pending" || status === "running"),
     recycled: count(({ status, method }) => status === "success" && method === "recycle"),
-    partial: count(({ mayBePartial }) => mayBePartial),
     // Chỉ là ước tính từ preview: Thùng rác chưa trả lại dung lượng.
     reclaimedBytes: results.reduce((total, { status, method, reclaimableBytes }) => (
       total + (status === "success" && method === "permanent" ? reclaimableBytes ?? 0 : 0)

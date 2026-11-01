@@ -55,7 +55,7 @@ function sampleSummary(level: RiskLevel): FileOpsSummary {
     totals: {
       targetCount: 1,
       reclaimableBytes: target.method === "permanent" ? SIZE.reclaimableBytes : 0,
-      recycleBytes: target.method === "recycle" ? SIZE.sizeBytes : 0,
+      recycleBytes: target.method === "recycle" ? SIZE.reclaimableBytes : 0,
     },
   }
 }

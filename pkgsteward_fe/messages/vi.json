@@ -226,6 +226,7 @@
         "title": "Không tìm thấy dự án",
         "description": "Dự án này không có trong lần quét gần nhất, có thể vừa bị xoá. Quét lại để cập nhật."
       },
+      "otherPreview": "Bản xem trước này được bắt đầu ở nơi khác và có mục ngoài dự án đang mở. Kiểm tra kỹ đường dẫn trước khi xoá.",
       "loadFailed": {
         "title": "Không tải được dự án",
         "description": "Không đọc được kết quả quét từ backend. Kiểm tra backend rồi tải lại trang."
@@ -401,7 +402,7 @@
     "errors": {
       "noScan": "Chưa có kết quả quét. Quét dự án trước rồi thử lại.",
       "previewLost": "Bản xem trước không còn, có thể backend vừa khởi động lại. Xem trước lại để tiếp tục; chưa có gì bị xoá từ bản này.",
-      "operationLost": "Không còn theo dõi được thao tác xoá, có thể backend vừa khởi động lại. Kết quả bên dưới có thể đã cũ; quét lại để kiểm tra.",
+      "operationLost": "Không còn theo dõi được thao tác xoá, có thể backend vừa khởi động lại. Không biết chắc những gì đã bị xoá; quét lại để kiểm tra.",
       "conflict": "Đang có lần quét, phép đo hoặc thao tác xoá khác chạy, hoặc bản xem trước này đã được dùng. Chờ xong rồi xem trước lại.",
       "scanChanged": "Kết quả quét đã đổi sau khi xem trước. Xem trước lại; chưa có gì bị xoá.",
       "riskChanged": "Rủi ro đã tăng sau khi xem trước. Xem trước lại; chưa có gì bị xoá.",
@@ -417,7 +418,8 @@
       "pollPaused": "Đã dừng kiểm tra tiến độ; thao tác trên backend vẫn tiếp tục. Bấm Thử kiểm tra lại, sẽ không gửi lại lệnh xoá."
     },
     "empty": {
-      "noTargets": "Không có mục nào khớp bộ lọc."
+      "noTargets": "Không có mục nào khớp bộ lọc.",
+    "stoppedEarly": "Đã dừng trước khi đo xong mục nào."
     },
     "tree": {
       "loading": "Đang tải thư mục…",

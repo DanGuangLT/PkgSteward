@@ -67,7 +67,7 @@ function TreeLevelView({ path, ...tree }: FileTreeProps & { path: string }) {
   const level = tree.tree.levels.get(path)
 
   if (!level || level.status === "loading") {
-    return <div className="space-y-2 py-2 pl-10" aria-label={t("tree.loading")}><Skeleton className="h-5 w-48 max-w-full" /></div>
+    return <div role="status" className="space-y-2 py-2 pl-10" aria-label={t("tree.loading")}><Skeleton className="h-5 w-48 max-w-full" /></div>
   }
   if (level.status === "failed") {
     return (

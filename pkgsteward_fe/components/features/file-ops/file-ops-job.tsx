@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import type { RefObject } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DeleteConfirmDialog } from "@/components/features/file-ops/delete-confirm-dialog"
@@ -11,8 +12,14 @@ import type { FileOpsController } from "@/hooks/use-file-ops"
 import { fileOpsErrorKey } from "@/lib/file-ops/file-ops-list"
 import { fileOpsStatusKey } from "@/lib/file-ops/file-ops-policy"
 
+interface FileOpsJobProps {
+  controller: FileOpsController
+  returnFocusRef: RefObject<HTMLElement | null>
+  onStartOver(): void
+}
+
 /** Phần chung của 2 màn hình: trạng thái, lỗi, nút dừng, dialog xác nhận và kết quả xoá. */
-export function FileOpsJob({ controller, onStartOver }: { controller: FileOpsController; onStartOver(): void }) {
+export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJobProps) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const { state, error } = controller
@@ -22,8 +29,7 @@ export function FileOpsJob({ controller, onStartOver }: { controller: FileOpsCon
   const pollPaused = (state.phase === "measuring" || state.phase === "operating") && state.errorCode !== undefined
   const stopping = state.phase === "operating" && (state.cancelPending || state.operation?.status === "stopping")
   const progress = preview?.progress
-  const lostOperation = state.phase === "idle" && state.operation !== null
-  const canStartOver = state.phase === "finished" || lostOperation
+  const canStartOver = state.phase === "finished" || state.phase === "lost"
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -65,7 +71,11 @@ export function FileOpsJob({ controller, onStartOver }: { controller: FileOpsCon
           {errorMessage ? <p>{errorMessage}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => void controller.resendExecute()}>{t("actions.resend")}</Button>
-            <Button type="button" variant="secondary" onClick={controller.abandon}>{t("actions.abandon")}</Button>
+            {/* Lệnh xoá có thể đã chạy: làm mới luôn dữ liệu đang hiện. */}
+            <Button type="button" variant="secondary" onClick={() => {
+              controller.abandon()
+              onStartOver()
+            }}>{t("actions.abandon")}</Button>
           </div>
         </div>
       ) : null}
@@ -87,7 +97,7 @@ export function FileOpsJob({ controller, onStartOver }: { controller: FileOpsCon
 
       {summary && preview ? (
         <DeleteConfirmDialog previewId={preview.previewId} summary={summary} targets={preview.targets}
-          pending={state.phase === "executing"} errorMessage={errorMessage}
+          pending={state.phase === "executing"} errorMessage={errorMessage} returnFocusRef={returnFocusRef}
           onConfirm={(confirmation) => void controller.execute(confirmation)} onCancel={controller.closeSummary} />
       ) : null}
 

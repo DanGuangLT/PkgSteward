@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useMemo, useState } from "react"
+import { useId, useMemo, useState, type RefObject } from "react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
@@ -39,12 +39,15 @@ interface ReviewSelectionProps {
   controller: FileOpsController
   preview: FileOpsPreview
   sort: CleanupSort
-  referenceTime: string
+  actionRef: RefObject<HTMLButtonElement | null>
   onSortChange(sort: CleanupSort): void
 }
 
+// Mốc của thời gian tương đối lấy từ preview: trang có thể đã mở từ lâu.
+const previewTime = ({ startedAt, finishedAt }: FileOpsPreview): string => finishedAt ?? startedAt
+
 // Khoá theo previewId và chỉ mount khi đo xong: lựa chọn ban đầu phải đọc từ danh sách đầy đủ.
-function ReviewSelection({ controller, preview, sort, referenceTime, onSortChange }: ReviewSelectionProps) {
+function ReviewSelection({ controller, preview, sort, actionRef, onSortChange }: ReviewSelectionProps) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const locale = useLocale()
@@ -69,7 +72,10 @@ function ReviewSelection({ controller, preview, sort, referenceTime, onSortChang
     setSelected(selected.size === eligible.length ? new Set() : new Set(eligible.map(({ path }) => path)))
   }
 
-  if (targets.length === 0) return <p className="text-body-sm text-muted-foreground">{t("empty.noTargets")}</p>
+  if (targets.length === 0) {
+    if (preview.status === "failed") return null
+    return <p className="text-body-sm text-muted-foreground">{t(preview.status === "cancelled" ? "empty.stoppedEarly" : "empty.noTargets")}</p>
+  }
 
   return (
     <>
@@ -84,7 +90,7 @@ function ReviewSelection({ controller, preview, sort, referenceTime, onSortChang
       </div>
       <p className="text-caption text-muted-foreground">{t("selection.estimateHint")}</p>
       <CleanupItems targets={targets} selected={selected} interaction={ready ? "ready" : "locked"}
-        referenceTime={referenceTime} onToggle={toggle} />
+        referenceTime={previewTime(preview)} onToggle={toggle} />
       <div className="sticky bottom-0 flex min-w-0 flex-col gap-3 rounded-md border border-border bg-background p-4 text-body-sm">
         <ul className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
           <li>{t("selection.count", { count: totals.count, formattedCount: format.number(totals.count) })}</li>
@@ -96,7 +102,7 @@ function ReviewSelection({ controller, preview, sort, referenceTime, onSortChang
           ) : null}
         </ul>
         {tooMany ? <p role="alert">{t("selection.tooMany", { formattedLimit: format.number(MAX_DELETE_PATHS) })}</p> : null}
-        <Button type="button" variant="destructive" className="self-start" disabled={!ready || selected.size === 0 || tooMany}
+        <Button ref={actionRef} type="button" variant="destructive" className="self-start" disabled={!ready || selected.size === 0 || tooMany}
           onClick={() => void controller.summarize([...selected])}>
           {t("actions.review", { count: totals.count, formattedCount: format.number(totals.count) })}
         </Button>
@@ -105,7 +111,7 @@ function ReviewSelection({ controller, preview, sort, referenceTime, onSortChang
   )
 }
 
-export function PreviewReview({ controller, referenceTime }: { controller: FileOpsController; referenceTime: string }) {
+export function PreviewReview({ controller, actionRef }: { controller: FileOpsController; actionRef: RefObject<HTMLButtonElement | null> }) {
   const locale = useLocale()
   const { state } = controller
   const [sort, setSort] = useState<CleanupSort>("size")
@@ -115,12 +121,12 @@ export function PreviewReview({ controller, referenceTime }: { controller: FileO
   if (state.phase === "measuring") {
     return (
       <CleanupItems targets={sortCleanupTargets(preview.targets, sort, locale)} selected={NOTHING_SELECTED}
-        interaction="measuring" referenceTime={referenceTime} onToggle={() => undefined} />
+        interaction="measuring" referenceTime={previewTime(preview)} onToggle={() => undefined} />
     )
   }
   if (state.phase !== "reviewing" && state.phase !== "executing" && state.phase !== "unconfirmed") return null
   return (
     <ReviewSelection key={preview.previewId} controller={controller} preview={preview} sort={sort}
-      referenceTime={referenceTime} onSortChange={setSort} />
+      actionRef={actionRef} onSortChange={setSort} />
   )
 }

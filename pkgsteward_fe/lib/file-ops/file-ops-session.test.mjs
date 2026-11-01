@@ -316,15 +316,52 @@ test("a preview is forgotten once it ends, so the next page load asks for nothin
   assert.equal(lost.environment.stored, null)
 })
 
-test("a remembered preview that ended or vanished is forgotten and starts nothing", async (t) => {
-  for (const route of [() => ok(preview("completed")), () => fail(404, "NOT_FOUND")]) {
-    const context = start(t, { [PREVIEW_POLL]: route }, browser({ stored: PREVIEW }))
-    await flush()
-    assert.equal(context.phase(), "idle")
-    assert.equal(context.environment.stored, null)
-    context.disconnect()
-    t.mock.timers.reset()
-  }
+test("a preview that finished while away comes back for review and runs nothing", async (t) => {
+  const context = start(t, undefined, browser({ stored: PREVIEW }))
+  await flush()
+  assert.equal(context.phase(), "reviewing")
+  assert.equal(context.environment.stored, null)
+  await context.tick(POLL_INTERVAL_MS * 5)
+  assert.equal(context.api.count(SUMMARY), 0)
+  assert.equal(context.api.count(EXECUTE), 0)
+})
+
+test("a remembered preview is forgotten only when the backend says it is gone", async (t) => {
+  const gone = start(t, { [PREVIEW_POLL]: () => fail(404, "NOT_FOUND") }, browser({ stored: PREVIEW }))
+  await flush()
+  assert.equal(gone.phase(), "idle")
+  assert.equal(gone.environment.stored, null)
+  gone.disconnect()
+  t.mock.timers.reset()
+
+  const down = start(t, { [PREVIEW_POLL]: unreachable }, browser({ stored: PREVIEW }))
+  await flush()
+  assert.equal(down.phase(), "idle")
+  assert.equal(down.environment.stored, PREVIEW)
+})
+
+test("a resend answered 404 reports a lost outcome, not an untouched preview", async (t) => {
+  const context = start(t, { [EXECUTE]: unreachable })
+  await toConfirm(context)
+  await context.session.execute(noTicks)
+  await flush()
+  context.api.routes[EXECUTE] = () => fail(404, "NOT_FOUND")
+  await context.session.resendExecute()
+  await flush()
+  assert.equal(context.phase(), "lost")
+  assert.equal(context.session.getSnapshot().error.code, "NOT_FOUND")
+  await context.tick(POLL_INTERVAL_MS * 5)
+  assert.equal(context.api.count(EXECUTE), 2)
+})
+
+test("a 202 followed by a 404 poll reports a lost operation", async (t) => {
+  const context = start(t, { [OPERATION_POLL]: () => fail(404, "NOT_FOUND") })
+  await toConfirm(context)
+  await context.session.execute(noTicks)
+  await flush()
+  assert.equal(context.phase(), "lost")
+  context.session.reset()
+  assert.equal(context.phase(), "idle")
 })
 
 test("no active checks while reviewing or hidden, and none after leaving", async (t) => {

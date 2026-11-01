@@ -183,8 +183,9 @@ export function createFileOpsSession(environment: FileOpsEnvironment): FileOpsSe
       generation += 1
       update(resumed)
       void poll()
-    } catch {
-      if (!signal.aborted) environment.rememberPreview(null)
+    } catch (cause) {
+      // Lỗi tạm thời: preview có thể vẫn chạy, giữ lại id để còn dừng được.
+      if (!signal.aborted && cause instanceof ApiError && cause.statusCode === 404) environment.rememberPreview(null)
     }
   }
 
