@@ -5,7 +5,17 @@ import createNextIntlPlugin from "next-intl/plugin"
 const withNextIntl = createNextIntlPlugin()
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Không trang nào được nhúng iframe: chặn lừa click vào nút xác nhận xoá (clickjacking).
+  // Click trong iframe mang Origin hợp lệ nên proxy không phân biệt được.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        { key: "X-Frame-Options", value: "DENY" },
+      ],
+    }]
+  },
 }
 
 export default withNextIntl(nextConfig)
