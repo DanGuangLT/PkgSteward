@@ -504,6 +504,32 @@ describe('FileOps HTTP flow (e2e)', () => {
     ).toMatchObject([{ result: 'failed' }, { result: 'success' }]);
   });
 
+  it('never treats a cache folder holding a scanned project as disposable', async () => {
+    const coverage = join(project, 'coverage');
+    await mkdir(join(coverage, 'test-tool'), { recursive: true });
+    await writeFile(
+      join(coverage, 'test-tool', 'package.json'),
+      '{"name":"test-tool"}',
+    );
+    await scan();
+    const { previewId } = data<IPreviewStart>(
+      await http()
+        .post(`${API}/cleanup/preview`)
+        .send({ includeKinds: ['build_cache'], projectPaths: [project] })
+        .expect(202),
+    );
+    const cleanup = await finishedPreview(previewId);
+    expect(cleanup.targets.map(({ path }) => path)).not.toContain(coverage);
+
+    const preview = await previewPaths([coverage]);
+    expect(preview.targets[0]).toMatchObject({
+      kind: 'project_content',
+      method: 'recycle',
+      nestedProjects: [join(coverage, 'test-tool')],
+    });
+    expect(preview.risk.level).toBe('high');
+  });
+
   it('rejects unusable selections with the shared error shape', async () => {
     await scan();
     const outside = join(base, 'data');

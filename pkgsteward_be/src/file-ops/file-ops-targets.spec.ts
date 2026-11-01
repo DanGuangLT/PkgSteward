@@ -373,7 +373,6 @@ describe('classifyTargets', () => {
 
   it.each<[string, FileOpsKind]>([
     ['D:\\p\\node_modules', 'node_modules'],
-    ['D:\\p\\.next', 'build_cache'],
     ['D:\\loose\\node_modules', 'orphan_node_modules'],
   ])(
     'reports nested scanned projects inside %s cleanup targets',
@@ -388,6 +387,25 @@ describe('classifyTargets', () => {
         expect.objectContaining({
           valid: true,
           kind,
+          nestedProjects: [child],
+        }),
+      ]);
+    },
+  );
+
+  it.each(['D:\\p\\coverage', 'D:\\p\\.next'])(
+    'recycles cache %s when it holds a scanned project, never deleting it permanently',
+    async (p) => {
+      const f = fixture();
+      f.project('D:\\p');
+      f.put(p);
+      const child = `${p}\\tool`;
+      f.project(child);
+      expect(await f.run([p])).toEqual([
+        expect.objectContaining({
+          valid: true,
+          kind: 'project_content',
+          method: 'recycle',
           nestedProjects: [child],
         }),
       ]);

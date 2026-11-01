@@ -150,7 +150,8 @@ caller confirms for a selection of that preview. Both run in the background and 
 
 - **Deletion method:** the server decides from the target kind. `node_modules` and build caches are deleted
   permanently. A whole project or project content goes to the Windows Recycle Bin and is never deleted permanently
-  as a fallback. If it cannot be recycled, the target reports an error and stays in place.
+  as a fallback. If it cannot be recycled, the target reports an error and stays in place. A build cache folder that
+  holds a scanned project counts as project content, so it is recycled and cleanup previews leave it out.
 - **Size numbers:** `reclaimableBytes` estimates the space a permanent deletion frees: files whose hardlinks are all
   inside the target. `sharedBytes` is still used by hardlinks elsewhere, such as the pnpm store. Recycling frees no
   space, so its `reclaimableBytes` is `null` and totals report it as `recycleBytes`.
