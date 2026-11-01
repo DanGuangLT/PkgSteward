@@ -214,3 +214,20 @@ export interface IExecuteInput extends IConfirmationInput {
   previewId: string;
   paths: string[];
 }
+
+export interface ICleanupPreviewInput {
+  includeKinds?: CleanupKind[];
+  olderThanDays?: number;
+  minSizeBytes?: number;
+  projectPaths?: string[];
+}
+
+export interface IPreviewStart {
+  previewId: string;
+  status: JobStatus;
+}
+
+export interface IOperationStart {
+  operationId: string;
+  status: IFileOpsOperation['status'];
+}

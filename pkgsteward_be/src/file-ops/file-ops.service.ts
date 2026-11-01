@@ -39,11 +39,13 @@ import {
 import { errorCode } from '@/file-ops/file-ops-targets';
 import { readTreeLevel } from '@/file-ops/file-tree';
 import { GitProbe } from '@/file-ops/git-probe';
+import type { IFileOpsService } from '@/file-ops/interfaces/file-ops.service.interface';
 import { FILE_OPS_FS } from '@/file-ops/interfaces/file-ops.types';
 import type {
   CleanupKind,
   FileOpsKind,
   FileOpsMethod,
+  ICleanupPreviewInput,
   IExecuteInput,
   IFileOpsFsBundle,
   IFileOpsOperation,
@@ -52,6 +54,7 @@ import type {
   IFileOpsTarget,
   IFileOpsTargetResult,
   IFileTreeLevel,
+  IOperationStart,
   IPreviewSummary,
   ITargetIdentity,
   ITargetSize,
@@ -75,13 +78,6 @@ import type {
 
 export const PREVIEW_MEASUREMENT_CONCURRENCY = 4;
 
-interface ICleanupPreviewInput {
-  includeKinds?: CleanupKind[];
-  olderThanDays?: number;
-  minSizeBytes?: number;
-  projectPaths?: string[];
-}
-
 type PreviewRequest =
   | { source: 'cleanup'; input: ICleanupPreviewInput }
   | { source: 'delete'; input: { paths: string[] } };
@@ -98,7 +94,7 @@ interface IExecuteTarget {
 }
 
 @Injectable()
-export class FileOpsService {
+export class FileOpsService implements IFileOpsService {
   private readonly logger = new Logger(FileOpsService.name);
   private readonly platform = toPathPlatform();
   private readonly previews = new PreviewStore();
@@ -119,9 +115,7 @@ export class FileOpsService {
     @Inject(RECYCLE_BIN) private readonly recycleBin: IRecycleBin,
   ) {}
 
-  async startExecute(
-    input: IExecuteInput,
-  ): Promise<{ operationId: string; status: IFileOpsOperation['status'] }> {
+  async startExecute(input: IExecuteInput): Promise<IOperationStart> {
     const { previewId, paths } = input;
     const requested = new Set<string>();
     const duplicates = new Set<string>();
@@ -598,7 +592,7 @@ export class FileOpsService {
   private replayExecute(
     operationId: string,
     paths: ReadonlySet<string>,
-  ): { operationId: string; status: IFileOpsOperation['status'] } {
+  ): IOperationStart {
     const operation = this.operations.get(operationId);
     // Không còn bản ghi để đối chiếu thì từ chối: replay không bao giờ được xoá lại.
     if (
