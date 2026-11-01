@@ -1,5 +1,10 @@
 import type { PathCheckFailureCode } from '@/core/path-guard/interfaces/path-guard.types';
-import type { IRisk } from '@/core/risk/interfaces/risk.types';
+import type {
+  IConfirmationInput,
+  IRisk,
+} from '@/core/risk/interfaces/risk.types';
+import type { IFileDeleterDeps } from '@/file-ops/file-deleter';
+import type { RecycleFailureCode } from '@/platform/interfaces/recycle-bin.interface';
 import type { IScanFs } from '@/scanner/interfaces/scanner.types';
 
 export type GitStatusResult =
@@ -40,6 +45,23 @@ export type CleanupKind =
   'node_modules' | 'orphan_node_modules' | 'build_cache';
 
 export type FileOpsMethod = 'permanent' | 'recycle';
+
+export type DeleteErrorCode =
+  | 'FILE_IN_USE'
+  | 'ACCESS_DENIED'
+  | 'TARGET_GONE'
+  | 'PATH_TOO_LONG'
+  | 'DELETE_FAILED'
+  | RecycleFailureCode;
+
+export type DeleteOutcome =
+  | { method: FileOpsMethod; status: 'success' }
+  | {
+      method: FileOpsMethod;
+      status: 'failed';
+      errorCode: DeleteErrorCode;
+      mayBePartial: boolean;
+    };
 
 export type TargetFailureCode =
   | PathCheckFailureCode
@@ -112,6 +134,7 @@ export const FILE_OPS_FS = Symbol('FILE_OPS_FS');
 export interface IFileOpsFsBundle {
   files: IFileOpsFs;
   scan: IScanFs;
+  remove: IFileDeleterDeps['rm'];
 }
 
 export type JobStatus = 'running' | 'completed' | 'cancelled' | 'failed';
@@ -164,4 +187,47 @@ export interface IPreviewSummary {
     reclaimableBytes: number;
     recycleBytes: number;
   };
+}
+
+export interface IFileOpsTargetResult {
+  path: string;
+  kind: FileOpsKind;
+  method: FileOpsMethod;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'not_started';
+  errorCode: DeleteErrorCode | 'TARGET_CHANGED' | 'AUDIT_WRITE_FAILED' | null;
+  mayBePartial: boolean;
+  /** Preview estimate for permanent deletion; recycling does not reclaim space. */
+  reclaimableBytes: number | null;
+}
+
+export interface IFileOpsOperation {
+  operationId: string;
+  previewId: string;
+  status: 'running' | 'stopping' | 'completed' | 'cancelled' | 'failed';
+  currentPath: string | null;
+  results: IFileOpsTargetResult[];
+  startedAt: string;
+  finishedAt?: string;
+}
+
+export interface IExecuteInput extends IConfirmationInput {
+  previewId: string;
+  paths: string[];
+}
+
+export interface ICleanupPreviewInput {
+  includeKinds?: CleanupKind[];
+  olderThanDays?: number;
+  minSizeBytes?: number;
+  projectPaths?: string[];
+}
+
+export interface IPreviewStart {
+  previewId: string;
+  status: JobStatus;
+}
+
+export interface IOperationStart {
+  operationId: string;
+  status: IFileOpsOperation['status'];
 }

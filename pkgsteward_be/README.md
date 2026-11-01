@@ -130,6 +130,59 @@ start is reported in the polled job rather than changing the already returned `2
 The optional Windows hardlink/junction tests use a pre-existing read-only fixture under
 `PKGSTEWARD_REAL_FS_TEST_DIR`; they are skipped when that variable is absent or the platform is not Windows.
 
+## File operations API
+
+File operations delete `node_modules`, build caches, project content or whole projects found by the latest scan.
+Nothing is deleted without two steps: a **preview** that reports what would happen, then an **execute** that the
+caller confirms for a selection of that preview. Both run in the background and are polled.
+
+| Endpoint | Result |
+|---|---|
+| `GET /api/v1/file-ops/tree?path=` | One directory level of a scanned project, at most 2,000 entries (`truncated` when cut) |
+| `POST /api/v1/file-ops/cleanup/preview` | Optional `{ includeKinds, olderThanDays, minSizeBytes, projectPaths }`; `202` with `{ previewId, status }` |
+| `POST /api/v1/file-ops/delete/preview` | `{ paths }`, 1 to 1,000 paths of at most 32,767 characters, in a request body of at most 10 MB; `202` with `{ previewId, status }` |
+| `GET /api/v1/file-ops/previews/:previewId` | Targets as they are measured, with risk; not rate limited, `Cache-Control: no-store` |
+| `POST /api/v1/file-ops/previews/:previewId/cancel` | Stops measuring; targets already measured stay selectable |
+| `POST /api/v1/file-ops/previews/:previewId/summary` | `{ paths }`; `200` with the risk, `confirmText` and totals of that selection |
+| `POST /api/v1/file-ops/delete/execute` | `{ previewId, paths, confirm: true, acknowledgedRisks?, confirmText? }`; `202` with `{ operationId, status }` |
+| `GET /api/v1/file-ops/operations/active` | The running operation, or `data: null` when idle, so a reloaded page can find it again; not rate limited, `Cache-Control: no-store` |
+| `GET /api/v1/file-ops/operations/:operationId` | Per-target results; not rate limited, `Cache-Control: no-store` |
+| `POST /api/v1/file-ops/operations/:operationId/cancel` | Stops before the next deletion starts; deleted targets stay deleted |
+
+- **Deletion method:** the server decides from the target kind. `node_modules` and build caches are deleted
+  permanently. A whole project or project content goes to the Windows Recycle Bin and is never deleted permanently
+  as a fallback. If it cannot be recycled, the target reports an error and stays in place. A build cache folder that
+  holds a scanned project counts as project content, so it is recycled and cleanup previews leave it out.
+- **Size numbers:** `reclaimableBytes` estimates the space a permanent deletion frees: files whose hardlinks are all
+  inside the target. `sharedBytes` is still used by hardlinks elsewhere, such as the pnpm store. Recycling frees no
+  space: an operation result reports `reclaimableBytes: null` for it, and summary totals count it as `recycleBytes`.
+- **Confirmation:** `confirm` must be the JSON boolean `true`. Medium and high risk also require every risk code in
+  `acknowledgedRisks`, and high risk requires the exact `confirmText` from the summary: the folder name of a single
+  project, otherwise `DELETE <count>`. The server recalculates risk at execute time and ignores values from the client.
+- **Execute checks:** targets are checked again before starting and once more immediately before each deletion. The
+  request fails with `409` and deletes nothing on `CONFLICT` (another scan, measurement, preview or operation is
+  active), `SCAN_CHANGED` (a newer scan exists), `RISK_CHANGED` (a target's risk increased) or `TARGET_CHANGED`
+  (a target vanished, was replaced, or no longer classifies as in the preview); `details.paths` lists the targets
+  involved for the last two. Preview again in these cases. A body over 10 MB returns `413 PAYLOAD_TOO_LARGE`.
+- **Results:** targets run one at a time in preview order, with no retries. Each result has a `status` (`success`,
+  `failed`, `not_started`) and, on failure, an `errorCode` such as `FILE_IN_USE`, `ACCESS_DENIED`, `TARGET_GONE`,
+  `TARGET_CHANGED`, `PATH_TOO_LONG` or a `RECYCLE_*` code. `mayBePartial` means a failed permanent deletion may
+  have removed part of the target. One failed target does not stop the others, and the operation still ends
+  `completed`, so read each result. An operation ends `cancelled` when targets were skipped by a cancel, and `failed`
+  when an audit write or an unexpected error stopped it.
+- **Replay:** a preview can be executed once. Sending the same paths again returns the same operation, so a lost
+  response can be retried safely. Other paths return `409 CONFLICT`.
+- **Audit log:** an intent record is written before anything is deleted, and a result record for each target, to
+  `logs/dangerous-operations.jsonl` in the data folder. If the intent cannot be written, execute fails with `500`
+  and nothing is deleted. If a result cannot be written, the remaining targets are skipped as `AUDIT_WRITE_FAILED`.
+- **Limits:** previews and operations live in memory, and the 16 most recent finished ones are kept. They are lost
+  on restart, so a preview must be repeated. Risk checks describe the moment they ran: a process may start, or a
+  file may change, between the last check and the deletion. Process detection only sees what Windows reports.
+
+The optional deletion tests in `src/file-ops/file-ops.real-fs.spec.ts` delete real files, so they need both
+`PKGSTEWARD_REAL_FS_TEST_DIR` and `PKGSTEWARD_DESTRUCTIVE_FS_TEST=1` on Windows. They work only inside a new UUID
+folder of that directory, and leave two small `pkgsteward-test-*` folders in the Recycle Bin.
+
 ## Documentation
 
 - Project overview and setup: [`README.md`](../README.md)

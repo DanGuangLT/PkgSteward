@@ -14,6 +14,7 @@ import { MutationGateModule } from '@/core/mutation-gate/mutation-gate.module';
 import { PlatformModule } from '@/platform/platform.module';
 import { PathGuardModule } from '@/core/path-guard/path-guard.module';
 import { ScannerModule } from '@/scanner/scanner.module';
+import { FileOpsModule } from '@/file-ops/file-ops.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ScannerModule } from '@/scanner/scanner.module';
     PlatformModule,
     PathGuardModule,
     ScannerModule,
+    FileOpsModule,
   ],
   controllers: [AppController],
   providers: [

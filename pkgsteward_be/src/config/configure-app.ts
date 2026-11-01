@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
   createHostOriginMiddleware,
   parseAllowedOrigins,
@@ -8,6 +9,9 @@ import { setupAppConfig } from '@/config/app-setup.config';
 import { setupCors } from '@/config/cors.config';
 import SwaggerConfig from '@/config/swagger.config';
 import { validationConfig } from '@/config/validation.config';
+
+// Mặc định 100 KB của Express không đủ cho lô 1.000 path của FileOps.
+export const JSON_BODY_LIMIT = '10mb';
 
 export interface IConfiguredApp {
   globalPrefix: string;
@@ -27,6 +31,11 @@ export const configureApp = (app: INestApplication): IConfiguredApp => {
       ),
     }),
   );
+
+  // Sau guard: request bị từ chối không tốn công đọc body.
+  (app as NestExpressApplication).useBodyParser('json', {
+    limit: JSON_BODY_LIMIT,
+  });
 
   const swaggerEnabled = configService.get<string>('MODE') === 'development';
   if (swaggerEnabled) SwaggerConfig.setup(app);

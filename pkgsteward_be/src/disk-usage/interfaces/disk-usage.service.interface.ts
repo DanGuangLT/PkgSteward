@@ -11,4 +11,5 @@ export interface IDiskUsageService {
   get(jobId: string): IDiskUsageJob;
   cancel(jobId: string): IDiskUsageJob;
   peekCompletedSize(canonicalPath: string): ICompletedDiskSize | null;
+  clearCache(): void;
 }

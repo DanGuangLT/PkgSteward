@@ -91,6 +91,22 @@ export class PreviewStore {
     this.records.get(previewId)?.controller.abort();
   }
 
+  attachOperation(previewId: string, operationId: string): void {
+    const record = this.records.get(previewId);
+    if (
+      !record ||
+      record.preview.status === 'running' ||
+      record.preview.operationId !== null
+    ) {
+      throw new AppException(
+        409,
+        'Preview cannot take an operation',
+        'CONFLICT',
+      );
+    }
+    record.preview.operationId = operationId;
+  }
+
   private trimTerminals(): void {
     const terminals = [...this.records.values()]
       .filter(({ preview }) => preview.status !== 'running')

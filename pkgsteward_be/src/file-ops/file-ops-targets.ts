@@ -86,6 +86,10 @@ export async function classifyTargets(
     }
     return nearest;
   };
+  const nestedProjectsOf = (key: string): ProjectEntry[] =>
+    projects.filter(
+      (entry) => entry.key !== key && isSameOrInside(entry.key, key, platform),
+    );
   // D12 is fresh for each call, shared only by targets in this batch.
   const ownerChecks = new Map<string, TargetFailureCode | null>();
   const checkOwner = async (
@@ -184,7 +188,9 @@ export async function classifyTargets(
       } else if (
         stats.isDirectory() &&
         api.dirname(key) === owner.key &&
-        matchBuildCacheName(api.basename(targetPath), platform)
+        matchBuildCacheName(api.basename(targetPath), platform) &&
+        // U-33: a project goes to the Recycle Bin, even inside a cache folder.
+        nestedProjectsOf(key).length === 0
       ) {
         kind = 'build_cache';
       } else {
@@ -206,12 +212,7 @@ export async function classifyTargets(
       owner: owner
         ? { path: owner.project.path, name: owner.project.name }
         : null,
-      nestedProjects: projects
-        .filter(
-          (entry) =>
-            entry.key !== key && isSameOrInside(entry.key, key, platform),
-        )
-        .map((entry) => entry.project.path),
+      nestedProjects: nestedProjectsOf(key).map((entry) => entry.project.path),
       identity: {
         dev: stats.dev.toString(),
         ino: stats.ino.toString(),
@@ -248,7 +249,7 @@ export async function classifyTargets(
     .map(({ target }) => target);
 }
 
-const errorCode = (error: unknown): unknown =>
+export const errorCode = (error: unknown): unknown =>
   error !== null && typeof error === 'object' && 'code' in error
     ? error.code
     : undefined;

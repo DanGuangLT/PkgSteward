@@ -5,6 +5,7 @@ import type { TestingModule } from '@nestjs/testing';
 import fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { toPathPlatform, pathApi } from '@/common/utils/path.util';
+import * as pathUtil from '@/common/utils/path.util';
 import {
   AppException,
   NotFoundException,
@@ -337,6 +338,292 @@ function fixture(
     walks,
   };
 }
+
+describe('ScannerService.applyDeletions', () => {
+  const paths = [
+    'D:\\mono',
+    'D:\\mono\\packages\\a',
+    'D:\\mono\\packages\\b',
+    'D:\\p',
+    'D:\\ab',
+  ];
+  const orphanPaths = [
+    'D:\\old\\node_modules',
+    'D:\\older\\node_modules',
+    'D:\\last\\node_modules',
+  ];
+  const measuredAt = '2026-10-30T00:00:00.000Z';
+
+  beforeEach(() => {
+    jest.spyOn(pathUtil, 'toPathPlatform').mockReturnValue('win32');
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  // TEST metadata is loaded through the cache mock; no real scan or filesystem IO.
+  async function deletionFixture(
+    status: 'completed' | 'timed_out' = 'completed',
+  ) {
+    const f = fixture({ roots: 'D:\\', depth: 4 });
+    const result: IStoredScanResult = {
+      scanId: 'TEST-deletions',
+      status,
+      partial: status === 'timed_out',
+      roots: ['D:\\'],
+      maxDepth: 4,
+      startedAt: '2026-10-29T00:00:00.000Z',
+      finishedAt: '2026-10-29T00:01:00.000Z',
+      skippedCount: 7,
+      projects: paths.map((path, index) => ({
+        path,
+        name: `TEST-project-${index}`,
+        packageManager: 'pnpm',
+        hasLockfile: true,
+        lastActivityAt: '2026-10-28T00:00:00.000Z',
+        nodeModules: {
+          exists: true,
+          path: `${path}\\node_modules`,
+          sizeBytes: null,
+          sizeMeasuredAt: null,
+        },
+      })),
+      orphanNodeModules: orphanPaths.map((path) => ({
+        path,
+        mtime: '2026-10-27T00:00:00.000Z',
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      })),
+    };
+    const disk = {
+      peekCompletedSize: jest.fn<ICompletedDiskSize | null, [string]>(
+        () => null,
+      ),
+      clearCache: jest.fn(),
+    };
+    const service = new ScannerService(
+      f.config,
+      f.guard as unknown as PathGuardService,
+      f.detector,
+      f.walker,
+      f.cache,
+      disk as unknown as DiskUsageService,
+      f.gate,
+    );
+    const key = makeScanCacheKey(
+      parseScanRootPaths('D:\\', 'win32'),
+      4,
+      'win32',
+    );
+    f.load.mockResolvedValue({ schemaVersion: 1, key, result });
+    await service.onModuleInit();
+    return { ...f, service, disk, result, key };
+  }
+
+  it.each<[string, string, number[]]>([
+    ['project root', 'D:\\p', [0, 1, 2, 4]],
+    ['monorepo ancestor', 'D:\\mono', [3, 4]],
+    ['nested project only', 'D:\\mono\\packages\\a', [0, 2, 3, 4]],
+    ['package.json', 'D:\\p\\package.json', [0, 1, 2, 4]],
+    ['case-insensitive package.json', 'd:\\P\\PACKAGE.JSON', [0, 1, 2, 4]],
+  ])(
+    'removes %s and preserves surviving project order',
+    async (_label, deleted, survivors) => {
+      const f = await deletionFixture();
+      const before = f.service.getLatest();
+      const original = structuredClone(before);
+      f.service.applyDeletions([deleted]);
+      const after = f.service.getLatest();
+      expect(after).toEqual({
+        ...original,
+        projects: survivors.map((index) => original.projects[index]),
+      });
+      expect(before).toEqual(original);
+      expect(f.save).toHaveBeenCalledTimes(1);
+      expect(f.save).toHaveBeenCalledWith({
+        schemaVersion: 1,
+        key: f.key,
+        result: after,
+      });
+      expect(f.result.projects).toHaveLength(5);
+      expect(f.disk.clearCache).not.toHaveBeenCalled();
+      expect(f.walker).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['D:\\p\\node_modules', 'd:\\P\\NODE_MODULES'])(
+    'marks deleted modules %s absent without changing other project metadata',
+    async (deleted) => {
+      const f = await deletionFixture();
+      const before = f.service.getLatest();
+      f.service.applyDeletions([deleted]);
+      const expected = structuredClone(before);
+      expected.projects[3].nodeModules.exists = false;
+      expect(f.service.getLatest()).toEqual(expected);
+      expect(before.projects[3].nodeModules.exists).toBe(true);
+      expect(f.save).toHaveBeenCalledTimes(1);
+      expect(f.save).toHaveBeenCalledWith({
+        schemaVersion: 1,
+        key: f.key,
+        result: expected,
+      });
+    },
+  );
+
+  it('marks modules absent when their ancestor is deleted but their project survives', async () => {
+    const f = await deletionFixture();
+    f.result.projects[3].nodeModules.path = 'D:\\p\\vendor\\node_modules';
+    await f.service.onModuleInit();
+    const before = f.service.getLatest();
+    f.service.applyDeletions(['D:\\p\\vendor']);
+    const expected = structuredClone(before);
+    expected.projects[3].nodeModules.exists = false;
+    expect(f.service.getLatest()).toEqual(expected);
+    expect(f.save).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['D:\\old\\node_modules', 'D:\\old'])(
+    'removes an orphan through %s, preserving sibling prefix and order',
+    async (deleted) => {
+      const f = await deletionFixture();
+      const before = f.service.getLatest();
+      f.service.applyDeletions([deleted]);
+      expect(f.service.getLatest()).toEqual({
+        ...before,
+        orphanNodeModules: before.orphanNodeModules.slice(1),
+      });
+      expect(f.save).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each<[string, readonly string[]]>([
+    ['empty batch', []],
+    ['ordinary project content', ['D:\\p\\src']],
+    ['sibling prefix', ['D:\\a']],
+    ['descendant of node_modules', ['D:\\p\\node_modules\\pkg']],
+    ['descendant of orphan', ['D:\\old\\node_modules\\pkg']],
+    ['unrelated path', ['D:\\unknown']],
+  ])('does not save or change latest for %s', async (_label, deleted) => {
+    const f = await deletionFixture();
+    const before = f.service.getLatest();
+    expect(() => f.service.applyDeletions(deleted)).not.toThrow();
+    expect(f.service.getLatest()).toEqual(before);
+    expect(f.save).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without a latest result', () => {
+    const f = fixture({ roots: 'D:\\' });
+    expect(() => f.service.applyDeletions(['D:\\p'])).not.toThrow();
+    expect(f.save).not.toHaveBeenCalled();
+    expect(() => f.service.getLatest()).toThrow(NotFoundException);
+  });
+
+  it('does not save again when modules are already absent', async () => {
+    const f = await deletionFixture();
+    f.result.projects[3].nodeModules.exists = false;
+    await f.service.onModuleInit();
+    const before = f.service.getLatest();
+    f.service.applyDeletions(['D:\\p\\node_modules']);
+    expect(f.service.getLatest()).toEqual(before);
+    expect(f.save).not.toHaveBeenCalled();
+  });
+
+  it('applies a mixed duplicate batch once and preserves partial scan metadata', async () => {
+    const f = await deletionFixture('timed_out');
+    const before = f.service.getLatest();
+    const deleted: readonly string[] = Object.freeze([
+      'D:\\mono\\packages',
+      'D:\\p\\node_modules',
+      'D:\\older',
+      'D:\\p\\node_modules',
+    ]);
+    f.service.applyDeletions(deleted);
+    const expected = structuredClone(before);
+    expected.projects = [
+      expected.projects[0],
+      expected.projects[3],
+      expected.projects[4],
+    ];
+    expected.projects[1].nodeModules.exists = false;
+    expected.orphanNodeModules = [
+      expected.orphanNodeModules[0],
+      expected.orphanNodeModules[2],
+    ];
+    expect(f.service.getLatest()).toEqual(expected);
+    expect(f.save).toHaveBeenCalledTimes(1);
+    expect(f.save).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      key: f.key,
+      result: expected,
+    });
+    f.save.mockClear();
+    f.service.applyDeletions(deleted);
+    expect(f.save).not.toHaveBeenCalled();
+  });
+
+  it('warns on rejected cache persistence but keeps the updated RAM result', async () => {
+    const f = await deletionFixture();
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const failure = new Error('TEST cache unavailable');
+    f.save.mockRejectedValueOnce(failure);
+    expect(() => f.service.applyDeletions(['D:\\p'])).not.toThrow();
+    expect(
+      f.service.getLatest().projects.map((project) => project.path),
+    ).toEqual([paths[0], paths[1], paths[2], paths[4]]);
+    await tick();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('Could not save scan cache', failure);
+    expect(f.service.getLatest().projects).toHaveLength(4);
+  });
+
+  it('returns null sizes for deleted modules despite stale disk cache and preserves prior responses', async () => {
+    const f = await deletionFixture();
+    f.disk.peekCompletedSize.mockReturnValue({ sizeBytes: 123, measuredAt });
+    const before = f.service.getLatest();
+    const original = structuredClone(before);
+    f.disk.peekCompletedSize.mockClear();
+    f.service.applyDeletions(['D:\\p\\node_modules']);
+    expect(f.disk.peekCompletedSize).not.toHaveBeenCalled();
+    expect(f.disk.clearCache).not.toHaveBeenCalled();
+    expect(f.service.getLatest().projects[3].nodeModules).toEqual({
+      path: 'D:\\p\\node_modules',
+      exists: false,
+      sizeBytes: null,
+      sizeMeasuredAt: null,
+    });
+    expect(f.disk.peekCompletedSize).not.toHaveBeenCalledWith(
+      'D:\\p\\node_modules',
+    );
+    expect(before).toEqual(original);
+    expect(before.projects[3].nodeModules.sizeBytes).toBe(123);
+    const saved = f.save.mock.calls[0][0];
+    expect(saved.result.projects[3].nodeModules.exists).toBe(false);
+    expect(
+      saved.result.projects.every(
+        (project) => project.nodeModules.sizeBytes === null,
+      ),
+    ).toBe(true);
+    expect(
+      saved.result.orphanNodeModules.every(
+        (orphan) => orphan.sizeBytes === null,
+      ),
+    ).toBe(true);
+  });
+
+  it('does not cancel or change an active scan while updating latest', async () => {
+    const f = await deletionFixture();
+    const scan = f.service.startScan();
+    await tick();
+    const before = f.service.getScan(scan.scanId);
+    try {
+      f.service.applyDeletions(['D:\\p']);
+      expect(f.service.getScan(scan.scanId)).toEqual(before);
+      expect(f.service.hasRunningScan()).toBe(true);
+      expect(f.walks[0].signal.aborted).toBe(false);
+      expect(f.service.getLatest().projects).toHaveLength(4);
+    } finally {
+      f.service.cancelScan(scan.scanId);
+    }
+  });
+});
 
 describe('ScannerService', () => {
   let errors: jest.SpyInstance;

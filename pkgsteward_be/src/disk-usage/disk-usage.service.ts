@@ -167,6 +167,10 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     return this.cache.peekCompletedSize(canonicalPath);
   }
 
+  clearCache(): void {
+    this.cache.clear();
+  }
+
   private requireJob(jobId: string): IActiveMeasurement {
     if (!this.current || this.current.job.jobId !== jobId) {
       throw new NotFoundException('Disk usage job', jobId);
