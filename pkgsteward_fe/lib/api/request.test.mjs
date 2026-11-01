@@ -43,6 +43,25 @@ test("method, headers, body and a combined caller signal are forwarded", async (
   )
 })
 
+test("null timeout adds no timer and keeps the caller signal", async (t) => {
+  const controller = new AbortController()
+  const factory = t.mock.method(AbortSignal, "timeout", () => assert.fail("TEST no timer expected"))
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    assert.equal(init.signal.aborted, false)
+    controller.abort()
+    assert.equal(init.signal.aborted, true)
+    throw init.signal.reason
+  })
+  await assert.rejects(requestApi("/api/scans", { signal: controller.signal }, null), { name: "AbortError" })
+  assert.equal(factory.mock.callCount(), 0)
+
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    assert.equal(init.signal, undefined)
+    return Response.json(envelope("TEST-data"))
+  })
+  assert.deepEqual(await requestApi("/api/scans", {}, null), envelope("TEST-data"))
+})
+
 test("timeout is exactly 10000ms and its signal is passed to fetch", async (t) => {
   const timeout = new AbortController()
   assert.equal(API_TIMEOUT_MS, 10000)
