@@ -17,13 +17,13 @@ import * as discovery from '@/file-ops/cleanup-discovery';
 import * as deleter from '@/file-ops/file-deleter';
 import * as assessment from '@/file-ops/file-ops-assessment';
 import * as measurement from '@/file-ops/file-ops-measure';
+import type { ITargetMeasurement } from '@/file-ops/file-ops-measure';
 import { FileOpsService } from '@/file-ops/file-ops.service';
 import * as tree from '@/file-ops/file-tree';
 import type { GitProbe } from '@/file-ops/git-probe';
 import type {
   DeleteOutcome,
   IExecuteInput,
-  IFileOpsOperation,
   IFileOpsFsBundle,
   IFileOpsFs,
   IFileOpsStat,
@@ -207,9 +207,13 @@ function fixture() {
       .fn<Promise<void>, [IAuditRecord]>()
       .mockResolvedValue(undefined),
   };
-  const recycleBin: jest.Mocked<IRecycleBin> = {
-    recycle: jest.fn().mockRejectedValue(new Error('Unexpected recycling')),
-  };
+  const recycle = jest
+    .fn<
+      ReturnType<IRecycleBin['recycle']>,
+      Parameters<IRecycleBin['recycle']>
+    >()
+    .mockRejectedValue(new Error('Unexpected recycling'));
+  const recycleBin: jest.Mocked<IRecycleBin> = { recycle };
   const guard = { checkMany: jest.fn().mockResolvedValue([]) };
   const fileLstat = jest
     .fn<ReturnType<IFileOpsFs['lstat']>, Parameters<IFileOpsFs['lstat']>>()
@@ -302,6 +306,7 @@ function fixture() {
     capture,
     diskUsage,
     audit,
+    recycle,
     recycleBin,
     gateToken,
   };
@@ -454,7 +459,7 @@ type ExecuteFixture = Awaited<ReturnType<typeof executeFixture>>;
 function expectNoDeletion(f: ExecuteFixture) {
   expect(f.deleteOne).not.toHaveBeenCalled();
   expect(f.fs.remove).not.toHaveBeenCalled();
-  expect(f.recycleBin.recycle).not.toHaveBeenCalled();
+  expect(f.recycle).not.toHaveBeenCalled();
 }
 async function expectExecuteError(
   f: ExecuteFixture,
@@ -586,15 +591,26 @@ describe('FileOpsService execute validation and concurrency', () => {
     'rejects missing server-side %s before entering the gate',
     async (missing) => {
       const f = await executeFixture();
-      const getFacts = PreviewStore.prototype.getFacts;
-      jest
-        .spyOn(PreviewStore.prototype, 'getFacts')
-        .mockImplementation(function (this: PreviewStore, id: string) {
-          const facts = getFacts.call(this, id);
-          if (missing === 'record') return undefined;
-          facts?.[missing].delete(EXEC_A);
-          return facts;
-        });
+      const { identity } = target(EXEC_A);
+      const size: ITargetMeasurement = {
+        apparentBytes: 120,
+        sizeBytes: 100,
+        reclaimableBytes: 70,
+        sharedBytes: 30,
+        fileCount: 2,
+      };
+      jest.spyOn(PreviewStore.prototype, 'getFacts').mockImplementation(() =>
+        missing === 'record'
+          ? undefined
+          : {
+              identities: new Map(
+                missing === 'identities' ? [] : [[EXEC_A, identity!]],
+              ),
+              measurements: new Map(
+                missing === 'measurements' ? [] : [[EXEC_A, size]],
+              ),
+            },
+      );
       await expectExecuteError(
         f,
         { ...f.input, paths: [EXEC_A] },
@@ -914,6 +930,10 @@ describe('FileOpsService execute preflight', () => {
       level: 'low',
       codes: [],
     });
+    expect(f.audit.append.mock.calls[1][0].risk).toEqual({
+      level: 'low',
+      codes: [],
+    });
   });
 
   it('reassesses with fresh dependencies and scan metadata without cleanup facts or cached sizes', async () => {
@@ -1080,7 +1100,7 @@ describe('FileOpsService execute operations and replay', () => {
       confirmText: 'DELETE 3',
     });
     expect(started).toEqual({
-      operationId: expect.any(String),
+      operationId: expect.any(String) as unknown,
       status: 'running',
     });
     expect(f.service.getPreview(f.previewId).operationId).toBe(
@@ -1349,6 +1369,7 @@ describe('FileOpsService immediate target checks', () => {
     ['ENOTDIR', 'TARGET_GONE'],
     ['EACCES', 'TARGET_CHANGED'],
     ['guard denied', 'TARGET_CHANGED'],
+    ['guard not found', 'TARGET_GONE'],
     ['guard throws', 'TARGET_CHANGED'],
     ['guard link', 'TARGET_CHANGED'],
     ['guard redirected', 'TARGET_CHANGED'],
@@ -1370,6 +1391,10 @@ describe('FileOpsService immediate target checks', () => {
       if (problem === 'guard denied')
         f.guard.checkMany.mockResolvedValueOnce([
           { allowed: false, code: 'DENYLISTED', message: PRIVATE_ERROR },
+        ]);
+      if (problem === 'guard not found')
+        f.guard.checkMany.mockResolvedValueOnce([
+          { allowed: false, code: 'NOT_FOUND', message: PRIVATE_ERROR },
         ]);
       if (problem === 'guard throws')
         f.guard.checkMany.mockRejectedValueOnce(ioError('ENOENT'));
@@ -1403,12 +1428,61 @@ describe('FileOpsService immediate target checks', () => {
         EXEC_B,
       ]);
       expect(f.guard.checkMany.mock.calls).toEqual([[[EXEC_A]], [[EXEC_B]]]);
+      expect(
+        f.audit.append.mock.calls.slice(1).map(([record]) => record),
+      ).toMatchObject([
+        { phase: 'result', targets: [EXEC_A], result: 'failed', errorCode },
+        {
+          phase: 'result',
+          targets: [EXEC_B],
+          result: 'success',
+          errorCode: null,
+        },
+      ]);
       expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
       expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
       expect(JSON.stringify(operation)).not.toContain(PRIVATE_ERROR);
       expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
     },
   );
+
+  it('refuses a special file whose device and inode still match', async () => {
+    const f = await executeFixture([
+      target(EXEC_C, {
+        kind: 'project_content',
+        method: 'recycle',
+        risk: CONTENT_RISK,
+        identity: { dev: '7', ino: '9007199254740993', type: 'file' },
+      }),
+    ]);
+    f.nodes.set(paths.toComparable(EXEC_C, 'win32'), {
+      ...executeStat(true),
+      isFile: () => false,
+    });
+    const started = await f.service.startExecute({
+      ...f.input,
+      acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+      confirmText: 'DELETE 1',
+    });
+    await flush();
+    expect(
+      f.service.getOperation(started.operationId).results[0],
+    ).toMatchObject({ status: 'failed', errorCode: 'TARGET_CHANGED' });
+    expectNoDeletion(f);
+  });
+
+  it('checks the manifest of the owner found by preflight, not the preview owner', async () => {
+    const f = await executeFixture([target(EXEC_A)]);
+    f.assess.mockResolvedValue([
+      target(EXEC_A, { owner: { path: 'D:\\TEST-moved', name: 'TEST-moved' } }),
+    ]);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(
+      f.service.getOperation(started.operationId).results[0],
+    ).toMatchObject({ status: 'failed', errorCode: 'TARGET_CHANGED' });
+    expectNoDeletion(f);
+  });
 
   it('accepts case-equivalent guard real paths immediately before deletion', async () => {
     const f = await executeFixture([target(EXEC_A)]);
@@ -1592,6 +1666,23 @@ describe('FileOpsService stopping and finalization', () => {
     });
   });
 
+  it('stays completed when cancellation arrives during the last target', async () => {
+    const f = await executeFixture([target(EXEC_A)]);
+    const waiting = deferred<DeleteOutcome>();
+    f.deleteOne.mockReturnValueOnce(waiting.promise);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.cancelOperation(started.operationId).status).toBe(
+      'stopping',
+    );
+    waiting.resolve({ method: 'permanent', status: 'success' });
+    await flush();
+    expect(f.service.getOperation(started.operationId)).toMatchObject({
+      status: 'completed',
+      results: [{ status: 'success' }],
+    });
+  });
+
   it.each([
     {
       method: 'permanent',
@@ -1739,15 +1830,11 @@ describe('FileOpsService stopping and finalization', () => {
 
   it('still leaves the gate when publishing the terminal operation throws', async () => {
     const f = await executeFixture();
-    const original = OperationStore.prototype.update;
-    jest.spyOn(OperationStore.prototype, 'update').mockImplementation(function (
-      this: OperationStore,
-      id: string,
-      operation: IFileOpsOperation,
-    ) {
-      if (operation.finishedAt) throw new Error(PRIVATE_ERROR);
-      return original.call(this, id, operation);
-    });
+    jest
+      .spyOn(OperationStore.prototype, 'update')
+      .mockImplementation((_id, operation) => {
+        if (operation.finishedAt) throw new Error(PRIVATE_ERROR);
+      });
     await f.service.startExecute(f.input);
     await flush();
     expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_A, EXEC_B]);

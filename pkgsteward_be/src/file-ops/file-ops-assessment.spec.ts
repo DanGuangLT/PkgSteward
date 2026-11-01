@@ -128,7 +128,7 @@ function fixture(platform: PathPlatform = 'win32') {
   const controller = new AbortController();
   const deps: IAssessDeps = {
     platform,
-    fs: { files, scan: scanFs },
+    fs: { files, scan: scanFs, remove: jest.fn() },
     checkMany,
     git,
     processes,
