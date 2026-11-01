@@ -49,8 +49,12 @@ export function OperationResults({ operation }: { operation: FileOpsOperation })
           <li>{t("results.counts.remaining", { count: counts.remaining, formattedCount: format.number(counts.remaining) })}</li>
         ) : null}
       </ul>
-      <p className="text-heading-md">{t("results.reclaimed")} <DiskSize bytes={counts.reclaimedBytes} /></p>
-      <p className="text-body-sm text-muted-foreground">{t("results.estimateHint")}</p>
+      {counts.reclaimedBytes > 0 || counts.recycled === 0 ? (
+        <>
+          <p className="text-heading-md">{t("results.reclaimed")} <DiskSize bytes={counts.reclaimedBytes} /></p>
+          <p className="text-body-sm text-muted-foreground">{t("results.estimateHint")}</p>
+        </>
+      ) : null}
       {counts.recycled > 0 ? <p className="text-body-sm">{t("results.recycledHint", {
         count: counts.recycled, formattedCount: format.number(counts.recycled),
       })}</p> : null}

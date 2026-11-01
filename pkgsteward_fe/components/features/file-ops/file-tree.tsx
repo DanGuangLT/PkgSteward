@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import type { FileTreeController } from "@/hooks/use-file-tree"
 import type { FileTreeEntry } from "@/lib/api/types"
 import { treeCheckState } from "@/lib/file-ops/tree-selection"
+import { cn } from "@/lib/utils"
 
 interface FileTreeProps {
   root: string
@@ -44,10 +45,15 @@ function TreeRow({ entry, ...tree }: FileTreeProps & { entry: FileTreeEntry }) {
           checked={state === "indeterminate" ? "indeterminate" : state === "checked"}
           onCheckedChange={() => tree.onToggle(entry)} />
         <EntryIcon entry={entry} />
-        <Label htmlFor={checkboxId} className="min-w-0 flex-1 font-mono text-body-sm leading-snug font-normal [overflow-wrap:anywhere]">
-          {entry.name}
-        </Label>
-        {entry.type === "link" ? <span className="shrink-0 text-caption text-muted-foreground">{t("tree.link")}</span> : null}
+        <div className="min-w-0 flex-1">
+          <Label htmlFor={checkboxId} className={cn(
+            "block font-mono text-body-sm leading-snug font-normal [overflow-wrap:anywhere]",
+            !entry.selectable && "text-muted-foreground"
+          )}>
+            {entry.name}
+          </Label>
+          {entry.type === "link" ? <p className="text-caption text-muted-foreground">{t("tree.link")}</p> : null}
+        </div>
         {entry.sizeBytes !== null ? <span className="shrink-0 text-caption text-muted-foreground"><DiskSize bytes={entry.sizeBytes} /></span> : null}
       </div>
       {open ? <TreeLevelView {...tree} path={entry.path} /> : null}

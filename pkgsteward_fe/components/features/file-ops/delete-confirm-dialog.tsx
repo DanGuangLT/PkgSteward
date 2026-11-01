@@ -78,10 +78,12 @@ function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Omi
         )}
 
         <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-          <div className="min-w-0">
-            <dt className="text-muted-foreground">{t("selection.reclaimable")}</dt>
-            <dd className="text-heading-md"><DiskSize bytes={summary.totals.reclaimableBytes} /></dd>
-          </div>
+          {summary.totals.reclaimableBytes > 0 || summary.totals.recycleBytes === 0 ? (
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">{t("selection.reclaimable")}</dt>
+              <dd className="text-heading-md"><DiskSize bytes={summary.totals.reclaimableBytes} /></dd>
+            </div>
+          ) : null}
           {summary.totals.recycleBytes > 0 ? (
             <div className="min-w-0">
               <dt className="text-muted-foreground">{t("selection.recycle")}</dt>

@@ -82,17 +82,19 @@ function ReviewSelection({ controller, preview, sort, referenceTime, onSortChang
         </div>
         <SortControl sort={sort} onSortChange={onSortChange} />
       </div>
+      <p className="text-caption text-muted-foreground">{t("selection.estimateHint")}</p>
       <CleanupItems targets={targets} selected={selected} interaction={ready ? "ready" : "locked"}
         referenceTime={referenceTime} onToggle={toggle} />
       <div className="sticky bottom-0 flex min-w-0 flex-col gap-3 rounded-md border border-border bg-background p-4 text-body-sm">
         <ul className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
           <li>{t("selection.count", { count: totals.count, formattedCount: format.number(totals.count) })}</li>
-          <li>{t("selection.reclaimable")} <span className="font-semibold"><DiskSize bytes={totals.reclaimableBytes} /></span></li>
+          {totals.reclaimableBytes > 0 || totals.recycleBytes === 0 ? (
+            <li>{t("selection.reclaimable")} <span className="font-semibold"><DiskSize bytes={totals.reclaimableBytes} /></span></li>
+          ) : null}
           {totals.recycleBytes > 0 ? (
             <li>{t("selection.recycle")} <span className="font-semibold"><DiskSize bytes={totals.recycleBytes} /></span></li>
           ) : null}
         </ul>
-        <p className="text-caption text-muted-foreground">{t("selection.estimateHint")}</p>
         {tooMany ? <p role="alert">{t("selection.tooMany", { formattedLimit: format.number(MAX_DELETE_PATHS) })}</p> : null}
         <Button type="button" variant="destructive" className="self-start" disabled={!ready || selected.size === 0 || tooMany}
           onClick={() => void controller.summarize([...selected])}>
