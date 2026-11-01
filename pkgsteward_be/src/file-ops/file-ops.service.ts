@@ -333,7 +333,9 @@ export class FileOpsService implements IFileOpsService {
         recycleBytes: selected.reduce(
           (total, target) =>
             total +
-            (target.method === 'recycle' ? (target.size.sizeBytes ?? 0) : 0),
+            (target.method === 'recycle'
+              ? (target.size.reclaimableBytes ?? 0)
+              : 0),
           0,
         ),
       },

@@ -2609,7 +2609,7 @@ describe('FileOpsService summary and tree', () => {
     },
   );
 
-  it('sums permanent reclaimable bytes separately from recyclable size and recomputes subset confirmation', async () => {
+  it('sums permanent and recycled reclaimable bytes separately and recomputes subset confirmation', async () => {
     const f = fixture();
     f.assess.mockResolvedValue([
       target('D:\\TEST-deps'),
@@ -2641,14 +2641,14 @@ describe('FileOpsService summary and tree', () => {
       paths: selected,
       risk: { level: 'high' },
       confirmText: 'DELETE 2',
-      totals: { targetCount: 2, reclaimableBytes: 70, recycleBytes: 300 },
+      totals: { targetCount: 2, reclaimableBytes: 70, recycleBytes: 250 },
     });
     const projectOnly = f.service.summarizePreview(previewId, [
       'D:\\TEST-project',
     ]);
     expect(projectOnly).toMatchObject({
       confirmText: 'TEST-project',
-      totals: { targetCount: 1, reclaimableBytes: 0, recycleBytes: 300 },
+      totals: { targetCount: 1, reclaimableBytes: 0, recycleBytes: 250 },
     });
     expect(
       f.service.summarizePreview(previewId, ['D:\\TEST-deps']),
@@ -2671,7 +2671,7 @@ describe('FileOpsService summary and tree', () => {
     expect(f.service.summarizePreview(previewId, selected)).toMatchObject({
       paths: selected,
       risk: { level: 'high' },
-      totals: { recycleBytes: 300 },
+      totals: { recycleBytes: 250 },
     });
   });
 

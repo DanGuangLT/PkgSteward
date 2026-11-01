@@ -155,7 +155,8 @@ caller confirms for a selection of that preview. Both run in the background and 
   holds a scanned project counts as project content, so it is recycled and cleanup previews leave it out.
 - **Size numbers:** `reclaimableBytes` estimates the space a permanent deletion frees: files whose hardlinks are all
   inside the target. `sharedBytes` is still used by hardlinks elsewhere, such as the pnpm store. Recycling frees no
-  space: an operation result reports `reclaimableBytes: null` for it, and summary totals count it as `recycleBytes`.
+  space until the bin is emptied: an operation result reports `reclaimableBytes: null` for it, and summary totals add
+  its reclaimable estimate to `recycleBytes` instead.
 - **Confirmation:** `confirm` must be the JSON boolean `true`. Medium and high risk also require every risk code in
   `acknowledgedRisks`, and high risk requires the exact `confirmText` from the summary: the folder name of a single
   project, otherwise `DELETE <count>`. The server recalculates risk at execute time and ignores values from the client.
