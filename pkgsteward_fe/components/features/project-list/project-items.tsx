@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table"
 import type { ScannedProject } from "@/lib/api/types"
 import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
+import { fileManagerHref } from "@/lib/file-ops/file-ops-list"
 import { projectDisplayName } from "@/lib/projects/project-list"
 
 interface ProjectItemsProps {
@@ -62,6 +63,15 @@ function ProjectNodeModules({ project }: { project: ScannedProject }) {
   )
 }
 
+function ProjectFilesLink({ project }: { project: ScannedProject }) {
+  const t = useTranslations("projects")
+  return (
+    <Link href={fileManagerHref(project.path)} className="inline-block max-w-full rounded-sm text-body-sm text-ink-soft underline focus-ring">
+      {t("actions.manageFiles")}
+    </Link>
+  )
+}
+
 function ProjectActivity({ date, referenceTime }: { date: string; referenceTime: string }) {
   const format = useFormatter()
   return <time dateTime={date}>{format.relativeTime(new Date(date), new Date(referenceTime))}</time>
@@ -90,6 +100,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                 <TableCell className="min-w-0 whitespace-normal">
                   <p className="font-semibold text-foreground [overflow-wrap:anywhere]">{projectDisplayName(project)}</p>
                   <p className="mt-1 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
+                  <p className="mt-2"><ProjectFilesLink project={project} /></p>
                 </TableCell>
                 <TableCell className="whitespace-normal"><ProjectManager project={project} /></TableCell>
                 <TableCell className="whitespace-normal"><ProjectLockfile project={project} /></TableCell>
@@ -110,6 +121,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
               <CardHeader className="min-w-0">
                 <CardTitle className="min-w-0 [overflow-wrap:anywhere]">{projectDisplayName(project)}</CardTitle>
                 <p className="min-w-0 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
+                <p><ProjectFilesLink project={project} /></p>
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-4 text-body-sm">
