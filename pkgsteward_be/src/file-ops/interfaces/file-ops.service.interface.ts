@@ -18,5 +18,6 @@ export interface IFileOpsService {
   summarizePreview(previewId: string, paths: string[]): IPreviewSummary;
   startExecute(input: IExecuteInput): Promise<IOperationStart>;
   getOperation(operationId: string): IFileOpsOperation;
+  getActiveOperation(): IFileOpsOperation | null;
   cancelOperation(operationId: string): IFileOpsOperation;
 }

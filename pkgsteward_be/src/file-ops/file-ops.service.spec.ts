@@ -1666,6 +1666,46 @@ describe('FileOpsService stopping and finalization', () => {
     });
   });
 
+  it('does not delete a target when cancellation arrives during its pre-delete check', async () => {
+    const f = await executeFixture();
+    const check = deferred<PathCheckResult[]>();
+    f.guard.checkMany.mockReturnValueOnce(check.promise);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.cancelOperation(started.operationId).status).toBe(
+      'stopping',
+    );
+    check.resolve([allowedPath(EXEC_A)]);
+    await flush();
+    expect(f.service.getOperation(started.operationId)).toMatchObject({
+      status: 'cancelled',
+      results: [
+        { status: 'not_started', errorCode: null },
+        { status: 'not_started', errorCode: null },
+      ],
+    });
+    expectNoDeletion(f);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([]);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+  });
+
+  it('exposes only the running operation as active', async () => {
+    const f = await executeFixture();
+    expect(f.service.getActiveOperation()).toBeNull();
+    const waiting = deferred<DeleteOutcome>();
+    f.deleteOne.mockReturnValueOnce(waiting.promise);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+    expect(f.service.getActiveOperation()).toMatchObject({
+      operationId: started.operationId,
+      status: 'running',
+      currentPath: EXEC_A,
+    });
+    waiting.resolve({ method: 'permanent', status: 'success' });
+    await flush();
+    expect(f.service.getActiveOperation()).toBeNull();
+  });
+
   it('stays completed when cancellation arrives during the last target', async () => {
     const f = await executeFixture([target(EXEC_A)]);
     const waiting = deferred<DeleteOutcome>();

@@ -504,6 +504,62 @@ describe('FileOps HTTP flow (e2e)', () => {
     ).toMatchObject([{ result: 'failed' }, { result: 'success' }]);
   });
 
+  it('accepts the documented path limit at realistic path lengths', async () => {
+    await scan();
+    const paths = Array.from({ length: 1000 }, (_, index) =>
+      join(project, 'src', `${'a'.repeat(150)}-${index}`),
+    );
+    const { previewId } = data<IPreviewStart>(
+      await http().post(`${API}/delete/preview`).send({ paths }).expect(202),
+    );
+    const preview = await finishedPreview(previewId);
+    expect(preview.targets).toHaveLength(1000);
+    expect(preview.targets.every(({ valid }) => !valid)).toBe(true);
+  });
+
+  it('answers an oversized body with a clear 413 instead of a 500', async () => {
+    const paths = Array.from({ length: 1000 }, () => 'a'.repeat(11_000));
+    const response = await http()
+      .post(`${API}/delete/preview`)
+      .send({ paths })
+      .expect(413);
+    expect(code(response)).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('finds the running operation again without knowing its ID', async () => {
+    await scan();
+    const idle = await http().get(`${API}/operations/active`).expect(200);
+    expect(idle.headers['cache-control']).toBe('no-store');
+    expect(data<IFileOpsOperation | null>(idle)).toBeNull();
+
+    const preview = await previewPaths([nodeModules]);
+    const body = await confirmed(preview.previewId, [nodeModules]);
+    let release!: () => void;
+    remove.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (release = resolve)),
+    );
+    const started = data<IOperationStart>(await execute(body).expect(202));
+    await until(
+      () => Promise.resolve(remove.mock.calls.length),
+      (calls) => calls === 1,
+    );
+    const active = data<IFileOpsOperation | null>(
+      await http().get(`${API}/operations/active`).expect(200),
+    );
+    expect(active).toMatchObject({
+      operationId: started.operationId,
+      status: 'running',
+      currentPath: nodeModules,
+    });
+    release();
+    await finishedOperation(started.operationId);
+    expect(
+      data<IFileOpsOperation | null>(
+        await http().get(`${API}/operations/active`).expect(200),
+      ),
+    ).toBeNull();
+  });
+
   it('never treats a cache folder holding a scanned project as disposable', async () => {
     const coverage = join(project, 'coverage');
     await mkdir(join(coverage, 'test-tool'), { recursive: true });

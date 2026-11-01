@@ -15,6 +15,12 @@ interface HttpExceptionBody {
   [key: string]: unknown;
 }
 
+// body-parser báo lỗi này trước khi vào route, không phải HttpException.
+const isPayloadTooLarge = (exception: unknown): boolean =>
+  exception instanceof Error &&
+  'type' in exception &&
+  exception.type === 'entity.too.large';
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -70,6 +76,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : statusCode === HttpStatus.TOO_MANY_REQUESTS
             ? 'RATE_LIMITED'
             : 'HTTP_EXCEPTION';
+    } else if (isPayloadTooLarge(exception)) {
+      statusCode = HttpStatus.PAYLOAD_TOO_LARGE;
+      message = 'Request body is too large';
+      code = 'PAYLOAD_TOO_LARGE';
     } else if (exception instanceof Error) {
       /**
        * 3. Unknown Error

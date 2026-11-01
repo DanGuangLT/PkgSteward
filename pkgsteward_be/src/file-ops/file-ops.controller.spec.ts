@@ -151,6 +151,7 @@ describe('FileOpsController contract', () => {
       Promise.resolve({ operationId, status: 'running' as const }),
     ),
     getOperation: jest.fn(operation),
+    getActiveOperation: jest.fn<IFileOpsOperation | null, []>(operation),
     cancelOperation: jest.fn(operation),
   };
   const controller = new FileOpsController(
@@ -224,6 +225,18 @@ describe('FileOpsController contract', () => {
     expect(service.cancelOperation).toHaveBeenCalledWith(operationId);
   });
 
+  it('returns the running operation, or null when idle', () => {
+    const running = controller.getActiveOperation();
+    expect(running.statusCode).toBe(200);
+    expect(running.data).toBeInstanceOf(FileOpsOperationEntity);
+    expect(instanceToPlain(running.data)).toEqual(operation());
+    service.getActiveOperation.mockReturnValueOnce(null);
+    expect(controller.getActiveOperation()).toMatchObject({
+      statusCode: 200,
+      data: null,
+    });
+  });
+
   it('declares the documented status code on every write route', () => {
     for (const route of [
       'startCleanupPreview',
@@ -265,9 +278,14 @@ describe('FileOpsController contract', () => {
       'summarizePreview',
       'startExecute',
       'getOperation',
+      'getActiveOperation',
       'cancelOperation',
     ] as const;
-    const polls: readonly string[] = ['getPreview', 'getOperation'];
+    const polls: readonly string[] = [
+      'getPreview',
+      'getOperation',
+      'getActiveOperation',
+    ];
     for (const route of routes) {
       expect(
         Reflect.hasMetadata(IS_DANGEROUS_OPERATION_KEY, handler(route)),
@@ -418,6 +436,7 @@ describe('FileOpsController contract', () => {
           ['400', '404', '409'],
         ],
         ['/file-ops/delete/execute', 'post', '202', ['400', '404', '409']],
+        ['/file-ops/operations/active', 'get', '200', []],
         ['/file-ops/operations/{operationId}', 'get', '200', ['400', '404']],
         ['/file-ops/operations/{operationId}/cancel', 'post', '200', ['404']],
       ];

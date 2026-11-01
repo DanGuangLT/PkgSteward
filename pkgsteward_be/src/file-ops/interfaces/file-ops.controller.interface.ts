@@ -24,6 +24,7 @@ export interface IFileOpsController {
   getOperation(params: {
     operationId: string;
   }): IApiResponse<IFileOpsOperation>;
+  getActiveOperation(): IApiResponse<IFileOpsOperation | null>;
   cancelOperation(params: {
     operationId: string;
   }): IApiResponse<IFileOpsOperation>;

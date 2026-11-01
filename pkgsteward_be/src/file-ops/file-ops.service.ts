@@ -173,7 +173,7 @@ export class FileOpsService implements IFileOpsService {
     if (token === null) {
       throw new AppException(
         409,
-        'Another file operation is in progress',
+        'A scan, measurement or file operation is in progress',
         'CONFLICT',
       );
     }
@@ -234,6 +234,12 @@ export class FileOpsService implements IFileOpsService {
     const operation = this.operations.get(operationId);
     if (!operation) throw new NotFoundException('File operation', operationId);
     return operation;
+  }
+
+  getActiveOperation(): IFileOpsOperation | null {
+    return this.activeOperation
+      ? this.getOperation(this.activeOperation.operationId)
+      : null;
   }
 
   cancelOperation(operationId: string): IFileOpsOperation {
@@ -602,7 +608,7 @@ export class FileOpsService implements IFileOpsService {
     ) {
       throw new AppException(
         409,
-        'This preview was already executed with other paths',
+        'This preview was already executed; preview again',
         'CONFLICT',
       );
     }
@@ -700,19 +706,23 @@ export class FileOpsService implements IFileOpsService {
     const { operationId } = operation;
     const removed: string[] = [];
     let status: 'completed' | 'cancelled' | 'failed' = 'completed';
+    const stopRequested = (): boolean => {
+      if (operation.status !== 'stopping') return false;
+      status = 'cancelled';
+      markNotStarted(operation, null);
+      return true;
+    };
     try {
       for (const [index, target] of targets.entries()) {
-        if (operation.status === 'stopping') {
-          status = 'cancelled';
-          markNotStarted(operation, null);
-          break;
-        }
+        if (stopRequested()) break;
         const result = operation.results[index];
         operation.currentPath = target.path;
         result.status = 'running';
         this.operations.update(operationId, operation);
 
         const refusal = await this.refusalBeforeDelete(target, removed);
+        // Lệnh dừng đến trong lúc kiểm: target này chưa bị đụng tới.
+        if (stopRequested()) break;
         if (refusal !== null) {
           result.status = 'failed';
           result.errorCode = refusal;

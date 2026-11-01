@@ -268,6 +268,24 @@ export class FileOpsController implements IFileOpsController {
     };
   }
 
+  // Before `operations/:operationId`, or "active" fails its UUID validation.
+  @Get('operations/active')
+  @PollingEndpoint()
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Get the running file operation; data is null when idle',
+  })
+  @ApiOkResponse({ schema: envelope(FileOpsOperationEntity, 200) })
+  @RateLimited()
+  getActiveOperation(): IApiResponse<FileOpsOperationEntity | null> {
+    const operation = this.fileOps.getActiveOperation();
+    return {
+      statusCode: 200,
+      message: 'Active file operation retrieved successfully',
+      data: operation && plainToInstance(FileOpsOperationEntity, operation),
+    };
+  }
+
   @Get('operations/:operationId')
   @PollingEndpoint()
   @Header('Cache-Control', 'no-store')
