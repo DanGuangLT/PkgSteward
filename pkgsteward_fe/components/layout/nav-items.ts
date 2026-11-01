@@ -13,5 +13,6 @@ type NavItem = {
 export const navItems = [
   { href: "/", labelKey: "projects" },
   { href: "/disk-usage", labelKey: "diskUsage" },
+  { href: "/cleanup", labelKey: "cleanup" },
   { href: "/design-system", labelKey: "designSystem" },
 ] as const satisfies readonly NavItem[]
