@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   realpath,
+  rename,
   rm,
   writeFile,
 } from 'node:fs/promises';
@@ -424,7 +425,8 @@ describe('FileOps HTTP flow (e2e)', () => {
     const preview = await previewPaths([nodeModules]);
     const body = await confirmed(preview.previewId, [nodeModules]);
     // Same path, different directory: only the identity check can notice this.
-    await rm(nodeModules, { recursive: true });
+    // The old folder stays on disk, because ext4 reuses a freed inode at once.
+    await rename(nodeModules, `${nodeModules}.old`);
     await mkdir(nodeModules);
     const refused = await execute(body).expect(409);
     expect(code(refused)).toBe('TARGET_CHANGED');
