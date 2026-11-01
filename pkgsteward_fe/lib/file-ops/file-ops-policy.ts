@@ -23,9 +23,15 @@ export type FileOpsUiState = FileOpsContext & (
 export interface FileOpsError {
   code: string
   paths: string[]
+  // Báo riêng lỗi lúc bắt đầu: 404 ở đó là chưa có kết quả quét, không phải mất job.
+  source?: "start"
 }
 
 type ResponseSource = "poll" | "cancel"
+type FileOpsStatus =
+  | "idle" | "starting" | "measuring" | "cancellingPreview" | "previewCompleted" | "previewCancelled" | "previewFailed"
+  | "executing" | "unconfirmed" | "deleting" | "stopping"
+  | "completed" | "completedWithFailures" | "cancelled" | "failed" | "untracked"
 
 export const fileOpsInitialState: FileOpsUiState = { phase: "idle", preview: null, operation: null }
 
@@ -36,7 +42,7 @@ export function fileOpsOperationIsTerminal(status: FileOpsOperationStatus): bool
   return status !== "running" && status !== "stopping"
 }
 
-export function fileOpsStatusKey(state: FileOpsUiState): `status.${string}` {
+export function fileOpsStatusKey(state: FileOpsUiState): `status.${FileOpsStatus}` {
   switch (state.phase) {
     case "starting": return "status.starting"
     case "measuring": return state.cancelPending ? "status.cancellingPreview" : "status.measuring"
@@ -47,19 +53,25 @@ export function fileOpsStatusKey(state: FileOpsUiState): `status.${string}` {
     case "unconfirmed": return "status.unconfirmed"
     case "operating":
       return state.cancelPending || state.operation?.status === "stopping" ? "status.stopping" : "status.deleting"
-    case "finished": return `status.${state.operation?.status ?? "completed"}`
+    case "finished":
+      if (state.operation?.status === "cancelled") return "status.cancelled"
+      if (state.operation?.status === "failed") return "status.failed"
+      return state.operation?.results.some(({ status }) => status === "failed")
+        ? "status.completedWithFailures"
+        : "status.completed"
     case "idle":
       return state.operation && !fileOpsOperationIsTerminal(state.operation.status) ? "status.untracked" : "status.idle"
   }
 }
 
-export function fileOpsError(error: unknown): FileOpsError {
-  if (!(error instanceof ApiError)) return { code: "UNKNOWN", paths: [] }
+export function fileOpsError(error: unknown, source?: "start"): FileOpsError {
+  const place = source ? { source } : {}
+  if (!(error instanceof ApiError)) return { code: "UNKNOWN", paths: [], ...place }
   const details = error.details
   const paths = typeof details === "object" && details !== null && "paths" in details && Array.isArray(details.paths)
     ? details.paths.filter((path): path is string => typeof path === "string")
     : []
-  return { code: error.code ?? (error.statusCode === 404 ? "NOT_FOUND" : "UNKNOWN"), paths }
+  return { code: error.code ?? (error.statusCode === 404 ? "NOT_FOUND" : "UNKNOWN"), paths, ...place }
 }
 
 export function fileOpsCanPoll(state: FileOpsUiState, visible: boolean): boolean {
@@ -152,13 +164,13 @@ export function fileOpsBeginExecute(state: FileOpsUiState, input?: FileOpsExecut
 export function fileOpsExecuteFailure(state: FileOpsUiState, code: string): FileOpsUiState {
   if (state.phase !== "executing") return state
   const { preview, operation, input, summary } = state
-  // CONFLICT khi gửi lại: preflight của lần trước có thể vẫn đang giữ cổng.
-  if (UNKNOWN_OUTCOME_CODES.has(code) || (state.resend && code === "CONFLICT")) {
+  if (STALE_PREVIEW_CODES.has(code)) return fileOpsInitialState
+  // Lần gửi lại bị từ chối không cho biết lần đầu ra sao, trừ khi chính xác nhận bị sai.
+  // CONFLICT: preflight của lần trước có thể vẫn đang giữ cổng.
+  if (UNKNOWN_OUTCOME_CODES.has(code) || (state.resend && code !== "VALIDATION_ERROR")) {
     return { phase: "unconfirmed", preview, operation, input, summary }
   }
-  return STALE_PREVIEW_CODES.has(code)
-    ? fileOpsInitialState
-    : { phase: "reviewing", preview, operation, summary, summarizing: false }
+  return { phase: "reviewing", preview, operation, summary, summarizing: false }
 }
 
 export function fileOpsTrackOperation(state: FileOpsUiState, operationId: string): FileOpsUiState {
@@ -168,8 +180,16 @@ export function fileOpsTrackOperation(state: FileOpsUiState, operationId: string
 }
 
 export function fileOpsFollowOperation(state: FileOpsUiState, operation: FileOpsOperation): FileOpsUiState {
-  return state.phase === "idle"
-    ? { phase: "operating", operationId: operation.operationId, cancelPending: false, preview: null, operation }
+  const { operationId } = operation
+  if (state.phase === "idle") return { phase: "operating", operationId, cancelPending: false, preview: null, operation }
+  return state.phase === "unconfirmed" && state.input.previewId === operation.previewId
+    ? { phase: "operating", operationId, cancelPending: false, preview: state.preview, operation }
+    : state
+}
+
+export function fileOpsResumePreview(state: FileOpsUiState, preview: FileOpsPreview): FileOpsUiState {
+  return state.phase === "idle" && preview.status === "running"
+    ? { phase: "measuring", previewId: preview.previewId, cancelPending: false, preview, operation: null }
     : state
 }
 

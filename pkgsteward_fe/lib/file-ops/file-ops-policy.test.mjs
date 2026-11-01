@@ -5,7 +5,7 @@ import {
   fileOpsAbandon, fileOpsAcceptOperation, fileOpsAcceptPreview, fileOpsBeginCancel, fileOpsBeginExecute, fileOpsBeginStart,
   fileOpsBeginSummary, fileOpsCanPoll, fileOpsCloseSummary, fileOpsError, fileOpsExecuteFailure, fileOpsFollowOperation,
   fileOpsInitialState, fileOpsOperationIsTerminal, fileOpsPollFailure, fileOpsReceiveOperation, fileOpsReceivePreview,
-  fileOpsReceiveSummary, fileOpsReset, fileOpsRetryPoll, fileOpsStartFailure, fileOpsStatusKey, fileOpsSummaryFailure,
+  fileOpsReceiveSummary, fileOpsReset, fileOpsResumePreview, fileOpsRetryPoll, fileOpsStartFailure, fileOpsStatusKey, fileOpsSummaryFailure,
   fileOpsTrackOperation, fileOpsTrackPreview,
 } from "./file-ops-policy.ts"
 
@@ -164,6 +164,39 @@ test("a resend blocked by a running preflight stays unconfirmed", () => {
   assert.equal(fileOpsExecuteFailure(again, "CONFLICT").phase, "unconfirmed")
 })
 
+test("a resend refused for another reason says nothing about the first send", () => {
+  const again = () => fileOpsBeginExecute(fileOpsExecuteFailure(executing, "BACKEND_UNAVAILABLE"))
+  for (const code of ["RATE_LIMITED", "FORBIDDEN", "INTERNAL_SERVER_ERROR", "HTTP_EXCEPTION"]) {
+    assert.equal(fileOpsExecuteFailure(again(), code).phase, "unconfirmed")
+  }
+  assert.equal(fileOpsExecuteFailure(again(), "VALIDATION_ERROR").phase, "reviewing")
+  assert.equal(fileOpsExecuteFailure(again(), "RISK_CHANGED").phase, "idle")
+})
+
+test("an unknown outcome follows only the operation of its own preview", () => {
+  const unconfirmed = fileOpsExecuteFailure(executing, "BACKEND_UNAVAILABLE")
+  assert.equal(fileOpsFollowOperation(unconfirmed, { ...operation("running"), previewId: "TEST-other" }), unconfirmed)
+  const followed = fileOpsFollowOperation(unconfirmed, operation("running"))
+  assert.equal(followed.phase, "operating")
+  assert.equal(followed.operation.status, "running")
+})
+
+test("a running preview resumes only from idle", () => {
+  const resumed = fileOpsResumePreview(fileOpsInitialState, preview("running"))
+  assert.equal(resumed.phase, "measuring")
+  assert.equal(resumed.previewId, "TEST-preview")
+  assert.equal(resumed.preview.status, "running")
+  assert.equal(fileOpsResumePreview(fileOpsInitialState, preview("completed")), fileOpsInitialState)
+  assert.equal(fileOpsResumePreview(reviewing, preview("running")), reviewing)
+})
+
+test("completed with failed items has its own status", () => {
+  const failed = { ...operation("completed"), results: [{ status: "success" }, { status: "failed" }] }
+  assert.equal(fileOpsStatusKey(fileOpsReceiveOperation(operating, failed)), "status.completedWithFailures")
+  const clean = { ...operation("completed"), results: [{ status: "success" }] }
+  assert.equal(fileOpsStatusKey(fileOpsReceiveOperation(operating, clean)), "status.completed")
+})
+
 test("a replayed operation is tracked like a new one", () => {
   const again = fileOpsBeginExecute(fileOpsExecuteFailure(executing, "BACKEND_UNAVAILABLE"))
   const tracked = fileOpsTrackOperation(again, "TEST-operation")
@@ -245,4 +278,5 @@ test("errors keep the code and the affected paths from details", () => {
   assert.deepEqual(fileOpsError(new ApiError(404, "TEST")), { code: "NOT_FOUND", paths: [] })
   assert.deepEqual(fileOpsError(new ApiError(500, "TEST")), { code: "UNKNOWN", paths: [] })
   assert.deepEqual(fileOpsError(new Error("TEST-private")), { code: "UNKNOWN", paths: [] })
+  assert.deepEqual(fileOpsError(new ApiError(404, "TEST", "NOT_FOUND"), "start"), { code: "NOT_FOUND", paths: [], source: "start" })
 })
