@@ -64,6 +64,7 @@ export function createFileOpsSession(environment: FileOpsEnvironment): FileOpsSe
 
   function update(state: FileOpsUiState, error: FileOpsError | null = snapshot.error) {
     if (state === snapshot.state && error === snapshot.error) return
+    if (snapshot.state.phase === "measuring" && state.phase !== "measuring") environment.rememberPreview(null)
     snapshot = { state, error }
     for (const listener of listeners) listener()
   }

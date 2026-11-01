@@ -288,6 +288,34 @@ test("the preview id survives a reload so measuring can still be stopped", async
   assert.equal(reloaded.getSnapshot().state.phase, "reviewing")
 })
 
+test("a preview is forgotten once it ends, so the next page load asks for nothing", async (t) => {
+  const context = start(t, { [PREVIEW_POLL]: () => ok(preview("running")) })
+  await context.session.startCleanup({})
+  await flush()
+  assert.equal(context.environment.stored, PREVIEW)
+  context.api.routes[PREVIEW_POLL] = () => ok(preview("completed"))
+  await context.tick(POLL_INTERVAL_MS)
+  assert.equal(context.phase(), "reviewing")
+  assert.equal(context.environment.stored, null)
+  context.disconnect()
+  t.mock.timers.reset()
+
+  const stopped = start(t, { [PREVIEW_POLL]: () => ok(preview("running")) })
+  await stopped.session.startCleanup({})
+  await flush()
+  await stopped.session.cancelPreview()
+  await flush()
+  assert.equal(stopped.environment.stored, null)
+  stopped.disconnect()
+  t.mock.timers.reset()
+
+  const lost = start(t, { [PREVIEW_POLL]: () => fail(404, "NOT_FOUND") })
+  await lost.session.startCleanup({})
+  await flush()
+  assert.equal(lost.phase(), "idle")
+  assert.equal(lost.environment.stored, null)
+})
+
 test("a remembered preview that ended or vanished is forgotten and starts nothing", async (t) => {
   for (const route of [() => ok(preview("completed")), () => fail(404, "NOT_FOUND")]) {
     const context = start(t, { [PREVIEW_POLL]: route }, browser({ stored: PREVIEW }))
