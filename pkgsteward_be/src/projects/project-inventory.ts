@@ -1,11 +1,11 @@
-import { readNpmLock } from './project-lock-npm';
+import { readNpmLock } from '@/projects/project-lock-npm';
 import type {
   ILockInventory,
   IManifestInput,
   IProjectInput,
   IProjectOutdatedTarget,
   ProjectManager,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 import {
   compareProjectText,
   normalizeInventory,
@@ -13,9 +13,9 @@ import {
   registryTarget,
   unavailableInventory,
   yieldProjectBatch,
-} from './project-lock-common';
-import { readPnpmLock } from './project-lock-pnpm';
-import { readYarnLock } from './project-lock-yarn';
+} from '@/projects/project-lock-common';
+import { readPnpmLock } from '@/projects/project-lock-pnpm';
+import { readYarnLock } from '@/projects/project-lock-yarn';
 
 export async function buildProjectInventory(
   input: IProjectInput,

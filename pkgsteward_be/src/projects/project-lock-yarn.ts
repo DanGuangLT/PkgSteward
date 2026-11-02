@@ -3,7 +3,7 @@ import type {
   ILockInventory,
   ILockPackage,
   IManifestInput,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 import {
   emptyInventory,
   isLocalWorkspaceSpec,
@@ -19,7 +19,7 @@ import {
   versionMatchesTarget,
   yamlDepthWithinLimit,
   yieldProjectBatch,
-} from './project-lock-common';
+} from '@/projects/project-lock-common';
 
 export async function readYarnLock(
   text: string,

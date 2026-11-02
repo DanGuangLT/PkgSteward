@@ -2,7 +2,7 @@ import type {
   IProjectAnalysisJob,
   IProjectAnalysisStart,
   IProjectDetail,
-} from './projects.types';
+} from '@/projects/interfaces/projects.types';
 
 // Structural return contract; runtime controller uses the shared API envelope.
 interface IProjectResponse<T> {

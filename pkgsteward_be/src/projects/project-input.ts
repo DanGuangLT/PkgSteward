@@ -23,14 +23,14 @@ import type {
   ProjectLockName,
   ProjectManager,
   ProjectScanSnapshot,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 import {
   compareProjectText,
   isProjectRecord,
   jsonDepthWithinLimit,
   PROJECT_DEPENDENCY_GROUPS,
   PROJECT_LOCK_BYTES,
-} from './project-lock-common';
+} from '@/projects/project-lock-common';
 
 const SMALL_INPUT_BYTES = 1024 * 1024;
 const LOCK_NAMES: readonly ProjectLockName[] = [

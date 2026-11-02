@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join, win32 as path } from 'node:path';
-import { readProjectInput } from './project-input';
+import { readProjectInput } from '@/projects/project-input';
 import type {
   IProjectFileStat,
   IProjectInputDeps,
   ProjectScanSnapshot,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
 jest.mock('node:fs/promises', () => ({

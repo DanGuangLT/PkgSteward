@@ -2,7 +2,7 @@ import type {
   IProjectAnalysisJob,
   IProjectAnalysisStart,
   IProjectDetail,
-} from './projects.types';
+} from '@/projects/interfaces/projects.types';
 
 export interface IProjectsService {
   detail(path: string): Promise<IProjectDetail>;

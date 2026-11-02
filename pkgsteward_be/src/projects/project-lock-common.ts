@@ -6,7 +6,7 @@ import type {
   IManifestInput,
   IProjectOutdatedTarget,
   ProjectAnalysisCode,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 
 export const PROJECT_LOCK_BYTES = 32 * 1024 * 1024;
 export const PROJECT_LOCK_RECORDS = 50_000;

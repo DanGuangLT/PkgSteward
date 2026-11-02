@@ -3,13 +3,13 @@ import { join } from 'node:path';
 import {
   buildProjectInventory,
   getProjectOutdatedTargets,
-} from './project-inventory';
+} from '@/projects/project-inventory';
 import type {
   IManifestInput,
   IProjectInput,
   ProjectLockName,
   ProjectManager,
-} from './interfaces/projects.types';
+} from '@/projects/interfaces/projects.types';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
 const fixtureText = (name: string) =>

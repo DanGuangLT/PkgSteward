@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readYarnLock } from './project-lock-yarn';
-import type { IManifestInput } from './interfaces/projects.types';
+import { readYarnLock } from '@/projects/project-lock-yarn';
+import type { IManifestInput } from '@/projects/interfaces/projects.types';
 
 jest.mock('node:fs/promises', () => ({
   readFile: jest.fn(),
