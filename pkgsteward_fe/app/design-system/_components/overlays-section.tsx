@@ -4,8 +4,8 @@ import { getTranslations } from "next-intl/server"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-import { DropdownMenuDemo } from "./dropdown-menu-demo"
-import { ShowcaseItem, ShowcaseSection } from "./showcase"
+import { DropdownMenuDemo } from "@/app/design-system/_components/dropdown-menu-demo"
+import { ShowcaseItem, ShowcaseSection } from "@/app/design-system/_components/showcase"
 
 export async function OverlaysSection() {
   const t = await getTranslations("designSystem.overlays")

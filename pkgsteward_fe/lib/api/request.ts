@@ -1,5 +1,5 @@
 import { ApiError, readApiResponse } from "./response.ts"
-import type { ApiResponse } from "./types"
+import type { ApiResponse } from "@/lib/api/types"
 
 export const API_TIMEOUT_MS = 10000
 

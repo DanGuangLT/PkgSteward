@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server"
 
 import { cn } from "@/lib/utils"
 
-import { ShowcaseSection, TokenName } from "./showcase"
+import { ShowcaseSection, TokenName } from "@/app/design-system/_components/showcase"
 
 // Số đo chép từ styles/tokens.css (cỡ · độ đậm · line-height · letter-spacing).
 // Đổi thang chữ ở đó thì sửa cả ở đây.

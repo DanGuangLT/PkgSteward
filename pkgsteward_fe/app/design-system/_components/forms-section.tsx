@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
-import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "./showcase"
+import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "@/app/design-system/_components/showcase"
 
 // Mục mẫu của cây chọn file (FileOps). Tên file là dữ liệu, không dịch.
 const CHECKBOX_DEMOS = [

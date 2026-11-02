@@ -1,4 +1,4 @@
-import type { ApiResponse } from "./types"
+import type { ApiResponse } from "@/lib/api/types"
 
 export class ApiError extends Error {
   statusCode: number

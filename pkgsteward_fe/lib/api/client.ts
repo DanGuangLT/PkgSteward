@@ -2,7 +2,7 @@ import "server-only"
 
 import { requestApi } from "./request.ts"
 import { unwrapApiData } from "./response.ts"
-import type { ApiResponse } from "./types"
+import type { ApiResponse } from "@/lib/api/types"
 
 const API_BASE_URL = (process.env.API_BASE_URL || "http://127.0.0.1:24681/api/v1").replace(/\/+$/, "")
 
