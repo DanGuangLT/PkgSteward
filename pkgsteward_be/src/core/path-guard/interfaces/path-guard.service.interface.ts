@@ -1,11 +1,13 @@
 import type {
   IGuardedPath,
+  PathChecker,
   PathCheckResult,
   ProtectedTreeMatcher,
 } from '@/core/path-guard/interfaces/path-guard.types';
 
 export interface IPathGuardService {
   checkMany(inputPaths: readonly string[]): Promise<PathCheckResult[]>;
+  createOperationChecker(): PathChecker;
   check(inputPath: string): Promise<PathCheckResult>;
   assertAllowed(inputPath: string): Promise<IGuardedPath>;
   isInsideProtectedTree(absolutePath: string): Promise<boolean>;

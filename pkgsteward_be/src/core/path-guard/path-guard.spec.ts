@@ -96,6 +96,132 @@ describe('PathGuard.checkMany', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
+  describe('createOperationChecker', () => {
+    it('reuses fixed-drive discovery across sequential calls of one checker', async () => {
+      const f = batchFixture();
+      const checkPaths = f.guard.createOperationChecker();
+
+      for (const input of inputs) {
+        expect(await checkPaths([input])).toMatchObject([{ allowed: true }]);
+      }
+
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(1);
+      expect(f.fs.lstat.mock.calls.map(([path]) => path)).toEqual(inputs);
+    });
+
+    it('retries drive discovery after a rejected call of the same checker', async () => {
+      const f = batchFixture();
+      const error = new InternalServerException('TEST discovery failed');
+      f.driveDetector.listFixedDrives.mockRejectedValueOnce(error);
+      const checkPaths = f.guard.createOperationChecker();
+
+      await expect(checkPaths(inputs)).rejects.toBe(error);
+      expect(f.fs.realpath).not.toHaveBeenCalled();
+      expect(f.fs.lstat).not.toHaveBeenCalled();
+      expect(await checkPaths(inputs)).toMatchObject([
+        { allowed: true },
+        { allowed: true },
+        { allowed: true },
+      ]);
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(2);
+    });
+
+    it('discovers drives independently for two operation checkers', async () => {
+      const f = batchFixture();
+      const first = f.guard.createOperationChecker();
+      const second = f.guard.createOperationChecker();
+
+      expect(await first([inputs[0]])).toMatchObject([{ allowed: true }]);
+      f.driveDetector.listFixedDrives.mockResolvedValue(['E:\\']);
+      expect(await second([inputs[0]])).toMatchObject([
+        { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+      ]);
+      expect(await first([inputs[0]])).toMatchObject([{ allowed: true }]);
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves scan roots again on each call of the same checker', async () => {
+      const input = 'D:\\Scan\\app';
+      const links = {
+        'D:\\': 'F:\\Old',
+        [input]: 'F:\\Old\\Scan\\app',
+      };
+      const f = batchFixture({ fs: makeFs(links) });
+      const checkPaths = f.guard.createOperationChecker();
+
+      expect(await checkPaths([input])).toMatchObject([{ allowed: true }]);
+      links['D:\\'] = 'F:\\New';
+      expect(await checkPaths([input])).toMatchObject([
+        { allowed: false, code: 'OUTSIDE_ALLOWLIST' },
+      ]);
+      expect(
+        f.fs.realpath.mock.calls.filter(([path]) => path === 'D:\\'),
+      ).toHaveLength(2);
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolves protected junctions again on each call of the same checker', async () => {
+      const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+      const links = { [protectedPath]: 'E:\\Protected\\Old' };
+      const f = batchFixture({ fs: makeFs(links) });
+      const checkPaths = f.guard.createOperationChecker();
+      const paths = ['E:\\Protected\\Old\\child', 'E:\\Protected\\New\\child'];
+
+      expect(await checkPaths(paths)).toMatchObject([
+        { allowed: false, code: 'DENYLISTED' },
+        { allowed: true },
+      ]);
+      links[protectedPath] = 'E:\\Protected\\New';
+      expect(await checkPaths(paths)).toMatchObject([
+        { allowed: true },
+        { allowed: false, code: 'DENYLISTED' },
+      ]);
+      for (const entry of denylist) {
+        expect(
+          f.fs.realpath.mock.calls.filter(([path]) => path === entry.path),
+        ).toHaveLength(2);
+      }
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes target realpath and lstat on each call of the same checker', async () => {
+      const input = 'D:\\Scan\\alias';
+      const links = { [input]: 'D:\\Scan\\first' };
+      const f = batchFixture({ fs: makeFs(links) });
+      const checkPaths = f.guard.createOperationChecker();
+
+      expect(await checkPaths([input])).toMatchObject([
+        { allowed: true, path: { realPath: 'D:\\Scan\\first' } },
+      ]);
+      links[input] = 'D:\\Scan\\second';
+      expect(await checkPaths([input])).toMatchObject([
+        { allowed: true, path: { realPath: 'D:\\Scan\\second' } },
+      ]);
+      f.fs.lstat.mockRejectedValueOnce(errno('ENOENT'));
+      expect(await checkPaths([input])).toMatchObject([
+        { allowed: false, code: 'NOT_FOUND' },
+      ]);
+      expect(
+        f.fs.realpath.mock.calls.filter(([path]) => path === input),
+      ).toHaveLength(3);
+      expect(f.fs.lstat).toHaveBeenCalledTimes(3);
+      expect(f.driveDetector.listFixedDrives).toHaveBeenCalledTimes(1);
+    });
+
+    it('never detects drives for explicit roots across checker calls', async () => {
+      const f = batchFixture({
+        scanRoots: { kind: 'paths', paths: ['D:\\Scan'] },
+      });
+      const checkPaths = f.guard.createOperationChecker();
+
+      for (const input of inputs) {
+        expect(await checkPaths([input])).toMatchObject([{ allowed: true }]);
+      }
+
+      expect(f.driveDetector.listFixedDrives).not.toHaveBeenCalled();
+    });
+  });
+
   it('shares one fixed-drive discovery and one resolution of each deny entry per batch', async () => {
     const f = batchFixture();
     const results = await f.guard.checkMany(inputs);
