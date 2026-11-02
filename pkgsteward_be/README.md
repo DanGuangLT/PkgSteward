@@ -97,6 +97,8 @@ from the latest scan return `409 CONFLICT` with reason `PROJECT_NOT_SCANNED`.
   never installs, updates or fixes packages. Missing package-manager executables do not prevent analysis;
   their installed versions remain unknown. Manifest `packageManager` is metadata only.
 - **Disclosure and registry policy:** online checks send dependency names and versions to the public npm registry.
+  When a lockfile can be read, only names it shows as coming from the public registry are sent; other dependencies
+  report `UNSUPPORTED_SPEC`.
   No credentials, custom registries, redirects, project-selected URLs, user/global config or environment proxy
   configuration are used. A bounded project-level config text check for registry/authentication keys disables
   online checks with `REGISTRY_CONFIG_UNSUPPORTED`, including when those keys occur in comments. Local detail

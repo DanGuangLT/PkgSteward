@@ -1,5 +1,6 @@
 import { execa } from 'execa';
 import { analyzeProject } from '@/projects/project-analysis';
+import { readNpmLock } from '@/projects/project-lock-npm';
 import type {
   IProjectAnalysisDeps,
   IProjectAnalysisUpdate,
@@ -46,11 +47,11 @@ function input(spec = '^1.0.0', name = 'pkg'): IProjectInput {
   };
 }
 
-function inventory(): ILockInventory {
+function inventory(names = ['pkg']): ILockInventory {
   return {
     coverage: 'complete',
-    direct: new Map([['pkg', ['1.0.0']]]),
-    packages: [{ name: 'pkg', version: '1.0.0', direct: true }],
+    direct: new Map(names.map((name) => [name, ['1.0.0']])),
+    packages: names.map((name) => ({ name, version: '1.0.0', direct: true })),
     warningCodes: [],
     failureCode: null,
   };
@@ -229,6 +230,124 @@ describe('analyzeProject public-registry analysis', () => {
       warning: 'UNSUPPORTED_SPEC',
     });
     expect(f.getPackageMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each(['complete', 'partial'] as const)(
+    'does not send unverified names from a %s inventory but still checks a verified sibling',
+    async (coverage) => {
+      const source = input();
+      source.manifest.dependencies.push({
+        name: '@private/secret',
+        declarations: [{ group: 'dependencies', spec: '^1.0.0' }],
+      });
+      const lock = inventory();
+      lock.coverage = coverage;
+      lock.direct.set('@private/secret', ['1.0.0']);
+      const f = fixture(lock);
+      const result = await analyzeProject(source, controller.signal, f.deps);
+      expect(f.getPackageMetadata).toHaveBeenCalledTimes(1);
+      expect(f.getPackageMetadata).toHaveBeenCalledWith(
+        'pkg',
+        controller.signal,
+      );
+      expect(result.outdated).toMatchObject({
+        state: 'partial',
+        warningCodes: ['UNSUPPORTED_SPEC'],
+      });
+      expect(result.outdated.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: '@private/secret',
+            lockedVersions: ['1.0.0'],
+            wanted: null,
+            latest: null,
+            warning: 'UNSUPPORTED_SPEC',
+          }),
+          expect.objectContaining({ name: 'pkg', latest: '2.0.0' }),
+        ]),
+      );
+    },
+  );
+
+  it('does not treat a verified alias display name as proof for its private registry name', async () => {
+    const f = fixture(inventory(['foo']));
+    const result = await analyzeProject(
+      input('npm:@private/x@1', 'foo'),
+      controller.signal,
+      f.deps,
+    );
+    expect(f.getPackageMetadata).not.toHaveBeenCalled();
+    expect(result.outdated.state).toBe('partial');
+    expect(result.outdated.items[0]).toMatchObject({
+      name: 'foo',
+      registryName: '@private/x',
+      latest: null,
+      warning: 'UNSUPPORTED_SPEC',
+    });
+  });
+
+  it('does not send private-registry, file or link names from the real npm reader', async () => {
+    const source = input();
+    const privateNames = [
+      '@private/secret',
+      '@private/workspace',
+      '@private/file',
+    ];
+    source.manifest.dependencies.push(
+      ...privateNames.map((name) => ({
+        name,
+        declarations: [{ group: 'dependencies' as const, spec: '^1.0.0' }],
+      })),
+    );
+    const text = JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        '': {
+          dependencies: {
+            pkg: '^1.0.0',
+            '@private/secret': '^1.0.0',
+            '@private/workspace': '^1.0.0',
+            '@private/file': '^1.0.0',
+          },
+        },
+        'node_modules/pkg': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/pkg/-/pkg-1.0.0.tgz',
+        },
+        'node_modules/@private/secret': {
+          version: '1.0.0',
+          resolved: 'https://TEST.invalid/@private/secret/-/secret-1.0.0.tgz',
+        },
+        'node_modules/@private/workspace': {
+          link: true,
+          resolved: 'packages/TEST-workspace',
+        },
+        'node_modules/@private/file': {
+          version: '1.0.0',
+          resolved: 'file:../TEST-local',
+        },
+      },
+    });
+    const f = fixture();
+    f.buildInventory.mockImplementation((project, signal) =>
+      readNpmLock(text, project.manifest, signal),
+    );
+    const result = await analyzeProject(source, controller.signal, f.deps);
+    expect(f.getPackageMetadata).toHaveBeenCalledTimes(1);
+    expect(f.getPackageMetadata).toHaveBeenCalledWith('pkg', controller.signal);
+    expect(f.getBulkAdvisories).toHaveBeenCalledWith(
+      { pkg: ['1.0.0'] },
+      controller.signal,
+    );
+    expect(result.outdated.state).toBe('partial');
+    for (const name of privateNames) {
+      expect(
+        result.outdated.items.find((row) => row.name === name),
+      ).toMatchObject({
+        warning: 'UNSUPPORTED_SPEC',
+        latest: null,
+      });
+    }
   });
 
   it.each<IRegistryPackageMetadata>([
@@ -465,6 +584,10 @@ describe('analyzeProject public-registry analysis', () => {
         failureCode: code,
       });
       expect(result.partial).toBe(true);
+      expect(f.getPackageMetadata).toHaveBeenCalledWith(
+        'pkg',
+        controller.signal,
+      );
       expect(f.getBulkAdvisories).not.toHaveBeenCalled();
     },
   );
@@ -504,11 +627,14 @@ describe('analyzeProject public-registry analysis', () => {
         name: `pkg-${i}`,
         declarations: [{ group: 'dependencies', spec: '^1' }],
       }));
-      const f = fixture();
+      const f = fixture(
+        inventory(source.manifest.dependencies.map(({ name }) => name)),
+      );
       f.getPackageMetadata.mockRejectedValue(
         Object.assign(new Error('safe'), { code, stopScheduling: true }),
       );
       const result = await analyzeProject(source, controller.signal, f.deps);
+      expect(f.getPackageMetadata.mock.calls.length).toBeGreaterThan(0);
       expect(f.getPackageMetadata.mock.calls.length).toBeLessThanOrEqual(4);
       expect(f.getBulkAdvisories).not.toHaveBeenCalled();
       expect(result.partial).toBe(true);
@@ -522,7 +648,7 @@ describe('analyzeProject public-registry analysis', () => {
       name: 'other',
       declarations: [{ group: 'dependencies', spec: '^1' }],
     });
-    const f = fixture();
+    const f = fixture(inventory(['pkg', 'other']));
     f.getPackageMetadata.mockImplementation((name) =>
       name === 'pkg'
         ? Promise.reject(
@@ -568,7 +694,9 @@ describe('analyzeProject public-registry analysis', () => {
       name: `pkg-${String(2000 - i).padStart(4, '0')}`,
       declarations: [{ group: 'dependencies', spec: '^1' }],
     }));
-    const f = fixture();
+    const f = fixture(
+      inventory(source.manifest.dependencies.map(({ name }) => name)),
+    );
     const result = await analyzeProject(source, controller.signal, f.deps);
     expect(result.outdated.items).toHaveLength(2000);
     expect(result.outdated.items[0].name).toBe('pkg-0000');
@@ -584,7 +712,9 @@ describe('analyzeProject public-registry analysis', () => {
       name: `pkg-${i}`,
       declarations: [{ group: 'dependencies', spec: '^1' }],
     }));
-    const f = fixture();
+    const f = fixture(
+      inventory(source.manifest.dependencies.map(({ name }) => name)),
+    );
     const times: number[] = [];
     f.onSnapshot.mockImplementation((snapshot) => {
       times.push(f.deps.now().getTime());

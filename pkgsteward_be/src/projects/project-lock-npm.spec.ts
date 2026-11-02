@@ -289,12 +289,16 @@ describe('readNpmLock', () => {
     );
     expect(result.coverage).toBe('partial');
   });
-  it('audits bundled entries by location identity without requiring resolved', async () => {
+  it('audits nested bundled entries only under a verified public parent', async () => {
     const result = await read(
       lock({
-        'node_modules/alpha': { version: '1.2.0', inBundle: true },
+        'node_modules/alpha': alpha,
         'node_modules/alpha/node_modules/@scope/bundled': {
           version: '2.0.0',
+          inBundle: true,
+        },
+        'node_modules/alpha/node_modules/@scope/bundled/node_modules/nested': {
+          version: '3.0.0',
           inBundle: true,
         },
       }),
@@ -304,8 +308,47 @@ describe('readNpmLock', () => {
     expect(result.packages).toEqual([
       { name: '@scope/bundled', version: '2.0.0', direct: false },
       { name: 'alpha', version: '1.2.0', direct: true },
+      { name: 'nested', version: '3.0.0', direct: false },
     ]);
     expect(result.direct.get('alpha')).toEqual(['1.2.0']);
+  });
+  it('skips bundles and their nested bundles under a file parent', async () => {
+    const result = await read(
+      lock({
+        'node_modules/alpha': alpha,
+        'node_modules/local': { version: '1.0.0', resolved: 'file:../TEST' },
+        'node_modules/local/node_modules/bundled': {
+          version: '2.0.0',
+          inBundle: true,
+        },
+        'node_modules/local/node_modules/bundled/node_modules/nested': {
+          version: '3.0.0',
+          inBundle: true,
+        },
+      }),
+    );
+    expect(result.coverage).toBe('partial');
+    expect(result.warningCodes).toContain('UNSUPPORTED_SPEC');
+    expect(result.packages).toEqual([
+      { name: 'alpha', version: '1.2.0', direct: true },
+    ]);
+  });
+  it('does not trust a top-level inBundle flag without a public source', async () => {
+    const result = await read(
+      lock({
+        'node_modules/alph': {
+          version: '1.2.0',
+          resolved: 'https://registry.npmjs.org/alph/-/alph-1.2.0.tgz',
+        },
+        'node_modules/alpha': { version: '1.2.0', inBundle: true },
+      }),
+    );
+    expect(result.coverage).toBe('partial');
+    expect(result.warningCodes).toContain('UNSUPPORTED_SPEC');
+    expect(result.packages).toEqual([
+      { name: 'alph', version: '1.2.0', direct: false },
+    ]);
+    expect(result.direct.size).toBe(0);
   });
 
   it('marks v1 unsupported', async () => {

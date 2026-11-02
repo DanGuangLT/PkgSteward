@@ -77,11 +77,13 @@ export async function readNpmLock(
       partialInventory(result);
       continue;
     }
-    const name =
-      entry.inBundle === true ? inferred : registrySourceName(entry.resolved);
+    const parentIndex = location.lastIndexOf('/node_modules/');
+    const parent = parentIndex < 0 ? '' : location.slice(0, parentIndex);
+    const bundled = entry.inBundle === true && byLocation.has(parent);
+    const name = bundled ? inferred : registrySourceName(entry.resolved);
     if (
       !name ||
-      (entry.inBundle !== true &&
+      (!bundled &&
         entry.name !== undefined &&
         (typeof entry.name !== 'string' || entry.name !== name))
     ) {

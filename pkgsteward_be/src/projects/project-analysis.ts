@@ -365,10 +365,17 @@ export async function analyzeProject(
     string,
     { target: IProjectOutdatedTarget; index: number }[]
   >();
+  // A readable lock must verify public provenance before a name leaves the machine.
+  const registryNames = new Set(inventory.packages.map((entry) => entry.name));
   for (let index = 0; index < targets.length; index++) {
     const target = targets[index];
     if (index > 0 && index % 256 === 0) await yieldProjectBatch(signal);
-    if (target.kind === 'unsupported' || !target.registryName) {
+    if (
+      target.kind === 'unsupported' ||
+      !target.registryName ||
+      (inventory.coverage !== 'unavailable' &&
+        !registryNames.has(target.registryName))
+    ) {
       rows[index] = emptyRow(
         target,
         inventory.direct.get(target.name) ?? [],

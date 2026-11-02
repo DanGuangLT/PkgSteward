@@ -803,6 +803,19 @@ describe('Projects HTTP flow (mocked IO, real Nest pipeline)', () => {
       manifestPath,
       JSON.stringify({ dependencies: { 'secret-dependency-name': '^1.0.0' } }),
     );
+    files.set(
+      join(root, 'package-lock.json'),
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          '': { dependencies: { 'secret-dependency-name': '^1.0.0' } },
+          'node_modules/secret-dependency-name': {
+            version: '1.0.0',
+            resolved: `${origin}/secret-dependency-name/-/secret-dependency-name-1.0.0.tgz`,
+          },
+        },
+      }),
+    );
     fetchMock.mockRejectedValue(
       new Error('SECRET upstream response; demo credential'),
     );
