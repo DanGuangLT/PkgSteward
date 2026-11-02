@@ -272,8 +272,10 @@ describe('analyzeProject public-registry analysis', () => {
       latest: '2.0.0',
       warning: 'DEPRECATED_VERSION',
     });
-    expect(result.outdated.state).toBe('partial');
-    expect(result.partial).toBe(true);
+    // Every row was checked: a deprecation is a finding, not missing data.
+    expect(result.outdated.state).toBe('complete');
+    expect(result.partial).toBe(false);
+    expect(result.warningCodes).toContain('DEPRECATED_VERSION');
   });
 
   it('warns when a locked version is no longer published instead of treating it as current', async () => {

@@ -449,12 +449,15 @@ export async function analyzeProject(
       }
     }
   }
-  result.outdated.state =
-    result.outdated.warningCodes.length > 0
-      ? metadataSucceeded === 0 && stopped !== null
-        ? 'unavailable'
-        : 'partial'
-      : 'complete';
+  // A deprecated version is a finding on a checked row, not missing data.
+  const incomplete = result.outdated.warningCodes.some(
+    (code) => code !== 'DEPRECATED_VERSION',
+  );
+  result.outdated.state = incomplete
+    ? metadataSucceeded === 0 && stopped !== null
+      ? 'unavailable'
+      : 'partial'
+    : 'complete';
   if (result.outdated.state === 'unavailable') {
     result.outdated.failureCode = stopped;
   }
