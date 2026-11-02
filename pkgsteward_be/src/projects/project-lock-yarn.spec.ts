@@ -185,6 +185,27 @@ describe('readYarnLock', () => {
       failureCode: 'INVALID_LOCKFILE',
     });
   });
+  it('rejects conflict input before the parser can rebuild an unsafe trailer', async () => {
+    expect(
+      await read('<<<<<<< a\n"open\n=======\nx >>>>>>> z\n# "\n'),
+    ).toMatchObject({
+      coverage: 'unavailable',
+      failureCode: 'INVALID_LOCKFILE',
+    });
+  });
+  it('rejects an unterminated quote without a final newline', async () => {
+    expect(await read('alpha@^1.0.0:\n  version "unterminated')).toMatchObject({
+      coverage: 'unavailable',
+      failureCode: 'INVALID_LOCKFILE',
+    });
+  });
+  it('reads the same valid packages without a final newline', async () => {
+    const withNewline = await read(text());
+    const withoutNewline = await read(text().trimEnd());
+    expect(withoutNewline.coverage).toBe('complete');
+    expect(withoutNewline.packages).toEqual(withNewline.packages);
+    expect(withoutNewline.direct).toEqual(withNewline.direct);
+  });
   it('rejects malformed Classic input', async () => {
     expect(
       await read('alpha@^1.0.0:\n  version "unterminated\n'),
@@ -206,15 +227,18 @@ describe('readYarnLock', () => {
       failureCode: 'INVALID_LOCKFILE',
     });
   });
-  it('returns complete empty coverage for an empty v1 lock and manifest', async () => {
-    const input = manifest();
-    input.dependencies = [];
-    expect(await read('# yarn lockfile v1\n', input)).toMatchObject({
-      coverage: 'complete',
-      packages: [],
-      failureCode: null,
-    });
-  });
+  it.each(['# yarn lockfile v1\n', '# yarn lockfile v1'])(
+    'returns complete empty coverage for an empty v1 lock and manifest: %j',
+    async (value) => {
+      const input = manifest();
+      input.dependencies = [];
+      expect(await read(value, input)).toMatchObject({
+        coverage: 'complete',
+        packages: [],
+        failureCode: null,
+      });
+    },
+  );
   it('reports record-limit coverage instead of successful empty audit', async () => {
     const value =
       text() +

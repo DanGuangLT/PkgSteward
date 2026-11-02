@@ -29,14 +29,20 @@ export async function readYarnLock(
   signal.throwIfAborted();
   if (Buffer.byteLength(text) > PROJECT_LOCK_BYTES)
     return unavailableInventory('LIMIT_EXCEEDED');
+  if (text.includes('<<<<<<<')) return unavailableInventory('INVALID_LOCKFILE');
   if (/^[ \t]*(?:__metadata|"__metadata"|'__metadata')\s*:/m.test(text))
     return unavailableInventory('UNSUPPORTED_LOCKFILE');
   if (!yamlDepthWithinLimit(text))
     return unavailableInventory('INVALID_LOCKFILE');
   await yieldProjectBatch(signal);
+  // The parser's tokenizer never returns on a comment or quote left open at the
+  // end of its input: it fills the heap and aborts the process. This trailer ends
+  // both and reads as a comment otherwise. Its merge path drops the trailer, so
+  // conflict markers are refused above.
+  const boundedText = `${text}\n# "\n`;
   let parsed: unknown;
   try {
-    parsed = classicLock.parse(text);
+    parsed = classicLock.parse(boundedText);
   } catch {
     return unavailableInventory('INVALID_LOCKFILE');
   }
