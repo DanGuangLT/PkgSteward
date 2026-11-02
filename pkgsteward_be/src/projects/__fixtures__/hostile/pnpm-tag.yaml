@@ -1,0 +1,4 @@
+lockfileVersion: '9.0'
+importers: {.: {}}
+packages:
+  alpha@1.0.0: !TEST {resolution: {integrity: sha512-TEST}}

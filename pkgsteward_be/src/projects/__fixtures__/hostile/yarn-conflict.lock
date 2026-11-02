@@ -1,0 +1,8 @@
+# yarn lockfile v1
+<<<<<<< HEAD
+alpha@^1.0.0:
+  version "1.1.0"
+=======
+alpha@^1.0.0:
+  version "1.2.0"
+>>>>>>> TEST-other

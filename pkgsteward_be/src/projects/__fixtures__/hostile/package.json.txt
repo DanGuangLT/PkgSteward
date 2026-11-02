@@ -1,0 +1,12 @@
+{
+  "name": "TEST-inert-input",
+  "version": "1.0.0",
+  "packageManager": "pnpm@11.0.0",
+  "dependencies": {"alpha": "^1.0.0"},
+  "devDependencies": {"alpha": "~1.2.0"},
+  "optionalDependencies": {"alpha": "1.2.0"},
+  "peerDependencies": {"alpha": ">=1.0.0"},
+  "scripts": {"postinstall": "TEST do not execute $(whoami) & echo inert"},
+  "pnpm": {"pnpmfile": "./TEST-plugin.cjs"},
+  "unknownField": {"registry": "https://TEST.invalid"}
+}
