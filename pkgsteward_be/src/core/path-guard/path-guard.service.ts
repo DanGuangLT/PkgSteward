@@ -9,6 +9,7 @@ import { buildDenylist } from '@/core/path-guard/denylist';
 import type { IPathGuardService } from '@/core/path-guard/interfaces/path-guard.service.interface';
 import type {
   IGuardedPath,
+  PathChecker,
   PathCheckResult,
   ProtectedTreeMatcher,
 } from '@/core/path-guard/interfaces/path-guard.types';
@@ -52,6 +53,10 @@ export class PathGuardService implements IPathGuardService {
 
   checkMany(inputPaths: readonly string[]): Promise<PathCheckResult[]> {
     return this.guard.checkMany(inputPaths);
+  }
+
+  createOperationChecker(): PathChecker {
+    return this.guard.createOperationChecker();
   }
 
   assertAllowed(inputPath: string): Promise<IGuardedPath> {

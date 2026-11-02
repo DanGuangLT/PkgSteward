@@ -21,6 +21,7 @@ import type {
   IDenyEntry,
   IGuardedPath,
   IPathGuardFs,
+  PathChecker,
   PathCheckFailureCode,
   PathCheckResult,
   ProtectedTreeMatcher,
@@ -50,7 +51,24 @@ const fail = (
 export class PathGuard {
   constructor(private readonly deps: IPathGuardDeps) {}
 
+  createOperationChecker(): PathChecker {
+    let drives: string[] | undefined;
+    // Reuse only drives; rejected discovery stays unset and is retried next call.
+    const listDrives = async () =>
+      (drives ??= await this.deps.driveDetector.listFixedDrives());
+    return (inputPaths) => this.checkWith(inputPaths, listDrives);
+  }
+
   async checkMany(inputPaths: readonly string[]): Promise<PathCheckResult[]> {
+    return this.checkWith(inputPaths, () =>
+      this.deps.driveDetector.listFixedDrives(),
+    );
+  }
+
+  private async checkWith(
+    inputPaths: readonly string[],
+    listDrives: () => Promise<string[]>,
+  ): Promise<PathCheckResult[]> {
     const results: PathCheckResult[] = [];
     // Snapshot only within this call; a later authorization must resolve roots/links again.
     let context: { roots: string[]; denylist: IDenyEntry[] } | undefined;
@@ -62,7 +80,7 @@ export class PathGuard {
       }
       const resolvedPath = pathApi(this.deps.platform).resolve(inputPath);
       if (!context) {
-        const roots = await this.allowedRoots();
+        const roots = await this.allowedRoots(listDrives);
         const denylist = await this.effectiveDenylist();
         context = { roots, denylist };
       }
@@ -238,11 +256,13 @@ export class PathGuard {
   }
 
   // Allowlist = gốc quét (hoặc mọi ổ cố định với "*") + đích thật của gốc (gốc có thể là junction).
-  private async allowedRoots(): Promise<string[]> {
-    const { scanRoots, driveDetector, fs, platform } = this.deps;
+  private async allowedRoots(
+    listDrives: () => Promise<string[]>,
+  ): Promise<string[]> {
+    const { scanRoots, fs, platform } = this.deps;
     const roots =
       scanRoots.kind === 'all-fixed-drives'
-        ? await driveDetector.listFixedDrives()
+        ? await listDrives()
         : scanRoots.paths;
     const result = new Set<string>();
     for (const root of roots) {

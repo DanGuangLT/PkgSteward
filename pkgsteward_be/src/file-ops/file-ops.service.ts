@@ -15,6 +15,7 @@ import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import type { PathChecker } from '@/core/path-guard/interfaces/path-guard.types';
 import { validateConfirmation } from '@/core/risk/confirmation';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
 import { DISK_FS } from '@/disk-usage/disk-usage-walker';
@@ -707,6 +708,7 @@ export class FileOpsService implements IFileOpsService {
   ): Promise<void> {
     const { operationId } = operation;
     const removed: string[] = [];
+    const gone: string[] = [];
     let status: 'completed' | 'cancelled' | 'failed' = 'completed';
     const stopRequested = (): boolean => {
       if (operation.status !== 'stopping') return false;
@@ -715,6 +717,7 @@ export class FileOpsService implements IFileOpsService {
       return true;
     };
     try {
+      const checkPaths = this.pathGuard.createOperationChecker();
       for (const [index, target] of targets.entries()) {
         if (stopRequested()) break;
         const result = operation.results[index];
@@ -722,7 +725,11 @@ export class FileOpsService implements IFileOpsService {
         result.status = 'running';
         this.operations.update(operationId, operation);
 
-        const refusal = await this.refusalBeforeDelete(target, removed);
+        const refusal = await this.refusalBeforeDelete(
+          target,
+          removed,
+          checkPaths,
+        );
         // Lệnh dừng đến trong lúc kiểm: target này chưa bị đụng tới.
         if (stopRequested()) break;
         if (refusal !== null) {
@@ -745,6 +752,7 @@ export class FileOpsService implements IFileOpsService {
             result.mayBePartial = outcome.mayBePartial;
           }
         }
+        if (result.errorCode === 'TARGET_GONE') gone.push(target.path);
         this.operations.update(operationId, operation);
 
         try {
@@ -771,7 +779,7 @@ export class FileOpsService implements IFileOpsService {
       status = 'failed';
       markNotStarted(operation, null);
     } finally {
-      this.finishOperation(operation, status, removed, token);
+      this.finishOperation(operation, status, removed, gone, token);
     }
   }
 
@@ -779,11 +787,12 @@ export class FileOpsService implements IFileOpsService {
   private async refusalBeforeDelete(
     target: IExecuteTarget,
     removed: readonly string[],
+    checkPaths: PathChecker,
   ): Promise<'TARGET_CHANGED' | 'TARGET_GONE' | null> {
     const api = pathApi(this.platform);
     const key = (path: string) => toComparable(path, this.platform);
     try {
-      const check = (await this.pathGuard.checkMany([target.path])).at(0);
+      const check = (await checkPaths([target.path])).at(0);
       if (check?.allowed === false && check.code === 'NOT_FOUND') {
         return 'TARGET_GONE';
       }
@@ -832,6 +841,7 @@ export class FileOpsService implements IFileOpsService {
     operation: IFileOpsOperation,
     status: 'completed' | 'cancelled' | 'failed',
     removed: readonly string[],
+    gone: readonly string[],
     token: symbol,
   ): void {
     // Mỗi bước bọc riêng: một bước lỗi không được chặn gate.leave.
@@ -842,7 +852,7 @@ export class FileOpsService implements IFileOpsService {
         this.logger.error('File operation finalization failed');
       }
     };
-    attempt(() => this.scanner.applyDeletions(removed));
+    attempt(() => this.scanner.applyDeletions([...removed, ...gone]));
     attempt(() => this.diskUsage.clearCache());
     attempt(() => {
       operation.status = status;

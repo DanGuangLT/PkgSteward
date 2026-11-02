@@ -9,7 +9,10 @@ import type { AuditLogService } from '@/core/audit-log/audit-log.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import type { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import type { PathGuardService } from '@/core/path-guard/path-guard.service';
-import type { PathCheckResult } from '@/core/path-guard/interfaces/path-guard.types';
+import type {
+  PathChecker,
+  PathCheckResult,
+} from '@/core/path-guard/interfaces/path-guard.types';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
 import type { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { IDiskFs } from '@/disk-usage/interfaces/disk-usage.types';
@@ -214,7 +217,13 @@ function fixture() {
     >()
     .mockRejectedValue(new Error('Unexpected recycling'));
   const recycleBin: jest.Mocked<IRecycleBin> = { recycle };
-  const guard = { checkMany: jest.fn().mockResolvedValue([]) };
+  const checkMany = jest
+    .fn<ReturnType<PathChecker>, Parameters<PathChecker>>()
+    .mockResolvedValue([]);
+  const guard = {
+    checkMany,
+    createOperationChecker: jest.fn(() => checkMany),
+  };
   const fileLstat = jest
     .fn<ReturnType<IFileOpsFs['lstat']>, Parameters<IFileOpsFs['lstat']>>()
     .mockRejectedValue(new Error('Unexpected file I/O'));
@@ -1360,6 +1369,119 @@ describe('FileOpsService execute operations and replay', () => {
 });
 
 describe('FileOpsService immediate target checks', () => {
+  it('creates one operation checker and checks each of two targets separately', async () => {
+    const f = await executeFixture();
+    const checkPaths = jest.fn<
+      ReturnType<PathChecker>,
+      Parameters<PathChecker>
+    >((inputPaths) => f.guard.checkMany(inputPaths));
+    f.guard.createOperationChecker.mockReturnValueOnce(checkPaths);
+    const started = await f.service.startExecute(f.input);
+    await flush();
+
+    expect(f.service.getOperation(started.operationId)).toMatchObject({
+      status: 'completed',
+      results: [{ status: 'success' }, { status: 'success' }],
+    });
+    expect(f.guard.createOperationChecker).toHaveBeenCalledTimes(1);
+    expect(checkPaths.mock.calls).toEqual([[[EXEC_A]], [[EXEC_B]]]);
+    expect(f.guard.checkMany.mock.calls).toEqual([[[EXEC_A]], [[EXEC_B]]]);
+  });
+
+  it('creates a separate checker for each operation on the same service', async () => {
+    const f = await executeFixture();
+    const first = await f.service.startExecute(f.input);
+    await flush();
+    const { previewId } = f.service.startDeletePreview({
+      paths: f.input.paths,
+    });
+    await flush();
+    const second = await f.service.startExecute({ ...f.input, previewId });
+    await flush();
+
+    expect(second.operationId).not.toBe(first.operationId);
+    for (const { operationId } of [first, second]) {
+      expect(f.service.getOperation(operationId)).toMatchObject({
+        status: 'completed',
+        results: [{ status: 'success' }, { status: 'success' }],
+      });
+    }
+    expect(f.guard.createOperationChecker).toHaveBeenCalledTimes(2);
+    expect(f.guard.checkMany.mock.calls).toEqual([
+      [[EXEC_A]],
+      [[EXEC_B]],
+      [[EXEC_A]],
+      [[EXEC_B]],
+    ]);
+  });
+
+  it.each([
+    target('D:\\TEST-app', {
+      kind: 'project',
+      method: 'recycle',
+      risk: HIGH,
+    }),
+    target(EXEC_A),
+    target('D:\\TEST-loose\\node_modules', {
+      kind: 'orphan_node_modules',
+      owner: null,
+    }),
+  ])(
+    'reconciles a gone $kind after successful removals in one scan update',
+    async (gone) => {
+      const removed = 'D:\\TEST-other\\node_modules';
+      const f = await executeFixture([
+        gone,
+        target(removed, {
+          owner: { path: 'D:\\TEST-other', name: 'TEST-other' },
+        }),
+      ]);
+      f.nodes.set(paths.toComparable(gone.path, 'win32'), ioError('ENOENT'));
+      const started = await f.service.startExecute({
+        ...f.input,
+        acknowledgedRisks:
+          gone.kind === 'project' ? ['DELETE_WHOLE_PROJECT'] : [],
+        confirmText: f.service.getPreview(f.previewId).confirmText ?? undefined,
+      });
+      await flush();
+
+      expect(f.service.getOperation(started.operationId)).toMatchObject({
+        status: 'completed',
+        results: [
+          { path: gone.path, status: 'failed', errorCode: 'TARGET_GONE' },
+          { path: removed, status: 'success' },
+        ],
+      });
+      expect(f.deleteOne.mock.calls.map(([input]) => input.path)).toEqual([
+        removed,
+      ]);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledTimes(1);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([
+        removed,
+        gone.path,
+      ]);
+    },
+  );
+
+  it('keeps a changed target out of the scan update', async () => {
+    const f = await executeFixture();
+    f.nodes.set(
+      paths.toComparable(EXEC_A, 'win32'),
+      executeStat(false, '9007199254740994'),
+    );
+    const started = await f.service.startExecute(f.input);
+    await flush();
+
+    expect(f.service.getOperation(started.operationId)).toMatchObject({
+      results: [
+        { path: EXEC_A, status: 'failed', errorCode: 'TARGET_CHANGED' },
+        { path: EXEC_B, status: 'success' },
+      ],
+    });
+    expect(f.scanner.applyDeletions).toHaveBeenCalledTimes(1);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
+  });
+
   it.each([
     ['changed inode', 'TARGET_CHANGED'],
     ['changed device', 'TARGET_CHANGED'],
@@ -1439,7 +1561,10 @@ describe('FileOpsService immediate target checks', () => {
           errorCode: null,
         },
       ]);
-      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledTimes(1);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith(
+        errorCode === 'TARGET_GONE' ? [EXEC_B, EXEC_A] : [EXEC_B],
+      );
       expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
       expect(JSON.stringify(operation)).not.toContain(PRIVATE_ERROR);
       expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
@@ -1567,6 +1692,55 @@ describe('FileOpsService immediate target checks', () => {
     expect(f.scanner.applyDeletions).toHaveBeenCalledWith([MANIFEST, EXEC_A]);
   });
 
+  it.each(['pre-delete check', 'delete outcome'])(
+    'does not grant the D12 exemption for a gone manifest from %s',
+    async (source) => {
+      const f = await executeFixture([
+        target(MANIFEST, {
+          kind: 'project_content',
+          method: 'recycle',
+          risk: CONTENT_RISK,
+          identity: { dev: '7', ino: '9007199254740993', type: 'file' },
+        }),
+        target(EXEC_A),
+      ]);
+      const markManifestGone = () =>
+        f.nodes.set(paths.toComparable(MANIFEST, 'win32'), ioError('ENOENT'));
+      if (source === 'pre-delete check') {
+        markManifestGone();
+      } else {
+        f.deleteOne.mockImplementationOnce(() => {
+          markManifestGone();
+          return Promise.resolve({
+            status: 'failed',
+            method: 'recycle',
+            errorCode: 'TARGET_GONE',
+            mayBePartial: false,
+          });
+        });
+      }
+      const started = await f.service.startExecute({
+        ...f.input,
+        acknowledgedRisks: ['DELETE_PROJECT_CONTENT'],
+        confirmText: 'DELETE 2',
+      });
+      await flush();
+
+      expect(f.service.getOperation(started.operationId)).toMatchObject({
+        status: 'completed',
+        results: [
+          { path: MANIFEST, status: 'failed', errorCode: 'TARGET_GONE' },
+          { path: EXEC_A, status: 'failed', errorCode: 'TARGET_CHANGED' },
+        ],
+      });
+      expect(f.deleteOne.mock.calls.map(([input]) => input.path)).toEqual(
+        source === 'pre-delete check' ? [] : [MANIFEST],
+      );
+      expect(f.scanner.applyDeletions).toHaveBeenCalledTimes(1);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([MANIFEST]);
+    },
+  );
+
   it('does not grant the D12 exemption after a failed manifest deletion', async () => {
     const f = await executeFixture([
       target(MANIFEST, {
@@ -1627,6 +1801,31 @@ describe('FileOpsService immediate target checks', () => {
 });
 
 describe('FileOpsService stopping and finalization', () => {
+  it('finalizes and releases the gate when creating the operation checker throws', async () => {
+    const f = await executeFixture();
+    f.guard.createOperationChecker.mockImplementationOnce(() => {
+      throw new Error(PRIVATE_ERROR);
+    });
+    const started = await f.service.startExecute(f.input);
+    await flush();
+
+    const final = f.service.getOperation(started.operationId);
+    expect(final).toMatchObject({
+      status: 'failed',
+      currentPath: null,
+      finishedAt: NOW.toISOString(),
+      results: [{ status: 'not_started' }, { status: 'not_started' }],
+    });
+    expectNoDeletion(f);
+    expect(f.scanner.applyDeletions).toHaveBeenCalledWith([]);
+    expect(f.diskUsage.clearCache).toHaveBeenCalledTimes(1);
+    expect(f.service.getActiveOperation()).toBeNull();
+    expect(f.gate.leave).toHaveBeenCalledTimes(1);
+    expect(f.gate.leave).toHaveBeenCalledWith(f.gateToken);
+    expect(JSON.stringify(final)).not.toContain(PRIVATE_ERROR);
+    expect(JSON.stringify(f.log.mock.calls)).not.toContain(PRIVATE_ERROR);
+  });
+
   it('lets the current target finish, then marks the rest not_started on cancellation', async () => {
     const f = await executeFixture();
     const waiting = deferred<DeleteOutcome>();
@@ -1774,7 +1973,10 @@ describe('FileOpsService stopping and finalization', () => {
           { status: 'success' },
         ],
       });
-      expect(f.scanner.applyDeletions).toHaveBeenCalledWith([EXEC_B]);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledTimes(1);
+      expect(f.scanner.applyDeletions).toHaveBeenCalledWith(
+        outcome.errorCode === 'TARGET_GONE' ? [EXEC_B, EXEC_A] : [EXEC_B],
+      );
       expect(f.deleteOne).toHaveBeenCalledTimes(2);
       expect(f.audit.append.mock.calls[1][0]).toMatchObject({
         phase: 'result',

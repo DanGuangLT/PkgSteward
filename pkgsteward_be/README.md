@@ -170,7 +170,8 @@ caller confirms for a selection of that preview. Both run in the background and 
   `TARGET_CHANGED`, `PATH_TOO_LONG` or a `RECYCLE_*` code. `mayBePartial` means a failed permanent deletion may
   have removed part of the target. One failed target does not stop the others, and the operation still ends
   `completed`, so read each result. An operation ends `cancelled` when targets were skipped by a cancel, and `failed`
-  when an audit write or an unexpected error stopped it.
+  when an audit write or an unexpected error stopped it. A `TARGET_GONE` target leaves the stored scan result, as a
+  deleted one does.
 - **Replay:** a preview can be executed once. Sending the same paths again returns the same operation, so a lost
   response can be retried safely. Other paths return `409 CONFLICT`.
 - **Audit log:** an intent record is written before anything is deleted, and a result record for each target, to

@@ -20,6 +20,10 @@ export type PathCheckResult =
   | { allowed: true; path: IGuardedPath }
   | { allowed: false; code: PathCheckFailureCode; message: string };
 
+export type PathChecker = (
+  inputPaths: readonly string[],
+) => Promise<PathCheckResult[]>;
+
 /**
  * Predicate cắt nhánh đồng bộ trên denylist đã chụp (xem createProtectedTreeMatcher).
  * Tiền điều kiện: path tuyệt đối đã resolve (Scanner). Không phải bộ kiểm path: đầu vào tương đối,
