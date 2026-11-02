@@ -4,8 +4,8 @@ import { getThemePreset } from "@/lib/theme/get-theme-preset"
 import type { ThemePreset } from "@/lib/theme/presets"
 import { cn } from "@/lib/utils"
 
-import { type ColorSwatch, colorGroups } from "./color-tokens"
-import { ShowcaseSection, TokenName } from "./showcase"
+import { type ColorSwatch, colorGroups } from "@/app/design-system/_components/color-tokens"
+import { ShowcaseSection, TokenName } from "@/app/design-system/_components/showcase"
 
 export async function ColorSection() {
   const [t, preset] = await Promise.all([

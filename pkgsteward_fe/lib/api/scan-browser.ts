@@ -1,7 +1,7 @@
 import { requestApi } from "./request.ts"
 import { unwrapApiData } from "./response.ts"
 import { scanPaths } from "./scan-paths.ts"
-import type { ScanJob, ScanStart } from "./types"
+import type { ScanJob, ScanStart } from "@/lib/api/types"
 
 export async function startBrowserScan(signal?: AbortSignal): Promise<ScanStart> {
   return unwrapApiData(await requestApi<ScanStart>(`/api${scanPaths.start}`, { method: "POST", signal }))

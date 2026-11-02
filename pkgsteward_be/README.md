@@ -75,6 +75,69 @@ start it, poll its progress, then read the result.
 - The latest result is kept in memory and in `cache/last-scan.json` inside the data folder, and is loaded
   again on startup. It is dropped when `SCAN_ROOT_PATHS` or `MAX_SCAN_DEPTH` changes. Results are not paginated.
 
+## Projects API
+
+Project details are local reads. Online version and vulnerability checks start only on an explicit request;
+opening or refreshing a detail page never starts them.
+
+| Endpoint | Result |
+|---|---|
+| `GET /api/v1/projects?path=...` | `200` with manifest dependencies, inert scripts, manager/lockfile metadata, input identity, read time and a cached disk-size reference |
+| `POST /api/v1/projects/analyses` | `{ path }`; `202` with `{ jobId, status }` |
+| `GET /api/v1/projects/analyses/:jobId` | `200` with the current snapshot; polling bypasses throttling and logs at debug level |
+| `POST /api/v1/projects/analyses/:jobId/cancel` | No body; `200` with a snapshot; repeated cancellation is idempotent |
+
+Responses use the standard envelope. Reads, including errors, are `no-store`. Paths must be single, nonempty,
+absolute strings of at most 32,768 characters, pass the path guard, and identify exactly a project in the latest
+scan. Job IDs are UUID v4. Extra DTO fields are rejected. Missing projects return `404 NOT_FOUND`; projects absent
+from the latest scan return `409 CONFLICT` with reason `PROJECT_NOT_SCANNED`.
+
+- **No runtime commands:** the module reads bounded local data and uses HTTP to the fixed
+  `https://registry.npmjs.org` origin. It never invokes npm, pnpm, Yarn, Corepack, project scripts or plugins, and
+  never installs, updates or fixes packages. Missing package-manager executables do not prevent analysis;
+  their installed versions remain unknown. Manifest `packageManager` is metadata only.
+- **Disclosure and registry policy:** online checks send dependency names and versions to the public npm registry.
+  When a lockfile can be read, only names it shows as coming from the public registry are sent; other dependencies
+  report `UNSUPPORTED_SPEC`.
+  No credentials, custom registries, redirects, project-selected URLs, user/global config or environment proxy
+  configuration are used. A bounded project-level config text check for registry/authentication keys disables
+  online checks with `REGISTRY_CONFIG_UNSUPPORTED`, including when those keys occur in comments. Local detail
+  remains available. Offline/registry failures retain local information and any positive findings.
+- **Lock support:** npm lock v2/v3 (shrinkwrap takes precedence), pnpm lock v9, and Yarn Classic v1. Yarn Berry
+  and other schemas have unavailable audit coverage (`UNSUPPORTED_LOCKFILE`). Missing or mismatched local locks
+  likewise prevent a complete audit; manifest-based wanted/latest checks may still work. No parent lock search,
+  package resolver, dependency graph or installed-tree traversal is performed.
+- **Coverage:** vulnerability checks cover every registry-sourced package entry in the selected lockfile,
+  including entries for other workspaces/importers, deduplicated by name/version. A finding is direct only when
+  its actual registry name is declared by the root manifest. Results describe **locked versions**, not installed
+  `node_modules`, npm metavulnerabilities or promised fixes. Outdated rows compare locked versions with wanted
+  and latest targets; unsupported specs and unknown versions remain visible. A deprecated version is a finding,
+  and does not by itself make an otherwise fully checked outdated section partial.
+- **Lifecycle:** one active analysis and one retained job, in RAM only. Same canonical-project starts coalesce;
+  another project returns `409 CONFLICT` with `{ reason: 'ANALYSIS_RUNNING', jobId, path }`, preserving the lexical
+  request path. A later accepted job replaces the terminal snapshot; restart or replacement makes old IDs return
+  `404`. Statuses are `running`, `completed`, `cancelled`, `timed_out`, `failed`. Start/cancel retain rate limits.
+- **Timeout and cancellation:** `NPM_COMMAND_TIMEOUT_MS` bounds the entire online job; empty/unset means no time
+  limit. Cancellation is explicit; there is no automatic retry. Bounded synchronous parsing may finish before
+  cancellation is observed. In-flight requests keep their concurrency permits until they settle.
+- **Consistency:** only start checks the mutation gate, immediately before reserving the slot. Detail and poll
+  do not block writes. Inputs/scan identity are rechecked once at job end; changes produce stale, partial results
+  with `INPUT_CHANGED`. Every poll is a defensive snapshot with no filesystem, guard, hashing or gate work.
+  `checkedAt` records historical verification, not continuous freshness; files can change afterwards. No analysis
+  cache or persistence exists. Disk sizes are existing RAM-cache references only; no measurement starts here.
+- **Results:** each section exposes state, checked/total counts, warnings and failure code. `null` means unknown,
+  while `0` means known empty. Partial/unavailable/stale/cancelled/timed-out results retain findings and cannot
+  support a clean verdict. An empty complete, current audit supports only a no-findings statement for its scope.
+- **Limits:** manifest/config files 1 MiB each; lockfiles 32 MiB; 50,000 lock records; 2,000 displayed direct rows;
+  10,000 audit name/version pairs; 64 MiB decoded package metadata per response; 16 MiB audit response; 2,000
+  displayed advisories; up to four network requests and four file reads concurrently. Audit requests split at
+  500 names or a 1 MiB body. Limits produce explicit partial/unavailable `LIMIT_EXCEEDED` results, never a
+  successful empty result. Registry-wide failures stop scheduling more requests and retain completed findings.
+
+Other errors include `400 VALIDATION_ERROR`, `403 FORBIDDEN`, start-only mutation-gate `409 CONFLICT`,
+`429 RATE_LIMITED`, and normalized registry/input failure codes within accepted job snapshots. Advisory links
+are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles remain plain text.
+
 ## Disk usage API
 
 Disk usage is a read-only background measurement. It uses **`unique-apparent`** bytes: regular-file sizes,

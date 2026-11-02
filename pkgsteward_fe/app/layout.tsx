@@ -10,7 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { getThemePreset } from "@/lib/theme/get-theme-preset"
 import { cn } from "@/lib/utils"
 
-import "./globals.css"
+import "@/app/globals.css"
 
 // Inter: font thay thế gần nhất cho Pin Sans. Preset trỏ
 // --font-body vào biến này, nên đổi font chỉ cần đổi biến trong preset.

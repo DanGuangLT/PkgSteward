@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "./showcase"
+import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "@/app/design-system/_components/showcase"
 
 type BadgeVariant = NonNullable<React.ComponentProps<typeof Badge>["variant"]>
 

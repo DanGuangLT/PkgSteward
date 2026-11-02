@@ -4,14 +4,14 @@ import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 
-import { ActionsSection } from "./_components/actions-section"
-import { ColorSection } from "./_components/color-section"
-import { DangerousSection } from "./_components/dangerous-section"
-import { DataSection } from "./_components/data-section"
-import { FormsSection } from "./_components/forms-section"
-import { OverlaysSection } from "./_components/overlays-section"
-import { ShapeSection } from "./_components/shape-section"
-import { TypographySection } from "./_components/typography-section"
+import { ActionsSection } from "@/app/design-system/_components/actions-section"
+import { ColorSection } from "@/app/design-system/_components/color-section"
+import { DangerousSection } from "@/app/design-system/_components/dangerous-section"
+import { DataSection } from "@/app/design-system/_components/data-section"
+import { FormsSection } from "@/app/design-system/_components/forms-section"
+import { OverlaysSection } from "@/app/design-system/_components/overlays-section"
+import { ShapeSection } from "@/app/design-system/_components/shape-section"
+import { TypographySection } from "@/app/design-system/_components/typography-section"
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("designSystem")

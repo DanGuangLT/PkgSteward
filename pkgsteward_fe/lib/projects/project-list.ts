@@ -1,4 +1,4 @@
-import type { ScannedProject } from "../api/types"
+import type { ScannedProject } from "@/lib/api/types"
 
 export type ProjectSort = "activity" | "name"
 

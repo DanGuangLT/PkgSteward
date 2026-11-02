@@ -20,6 +20,7 @@ import type { ScannedProject } from "@/lib/api/types"
 import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
 import { fileManagerHref } from "@/lib/file-ops/file-ops-list"
 import { projectDisplayName } from "@/lib/projects/project-list"
+import { projectDetailHref } from "@/lib/projects/project-detail-list"
 
 interface ProjectItemsProps {
   projects: readonly ScannedProject[]
@@ -72,6 +73,15 @@ function ProjectFilesLink({ project }: { project: ScannedProject }) {
   )
 }
 
+function ProjectDetailsLink({ project }: { project: ScannedProject }) {
+  const t = useTranslations("projects")
+  return (
+    <Link href={projectDetailHref(project.path)} prefetch={false} className="inline-block max-w-full rounded-sm text-body-sm text-ink-soft underline focus-ring">
+      {t("viewDetails")}
+    </Link>
+  )
+}
+
 function ProjectActivity({ date, referenceTime }: { date: string; referenceTime: string }) {
   const format = useFormatter()
   return <time dateTime={date}>{format.relativeTime(new Date(date), new Date(referenceTime))}</time>
@@ -101,6 +111,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                   <p className="font-semibold text-foreground [overflow-wrap:anywhere]">{projectDisplayName(project)}</p>
                   <p className="mt-1 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
                   <p className="mt-2"><ProjectFilesLink project={project} /></p>
+                  <p className="mt-2"><ProjectDetailsLink project={project} /></p>
                 </TableCell>
                 <TableCell className="whitespace-normal"><ProjectManager project={project} /></TableCell>
                 <TableCell className="whitespace-normal"><ProjectLockfile project={project} /></TableCell>
@@ -122,6 +133,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                 <CardTitle className="min-w-0 [overflow-wrap:anywhere]">{projectDisplayName(project)}</CardTitle>
                 <p className="min-w-0 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
                 <p><ProjectFilesLink project={project} /></p>
+                <p><ProjectDetailsLink project={project} /></p>
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-4 text-body-sm">

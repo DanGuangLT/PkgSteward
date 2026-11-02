@@ -59,6 +59,52 @@ The server loads the initial scan results. Browser scan requests use same-origin
 Backend requests time out after 10 seconds. If the backend is offline or a request times out, the page
 shows a localized `BACKEND_UNAVAILABLE` error state instead of crashing.
 
+## Project details and package checks
+
+Select **View details** in the project list to open `/projects?path=...`. A single path is required; missing,
+invalid, deleted or no-longer-scanned projects show a localized guide/error with a link back to the list.
+Opening, prefetching, reloading or refreshing the page reads local detail only, without starting a scan or
+online check. The list retains its selection, size and file-operation controls without per-row data requests.
+
+The initial view shows manifest dependencies, declared specs/groups, locked versions, detected manager and pin,
+read time, scripts as inert text, and an existing cached `node_modules` size. Installed tool versions remain
+unknown. No Run, Install, Update or Fix controls are provided. Unknown values are distinct from known empty
+results. A missing cached size links to `/disk-usage?path=...&view=packages`, without starting measurement.
+
+**Check packages** explicitly sends dependency names and versions to the public npm registry. Project-level
+registry/authentication configuration disables this button with an explanation; local detail remains available.
+Results cover **locked versions**, rather than the installed tree. The vulnerability scope includes every npm
+registry package entry at the chosen lock root, including other workspaces/importers; direct status uses only
+root declarations. Supported audit locks are npm v2/v3, pnpm v9 and Yarn Classic v1. Yarn Berry/other unsupported,
+missing or mismatched locks have unavailable audit coverage, even when wanted/latest metadata is available.
+
+The desktop dependency table becomes cards on narrow screens, with no filtering, search, tabs or paging.
+Outdated/vulnerable badges indicate available findings, including partial ones; absent badges do not assert
+clean results. Advisory findings sort by severity, package name and ID. Titles are text, and only backend-validated
+advisory URLs are links. A deprecated version is a row warning and does not alone make a check incomplete.
+
+The browser uses same-origin Route Handlers; the server calls the backend:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/projects?path=...` | Local detail read |
+| `POST /api/projects/analyses` | Start an explicit check |
+| `GET /api/projects/analyses/:id` | Read a job snapshot |
+| `POST /api/projects/analyses/:id/cancel` | Request cancellation |
+
+One poll is in flight at a time, with the next scheduled one second after settlement. Hiding the tab aborts
+local polling; showing it resumes. Terminal states stop polling. Poll failures pause until **Check status again**;
+a lost job (`404`, for example after restart or replacement) retains old findings as unverified. Cancellation
+failure says its outcome is unconfirmed; start transport failure says its outcome is unknown. Neither POST is
+automatically retried. An analysis conflict links to the other project's detail page, preserving its lexical
+path; it never displays that project's findings under the current project's summary. Other conflicts have no link.
+
+Completed, partial, stale, unavailable, cancelled and timed-out states remain distinct. A no-vulnerabilities
+claim requires a complete, current audit with no findings. `checkedAt` is the historical end-of-job input check,
+and polling never revalidates files. **Refresh local data** is available after tracking ends and marks old analysis
+stale when the input hash or scan changes. Leaving the page aborts local requests only; the backend may continue
+until explicit cancellation or the optional configured deadline. There is no default analysis time limit.
+
 ## Disk usage
 
 Open `/disk-usage`, enter an absolute directory path, choose `directory` or `packages`, then select **Measure size**.
@@ -149,17 +195,17 @@ To add a language: copy `messages/en.json` to `messages/<code>.json` and transla
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin scan, disk usage and file operation Route Handlers
+app/api/              Same-origin scan, project analysis, disk usage and file operation Route Handlers
 components/ui/        shadcn/ui components (adapted to the theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
 i18n/, messages/      next-intl config and translations
-hooks/                Client scan, disk usage, file operation and file tree state
+hooks/                Client scan, project analysis, disk usage, file operation and file tree state
 lib/api/              Backend client, transport, contracts and feature requests
 lib/disk-usage/       Measurement polling and presentation policy
 lib/file-ops/         Selection, confirmation, deletion flow and list helpers
-lib/projects/         Project filtering, sorting and display helpers
+lib/projects/         Project list helpers, analysis session/policy and detail presentation
 lib/scans/            Scan polling and completion policy
 lib/theme/            Theme preset registry
 styles/               Theme presets and tokens

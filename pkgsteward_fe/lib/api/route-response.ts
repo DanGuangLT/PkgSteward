@@ -1,5 +1,5 @@
 import { ApiError, toApiErrorResponse } from "./response.ts"
-import type { ApiResponse } from "./types"
+import type { ApiResponse } from "@/lib/api/types"
 
 const NO_STORE = { "Cache-Control": "no-store" }
 

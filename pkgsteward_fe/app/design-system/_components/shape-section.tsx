@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server"
 
 import { cn } from "@/lib/utils"
 
-import { ShowcaseItem, ShowcaseSection, TokenName } from "./showcase"
+import { ShowcaseItem, ShowcaseSection, TokenName } from "@/app/design-system/_components/showcase"
 
 // Thang bo góc suy ra từ --radius (styles/tokens.css).
 const RADII = [

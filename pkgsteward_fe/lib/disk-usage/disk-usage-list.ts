@@ -1,4 +1,4 @@
-import type { DiskUsageRow, DiskView } from "../api/types.ts"
+import type { DiskUsageRow, DiskView } from "@/lib/api/types"
 
 export function sortDiskRows(rows: readonly DiskUsageRow[], locale: string): DiskUsageRow[] {
   return [...rows].sort((a, b) => {

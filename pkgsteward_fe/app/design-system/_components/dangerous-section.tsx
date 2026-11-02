@@ -1,8 +1,8 @@
 import { getTranslations } from "next-intl/server"
 
-import { ConfirmDeleteDemo } from "./confirm-delete-demo"
-import { RiskConfirmDemo } from "./risk-confirm-demo"
-import { ShowcaseItem, ShowcaseSection } from "./showcase"
+import { ConfirmDeleteDemo } from "@/app/design-system/_components/confirm-delete-demo"
+import { RiskConfirmDemo } from "@/app/design-system/_components/risk-confirm-demo"
+import { ShowcaseItem, ShowcaseSection } from "@/app/design-system/_components/showcase"
 
 const STEPS = ["preview", "dialog", "execute"] as const
 

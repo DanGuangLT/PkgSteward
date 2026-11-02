@@ -13,7 +13,7 @@ import { getTranslations } from "next-intl/server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
-import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "./showcase"
+import { ShowcaseItem, ShowcaseRow, ShowcaseSection } from "@/app/design-system/_components/showcase"
 
 type ButtonVariant = NonNullable<React.ComponentProps<typeof Button>["variant"]>
 type BadgeVariant = NonNullable<React.ComponentProps<typeof Badge>["variant"]>

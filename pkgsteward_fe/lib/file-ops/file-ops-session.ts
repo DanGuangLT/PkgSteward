@@ -3,7 +3,7 @@ import {
   pollBrowserOperation, pollBrowserPreview, startBrowserCleanupPreview, startBrowserDeletePreview, summarizeBrowserPreview,
 } from "../api/file-ops-browser.ts"
 import { ApiError } from "../api/response.ts"
-import type { CleanupPreviewInput, FileOpsPreviewStart } from "../api/types.ts"
+import type { CleanupPreviewInput, FileOpsPreviewStart } from "@/lib/api/types"
 import { buildExecuteInput, type ConfirmationInput } from "./confirmation.ts"
 import {
   fileOpsAbandon, fileOpsAcceptOperation, fileOpsAcceptPreview, fileOpsBeginCancel, fileOpsBeginExecute, fileOpsBeginStart,

@@ -257,3 +257,107 @@ export interface FileTreeLevel {
   entries: FileTreeEntry[]
   truncated: boolean
 }
+
+export type ProjectManager = "npm" | "pnpm" | "yarn" | "unknown" | "ambiguous"
+export type AnalysisStatus = "running" | "completed" | "cancelled" | "timed_out" | "failed"
+export type AnalysisSectionState = "pending" | "running" | "complete" | "partial" | "unavailable"
+export type AnalysisPhase = "reading" | "outdated" | "audit" | "validating" | "done"
+export type DependencyGroup = "dependencies" | "devDependencies" | "optionalDependencies" | "peerDependencies"
+export type ProjectAnalysisCode =
+  | "INPUT_CHANGED" | "PROJECT_NOT_SCANNED" | "CANCELLED" | "TIMED_OUT"
+  | "UNREADABLE_INPUT" | "INVALID_LOCKFILE" | "NO_LOCKFILE" | "UNSUPPORTED_LOCKFILE"
+  | "LOCKFILE_MISMATCH" | "UNSUPPORTED_MANAGER" | "UNSUPPORTED_SPEC"
+  | "REGISTRY_CONFIG_UNSUPPORTED" | "LIMIT_EXCEEDED" | "REGISTRY_AUTH_REQUIRED"
+  | "REGISTRY_RATE_LIMITED" | "REGISTRY_UNAVAILABLE" | "PACKAGE_NOT_FOUND"
+  | "DEPRECATED_VERSION" | "INVALID_REGISTRY_RESPONSE" | "INTERNAL_SERVER_ERROR"
+
+export interface DependencyDeclaration {
+  group: DependencyGroup
+  spec: string
+}
+
+export interface ManifestDependency {
+  name: string
+  declarations: DependencyDeclaration[]
+}
+
+export interface ProjectDependency extends ManifestDependency {
+  lockedVersions: string[]
+}
+
+export interface ProjectScript {
+  name: string
+  command: string
+}
+
+export interface ProjectDetail {
+  path: string
+  requestPath: string
+  name: string | null
+  version: string | null
+  manager: ProjectManager
+  packageManager: string | null
+  lockfile: string | null
+  scanId: string
+  inputHash: string
+  readAt: string
+  dependencies: ProjectDependency[]
+  scripts: ProjectScript[]
+  warnings: ProjectAnalysisCode[]
+  diskUsage: { sizeBytes: number; measuredAt: string } | null
+}
+
+export interface ProjectOutdated {
+  name: string
+  registryName: string
+  lockedVersions: string[]
+  wanted: string | null
+  latest: string | null
+  behindWanted: boolean | null
+  behindLatest: boolean | null
+  warning: ProjectAnalysisCode | null
+}
+
+export interface ProjectAdvisory {
+  id: string
+  name: string
+  title: string
+  url: string | null
+  severity: "info" | "low" | "moderate" | "high" | "critical" | "unknown"
+  range: string
+  affectedVersions: string[]
+  direct: boolean
+}
+
+export interface AnalysisSection<T> {
+  state: AnalysisSectionState
+  items: T[]
+  warningCodes: ProjectAnalysisCode[]
+  failureCode: ProjectAnalysisCode | null
+  checkedCount: number
+  totalCount: number | null
+}
+
+export interface StartProjectAnalysis { path: string }
+
+export interface ProjectAnalysisStart {
+  jobId: string
+  status: AnalysisStatus
+}
+
+export interface ProjectAnalysisJob extends ProjectAnalysisStart {
+  path: string
+  requestPath: string
+  scanId: string
+  inputHash: string
+  phase: AnalysisPhase
+  partial: boolean
+  stale: boolean
+  startedAt: string
+  finishedAt: string | null
+  checkedAt: string | null
+  outdated: AnalysisSection<ProjectOutdated>
+  audit: AnalysisSection<ProjectAdvisory>
+  warningCodes: ProjectAnalysisCode[]
+  failureCode: ProjectAnalysisCode | null
+}

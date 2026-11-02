@@ -1,4 +1,4 @@
-import type { ScanStatus } from "../api/types"
+import type { ScanStatus } from "@/lib/api/types"
 
 export function pollFailureAction(code: string): "pause" | "abandon" {
   return code === "NOT_FOUND" ? "abandon" : "pause"

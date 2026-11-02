@@ -4,7 +4,7 @@ import { unwrapApiData } from "./response.ts"
 import type {
   CleanupPreviewInput, FileOpsExecuteInput, FileOpsOperation, FileOpsOperationStart,
   FileOpsPreview, FileOpsPreviewStart, FileOpsSummary, FileTreeLevel,
-} from "./types.ts"
+} from "@/lib/api/types"
 
 const postJson = (input: unknown, signal?: AbortSignal): RequestInit => ({
   method: "POST",
