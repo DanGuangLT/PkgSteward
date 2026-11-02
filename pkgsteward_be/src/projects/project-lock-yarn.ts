@@ -91,8 +91,10 @@ export async function readYarnLock(
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
       const descriptor = `${dependency.name}@${declaration.spec}`;
-      if (!Object.hasOwn(records, descriptor))
+      if (!Object.hasOwn(records, descriptor)) {
+        if (declaration.group === 'peerDependencies') continue;
         return unavailableInventory('LOCKFILE_MISMATCH');
+      }
       const resolved = byDescriptor.get(descriptor);
       const target = registryTarget(dependency.name, declaration.spec);
       if (

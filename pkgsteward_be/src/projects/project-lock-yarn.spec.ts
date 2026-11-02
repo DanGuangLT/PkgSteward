@@ -74,18 +74,55 @@ describe('readYarnLock', () => {
       failureCode: 'LOCKFILE_MISMATCH',
     });
   });
-  it.each([
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'peerDependencies',
-  ] as const)('checks declarations in %s', async (group) => {
+  it.each(['dependencies', 'devDependencies', 'optionalDependencies'] as const)(
+    'checks declarations in %s',
+    async (group) => {
+      const input = manifest();
+      input.dependencies[0].declarations = [{ group, spec: '^9.0.0' }];
+      expect(await read(text(), input)).toMatchObject({
+        coverage: 'unavailable',
+        failureCode: 'LOCKFILE_MISMATCH',
+      });
+    },
+  );
+  it('does not require a lock descriptor for an unlocked peer-only declaration', async () => {
     const input = manifest();
-    input.dependencies[0].declarations = [{ group, spec: '^9.0.0' }];
-    expect(await read(text(), input)).toMatchObject({
-      coverage: 'unavailable',
-      failureCode: 'LOCKFILE_MISMATCH',
+    input.dependencies[0].declarations = [
+      { group: 'peerDependencies', spec: '>=16' },
+    ];
+    const result = await read('# yarn lockfile v1\n', input);
+    expect(result).toMatchObject({
+      coverage: 'complete',
+      warningCodes: [],
+      failureCode: null,
     });
+    expect(result.direct.size).toBe(0);
+  });
+  it('keeps the dev version when a different peer descriptor is absent', async () => {
+    const input = manifest();
+    input.dependencies = [
+      {
+        name: 'react',
+        declarations: [
+          { group: 'peerDependencies', spec: '>=16' },
+          { group: 'devDependencies', spec: '^18.2.0' },
+        ],
+      },
+    ];
+    const value =
+      '# yarn lockfile v1\nreact@^18.2.0:\n  version "18.2.0"\n  resolved "https://registry.yarnpkg.com/react/-/react-18.2.0.tgz"\n';
+    const result = await read(value, input);
+    expect(result.coverage).toBe('complete');
+    expect(result.direct.get('react')).toEqual(['18.2.0']);
+  });
+  it('still checks a peer descriptor when it is present', async () => {
+    const input = manifest();
+    input.dependencies[0].declarations = [
+      { group: 'peerDependencies', spec: '^1.0.0' },
+    ];
+    expect(
+      await read(text().replace('version "1.2.0"', 'version "9.0.0"'), input),
+    ).toMatchObject({ failureCode: 'LOCKFILE_MISMATCH' });
   });
   it('does not mark an undeclared top-level descriptor direct', async () => {
     const input = manifest();

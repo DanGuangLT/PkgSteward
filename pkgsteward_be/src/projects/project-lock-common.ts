@@ -164,6 +164,7 @@ export function rootSpecsMatch(
 ): boolean {
   if (!isProjectRecord(root)) return false;
   for (const group of PROJECT_DEPENDENCY_GROUPS) {
+    if (pnpm && group === 'peerDependencies') continue;
     const expected = new Map<string, string>();
     for (const dependency of manifest.dependencies) {
       for (const declaration of dependency.declarations) {
@@ -172,11 +173,26 @@ export function rootSpecsMatch(
       }
     }
     const actual: unknown = root[group] ?? {};
-    if (
-      !isProjectRecord(actual) ||
-      Object.keys(actual).length !== expected.size
-    )
-      return false;
+    if (!isProjectRecord(actual)) return false;
+    for (const name of Object.keys(actual)) {
+      if (expected.has(name)) continue;
+      const value = actual[name];
+      if (
+        !pnpm ||
+        group !== 'dependencies' ||
+        !isProjectRecord(value) ||
+        !manifest.dependencies.some(
+          (dependency) =>
+            dependency.name === name &&
+            dependency.declarations.some(
+              (declaration) =>
+                declaration.group === 'peerDependencies' &&
+                declaration.spec === value.specifier,
+            ),
+        )
+      )
+        return false;
+    }
     for (const [name, spec] of expected) {
       if (!Object.hasOwn(actual, name)) return false;
       const value = actual[name];

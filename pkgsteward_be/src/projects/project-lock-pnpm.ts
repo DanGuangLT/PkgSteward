@@ -163,10 +163,17 @@ export async function readPnpmLock(
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
       const target = registryTarget(dependency.name, declaration.spec);
-      const group = root[declaration.group];
+      const peer = declaration.group === 'peerDependencies';
+      const group = root[peer ? 'dependencies' : declaration.group];
       const declarationValue = isProjectRecord(group)
         ? group[dependency.name]
         : null;
+      if (
+        peer &&
+        (!isProjectRecord(declarationValue) ||
+          declarationValue.specifier !== declaration.spec)
+      )
+        continue;
       if (
         target.registryName &&
         isProjectRecord(declarationValue) &&

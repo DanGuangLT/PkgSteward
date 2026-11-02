@@ -97,6 +97,75 @@ describe('readPnpmLock', () => {
       });
     }
   });
+  it.each([true, false])(
+    'accepts a peer-only lock with autoInstallPeers=%s',
+    async (autoInstallPeers) => {
+      const input = manifest();
+      input.dependencies = [
+        {
+          name: 'is-odd',
+          declarations: [{ group: 'peerDependencies', spec: '^3.0.0' }],
+        },
+      ];
+      const importer = autoInstallPeers
+        ? 'dependencies:\n      is-odd: {specifier: ^3.0.0, version: 3.0.1}'
+        : '{}';
+      const packages = autoInstallPeers
+        ? '\n  is-odd@3.0.1: {resolution: {integrity: sha512-TEST}}\n'
+        : ' {}\n';
+      const result = await read(
+        `lockfileVersion: '9.0'\nsettings: {autoInstallPeers: ${autoInstallPeers}}\nimporters:\n  .:\n    ${importer}\npackages:${packages}`,
+        input,
+      );
+      expect(result).toMatchObject({
+        coverage: 'complete',
+        warningCodes: [],
+        failureCode: null,
+      });
+      expect(result.direct.get('is-odd') ?? []).toEqual(
+        autoInstallPeers ? ['3.0.1'] : [],
+      );
+    },
+  );
+  it('accepts a peer plus dev declaration recorded only as dev', async () => {
+    const input = manifest();
+    input.dependencies = [
+      {
+        name: 'is-odd',
+        declarations: [
+          { group: 'peerDependencies', spec: '>=2' },
+          { group: 'devDependencies', spec: '3.0.1' },
+        ],
+      },
+    ];
+    const result = await read(
+      "lockfileVersion: '9.0'\nimporters:\n  .:\n    devDependencies:\n      is-odd: {specifier: 3.0.1, version: 3.0.1}\npackages:\n  is-odd@3.0.1: {resolution: {integrity: sha512-TEST}}\n",
+      input,
+    );
+    expect(result.coverage).toBe('complete');
+    expect(result.direct.get('is-odd')).toEqual(['3.0.1']);
+  });
+  it.each([
+    ['extra', '^3.0.0'],
+    ['is-odd', '^2.0.0'],
+  ])('rejects an extra dependency %s with specifier %s', async (name, spec) => {
+    const input = manifest();
+    input.dependencies = [
+      {
+        name: 'is-odd',
+        declarations: [{ group: 'peerDependencies', spec: '^3.0.0' }],
+      },
+    ];
+    expect(
+      await read(
+        `lockfileVersion: '9.0'\nimporters:\n  .:\n    dependencies:\n      ${name}: {specifier: ${spec}, version: 3.0.1}\npackages: {}\n`,
+        input,
+      ),
+    ).toMatchObject({
+      coverage: 'unavailable',
+      failureCode: 'LOCKFILE_MISMATCH',
+    });
+  });
   it('rejects a direct version reference inconsistent with its root specifier', async () => {
     expect(
       await read(text().replace('version: 1.2.0', 'version: 9.0.0')),
