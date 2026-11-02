@@ -31,6 +31,7 @@ export type ProjectAnalysisCode =
   | 'REGISTRY_RATE_LIMITED'
   | 'REGISTRY_UNAVAILABLE'
   | 'PACKAGE_NOT_FOUND'
+  | 'DEPRECATED_VERSION'
   | 'INVALID_REGISTRY_RESPONSE'
   | 'INTERNAL_SERVER_ERROR';
 
@@ -160,6 +161,8 @@ export interface IProjectFileStat {
   dev: number;
   isFile(): boolean;
   isSymbolicLink(): boolean;
+  // Optional for existing file-only adapters; disk peeks require a positive check.
+  isDirectory?(): boolean;
 }
 // Production adapter streams bytes; readProjectInput counts them before parsing.
 export interface IProjectFs {
