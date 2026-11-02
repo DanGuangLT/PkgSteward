@@ -4,7 +4,7 @@ import {
   acceptAnalysisJob, beginAnalysisCancel, canPollAnalysis, failAnalysisRequest,
   initialAnalysisState, receiveAnalysisJob, retryAnalysisPoll, trackAnalysis,
 } from "./project-analysis-policy.ts"
-import type { AnalysisConflict, ProjectAnalysisState } from "@/lib/projects/project-analysis-policy"
+import type { ProjectAnalysisState } from "@/lib/projects/project-analysis-policy"
 
 export interface ProjectAnalysisApi {
   start(input: StartProjectAnalysis, signal: AbortSignal): Promise<ProjectAnalysisStart>
@@ -114,7 +114,14 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
       publish(trackAnalysis(state, started.jobId, path))
     } catch (cause) {
       if (active(controller, generation) && commandRequest === controller) {
-        publish(failAnalysisRequest(state, "start", cause))
+        const next = failAnalysisRequest(state, "start", cause)
+        if (next.error && !next.error.conflict && cause instanceof ApiError
+          && cause.statusCode === 409 && cause.code === "CONFLICT"
+          && typeof cause.details === "object" && cause.details !== null
+          && "reason" in cause.details && typeof cause.details.reason === "string" && cause.details.reason) {
+          next.error = { ...next.error, code: cause.details.reason }
+        }
+        publish(next)
       }
     } finally {
       if (commandRequest === controller) commandRequest = null
@@ -152,15 +159,6 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
     void poll()
   }
 
-  function follow(conflict: AnalysisConflict) {
-    if (disposed || commandRequest || state.phase === "starting" || state.phase === "tracking"
-      || conflict.reason !== "ANALYSIS_RUNNING" || typeof conflict.jobId !== "string" || !conflict.jobId
-      || typeof conflict.path !== "string" || !conflict.path) return
-    const generation = invalidate()
-    publish(trackAnalysis({ ...state, generation }, conflict.jobId, conflict.path))
-    void poll()
-  }
-
   function refresh(detail: ProjectDetail) {
     if (disposed) return
     const switched = state.detail
@@ -186,7 +184,7 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
     unsubscribe()
   }
 
-  return { start, cancel, retryPoll, follow, refresh, dispose, getSnapshot: () => state }
+  return { start, cancel, retryPoll, refresh, dispose, getSnapshot: () => state }
 }
 
 export type ProjectAnalysisSession = ReturnType<typeof createProjectAnalysisSession>

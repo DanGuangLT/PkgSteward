@@ -2,7 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   projectDetailHref, projectValueKnown, projectSectionIsComplete, projectAuditIsClean,
-  projectDependencyBadges, sortProjectAdvisories, projectAnalysisStatusKey,
+  createProjectDependencyBadgeReader, sortProjectAdvisories, projectAnalysisStatusKey,
 } from "./project-detail-list.ts"
 import { initialAnalysisState, trackAnalysis, failAnalysisRequest, beginAnalysisCancel } from "./project-analysis-policy.ts"
 import { ApiError } from "../api/response.ts"
@@ -49,12 +49,25 @@ test("badges use available findings including partial/stale findings; unknown ne
     ] },
     audit: { ...section, state: "partial", items: [{ name: "TEST-real" }, { name: "TEST-transitive" }] },
   }
-  assert.deepEqual(projectDependencyBadges("TEST-alias", snapshot), { outdated: true, vulnerable: true })
-  assert.deepEqual(projectDependencyBadges("TEST-transitive", snapshot), { outdated: false, vulnerable: true })
+  const badges = createProjectDependencyBadgeReader(snapshot)
+  assert.deepEqual(badges("TEST-alias"), { outdated: true, vulnerable: true })
+  assert.deepEqual(badges("TEST-transitive"), { outdated: false, vulnerable: true })
   for (const name of ["TEST-tag", "TEST-deprecated", "TEST-unchecked"]) {
-    assert.deepEqual(projectDependencyBadges(name, snapshot), { outdated: false, vulnerable: false })
+    assert.deepEqual(badges(name), { outdated: false, vulnerable: false })
   }
-  assert.deepEqual(projectDependencyBadges("TEST-alias", null), { outdated: false, vulnerable: false })
+  assert.deepEqual(createProjectDependencyBadgeReader(null)("TEST-alias"), { outdated: false, vulnerable: false })
+})
+
+test("badge reader indexes each snapshot once and does no per-name list traversal", () => {
+  let outdatedReads = 0, auditReads = 0
+  const snapshot = { ...job,
+    outdated: { ...section, get items() { outdatedReads++; return [{ name: "TEST-alias", registryName: "TEST-real", behindWanted: true }] } },
+    audit: { ...section, get items() { auditReads++; return [{ name: "TEST-real" }] } },
+  }
+  const badges = createProjectDependencyBadgeReader(snapshot)
+  for (let i = 0; i < 2000; i++) assert.deepEqual(badges("TEST-alias"), { outdated: true, vulnerable: true })
+  assert.equal(outdatedReads, 1)
+  assert.equal(auditReads, 1)
 })
 
 test("severity sort is immutable and uses deterministic name/id ties", () => {

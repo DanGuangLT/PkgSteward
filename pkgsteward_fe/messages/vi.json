@@ -32,6 +32,7 @@
     "label": "Ngôn ngữ"
   },
   "projects": {
+    "viewDetails": "Xem chi tiết",
     "title": "Dự án",
     "listLabel": "Danh sách dự án quét được",
     "empty": {
@@ -125,6 +126,34 @@
       "generic": "Đã xảy ra lỗi. Vui lòng thử lại.",
       "pollFailed": "Chưa kiểm tra được tiến độ quét. Thử kiểm tra lại hoặc huỷ quét.",
       "backendHint": "Hãy bảo đảm backend PkgSteward đang chạy, rồi tải lại trang."
+    }
+  },
+  "projectDetail": {
+    "title": "Chi tiết dự án",
+    "back": "Về danh sách dự án",
+    "missingPath": "Chọn một dự án từ danh sách để xem chi tiết. Đường dẫn phải có đúng một giá trị.",
+    "summary": { "title": "Thông tin từ máy này", "name": "Tên", "version": "Phiên bản", "manager": "Trình quản lý gói", "packageManager": "Khai báo packageManager", "installedManager": "Phiên bản công cụ đã cài", "lockfile": "Lockfile", "readAt": "Đọc lúc", "unknown": "Chưa xác định", "managerUnknown": "Chưa xác định", "managerAmbiguous": "Có nhiều loại lockfile" },
+    "dependencies": { "title": "Dependency", "count": "{count, plural, other {{formattedCount} dependency được hiển thị}}", "empty": "Không có dependency được khai báo.", "name": "Tên", "groups": "Nhóm", "spec": "Khai báo", "locked": "Phiên bản trong lockfile", "wanted": "Phiên bản phù hợp khai báo", "latest": "Phiên bản mới nhất", "unknown": "Chưa xác định", "outdated": "Có phiên bản mới hơn", "vulnerable": "Có cảnh báo lỗ hổng" },
+    "scripts": { "title": "Script", "empty": "Không có script được khai báo.", "readOnly": "Script chỉ được hiển thị dưới dạng văn bản, không được thực thi." },
+    "analysis": {
+      "start": "Kiểm tra package", "publicRegistryNotice": "Khi kiểm tra, tên dependency và phiên bản được gửi tới npm registry công khai tại registry.npmjs.org.",
+      "cancel": "Huỷ kiểm tra", "cancelling": "Đang yêu cầu huỷ…", "cancelUnknown": "Chưa xác nhận được việc huỷ. Kiểm tra trạng thái trước khi tiếp tục.", "startUnknown": "Chưa xác nhận được lần kiểm tra đã bắt đầu hay chưa. Bạn có thể chủ động gửi lại yêu cầu.",
+      "refresh": "Đọc lại dữ liệu trên máy", "refreshing": "Đang đọc lại…", "retryPoll": "Kiểm tra lại trạng thái", "follow": "Xem dự án đang được kiểm tra", "otherProject": "Một dự án khác đang được kiểm tra.",
+      "partial": "Kết quả chưa đầy đủ. Các cảnh báo tìm được vẫn được giữ lại.", "stale": "Dữ liệu đầu vào đã thay đổi hoặc kết quả không còn được xác minh. Hãy đọc lại và kiểm tra lại.", "untracked": "Đã tạm dừng theo dõi do lỗi. Chỉ tiếp tục khi bạn kiểm tra lại trạng thái.",
+      "previous": "Đang giữ kết quả của lần kiểm tra trước trong khi chờ kết quả mới.", "clean": "Không tìm thấy lỗ hổng trong toàn bộ phạm vi lockfile đã kiểm tra.", "checkedAt": "Xác minh dữ liệu đầu vào lần cuối lúc", "startedAt": "Bắt đầu lúc", "finishedAt": "Kết thúc lúc", "continues": "Rời trang chỉ dừng theo dõi. Backend có thể tiếp tục cho tới khi bạn huỷ hoặc hết thời gian đã cấu hình.", "historical": "Thời điểm xác minh không bảo đảm dữ liệu trên đĩa vẫn giữ nguyên sau đó.",
+      "progress": "Đã kiểm tra {formattedChecked} / {formattedTotal}", "unknownTotal": "tổng chưa xác định"
+    },
+    "status": { "idle": "Chưa kiểm tra trực tuyến.", "starting": "Đang bắt đầu kiểm tra…", "running": "Đang kiểm tra…", "completed": "Kiểm tra đã kết thúc.", "cancelled": "Đã huỷ kiểm tra.", "timed_out": "Lần kiểm tra đã hết thời gian.", "failed": "Kiểm tra thất bại.", "lost": "Không còn tìm thấy lần kiểm tra này. Kết quả trước được giữ lại và chưa được xác minh." },
+    "phases": { "reading": "Đọc dữ liệu", "outdated": "Kiểm tra phiên bản", "audit": "Kiểm tra lỗ hổng", "validating": "Xác minh dữ liệu đầu vào", "done": "Đã kết thúc" },
+    "sections": { "pending": "Đang chờ", "running": "Đang kiểm tra", "complete": "Đã kiểm tra đầy đủ", "partial": "Kết quả một phần", "unavailable": "Không có kết quả kiểm tra" },
+    "audit": { "checkedVersions": "{count, plural, other {Đã kiểm tra {formattedCount} phiên bản}}", "title": "Cảnh báo lỗ hổng", "empty": "Không có cảnh báo được trả về. Chỉ kết quả đầy đủ và còn được xác minh mới cho phép kết luận không tìm thấy lỗ hổng.", "count": "{count, plural, other {{formattedCount} cảnh báo được hiển thị}}", "severity": "Mức độ", "affectedVersions": "Phiên bản bị ảnh hưởng", "range": "Dải phiên bản bị ảnh hưởng", "direct": "Được khai báo trực tiếp ở gốc", "transitive": "Không được khai báo trực tiếp ở gốc", "lockfileCoverage": "Kiểm tra mọi mục package từ npm registry trong lockfile đã chọn, kể cả workspace hoặc importer khác. Trạng thái trực tiếp chỉ dựa vào khai báo ở gốc.", "notInstalledState": "Kết quả mô tả phiên bản trong lockfile, không mô tả những gì đang được cài trong node_modules.", "severities": { "critical": "Nghiêm trọng nhất", "high": "Cao", "moderate": "Trung bình", "low": "Thấp", "info": "Thông tin", "unknown": "Chưa xác định" } },
+    "diskUsage": { "title": "Dung lượng node_modules tham khảo", "unknown": "Chưa có số đo được lưu. Giá trị này không phải 0.", "cached": "Số đo đã lưu", "empty": "Số đo đã lưu: thư mục trống (0 byte).", "measuredAt": "Đo lúc", "view": "Xem dung lượng" },
+    "errors": {
+      "INPUT_CHANGED": "Dữ liệu đầu vào hoặc lần quét đã thay đổi. Đọc lại dữ liệu trước khi kiểm tra lại.", "PROJECT_NOT_SCANNED": "Dự án không có trong lần quét gần nhất. Về danh sách để quét lại.", "CANCELLED": "Lần kiểm tra đã bị huỷ.", "TIMED_OUT": "Đã hết thời gian kiểm tra được cấu hình.",
+      "UNREADABLE_INPUT": "Không đọc được dữ liệu dự án.", "INVALID_LOCKFILE": "Lockfile không hợp lệ.", "NO_LOCKFILE": "Không có lockfile cục bộ để kiểm tra lỗ hổng.", "UNSUPPORTED_LOCKFILE": "Định dạng lockfile chưa được hỗ trợ để kiểm tra lỗ hổng.", "LOCKFILE_MISMATCH": "Lockfile không khớp với khai báo dự án.", "UNSUPPORTED_MANAGER": "Khai báo trình quản lý gói chưa được hỗ trợ.", "UNSUPPORTED_SPEC": "Không kiểm tra trực tuyến được kiểu khai báo dependency này.",
+      "REGISTRY_CONFIG_UNSUPPORTED": "Kiểm tra trực tuyến bị vô hiệu hoá vì cấu hình registry hoặc thông tin xác thực của dự án chưa được hỗ trợ. Dữ liệu trên máy vẫn xem được.", "LIMIT_EXCEEDED": "Đã chạm giới hạn xử lý. Kết quả có thể chưa đầy đủ.", "REGISTRY_AUTH_REQUIRED": "Registry yêu cầu xác thực. PkgSteward không gửi thông tin xác thực.", "REGISTRY_RATE_LIMITED": "Registry đang giới hạn yêu cầu. Bạn có thể thử lại sau.", "REGISTRY_UNAVAILABLE": "Không kết nối được npm registry. Dữ liệu trên máy vẫn được giữ lại.", "PACKAGE_NOT_FOUND": "Không tìm thấy package trên npm registry công khai.", "DEPRECATED_VERSION": "Phiên bản package này đã được đánh dấu ngừng khuyến nghị.", "INVALID_REGISTRY_RESPONSE": "Registry trả về dữ liệu không hợp lệ.", "INTERNAL_SERVER_ERROR": "Có lỗi nội bộ khi xử lý yêu cầu.",
+      "ANALYSIS_RUNNING": "Một dự án khác đang được kiểm tra.", "CONFLICT": "Một thao tác khác đang chạy hoặc trạng thái dự án đã thay đổi. Thử lại sau khi kiểm tra trạng thái.", "SCAN_RUNNING": "Đang có lần quét chạy.", "DISK_USAGE_RUNNING": "Đang có phép đo dung lượng chạy.", "PREVIEW_RUNNING": "Đang có lần tính trước thao tác xoá chạy.", "OPERATION_RUNNING": "Đang có thao tác thay đổi dữ liệu chạy.", "SCAN_CHANGED": "Lần quét đã thay đổi.", "TARGET_CHANGED": "Mục tiêu đã thay đổi.", "RISK_CHANGED": "Mức rủi ro đã thay đổi.",
+      "NOT_FOUND": "Không còn tìm thấy dự án hoặc lần kiểm tra. Về danh sách để chọn lại.", "FORBIDDEN": "Đường dẫn hoặc yêu cầu này không được phép.", "VALIDATION_ERROR": "Đường dẫn hoặc dữ liệu yêu cầu không hợp lệ.", "RATE_LIMITED": "Có quá nhiều yêu cầu. Chờ một chút rồi thử lại.", "BACKEND_UNAVAILABLE": "Không kết nối được backend trên máy này.", "SERVICE_UNAVAILABLE": "Dịch vụ tạm thời chưa sẵn sàng.", "INVALID_RESPONSE": "Backend trả về dữ liệu không hợp lệ.", "UNKNOWN": "Chưa xử lý được yêu cầu. Bạn có thể chủ động thử lại."
     }
   },
   "diskUsage": {

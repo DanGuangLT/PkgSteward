@@ -18,6 +18,38 @@ function deferred() {
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }
 
+async function startTracking(h, target = conflict) {
+  const started = h.session.start(target.path)
+  h.requests.at(-1).resolve({ jobId: target.jobId, status: "running" })
+  await started
+}
+
+test("session cannot follow another project's job into this detail view", async t => {
+  const h = harness(t)
+  h.session.refresh(detail())
+  const started = h.session.start(path)
+  const other = { ...conflict, path: "D:\\TEST-other" }
+  h.requests[0].reject(new ApiError(409, "TEST", "CONFLICT", other))
+  await started
+  assert.equal(h.session.follow, undefined)
+  assert.deepEqual(h.session.getSnapshot().error.conflict, other)
+  assert.equal(h.session.getSnapshot().detail.path, path)
+  assert.equal(h.get().length, 0)
+})
+
+test("other 409 reasons remain translatable without advertising a different analysis", async t => {
+  for (const reason of ["PROJECT_NOT_SCANNED", undefined]) {
+    const h = harness(t)
+    h.session.refresh(detail())
+    const started = h.session.start(path)
+    h.requests[0].reject(new ApiError(409, "TEST private text", "CONFLICT", { reason }))
+    await started
+    assert.equal(h.session.getSnapshot().error.code, reason ?? "CONFLICT")
+    assert.equal(h.session.getSnapshot().error.conflict, undefined)
+    assert.equal(h.get().length, 0)
+  }
+})
+
 function harness(t) {
   let now = 0, sequence = 0, visible = true
   const timers = new Map(), listeners = new Set(), requests = [], changes = []
@@ -73,7 +105,7 @@ test("start POST once; one GET in flight; next GET is 1000ms after settle", asyn
 
 test("hide aborts GET and timer; show waits for ignored abort to settle before resuming", async t => {
   const h = harness(t)
-  h.session.follow(conflict)
+  await startTracking(h)
   const first = h.get()[0]
   await h.visible(false)
   assert.equal(first.args[1].aborted, true)
@@ -96,7 +128,7 @@ test("hide aborts GET and timer; show waits for ignored abort to settle before r
 
 test("poll errors pause across visibility changes and retry only by manual action; 404 keeps rows", async t => {
   const h = harness(t)
-  h.session.follow(conflict)
+  await startTracking(h)
   h.get()[0].resolve(job({ audit: { ...section, items: [{ id: "TEST-advisory" }] } }))
   await flush()
   await h.tick(1000)
@@ -122,7 +154,7 @@ test("poll errors pause across visibility changes and retry only by manual actio
 
 test("cancel fences late poll; failed POST never claims stopped and status check is manual", async t => {
   const h = harness(t)
-  h.session.follow(conflict)
+  await startTracking(h)
   const poll = h.get()[0]
   const cancelled = h.session.cancel()
   void h.session.cancel()
@@ -147,7 +179,7 @@ test("cancel fences late poll; failed POST never claims stopped and status check
 
 test("cancel success stops polling even when old GET rejects later", async t => {
   const h = harness(t)
-  h.session.follow(conflict)
+  await startTracking(h)
   const cancel = h.session.cancel()
   h.requests.find(request => request.method === "cancel").resolve(job({ status: "cancelled" }))
   await cancel
@@ -159,7 +191,7 @@ test("cancel success stops polling even when old GET rejects later", async t => 
   assert.equal(h.get().length, 1)
 })
 
-test("start transport failure is unknown without auto POST retry; conflict follow uses server lexical path", async t => {
+test("start transport failure is unknown without auto POST retry; conflicts preserve lexical path without polling", async t => {
   const h = harness(t)
   const first = h.session.start(path)
   h.requests[0].reject(new ApiError(503, "TEST", "BACKEND_UNAVAILABLE"))
@@ -171,13 +203,10 @@ test("start transport failure is unknown without auto POST retry; conflict follo
   const serverConflict = { ...conflict, path: "D:\\TEST-lexical\\alias" }
   h.requests[1].reject(new ApiError(409, "TEST", "CONFLICT", serverConflict))
   await second
-  const state = h.session.getSnapshot()
-  assert.equal(state.startUnknown, false)
-  h.session.follow({ ...serverConflict, reason: "INPUT_CHANGED" })
+  assert.equal(h.session.getSnapshot().startUnknown, false)
+  assert.deepEqual(h.session.getSnapshot().error.conflict, serverConflict)
+  assert.equal(h.session.getSnapshot().requestPath, path)
   assert.equal(h.get().length, 0)
-  h.session.follow(state.error.conflict)
-  assert.equal(h.session.getSnapshot().requestPath, serverConflict.path)
-  assert.equal(h.get()[0].args[0], serverConflict.jobId)
 })
 
 test("path switch aborts start; late success/dispose publish nothing and never cancel BE implicitly", async t => {
@@ -191,7 +220,7 @@ test("path switch aborts start; late success/dispose publish nothing and never c
   await started
   assert.equal(h.session.getSnapshot().phase, "idle")
   assert.equal(h.session.getSnapshot().requestPath, "D:\\TEST-other")
-  h.session.follow(conflict)
+  await startTracking(h)
   const count = h.changes.length
   h.session.dispose()
   assert.equal(h.get()[0].args[1].aborted, true)
@@ -208,10 +237,10 @@ test("path switch aborts start; late success/dispose publish nothing and never c
 test("generation fences poll after route switch/new job; mismatched id is a paused response error", async t => {
   const h = harness(t)
   h.session.refresh(detail())
-  h.session.follow(conflict)
+  await startTracking(h)
   const old = h.get()[0]
   h.session.refresh(detail({ path: "D:\\TEST-other", requestPath: "D:\\TEST-other" }))
-  h.session.follow({ ...conflict, jobId: "TEST-new", path: "D:\\TEST-other" })
+  await startTracking(h, { ...conflict, jobId: "TEST-new", path: "D:\\TEST-other" })
   assert.equal(h.get().length, 1)
   old.resolve(job())
   await flush()
@@ -228,7 +257,7 @@ test("generation fences poll after route switch/new job; mismatched id is a paus
 test("refresh same project keeps terminal rows; changed hash or scan marks stale without mutating input", async t => {
   const h = harness(t)
   h.session.refresh(detail())
-  h.session.follow(conflict)
+  await startTracking(h)
   h.session.refresh(detail({ inputHash: "TEST-ignore-while-running" }))
   assert.equal(h.session.getSnapshot().detail.inputHash, "TEST-hash")
   const terminal = job({ status: "completed" })
@@ -239,14 +268,14 @@ test("refresh same project keeps terminal rows; changed hash or scan marks stale
   h.session.refresh(detail({ inputHash: "TEST-changed" }))
   assert.equal(h.session.getSnapshot().job.stale, true)
   assert.equal(terminal.stale, false)
-  assert.equal(h.requests.length, 1)
+  assert.equal(h.requests.length, 2)
 })
 
-test("hidden start/follow waits for visibility; terminal statuses never schedule", async t => {
+test("hidden start waits for visibility; terminal statuses never schedule", async t => {
   for (const status of ["completed", "cancelled", "timed_out", "failed"]) {
     const h = harness(t)
     await h.visible(false)
-    h.session.follow(conflict)
+    await startTracking(h)
     assert.equal(h.get().length, 0)
     await h.visible(true)
     h.get()[0].resolve(job({ status }))
@@ -277,7 +306,7 @@ test("hidden start can settle but cannot GET until visible; config warning block
 test("route switch fences late cancel and allows a new start without waiting for the old command", async t => {
   const h = harness(t)
   h.session.refresh(detail())
-  h.session.follow(conflict)
+  await startTracking(h)
   h.get()[0].resolve(job())
   await flush()
   const cancelled = h.session.cancel()
@@ -289,7 +318,7 @@ test("route switch fences late cancel and allows a new start without waiting for
   await cancelled
   assert.equal(h.session.getSnapshot().phase, "starting")
   assert.equal(h.session.getSnapshot().job, null)
-  h.requests.find(request => request.method === "start").resolve({ jobId: "TEST-next-job", status: "running" })
+  h.requests.findLast(request => request.method === "start").resolve({ jobId: "TEST-next-job", status: "running" })
   await started
   assert.equal(h.session.getSnapshot().jobId, "TEST-next-job")
   assert.equal(h.get().at(-1).args[0], "TEST-next-job")
@@ -298,7 +327,7 @@ test("route switch fences late cancel and allows a new start without waiting for
 test("refresh with replaced scan marks terminal snapshot stale even when hash is unchanged", async t => {
   const h = harness(t)
   h.session.refresh(detail())
-  h.session.follow(conflict)
+  await startTracking(h)
   h.get()[0].resolve(job({ status: "completed" }))
   await flush()
   h.session.refresh(detail({ scanId: "TEST-replaced-scan" }))

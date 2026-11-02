@@ -18,12 +18,19 @@ export function projectAuditIsClean(job: ProjectAnalysisJob | null): boolean {
     && job.checkedAt !== null && projectSectionIsComplete(job.audit) && job.audit.items.length === 0
 }
 
-export function projectDependencyBadges(name: string, job: ProjectAnalysisJob | null): { outdated: boolean; vulnerable: boolean } {
-  const row = job?.outdated.items.find(item => item.name === name)
-  return {
-    outdated: row?.behindWanted === true || row?.behindLatest === true,
-    vulnerable: job?.audit.items.some(item => item.name === name || item.name === row?.registryName) ?? false,
+export function createProjectDependencyBadgeReader(job: ProjectAnalysisJob | null) {
+  const outdated = new Set<string>()
+  const registryNames = new Map<string, string>()
+  const vulnerable = new Set<string>()
+  for (const row of job?.outdated.items ?? []) {
+    registryNames.set(row.name, row.registryName)
+    if (row.behindWanted === true || row.behindLatest === true) outdated.add(row.name)
   }
+  for (const row of job?.audit.items ?? []) vulnerable.add(row.name)
+  return (name: string): { outdated: boolean; vulnerable: boolean } => ({
+    outdated: outdated.has(name),
+    vulnerable: vulnerable.has(name) || vulnerable.has(registryNames.get(name) ?? name),
+  })
 }
 
 const severityOrder: Record<ProjectAdvisory["severity"], number> = {
