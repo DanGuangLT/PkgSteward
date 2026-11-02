@@ -15,6 +15,7 @@ import { PlatformModule } from '@/platform/platform.module';
 import { PathGuardModule } from '@/core/path-guard/path-guard.module';
 import { ScannerModule } from '@/scanner/scanner.module';
 import { FileOpsModule } from '@/file-ops/file-ops.module';
+import { ProjectsModule } from '@/projects/projects.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { FileOpsModule } from '@/file-ops/file-ops.module';
     PathGuardModule,
     ScannerModule,
     FileOpsModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [
