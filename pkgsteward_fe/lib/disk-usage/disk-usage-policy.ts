@@ -1,5 +1,5 @@
 import { ApiError } from "../api/response.ts"
-import type { DiskStatus, DiskUsageJob, DiskUsageRow, DiskView, StartDiskUsage } from "../api/types.ts"
+import type { DiskStatus, DiskUsageJob, DiskUsageRow, DiskView, StartDiskUsage } from "@/lib/api/types"
 
 export interface DiskRequestTarget { path: string; view: DiskView }
 export interface DiskSnapshot { job: DiskUsageJob; requestTarget: DiskRequestTarget }

@@ -1,11 +1,11 @@
 import "server-only"
 
-import { apiFetchEnvelope } from "./client.ts"
-import { fileOpsPaths } from "./file-ops-paths.ts"
+import { apiFetchEnvelope } from "@/lib/api/client"
+import { fileOpsPaths } from "@/lib/api/file-ops-paths"
 import type {
   ApiResponse, CleanupPreviewInput, FileOpsExecuteInput, FileOpsOperation, FileOpsOperationStart,
   FileOpsPreview, FileOpsPreviewStart, FileOpsSummary, FileTreeLevel,
-} from "./types.ts"
+} from "@/lib/api/types"
 
 const postJson = (input: unknown): RequestInit => ({
   method: "POST",

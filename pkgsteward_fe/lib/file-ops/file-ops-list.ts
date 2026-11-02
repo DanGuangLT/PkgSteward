@@ -1,7 +1,7 @@
 import type {
   CleanupKind, CleanupPreviewInput, FileOpsOperation, FileOpsPreview, FileOpsTarget, FileOpsTargetResult,
-} from "../api/types.ts"
-import type { FileOpsError, FileOpsUiState } from "./file-ops-policy.ts"
+} from "@/lib/api/types"
+import type { FileOpsError, FileOpsUiState } from "@/lib/file-ops/file-ops-policy"
 
 export type CleanupSort = "size" | "age"
 

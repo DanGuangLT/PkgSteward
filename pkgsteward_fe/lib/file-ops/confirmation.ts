@@ -1,4 +1,4 @@
-import type { FileOpsExecuteInput, FileOpsSummary, RiskCode } from "../api/types.ts"
+import type { FileOpsExecuteInput, FileOpsSummary, RiskCode } from "@/lib/api/types"
 
 export interface ConfirmationInput {
   acknowledged: ReadonlySet<RiskCode>

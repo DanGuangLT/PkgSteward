@@ -1,7 +1,7 @@
 import { ApiError } from "../api/response.ts"
 import type {
   FileOpsExecuteInput, FileOpsOperation, FileOpsOperationStatus, FileOpsPreview, FileOpsSummary,
-} from "../api/types.ts"
+} from "@/lib/api/types"
 
 interface FileOpsContext {
   preview: FileOpsPreview | null

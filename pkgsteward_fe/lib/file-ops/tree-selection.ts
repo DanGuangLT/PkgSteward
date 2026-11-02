@@ -1,4 +1,4 @@
-import type { FileTreeEntry } from "../api/types.ts"
+import type { FileTreeEntry } from "@/lib/api/types"
 
 // Giới hạn `paths` của backend cho preview, summary và execute.
 export const MAX_DELETE_PATHS = 1000
