@@ -1,4 +1,8 @@
-# pkgsteward_fe
+# @pkgsteward/web
+
+**Web UI for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Frontend of **PkgSteward**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
 next-themes and next-intl.
@@ -7,14 +11,25 @@ next-themes and next-intl.
 > Next.js 16 has breaking changes compared to older versions. The bundled docs live in
 > `node_modules/next/dist/docs/`.
 
-## Run
+## Requirements
 
-Requirements: Node 24, pnpm 11.
+Node 24, pnpm 11. Target platform: Windows 11.
+
+## Install
+
+Run inside `apps/web/`:
 
 ```bash
 pnpm install
+```
+
+## Run
+
+```bash
 pnpm dev        # http://localhost:24680
 ```
+
+## Scripts
 
 | Command | What it does |
 |---|---|
@@ -26,7 +41,7 @@ pnpm dev        # http://localhost:24680
 
 ## Frontend listen address
 
-Set these variables in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env`:
+Set these variables in `apps/web/.env.local` or `apps/web/.env`:
 
 | Variable | Default when empty or unset | Allowed values |
 |---|---|---|
@@ -42,17 +57,17 @@ origin used in your browser (for example, `http://localhost:24680`; IPv6 uses `h
 
 ## Backend connection
 
-In `pkgsteward_fe/`, copy `.env.example` to `.env.local` before starting the frontend:
+In `apps/web/`, copy `.env.example` to `.env.local` before starting the frontend:
 
 ```powershell
 Copy-Item .env.example .env.local
 ```
 
 `API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host and port must match
-`HOST` and `PORT` in `pkgsteward_be/.env`; update `API_BASE_URL` whenever the backend address changes.
+`HOST` and `PORT` in `apps/api/.env`; update `API_BASE_URL` whenever the backend address changes.
 Use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
 This variable is read only on the server; do not add the `NEXT_PUBLIC_` prefix.
-Start the backend first by running `pnpm dev` in `pkgsteward_be/`, then start the frontend as above.
+Start the backend first by running `pnpm dev` in `apps/api/`, then start the frontend as above.
 
 The server loads the initial scan results. Browser scan requests use same-origin Route Handlers at
 `/api/scans`, `/api/scans/[id]` and `/api/scans/[id]/cancel`; the server calls the backend.
@@ -153,7 +168,7 @@ Browser requests use same-origin Route Handlers under `app/api/npm-runs/**`; the
 `GET /api/npm-runs/context?path=...`, `POST /api/npm-runs`, `GET /api/npm-runs/latest`,
 `GET /api/npm-runs/:id`, `GET /api/npm-runs/:id/logs?cursor=...`, and `POST /api/npm-runs/:id/cancel`.
 For fixed command arguments, environment/config limits and process cleanup details, see the backend's
-[Command runner API](../pkgsteward_be/README.md#command-runner-api).
+[Command runner API](../api/README.md#command-runner-api).
 
 ## Disk usage
 
@@ -264,4 +279,13 @@ scripts/              theme:check and i18n:check
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+## License
+
+Copyright (c) 2026 LianHarman (LienThuan04). Released under the [MIT License](LICENSE).
+
+## Third-party licenses
+
+This app depends on open-source packages under their own licenses. Their copyrights belong to their respective
+authors. See [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) for the full list with versions and licenses.

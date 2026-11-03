@@ -1,4 +1,8 @@
-# pkgsteward_be
+# @pkgsteward/api
+
+**Backend for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Backend of **PkgSteward**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
 machine. NestJS 11 + TypeScript.
@@ -9,15 +13,26 @@ machine. NestJS 11 + TypeScript.
 - Safety rules: dangerous operations (deleting files, changing global versions, switching Node.js) use a
   `preview` → `execute` pair; every path coming from the client must be inside `SCAN_ROOT_PATHS`.
 
-## Run
+## Requirements
 
-Requirements: Node 24, pnpm 11.
+Node 24, pnpm 11. Target platform: Windows 11.
+
+## Install
+
+Run inside `apps/api/`:
 
 ```bash
 pnpm install
 # create .env from .env.example and set SCAN_ROOT_PATHS
+```
+
+## Run
+
+```bash
 pnpm dev
 ```
+
+## Scripts
 
 | Command | What it does |
 |---|---|
@@ -47,7 +62,7 @@ Full list in `.env.example`.
 Values in settings.json inside the data folder override environment variables.
 
 The frontend has its own `PORT` (default `24680`, integer `1`–`65535`) and `HOST` (default `127.0.0.1`,
-only `127.0.0.1`, `localhost` or `::1`), set in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env`.
+only `127.0.0.1`, `localhost` or `::1`), set in `apps/web/.env.local` or `apps/web/.env`.
 For each frontend variable, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
 When changing the frontend address, update this backend's `LIST_ORIGIN_CORS` to match the origin used in the
 browser (for example, `http://localhost:24680`). When changing this backend's `PORT` or `HOST`, update the
@@ -359,5 +374,14 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Documentation
 
-- Project overview and setup: [`README.md`](../README.md)
-- Contributing guide: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
+- Project overview and setup: [`README.md`](../../README.md)
+- Contributing guide: [`CONTRIBUTING.md`](../../CONTRIBUTING.md)
+
+## License
+
+Copyright (c) 2026 LianHarman (LienThuan04). Released under the [MIT License](LICENSE).
+
+## Third-party licenses
+
+This app depends on open-source packages under their own licenses. Their copyrights belong to their respective
+authors. See [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) for the full list with versions and licenses.

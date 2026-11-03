@@ -1,5 +1,5 @@
 # Monorepo PkgSteward — quy tắc chung. Chi tiết từng service nằm trong
-# pkgsteward_be/.gitignore và pkgsteward_fe/.gitignore.
+# apps/api/.gitignore và apps/web/.gitignore.
 
 # Dependencies
 node_modules/
@@ -19,13 +19,13 @@ test-results/
 !.env.example
 
 # Swagger JSON tự sinh của backend (EXPORT_SWAGGER_API_JSON)
-pkgsteward_be/docs_API/
+apps/api/docs_API/
 
 # Logs
 logs/
 *.log
 # Route Handler GET /api/npm-runs/[id]/logs là mã nguồn, không phải log
-!/pkgsteward_fe/app/api/npm-runs/\[id\]/logs/
+!/apps/web/app/api/npm-runs/\[id\]/logs/
 
 # Dữ liệu runtime khi chạy từ mã nguồn (PKGSTEWARD_DATA_DIR mặc định)
 /PkgStewardLog/

@@ -1,5 +1,5 @@
 {
-  "name": "pkgsteward_be",
+  "name": "@pkgsteward/api",
   "version": "0.1.0",
   "description": "Backend for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages",
   "author": {
@@ -12,7 +12,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LienThuan04/PkgSteward.git",
-    "directory": "pkgsteward_be"
+    "directory": "apps/api"
   },
   "bugs": {
     "url": "https://github.com/LienThuan04/PkgSteward/issues"

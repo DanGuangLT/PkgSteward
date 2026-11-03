@@ -31,13 +31,13 @@ một cách an toàn.
 ```bash
 git clone https://github.com/LienThuan04/PkgSteward.git
 cd PkgSteward
-cd pkgsteward_be && pnpm install && cd ..
-cd pkgsteward_fe && pnpm install && cd ..
+cd apps/api && pnpm install && cd ../..
+cd apps/web && pnpm install && cd ../..
 ```
 
 ### 2. Cấu hình
 
-Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền `SCAN_ROOT_PATHS`. Các biến chính:
+Sao chép `apps/api/.env.example` thành `apps/api/.env` rồi điền `SCAN_ROOT_PATHS`. Các biến chính:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -53,7 +53,7 @@ Sao chép `pkgsteward_be/.env.example` thành `pkgsteward_be/.env` rồi điền
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
 
-Biến của frontend đặt trong `pkgsteward_fe/.env.local` hoặc `pkgsteward_fe/.env` (sao chép từ `.env.example` của frontend):
+Biến của frontend đặt trong `apps/web/.env.local` hoặc `apps/web/.env` (sao chép từ `.env.example` của frontend):
 
 | Biến | Mặc định khi trống hoặc không đặt | Ý nghĩa |
 |---|---|---|
@@ -106,8 +106,8 @@ Muốn chạy riêng một ứng dụng, dùng các lệnh bên dưới trong th
 ## Cấu trúc thư mục
 
 ```
-pkgsteward_be/     API backend (NestJS 11)
-pkgsteward_fe/     Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
+apps/api/          API backend (NestJS 11)
+apps/web/          Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 start-dev.bat      Chạy cả hai ứng dụng ở chế độ development
 start-prod.bat     Build và chạy cả hai ứng dụng ở chế độ production
 ```
@@ -123,7 +123,13 @@ Rất hoan nghênh đóng góp. Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.
 
 ## Giấy phép
 
-[MIT](LICENSE) © 2026 LianHarman (LienThuan04)
+Bản quyền (c) 2026 LianHarman (LienThuan04). Phát hành theo [Giấy phép MIT](LICENSE).
+
+## Giấy phép bên thứ ba
+
+PkgSteward sử dụng các gói mã nguồn mở theo giấy phép riêng của từng gói. Bản quyền của các gói này thuộc về
+tác giả tương ứng. Xem danh sách đầy đủ cùng phiên bản và giấy phép trong
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Mỗi ứng dụng cũng có tệp `LICENSE` riêng.
 
 ## Thương hiệu
 
