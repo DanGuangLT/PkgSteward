@@ -86,6 +86,36 @@ describe('AllExceptionsFilter', () => {
       'HTTP_EXCEPTION',
     ));
 
+  // body-parser's http-errors instance; Nest >= 12.3 wraps it in an HttpException cause.
+  const tooLarge = () =>
+    Object.assign(new Error('request entity too large'), {
+      type: 'entity.too.large',
+      status: 413,
+      statusCode: 413,
+      expose: true,
+    });
+
+  it.each([
+    ['the raw body-parser error', () => tooLarge()],
+    [
+      'an HttpException wrapping it',
+      () =>
+        new HttpException('request entity too large', 413, {
+          cause: tooLarge(),
+        }),
+    ],
+  ])('maps %s to PAYLOAD_TOO_LARGE', (_label, make) => {
+    const { status, body } = run(make());
+    expect(status).toHaveBeenCalledWith(413);
+    expect(body).toMatchObject({
+      statusCode: 413,
+      message: 'Request body is too large',
+      code: 'PAYLOAD_TOO_LARGE',
+    });
+    expect(warn).toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it('logs 4xx AppExceptions at warn without a stack', () => {
     const { body } = run(new ConflictException('busy'));
     expect(body).toMatchObject({
