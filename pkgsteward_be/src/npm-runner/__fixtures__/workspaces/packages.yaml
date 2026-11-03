@@ -1,0 +1,3 @@
+# TEST workspace declaration, never processed by a real package manager
+packages:
+  - 'packages/*'
