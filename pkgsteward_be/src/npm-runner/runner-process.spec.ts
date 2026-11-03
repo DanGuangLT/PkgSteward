@@ -41,16 +41,14 @@ function makeChild() {
     reject = no;
   });
   const events = new EventEmitter();
+  // Same shape as execa 10.2.1 (RT1): the subprocess has no on/once; native
+  // ChildProcess events are reachable only through `nodeChildProcess`.
   const child = Object.assign(promise, {
     pid: 10,
     stdout: new TestOutput(),
     stderr: new TestOutput(),
     kill: jest.fn(() => true),
-    on: (...args: Parameters<EventEmitter['on']>) => events.on(...args),
-    once: (...args: Parameters<EventEmitter['once']>) => events.once(...args),
-    off: (...args: Parameters<EventEmitter['off']>) => events.off(...args),
-    removeListener: (...args: Parameters<EventEmitter['removeListener']>) =>
-      events.removeListener(...args),
+    nodeChildProcess: Object.assign(events, { pid: 10 }),
   });
   const finish = (
     result: TestResult = { exitCode: 0 },

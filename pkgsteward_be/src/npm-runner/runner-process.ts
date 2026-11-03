@@ -1,4 +1,3 @@
-import type { ChildProcess } from 'node:child_process';
 import type { IRunnerCommand } from '@/npm-runner/interfaces/npm-runner.types';
 import type { IRunClock } from '@/npm-runner/runner-logs';
 import type {
@@ -263,7 +262,8 @@ export function launchRun(
   try {
     launchedAt = deps.clock.now();
     child = spawn();
-    const native = child as unknown as ChildProcess;
+    // execa 10 subprocess has no on/once; native events live on nodeChildProcess (RT1).
+    const native = child.nodeChildProcess;
     for (const stream of ['stdout', 'stderr'] as const) {
       const output = child[stream];
       outputClosed[stream] = !output;
