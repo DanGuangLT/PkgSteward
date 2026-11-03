@@ -15,11 +15,17 @@ interface HttpExceptionBody {
   [key: string]: unknown;
 }
 
-// body-parser báo lỗi này trước khi vào route, không phải HttpException.
-const isPayloadTooLarge = (exception: unknown): boolean =>
-  exception instanceof Error &&
-  'type' in exception &&
-  exception.type === 'entity.too.large';
+// body-parser báo lỗi này trước khi vào route. Nest < 12.3 đưa thẳng lỗi gốc tới filter;
+// từ 12.3 ExpressAdapter bọc nó trong HttpException 413 với cause = lỗi gốc.
+const isPayloadTooLarge = (exception: unknown): boolean => {
+  const error =
+    exception instanceof HttpException ? exception.cause : exception;
+  return (
+    error instanceof Error &&
+    'type' in error &&
+    error.type === 'entity.too.large'
+  );
+};
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -44,6 +50,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
       code = exception.code;
       details = exception.details;
+    } else if (isPayloadTooLarge(exception)) {
+      statusCode = HttpStatus.PAYLOAD_TOO_LARGE;
+      message = 'Request body is too large';
+      code = 'PAYLOAD_TOO_LARGE';
     } else if (exception instanceof HttpException) {
       /**
        * 2. NestJS Default Exception
@@ -76,10 +86,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : statusCode === HttpStatus.TOO_MANY_REQUESTS
             ? 'RATE_LIMITED'
             : 'HTTP_EXCEPTION';
-    } else if (isPayloadTooLarge(exception)) {
-      statusCode = HttpStatus.PAYLOAD_TOO_LARGE;
-      message = 'Request body is too large';
-      code = 'PAYLOAD_TOO_LARGE';
     } else if (exception instanceof Error) {
       /**
        * 3. Unknown Error
