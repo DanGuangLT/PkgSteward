@@ -138,6 +138,115 @@ Other errors include `400 VALIDATION_ERROR`, `403 FORBIDDEN`, start-only mutatio
 `429 RATE_LIMITED`, and normalized registry/input failure codes within accepted job snapshots. Advisory links
 are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles remain plain text.
 
+## Command runner API
+
+Run one command in a project from the latest scan: install all dependencies, install one package, update all,
+update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 11 and pnpm 11**,
+verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0. Yarn projects return `UNSUPPORTED_MANAGER`; pnpm without
+a resolvable global installation returns `TOOL_NOT_FOUND`. Corepack-only or unknown installation layouts are
+refused; the app never downloads or switches tools. A workspace root allows all actions; a workspace member
+allows scripts only (`WORKSPACE_LEAF`). A `packageManager` pin must match the installed major
+(`TOOL_VERSION_MISMATCH` otherwise); other version differences warn with `PACKAGE_MANAGER_PIN_DIFFERS`.
+
+**Only run projects you trust.** Run executes project code, including lifecycle scripts and behavior from
+`.npmrc`, pnpmfile and plugins, with your user rights and no sandbox. It may use the network, shared stores and
+files outside the project. Logs may reveal secrets. There is no rollback: a stopped or failed run can leave
+partial changes. Stop may miss processes that escape the tracked tree, including descendants whose intermediate
+parent exits before discovery. Replacing the project folder through a junction swap at the exact moment of
+launch is not fully prevented. Run starts without a preview/confirmation step.
+
+| Endpoint | Result |
+|---|---|
+| `GET /api/v1/npm-runs/context?path=...` | `200` with manager/version, eligible scripts, warnings and `inputHash`; starts no process |
+| `POST /api/v1/npm-runs` | `{ path, action, inputHash, requestId, package?, script? }`; `202` with `{ jobId, requestId, status }`; the retained job's `requestId` returns that same job |
+| `GET /api/v1/npm-runs/latest` | `200` with the latest retained run |
+| `GET /api/v1/npm-runs/:id` | `200` with status, phase, actual exit code, failure/warnings and cleanup state; no filesystem work |
+| `GET /api/v1/npm-runs/:id/logs?cursor=...` | `200` with a bounded output page and `nextCursor`; cursor defaults to `0` |
+| `POST /api/v1/npm-runs/:id/cancel` | No body; `202` while stopping or the lock is held, otherwise `200`; also retries unfinished cleanup without restarting the command |
+
+Responses use the standard envelope; successful responses send `Cache-Control: no-store`. Status/latest/log polling bypasses throttling;
+start/cancel remain rate limited. Paths must be fully qualified Windows paths, at most 32,767 characters, pass
+the path guard and identify a currently scanned project. IDs and `requestId` are UUID v4; `inputHash` is the
+64-character lowercase hexadecimal value from context. Extra fields are rejected. `package` is required only
+for the three single-package actions; `script` only for `script`, and both must be omitted otherwise. A cursor
+is a nonnegative safe integer. Errors include `400 VALIDATION_ERROR`, `403 FORBIDDEN`, `404 NOT_FOUND`,
+`409 CONFLICT`, `429 RATE_LIMITED` and `503 SERVICE_UNAVAILABLE`.
+
+### Commands and child environment
+
+The executable is the running backend's `node.exe`, followed by the verified npm/pnpm JavaScript entry point.
+The app never launches a `.cmd`, builds a shell command, or selects a program from the project folder; a fake
+project-local `npm.cmd` or `node.exe` is ignored. Scripts still use the package manager's own script shell.
+
+Each row below follows that entry point and the manager's fixed prefix:
+
+- npm: `--prefix <project> --global=false --no-audit --no-fund --no-progress --update-notifier=false`
+- pnpm: `--dir <project> --pm-on-fail=warn`
+
+| Action | npm arguments after prefix | pnpm arguments after prefix |
+|---|---|---|
+| `install_all` | `install` | `install --no-frozen-lockfile --reporter=append-only` |
+| `install_one` | `install --save-prod -- <spec>` | `add --global=false --save-prod --reporter=append-only -- <spec>` |
+| `update_all` | `update` | `update --global=false --reporter=append-only` |
+| `update_one` | `update -- <name>` | `update --global=false --reporter=append-only -- <name>` |
+| `uninstall_one` | `uninstall -- <name>` | `remove --reporter=append-only -- <name>` |
+| `script` | `run-script -- <script>` | `run <script>` |
+
+Package names use a restricted registry-name grammar, including scoped names. Only `install_one` accepts an
+exact version or dist-tag, such as `@scope/name@1.2.3` or `name@latest`; update/uninstall require a declared
+package name without a version. Flags, version ranges, URLs, `file:`, git specs and paths are rejected as
+`INVALID_PACKAGE_SPEC` before a process starts. Script names must be declared, nonempty and match
+`[A-Za-z0-9][A-Za-z0-9:_-]{0,127}`; arbitrary commands and script arguments are unavailable.
+
+- **Environment:** inherits the user's environment after removing all backend settings-file keys (including
+  `PORT`, `HOST`, `SCAN_ROOT_PATHS`), `PKGSTEWARD_DATA_DIR`, `NODE_ENV`, `NODE_OPTIONS`, `INIT_CWD`,
+  `PNPM_SCRIPT_SRC_DIR` and every `npm_*` key, case-insensitively. PATH retains absolute entries only.
+  Forced values are `NO_COLOR=1`, `FORCE_COLOR=0`, `NoDefaultCurrentDirectoryInExePath=1`,
+  `COREPACK_ENABLE_NETWORK=0`, `COREPACK_ENABLE_AUTO_PIN=0` and `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`.
+  For pnpm, `pnpm_config_verify_deps_before_run=false` prevents an install before a script, and
+  `pnpm_config_update_notifier=false` disables its update notice. Mutations force `CI=1`; scripts do not force
+  it and can inherit the user's value. stdin is closed for all actions.
+- **Configuration:** project `.npmrc` or pnpm workspace settings that select global mode, `prefix`, `location`,
+  directory redirection or package-manager version management are refused with `CONFIG_UNSUPPORTED`.
+  User credentials in the environment and user-level config still apply; user-level config is not inspected.
+  pnpm 11 accepts `--global=false` only for `add`/`update`; `install`/`remove` cannot be forced non-global.
+
+### Lifecycle, output and limits
+
+- **One run at a time, machine-wide:** the mutation lock blocks scans, size measurement, package analysis and
+  file-operation previews/deletions with `409 CONFLICT`. Existing readers block a start with `READERS_RUNNING`.
+  A second run returns `409` with `details: { reason: 'RUNNING', jobId, requestPath }`; the UI can follow it.
+  The lock stays held through process verification, project refresh and audit recording.
+- **Stop and timeout:** Stop uses `taskkill /T /F` on the tracked tree and requires two empty process snapshots
+  to verify termination. Unconfirmed termination produces `termination_failed` and keeps the lock held; retry
+  cleanup through cancel. `NPM_COMMAND_TIMEOUT_MS` empty means no limit; a configured deadline produces
+  `timed_out`. When the root exits first, tracked children are stopped before completion. Windows ended
+  non-detached children when the backend itself was killed in trials; deliberately detached processes can
+  escape. After a backend crash, inspect and end leftover processes in Windows Task Manager.
+- **Results and refresh:** statuses are `running`, `stopping`, `completed`, `failed`, `cancelled`, `timed_out`,
+  `termination_failed`. Inspect `exitCode`, `failureCode`, `terminationVerified`, `gateHeld`, `auditWritten`
+  and `refreshRequired`; exit code zero alone does not establish successful finalization or a clean audit.
+  After any spawned run, the project's scan entry is refreshed in place (lockfile, manager, activity time),
+  cached sizes are cleared and earlier package analysis becomes stale (`INPUT_CHANGED`). Refresh runner context
+  before another command. No automatic rescan, analysis, install or retry occurs; newly created project folders
+  appear only after a manual scan.
+- **Retention:** only the latest run and its output live in memory. Backend restart loses runs and logs;
+  the audit log retains intent and result lines in `logs/dangerous-operations.jsonl` inside the data folder.
+- **Logs:** the backend retains the last 1 MiB / 4,096 chunks per run and serves pages of at most 64 KiB /
+  256 chunks by cursor. Older output is dropped with `OUTPUT_TRUNCATED` and a dropped byte count. ANSI/OSC
+  codes are stripped; invalid bytes become U+FFFD with `OUTPUT_ENCODING_LOSS`. Values following `password=`,
+  `token:`, `_authToken=` and `Authorization:`, plus URL credentials, are masked. Bare tokens printed by scripts
+  (for example, `npm_…`) are **not** masked; do not treat log filtering as a guarantee against secret disclosure.
+
+Failure/reason codes: `PROJECT_NOT_SCANNED`, `INPUT_CHANGED`, `WORKSPACE_LEAF`, `UNSUPPORTED_MANAGER`,
+`LOCKFILE_MISMATCH`, `TOOL_NOT_FOUND`, `TOOL_LAYOUT_UNSUPPORTED`, `TOOL_VERSION_MISMATCH`, `CONFIG_UNSUPPORTED`,
+`INVALID_PACKAGE_SPEC`, `SCRIPT_NOT_FOUND`, `SCRIPT_NAME_UNSUPPORTED`, `READERS_RUNNING`, `RUNNING`,
+`SPAWN_FAILED`, `COMMAND_FAILED`, `CANCELLED`, `TIMED_OUT`, `SHUTDOWN`, `TERMINATION_UNCONFIRMED`,
+`AUDIT_WRITE_FAILED`, `CACHE_INVALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`.
+
+Warning codes: `NO_LOCKFILE`, `PACKAGE_MANAGER_PIN_DIFFERS`, `OUTPUT_TRUNCATED`, `OUTPUT_ENCODING_LOSS`,
+`LOGS_MAY_CONTAIN_SECRETS`, `PROJECT_CODE_EXECUTION`, `PATH_RACE_RESIDUAL`.
+
 ## Disk usage API
 
 Disk usage is a read-only background measurement. It uses **`unique-apparent`** bytes: regular-file sizes,
