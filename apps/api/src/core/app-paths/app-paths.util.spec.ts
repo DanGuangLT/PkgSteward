@@ -73,6 +73,13 @@ describe('package folders', () => {
     expect(findSourceCheckoutDir(be)).toBe(tmp);
   });
 
+  it('findSourceCheckoutDir ignores the case of the apps folder name', () => {
+    // On Windows __dirname keeps the case typed in the shell (e.g. cd ...\APPS\api).
+    mkdirSync(join(tmp, '.git'));
+    mkdirSync(join(tmp, 'apps', 'api'), { recursive: true });
+    expect(findSourceCheckoutDir(join(tmp, 'APPS', 'api'))).toBe(tmp);
+  });
+
   it.each([
     ['a flat <repo>/<app> layout', ['api']],
     ['a parent not named apps', ['tools', 'api']],
