@@ -2086,6 +2086,65 @@ describe('FileOpsService stopping and finalization', () => {
   });
 });
 
+describe('FileOpsService.hasRunningPreview', () => {
+  it.each([
+    ['cleanup', 'completed'],
+    ['cleanup', 'cancelled'],
+    ['cleanup', 'failed'],
+    ['delete', 'completed'],
+    ['delete', 'cancelled'],
+    ['delete', 'failed'],
+  ] as const)(
+    'tracks %s preview from idle through running to %s',
+    async (source, status) => {
+      const f = fixture();
+      const work = deferred<assessment.IAssessedTarget[]>();
+      f.assess.mockReturnValueOnce(work.promise);
+      expect(f.service.hasRunningPreview()).toBe(false);
+      const { previewId } =
+        source === 'cleanup'
+          ? f.service.startCleanupPreview({})
+          : f.service.startDeletePreview({ paths: ['D:\\TEST-one'] });
+      expect(f.service.hasRunningPreview()).toBe(true);
+      await flush();
+      expect(f.service.hasRunningPreview()).toBe(true);
+      expect(f.service.getPreview(previewId).status).toBe('running');
+      if (status === 'cancelled') f.service.cancelPreview(previewId);
+      if (status === 'failed') work.reject(new Error('TEST assessment failed'));
+      else work.resolve([]);
+      await flush();
+      expect(f.service.getPreview(previewId).status).toBe(status);
+      expect(f.service.hasRunningPreview()).toBe(false);
+      expect(f.fs.remove).not.toHaveBeenCalled();
+      expect(f.audit.append).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps a new preview running after a cancelled preview settles late', async () => {
+    const f = fixture();
+    const oldWork = deferred<assessment.IAssessedTarget[]>();
+    const newWork = deferred<assessment.IAssessedTarget[]>();
+    f.assess
+      .mockReturnValueOnce(oldWork.promise)
+      .mockReturnValueOnce(newWork.promise);
+    const first = f.service.startDeletePreview({ paths: ['D:\\TEST-one'] });
+    await flush();
+    f.service.cancelPreview(first.previewId);
+    expect(f.service.hasRunningPreview()).toBe(false);
+    const second = f.service.startDeletePreview({ paths: ['D:\\TEST-two'] });
+    expect(f.service.hasRunningPreview()).toBe(true);
+    await flush();
+    oldWork.resolve([]);
+    await flush();
+    expect(f.service.getPreview(first.previewId).status).toBe('cancelled');
+    expect(f.service.getPreview(second.previewId).status).toBe('running');
+    expect(f.service.hasRunningPreview()).toBe(true);
+    newWork.resolve([]);
+    await flush();
+    expect(f.service.hasRunningPreview()).toBe(false);
+  });
+});
+
 describe('FileOpsService preview start', () => {
   it.each(['cleanup', 'delete'] as const)(
     'rejects %s start when the mutation gate is busy, without reserving a slot',

@@ -339,6 +339,292 @@ function fixture(
   };
 }
 
+describe('ScannerService.refreshProject', () => {
+  const projectPath = 'D:\\TEST-refresh\\app';
+  const siblingPath = 'D:\\TEST-refresh\\app-other';
+  const entry = (name: string, directory = false, link = false): Dirent =>
+    ({
+      name,
+      isFile: () => !directory,
+      isDirectory: () => directory,
+      isSymbolicLink: () => link,
+    }) as Dirent;
+
+  beforeEach(() => {
+    jest.spyOn(pathUtil, 'toPathPlatform').mockReturnValue('win32');
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  async function refreshFixture() {
+    const f = fixture({ roots: 'D:\\TEST-refresh', depth: 4 });
+    const result: IStoredScanResult = {
+      scanId: 'TEST-refresh-scan',
+      status: 'timed_out',
+      partial: true,
+      roots: ['D:\\TEST-refresh'],
+      maxDepth: 4,
+      startedAt: '2026-11-03T00:00:00.000Z',
+      finishedAt: '2026-11-03T00:01:00.000Z',
+      skippedCount: 3,
+      projects: [projectPath, siblingPath].map((path) => ({
+        path,
+        name: 'TEST-old',
+        packageManager: 'npm',
+        hasLockfile: true,
+        lastActivityAt: '2026-11-02T00:00:00.000Z',
+        nodeModules: {
+          exists: true,
+          path: `${path}\\node_modules`,
+          sizeBytes: null,
+        },
+      })),
+      orphanNodeModules: [
+        {
+          path: 'D:\\TEST-refresh\\old\\node_modules',
+          mtime: '2026-11-01T00:00:00.000Z',
+          sizeBytes: null,
+        },
+      ],
+    };
+    const key = makeScanCacheKey(
+      parseScanRootPaths('D:\\TEST-refresh', 'win32'),
+      4,
+      'win32',
+    );
+    f.load.mockResolvedValue({ schemaVersion: 1, key, result });
+    await f.service.onModuleInit();
+    let entries = [entry('package.json')];
+    const readdir = jest
+      .spyOn(fs, 'readdir')
+      .mockImplementation(() =>
+        Promise.resolve(
+          entries as unknown as Awaited<ReturnType<typeof fs.readdir>>,
+        ),
+      );
+    const lstat = jest.spyOn(fs, 'lstat').mockImplementation((path) =>
+      Promise.resolve({
+        mtimeMs: String(path).endsWith('index') ? 6000 : 1000,
+        isFile: () =>
+          !['node_modules', '.git'].some((name) => String(path).endsWith(name)),
+        isDirectory: () =>
+          ['node_modules', '.git'].some((name) => String(path).endsWith(name)),
+        isSymbolicLink: () => false,
+      } as unknown as Awaited<ReturnType<typeof fs.lstat>>),
+    );
+    const readFile = jest
+      .spyOn(fs, 'readFile')
+      .mockResolvedValue('{"name":"TEST-refreshed"}');
+    return {
+      ...f,
+      result,
+      key,
+      readdir,
+      lstat,
+      readFile,
+      setEntries: (value: Dirent[]) => {
+        entries = value;
+      },
+    };
+  }
+
+  it('does nothing before a latest scan exists, without reading or saving', async () => {
+    const f = await refreshFixture();
+    const empty = fixture();
+    await expect(
+      empty.service.refreshProject(projectPath),
+    ).resolves.toBeUndefined();
+    expect(() => empty.service.getLatest()).toThrow(NotFoundException);
+    expect(f.readdir).not.toHaveBeenCalled();
+    expect(f.lstat).not.toHaveBeenCalled();
+    expect(f.readFile).not.toHaveBeenCalled();
+    expect(empty.save).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'D:\\TEST-refresh',
+    `${projectPath}\\child`,
+    `${projectPath}-unknown`,
+  ])('does not refresh an unscanned path %s', async (path) => {
+    const f = await refreshFixture();
+    const before = f.service.getLatest();
+    await expect(f.service.refreshProject(path)).resolves.toBeUndefined();
+    expect(f.service.getLatest()).toEqual(before);
+    expect(f.readdir).not.toHaveBeenCalled();
+    expect(f.lstat).not.toHaveBeenCalled();
+    expect(f.readFile).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds only the matching Windows project with scanner metadata rules while the gate is held', async () => {
+    const f = await refreshFixture();
+    const before = f.service.getLatest();
+    f.setEntries([
+      entry('PACKAGE.JSON'),
+      entry('node_modules', true),
+      entry('pnpm-lock.yaml'),
+      entry('yarn.lock'),
+      entry('package-lock.json'),
+      entry('.git', true),
+    ]);
+    f.readFile.mockResolvedValue('\uFEFF{"name":"TEST-refreshed"}');
+    const token = f.gate.tryEnter()!;
+    await f.service.refreshProject('d:\\test-refresh\\APP');
+    const after = f.service.getLatest();
+    expect(after).toEqual({
+      ...before,
+      projects: [
+        {
+          path: projectPath,
+          name: 'TEST-refreshed',
+          packageManager: 'pnpm',
+          hasLockfile: true,
+          lastActivityAt: '1970-01-01T00:00:06.000Z',
+          nodeModules: {
+            exists: true,
+            path: `${projectPath}\\node_modules`,
+            sizeBytes: null,
+            sizeMeasuredAt: null,
+          },
+        },
+        before.projects[1],
+      ],
+    });
+    expect(f.readdir).toHaveBeenCalledTimes(1);
+    expect(f.readdir).toHaveBeenCalledWith(projectPath, {
+      withFileTypes: true,
+    });
+    expect(f.readFile).toHaveBeenCalledWith(
+      `${projectPath}\\PACKAGE.JSON`,
+      expect.objectContaining({ encoding: 'utf8' }),
+    );
+    expect(f.walker).not.toHaveBeenCalled();
+    expect(f.detect).not.toHaveBeenCalled();
+    expect(f.gate.isBusy()).toBe(true);
+    expect(f.gate.tryEnter()).toBeNull();
+    f.gate.leave(token);
+    expect(f.save).toHaveBeenCalledTimes(1);
+    const saved = f.save.mock.calls[0][0];
+    expect(saved.schemaVersion).toBe(1);
+    expect(saved.key).toEqual(f.key);
+    expect(saved.result).toMatchObject({
+      ...f.result,
+      projects: [
+        { name: 'TEST-refreshed', packageManager: 'pnpm' },
+        f.result.projects[1],
+      ],
+    });
+    saved.result.projects[0].name = 'TEST-mutated-cache-copy';
+    after.projects[0].name = 'TEST-mutated-response';
+    expect(f.service.getLatest().projects[0].name).toBe('TEST-refreshed');
+    expect(before.projects[0].name).toBe('TEST-old');
+  });
+
+  it('drops the project when a run removed its whole directory', async () => {
+    const f = await refreshFixture();
+    f.readdir.mockRejectedValue(
+      Object.assign(new Error('TEST gone'), { code: 'ENOENT' }),
+    );
+    await f.service.refreshProject(projectPath);
+    expect(f.service.getLatest().projects.map(({ path }) => path)).toEqual([
+      f.result.projects[1].path,
+    ]);
+    expect(f.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps invalid JSON as a project and clears removed lockfile and modules metadata', async () => {
+    const f = await refreshFixture();
+    f.readFile.mockResolvedValue('{broken');
+    await f.service.refreshProject(projectPath);
+    expect(f.service.getLatest().projects[0]).toEqual({
+      path: projectPath,
+      name: null,
+      packageManager: null,
+      hasLockfile: false,
+      lastActivityAt: '1970-01-01T00:00:01.000Z',
+      nodeModules: {
+        exists: false,
+        path: `${projectPath}\\node_modules`,
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      },
+    });
+  });
+
+  it('does not follow symlinked node_modules or lockfiles', async () => {
+    const f = await refreshFixture();
+    f.setEntries([
+      entry('package.json'),
+      entry('node_modules', true, true),
+      entry('pnpm-lock.yaml', false, true),
+    ]);
+    await f.service.refreshProject(projectPath);
+    expect(f.service.getLatest().projects[0]).toMatchObject({
+      packageManager: null,
+      hasLockfile: false,
+      nodeModules: { exists: false },
+    });
+    expect(f.lstat).toHaveBeenCalledTimes(1);
+    expect(f.lstat).toHaveBeenCalledWith(`${projectPath}\\package.json`);
+  });
+
+  it('drops only the project when its manifest is gone, preserving existing orphans', async () => {
+    const f = await refreshFixture();
+    const before = f.service.getLatest();
+    f.setEntries([entry('node_modules', true)]);
+    await f.service.refreshProject(projectPath);
+    expect(f.service.getLatest()).toEqual({
+      ...before,
+      projects: [before.projects[1]],
+    });
+    expect(f.save).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      key: f.key,
+      result: { ...f.result, projects: [f.result.projects[1]] },
+    });
+    expect(f.readFile).not.toHaveBeenCalled();
+  });
+
+  it.each(['readdir', 'lstat', 'readFile'] as const)(
+    'propagates %s failure without changing RAM or saving',
+    async (operation) => {
+      const f = await refreshFixture();
+      const before = f.service.getLatest();
+      const error = Object.assign(new Error(`TEST ${operation} unavailable`), {
+        code: operation === 'readdir' ? 'EACCES' : 'ENOENT',
+      });
+      f[operation].mockRejectedValueOnce(error);
+      await expect(f.service.refreshProject(projectPath)).rejects.toBe(error);
+      expect(f.service.getLatest()).toEqual(before);
+      expect(f.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not resolve until the refreshed cache has been saved', async () => {
+    const f = await refreshFixture();
+    const saving = deferred<void>();
+    f.save.mockReturnValueOnce(saving.promise);
+    let settled = false;
+    const refresh = f.service.refreshProject(projectPath).then(() => {
+      settled = true;
+    });
+    await tick();
+    expect(f.save).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+    saving.resolve();
+    await refresh;
+    expect(settled).toBe(true);
+  });
+
+  it('propagates cache-save failure while retaining the refreshed RAM entry', async () => {
+    const f = await refreshFixture();
+    const error = new Error('TEST cache unavailable');
+    f.save.mockRejectedValueOnce(error);
+    await expect(f.service.refreshProject(projectPath)).rejects.toBe(error);
+    expect(f.service.getLatest().projects[0].name).toBe('TEST-refreshed');
+    expect(f.save).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ScannerService.applyDeletions', () => {
   const paths = [
     'D:\\mono',
@@ -651,7 +937,7 @@ describe('ScannerService', () => {
       expect(thrown).toMatchObject({
         statusCode: 409,
         code: 'CONFLICT',
-        message: 'A file operation is in progress',
+        message: 'A file operation or command run is in progress',
       });
       expect(f.service.hasRunningScan()).toBe(false);
       await tick();
@@ -684,7 +970,7 @@ describe('ScannerService', () => {
       expect(thrown).toMatchObject({
         statusCode: 409,
         code: 'CONFLICT',
-        message: 'A file operation is in progress',
+        message: 'A file operation or command run is in progress',
       });
       expect(f.service.getScan(start.scanId)).toEqual(before);
       expect(f.service.hasRunningScan()).toBe(true);

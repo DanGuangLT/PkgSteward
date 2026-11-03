@@ -11,6 +11,7 @@ import type {
 
 export interface IFileOpsService {
   getTree(path: string): Promise<IFileTreeLevel>;
+  hasRunningPreview(): boolean;
   startCleanupPreview(input: ICleanupPreviewInput): IPreviewStart;
   startDeletePreview(input: { paths: string[] }): IPreviewStart;
   getPreview(previewId: string): IFileOpsPreview;

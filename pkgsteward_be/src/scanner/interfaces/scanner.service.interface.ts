@@ -10,5 +10,6 @@ export interface IScannerService {
   getScan(scanId: string): IScanJob;
   cancelScan(scanId: string): IScanJob;
   getLatest(): IScanResult;
+  refreshProject(path: string): Promise<void>;
   applyDeletions(deletedPaths: readonly string[]): void;
 }

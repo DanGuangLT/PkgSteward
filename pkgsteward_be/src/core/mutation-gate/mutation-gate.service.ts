@@ -24,7 +24,7 @@ export class MutationGateService implements IMutationGateService {
     if (this.isBusy()) {
       throw new AppException(
         409,
-        'A file operation is in progress',
+        'A file operation or command run is in progress',
         'CONFLICT',
       );
     }

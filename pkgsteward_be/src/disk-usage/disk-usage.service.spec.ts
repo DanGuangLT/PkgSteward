@@ -238,7 +238,7 @@ describe('DiskUsageService', () => {
     const conflict = {
       statusCode: 409,
       code: 'CONFLICT',
-      message: 'A file operation is in progress',
+      message: 'A file operation or command run is in progress',
     };
 
     it('rejects when the gate is acquired during path authorization, then starts after release', async () => {

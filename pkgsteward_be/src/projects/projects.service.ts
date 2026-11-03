@@ -198,6 +198,18 @@ export class ProjectsService implements IProjectsService, OnModuleDestroy {
     return this.current?.job.status === 'running';
   }
 
+  invalidateAfterMutation(path: string): void {
+    const active = this.current;
+    if (!active || this.comparable(active.job.path) !== this.comparable(path)) {
+      return;
+    }
+    active.job.stale = true;
+    active.job.warningCodes = [
+      ...new Set([...active.job.warningCodes, 'INPUT_CHANGED' as const]),
+    ].sort(compareProjectText);
+    this.finish(active, 'cancelled', 'INPUT_CHANGED');
+  }
+
   onModuleDestroy(): void {
     this.closed = true;
     if (this.current) this.finish(this.current, 'cancelled', 'CANCELLED');
