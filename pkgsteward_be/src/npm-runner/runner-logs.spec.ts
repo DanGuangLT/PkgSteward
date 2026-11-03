@@ -1,5 +1,5 @@
-import { createRunLogStore } from './runner-logs';
-import type { IRunClock, IRunLogStore } from './runner-logs';
+import { createRunLogStore } from '@/npm-runner/runner-logs';
+import type { IRunClock, IRunLogStore } from '@/npm-runner/runner-logs';
 
 class TestClock implements IRunClock {
   time = 0;

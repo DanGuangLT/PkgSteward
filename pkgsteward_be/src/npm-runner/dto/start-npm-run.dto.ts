@@ -1,9 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsUUID, Length, Matches, ValidateBy } from 'class-validator';
 import type { ValidationArguments } from 'class-validator';
-import { RunnerPathQueryDto } from './runner-path-query.dto';
-import { RUN_ACTIONS } from '../interfaces/npm-runner.types';
-import type { IRunRequest, RunAction } from '../interfaces/npm-runner.types';
+import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
+import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  IRunRequest,
+  RunAction,
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 const actionField = (
   field: 'package' | 'script',

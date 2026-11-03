@@ -1,10 +1,10 @@
 import type {
   IProcessInfo,
   IProcessSnapshot,
-} from '../interfaces/process-snapshot.interface';
+} from '@/platform/interfaces/process-snapshot.interface';
 import { win32 } from 'node:path';
 import { execa } from 'execa';
-import { windowsSystemRoot } from './windows-process-snapshot';
+import { windowsSystemRoot } from '@/platform/windows/windows-process-snapshot';
 
 export interface IRunnerProcessIdentity {
   pid: number;

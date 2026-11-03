@@ -4,7 +4,7 @@ import type {
   IRunRequest,
   IRunStart,
   IRunnerContext,
-} from './npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 export interface INpmRunnerService {
   context(path: string): Promise<IRunnerContext>;

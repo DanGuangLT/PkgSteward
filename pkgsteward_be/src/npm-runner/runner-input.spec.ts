@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join, win32 as path } from 'node:path';
-import { readRunnerInput, revalidateRunnerInput } from './runner-input';
-import { buildRunCommand } from './runner-command';
+import {
+  readRunnerInput,
+  revalidateRunnerInput,
+} from '@/npm-runner/runner-input';
+import { buildRunCommand } from '@/npm-runner/runner-command';
 import { ForbiddenException } from '@/common/exceptions/app.exception';
 import {
   fileStat,
@@ -9,11 +12,11 @@ import {
   key,
   root,
   tool,
-} from './__fixtures__/runner-test.fixture';
+} from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type {
   IRunnerInput,
   IRunnerInputDeps,
-} from './interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
 
 const fixtureText = (name: string) =>

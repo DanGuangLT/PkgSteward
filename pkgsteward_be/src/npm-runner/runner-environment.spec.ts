@@ -1,7 +1,7 @@
 import 'reflect-metadata';
-import { buildRunnerEnvironment } from './runner-environment';
-import { tool } from './__fixtures__/runner-test.fixture';
-import type { RunAction } from './interfaces/npm-runner.types';
+import { buildRunnerEnvironment } from '@/npm-runner/runner-environment';
+import { tool } from '@/npm-runner/__fixtures__/runner-test.fixture';
+import type { RunAction } from '@/npm-runner/interfaces/npm-runner.types';
 
 describe('runner child environment (A8)', () => {
   const appKeys = [

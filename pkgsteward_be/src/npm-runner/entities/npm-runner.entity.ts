@@ -5,7 +5,7 @@ import {
   RUN_FAILURE_CODES,
   RUN_STATUSES,
   RUN_WARNING_CODES,
-} from '../interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   IRunJob,
   IRunLogChunk,
@@ -13,7 +13,7 @@ import type {
   IRunStart,
   IRunnerContext,
   IRunnerScript,
-} from '../interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 export class RunnerScriptEntity implements IRunnerScript {
   @ApiProperty() name!: string;

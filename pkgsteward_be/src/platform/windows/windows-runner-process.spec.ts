@@ -4,12 +4,12 @@ import { execa } from 'execa';
 import type {
   IProcessInfo,
   ProcessSnapshotResult,
-} from '../interfaces/process-snapshot.interface';
-import { createWindowsRunnerProcess } from './windows-runner-process';
+} from '@/platform/interfaces/process-snapshot.interface';
+import { createWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 import type {
   IRunnerProcessIdentity,
   IWindowsRunnerProcess,
-} from './windows-runner-process';
+} from '@/platform/windows/windows-runner-process';
 
 const execaMock = execa as unknown as jest.Mock<
   Promise<{ exitCode: number }>,

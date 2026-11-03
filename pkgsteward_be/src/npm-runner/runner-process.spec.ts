@@ -2,14 +2,14 @@ jest.mock('execa', () => ({ execa: jest.fn() }));
 
 import { EventEmitter } from 'node:events';
 import { execa } from 'execa';
-import { launchRun } from './runner-process';
-import type { IRunProcessCallbacks } from './runner-process';
-import type { IRunClock } from './runner-logs';
-import type { IRunnerCommand } from './interfaces/npm-runner.types';
+import { launchRun } from '@/npm-runner/runner-process';
+import type { IRunProcessCallbacks } from '@/npm-runner/runner-process';
+import type { IRunClock } from '@/npm-runner/runner-logs';
+import type { IRunnerCommand } from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   IRunnerProcessIdentity,
   IWindowsRunnerProcess,
-} from '../platform/windows/windows-runner-process';
+} from '@/platform/windows/windows-runner-process';
 
 class TestOutput extends EventEmitter {
   destroyed = false;

@@ -1,9 +1,9 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { StartNpmRunDto } from './start-npm-run.dto';
-import { RunnerPathQueryDto } from './runner-path-query.dto';
-import { RunIdParamDto } from './run-id-param.dto';
-import { RunLogQueryDto } from './run-log-query.dto';
+import { StartNpmRunDto } from '@/npm-runner/dto/start-npm-run.dto';
+import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
+import { RunIdParamDto } from '@/npm-runner/dto/run-id-param.dto';
+import { RunLogQueryDto } from '@/npm-runner/dto/run-log-query.dto';
 
 const base = {
   path: 'D:\\TEST\\project',

@@ -3,10 +3,10 @@ import type {
   IRunnerCommand,
   IRunnerInput,
   IRunnerPackageSpec,
-} from './interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import { AppException } from '@/common/exceptions/app.exception';
 import * as semver from 'semver';
-import { RUN_ACTIONS } from './interfaces/npm-runner.types';
+import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
 
 export const isRunnerScriptName = (name: string): boolean =>
   name.trim() === name && /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(name);

@@ -1,7 +1,7 @@
 import type {
   IRunLogPage,
   RunWarningCode,
-} from './interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import { StringDecoder } from 'node:string_decoder';
 
 export interface IRunClock {

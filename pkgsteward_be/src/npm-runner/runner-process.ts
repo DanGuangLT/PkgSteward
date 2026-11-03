@@ -1,11 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
-import type { IRunnerCommand } from './interfaces/npm-runner.types';
-import type { IRunClock } from './runner-logs';
+import type { IRunnerCommand } from '@/npm-runner/interfaces/npm-runner.types';
+import type { IRunClock } from '@/npm-runner/runner-logs';
 import type {
   IRunnerProcessIdentity,
   IWindowsRunnerProcess,
   RunnerStopOutcome,
-} from '../platform/windows/windows-runner-process';
+} from '@/platform/windows/windows-runner-process';
 import { execa } from 'execa';
 
 export interface IRunProcessExit {

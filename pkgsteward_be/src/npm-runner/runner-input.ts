@@ -33,16 +33,16 @@ import type {
   IRunnerInputDeps,
   IRunnerWorkspace,
   RunFailureCode,
-} from './interfaces/npm-runner.types';
-import { isRunnerPath } from './dto/runner-path-query.dto';
+} from '@/npm-runner/interfaces/npm-runner.types';
+import { isRunnerPath } from '@/npm-runner/dto/runner-path-query.dto';
 import {
   readRunnerFile,
   revalidateRunnerTool,
   runnerFailure,
   runnerIdentity,
   sameRunnerIdentity,
-} from './runner-tool';
-import type { IRunnerTextFile } from './runner-tool';
+} from '@/npm-runner/runner-tool';
+import type { IRunnerTextFile } from '@/npm-runner/runner-tool';
 
 const SMALL_BYTES = 1024 * 1024;
 const LOCKS: readonly ProjectLockName[] = [

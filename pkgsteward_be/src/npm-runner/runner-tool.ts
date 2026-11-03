@@ -8,7 +8,7 @@ import type {
   IRunnerTool,
   IRunnerToolSnapshot,
   RunFailureCode,
-} from './interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import { AppException } from '@/common/exceptions/app.exception';
 import {
   isFullyQualifiedPath,

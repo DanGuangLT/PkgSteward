@@ -1,6 +1,15 @@
-import { buildRunCommand, parseRunnerPackageSpec } from './runner-command';
-import { runnerInput, tool } from './__fixtures__/runner-test.fixture';
-import type { IRunRequest, RunAction } from './interfaces/npm-runner.types';
+import {
+  buildRunCommand,
+  parseRunnerPackageSpec,
+} from '@/npm-runner/runner-command';
+import {
+  runnerInput,
+  tool,
+} from '@/npm-runner/__fixtures__/runner-test.fixture';
+import type {
+  IRunRequest,
+  RunAction,
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 const request = (
   action: RunAction,

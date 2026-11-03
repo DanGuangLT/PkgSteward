@@ -12,7 +12,7 @@ import type {
   IRunnerTool,
   IRunnerToolSnapshot,
   RunnerManager,
-} from '../interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 export const root = 'D:\\TEST\\project';
 export const nodeFile = 'C:\\Program Files\\nodejs\\node.exe';

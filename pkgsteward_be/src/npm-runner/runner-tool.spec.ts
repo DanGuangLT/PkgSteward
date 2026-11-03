@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join, win32 as path } from 'node:path';
-import { resolveRunnerTool, revalidateRunnerTool } from './runner-tool';
+import {
+  resolveRunnerTool,
+  revalidateRunnerTool,
+} from '@/npm-runner/runner-tool';
 import {
   fileStat,
   fsFixture,
@@ -9,7 +12,7 @@ import {
   npmDir,
   pnpmPrefix,
   root,
-} from './__fixtures__/runner-test.fixture';
+} from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type { ProjectManager } from '@/projects/interfaces/projects.types';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));

@@ -2,7 +2,7 @@ import type {
   IRunnerTool,
   RunAction,
   RunnerManager,
-} from './interfaces/npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 import { SETTINGS_FILE_KEYS } from '@/config/env.validation';
 import { isFullyQualifiedPath } from '@/common/utils/path.util';
 
