@@ -1,6 +1,7 @@
 {
   "name": "@pkgsteward/web",
   "version": "0.1.0",
+  "description": "Web UI for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages",
   "author": {
     "name": "LianHarman (LienThuan04)",
     "email": "lienthuan2004@gmail.com",

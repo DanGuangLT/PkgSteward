@@ -123,7 +123,13 @@ Rất hoan nghênh đóng góp. Vui lòng đọc [CONTRIBUTING.md](CONTRIBUTING.
 
 ## Giấy phép
 
-[MIT](LICENSE) © 2026 LianHarman (LienThuan04)
+Bản quyền (c) 2026 LianHarman (LienThuan04). Phát hành theo [Giấy phép MIT](LICENSE).
+
+## Giấy phép bên thứ ba
+
+PkgSteward sử dụng các gói mã nguồn mở theo giấy phép riêng của từng gói. Bản quyền của các gói này thuộc về
+tác giả tương ứng. Xem danh sách đầy đủ cùng phiên bản và giấy phép trong
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Mỗi ứng dụng cũng có tệp `LICENSE` riêng.
 
 ## Thương hiệu
 

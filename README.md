@@ -133,7 +133,13 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and th
 
 ## License
 
-[MIT](LICENSE) © 2026 LianHarman (LienThuan04)
+Copyright (c) 2026 LianHarman (LienThuan04). Released under the [MIT License](LICENSE).
+
+## Third-party licenses
+
+PkgSteward depends on open-source packages under their own licenses. Their copyrights belong to their respective
+authors. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full list with versions and licenses.
+Each app also carries its own `LICENSE` file.
 
 ## Trademarks
 

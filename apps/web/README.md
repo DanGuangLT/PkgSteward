@@ -1,5 +1,9 @@
 # @pkgsteward/web
 
+**Web UI for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Frontend of **PkgSteward**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
 next-themes and next-intl.
 
@@ -7,14 +11,25 @@ next-themes and next-intl.
 > Next.js 16 has breaking changes compared to older versions. The bundled docs live in
 > `node_modules/next/dist/docs/`.
 
-## Run
+## Requirements
 
-Requirements: Node 24, pnpm 11.
+Node 24, pnpm 11. Target platform: Windows 11.
+
+## Install
+
+Run inside `apps/web/`:
 
 ```bash
 pnpm install
+```
+
+## Run
+
+```bash
 pnpm dev        # http://localhost:24680
 ```
+
+## Scripts
 
 | Command | What it does |
 |---|---|
@@ -264,4 +279,13 @@ scripts/              theme:check and i18n:check
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+## License
+
+Copyright (c) 2026 LianHarman (LienThuan04). Released under the [MIT License](LICENSE).
+
+## Third-party licenses
+
+This app depends on open-source packages under their own licenses. Their copyrights belong to their respective
+authors. See [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) for the full list with versions and licenses.
