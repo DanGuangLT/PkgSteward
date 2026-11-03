@@ -26,7 +26,7 @@ versions) safely.
 > plugins) with your user rights and no sandbox; they may use the network, shared stores and files outside the
 > project. Logs may reveal secrets. There is no rollback; stopped/failed runs may leave partial changes. Stop
 > may miss processes that escape the tracked tree, and a junction swap at launch is not fully prevented.
-> See [Command runner API](pkgsteward_be/README.md#command-runner-api) for tool/config limits and cleanup behavior.
+> See [Command runner API](apps/api/README.md#command-runner-api) for tool/config limits and cleanup behavior.
 
 ## Requirements
 
@@ -41,13 +41,13 @@ versions) safely.
 ```bash
 git clone https://github.com/LienThuan04/PkgSteward.git
 cd PkgSteward
-cd pkgsteward_be && pnpm install && cd ..
-cd pkgsteward_fe && pnpm install && cd ..
+cd apps/api && pnpm install && cd ../..
+cd apps/web && pnpm install && cd ../..
 ```
 
 ### 2. Configure
 
-Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PATHS`. Main variables:
+Copy `apps/api/.env.example` to `apps/api/.env` and set `SCAN_ROOT_PATHS`. Main variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -63,7 +63,7 @@ Copy `pkgsteward_be/.env.example` to `pkgsteward_be/.env` and set `SCAN_ROOT_PAT
 
 Values in settings.json inside the data folder override environment variables.
 
-Frontend variables go in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env` (copy the frontend's `.env.example`):
+Frontend variables go in `apps/web/.env.local` or `apps/web/.env` (copy the frontend's `.env.example`):
 
 | Variable | Default when empty or unset | Purpose |
 |---|---|---|
@@ -116,8 +116,8 @@ To run an app on its own, use the scripts below inside its folder.
 ## Project structure
 
 ```
-pkgsteward_be/     Backend API (NestJS 11)
-pkgsteward_fe/     Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
+apps/api/          Backend API (NestJS 11)
+apps/web/          Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 start-dev.bat      Run both apps in development mode
 start-prod.bat     Build and run both apps in production mode
 ```

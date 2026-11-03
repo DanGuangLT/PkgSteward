@@ -20,11 +20,11 @@ Requirements: **Node.js 24** (see [`.nvmrc`](.nvmrc)) and **pnpm 11**. Windows 1
 git clone https://github.com/<your-username>/PkgSteward.git
 cd PkgSteward
 
-cd pkgsteward_be && pnpm install && cp .env.example .env && cd ..
-cd pkgsteward_fe && pnpm install && cd ..
+cd apps/api && pnpm install && cp .env.example .env && cd ../..
+cd apps/web && pnpm install && cd ../..
 ```
 
-Run `pnpm dev` in `pkgsteward_be/` (API on `http://localhost:24681/api/v1`) and in `pkgsteward_fe/`
+Run `pnpm dev` in `apps/api/` (API on `http://localhost:24681/api/v1`) and in `apps/web/`
 (UI on `http://localhost:24680`), or run `start-dev.bat` from the repository root to start both on Windows. The two
 apps are independent pnpm projects with their own lockfiles.
 
@@ -56,7 +56,7 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
 - **Tests must mock `execa` and the filesystem.** Never run real global commands (`npm -g`, `pnpm -g`, `yarn global`,
   `nvm install/use`, `corepack enable/use`) from tests or development scripts.
 
-### Backend conventions (`pkgsteward_be/`)
+### Backend conventions (`apps/api/`)
 
 - One folder per feature: `src/<feature>/` with `dto/`, `entities/`, `interfaces/`, `<feature>.controller.ts`,
   `<feature>.service.ts`, `<feature>.module.ts`.
@@ -67,11 +67,11 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
 - Use the `@/` path alias for internal imports. Prettier: single quotes, trailing commas.
 - Names: files `kebab-case.<role>.ts`, classes `PascalCase`, interfaces prefixed with `I`.
 
-### Frontend conventions (`pkgsteward_fe/`)
+### Frontend conventions (`apps/web/`)
 
 - Colors, radii, font sizes and shadows come only from theme tokens (`bg-primary`, `text-muted-foreground`, …).
   ESLint rejects palette classes (`bg-red-500`), hex values in classes and `dark:` variants. Import `cn` from
-  `@/lib/utils`. See [`pkgsteward_fe/README.md`](pkgsteward_fe/README.md#theme-system).
+  `@/lib/utils`. See [`apps/web/README.md`](apps/web/README.md#theme-system).
 - Every user-facing string goes through next-intl. Add new keys to **both** `messages/vi.json` (default locale) and
   `messages/en.json`.
 - Prefer Server Components; keep client components small. API calls will go through a shared `lib/api/*` client

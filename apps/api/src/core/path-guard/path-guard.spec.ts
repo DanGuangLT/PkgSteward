@@ -22,7 +22,7 @@ const denylist = buildDenylist({
     ProgramData: 'C:\\ProgramData',
   },
   homeDir: 'C:\\Users\\alice',
-  appInstallDir: 'D:\\Tools\\PkgSteward\\pkgsteward_be',
+  appInstallDir: 'D:\\Tools\\PkgSteward\\apps\\api',
   sourceCheckoutDir: 'D:\\Tools\\PkgSteward',
   dataDir: 'C:\\Users\\alice\\AppData\\Local\\PkgSteward',
 });
@@ -161,7 +161,7 @@ describe('PathGuard.checkMany', () => {
     });
 
     it('resolves protected junctions again on each call of the same checker', async () => {
-      const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+      const protectedPath = 'd:\\tools\\pkgsteward\\apps\\api';
       const links = { [protectedPath]: 'E:\\Protected\\Old' };
       const f = batchFixture({ fs: makeFs(links) });
       const checkPaths = f.guard.createOperationChecker();
@@ -256,7 +256,7 @@ describe('PathGuard.checkMany', () => {
   });
 
   it('refreshes drives and protected junction targets on every call', async () => {
-    const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+    const protectedPath = 'd:\\tools\\pkgsteward\\apps\\api';
     const links = { [protectedPath]: 'E:\\Protected\\Old' };
     const f = batchFixture({ fs: makeFs(links) });
     const paths = [
@@ -483,7 +483,7 @@ describe('PathGuard.checkMany', () => {
 });
 
 describe('PathGuard protected-tree matcher', () => {
-  const protectedPath = 'd:\\tools\\pkgsteward\\pkgsteward_be';
+  const protectedPath = 'd:\\tools\\pkgsteward\\apps\\api';
 
   it.each([
     ['C:\\', false],
@@ -494,8 +494,8 @@ describe('PathGuard protected-tree matcher', () => {
     ['C:\\Windows', true],
     ['C:\\Windows\\x', true],
     ['E:\\Program Files\\y', true],
-    ['D:\\Tools\\PkgSteward\\pkgsteward_be', true],
-    ['D:\\Tools\\PkgSteward\\pkgsteward_be\\src', true],
+    ['D:\\Tools\\PkgSteward\\apps\\api', true],
+    ['D:\\Tools\\PkgSteward\\apps\\api\\src', true],
     ['C:\\Users\\alice\\AppData\\Local\\PkgSteward', true],
     ['C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs', true],
     ['E:\\Protected\\ActualApp', true],
@@ -516,9 +516,9 @@ describe('PathGuard protected-tree matcher', () => {
     ['/home', false],
     ['/home/alice', false],
     ['/home/alice/code', false],
-    ['/opt/pkgsteward/pkgsteward_be', true],
-    ['/opt/pkgsteward/pkgsteward_be/src', true],
-    ['/opt/PkgSteward/pkgsteward_be', false],
+    ['/opt/pkgsteward/apps/api', true],
+    ['/opt/pkgsteward/apps/api/src', true],
+    ['/opt/PkgSteward/apps/api', false],
     ['/home/alice/.local/share/PkgSteward/cache', true],
     ['/srv/protected/app', true],
     ['/srv/protected/app/child', true],
@@ -532,11 +532,11 @@ describe('PathGuard protected-tree matcher', () => {
         platform: 'posix',
         env: {},
         homeDir: '/home/alice',
-        appInstallDir: '/opt/pkgsteward/pkgsteward_be',
+        appInstallDir: '/opt/pkgsteward/apps/api',
         sourceCheckoutDir: null,
         dataDir: '/home/alice/.local/share/PkgSteward',
       }),
-      fs: makeFs({ '/opt/pkgsteward/pkgsteward_be': '/srv/protected/app' }),
+      fs: makeFs({ '/opt/pkgsteward/apps/api': '/srv/protected/app' }),
     });
     const matcher = await guard.createProtectedTreeMatcher();
 
@@ -580,7 +580,7 @@ describe('PathGuard protected-tree matcher', () => {
       expect(
         matcher('C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs'),
       ).toBe(true);
-      expect(matcher('D:\\Tools\\PkgSteward\\pkgsteward_be\\src')).toBe(true);
+      expect(matcher('D:\\Tools\\PkgSteward\\apps\\api\\src')).toBe(true);
       expect(matcher('D:\\Scan\\app')).toBe(false);
       expect(fs.realpath).toHaveBeenCalledTimes(denylist.length);
     },
@@ -712,8 +712,8 @@ describe('PathGuard (win32)', () => {
   );
 
   it.each([
-    'D:\\Tools\\PkgSteward\\pkgsteward_be\\src',
-    'D:\\Tools\\PkgSteward\\pkgsteward_fe',
+    'D:\\Tools\\PkgSteward\\apps\\api\\src',
+    'D:\\Tools\\PkgSteward\\apps\\web',
     'C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs',
   ])('blocks appInstallDir / source repo / dataDir content %s', async (p) =>
     expect(await makeGuard({ scanRoots: ALL }).guard.check(p)).toMatchObject({
@@ -915,7 +915,7 @@ describe('PathGuard denylist junction regressions', () => {
         platform: 'win32',
         env: {},
         homeDir: 'C:\\Users\\alice',
-        appInstallDir: 'D:\\Tools\\PkgSteward\\pkgsteward_be',
+        appInstallDir: 'D:\\Tools\\PkgSteward\\apps\\api',
         sourceCheckoutDir: 'D:\\Tools\\PkgSteward',
         dataDir: 'D:\\DataLink',
       }),
@@ -927,7 +927,7 @@ describe('PathGuard denylist junction regressions', () => {
       makeDataGuard(
         makeFs({
           'd:\\datalink': 'E:\\Protected\\ActualData',
-          'd:\\tools\\pkgsteward\\pkgsteward_be': 'E:\\Protected\\ActualApp',
+          'd:\\tools\\pkgsteward\\apps\\api': 'E:\\Protected\\ActualApp',
         }),
       );
 

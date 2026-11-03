@@ -48,11 +48,15 @@ export const findPackageRoot = (
   }
 };
 
-// A source checkout has .git directly above the backend package directory.
+// A source checkout is laid out as <repo>/apps/<app> with .git in <repo>.
+// Only that exact shape counts: walking further up could treat a user's own
+// repository (PkgSteward installed inside it) as the source checkout.
 export const findSourceCheckoutDir = (
   appInstallDir: string,
   exists: (filePath: string) => boolean = existsSync,
 ): string | null => {
-  const parent = path.dirname(appInstallDir);
-  return exists(path.join(parent, '.git')) ? parent : null;
+  const apps = path.dirname(appInstallDir);
+  if (path.basename(apps) !== 'apps') return null;
+  const repo = path.dirname(apps);
+  return exists(path.join(repo, '.git')) ? repo : null;
 };

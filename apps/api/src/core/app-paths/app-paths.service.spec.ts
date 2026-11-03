@@ -69,7 +69,7 @@ describe('AppPathsService', () => {
       const pkg = JSON.parse(
         readFileSync(join(paths.appInstallDir, 'package.json'), 'utf8'),
       ) as { name: string };
-      expect(pkg.name).toBe('pkgsteward_be');
+      expect(pkg.name).toBe('@pkgsteward/api');
     } finally {
       process.chdir(cwd);
     }

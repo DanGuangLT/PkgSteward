@@ -15,7 +15,7 @@ const winDenylist = buildDenylist({
     ProgramW6432: 'relative\\ignored',
   },
   homeDir: 'C:\\Users\\alice',
-  appInstallDir: 'D:\\Tools\\PkgSteward\\pkgsteward_be',
+  appInstallDir: 'D:\\Tools\\PkgSteward\\apps\\api',
   sourceCheckoutDir: 'D:\\Tools\\PkgSteward',
   dataDir: 'C:\\Users\\alice\\AppData\\Local\\PkgSteward',
 });
@@ -33,7 +33,7 @@ describe('Windows system environment', () => {
       platform: 'win32',
       env,
       homeDir: 'C:\\Users\\alice',
-      appInstallDir: 'D:\\Tools\\PkgSteward\\pkgsteward_be',
+      appInstallDir: 'D:\\Tools\\PkgSteward\\apps\\api',
       sourceCheckoutDir: 'D:\\Tools\\PkgSteward',
       dataDir: 'C:\\Users\\alice\\AppData\\Local\\PkgSteward',
     });
@@ -93,7 +93,7 @@ describe('Windows system environment', () => {
       expect(entries.map((entry) => entry.path)).toEqual([
         'c:\\users\\alice',
         'c:\\users',
-        'd:\\tools\\pkgsteward\\pkgsteward_be',
+        'd:\\tools\\pkgsteward\\apps\\api',
         'd:\\tools\\pkgsteward',
         'c:\\users\\alice\\appdata\\local\\pkgsteward',
       ]);
@@ -149,8 +149,8 @@ describe('findDenyMatch (win32)', () => {
     'D:\\Tools\\other',
   ])('allows %s', (p) => expect(deny(p)).toBeNull());
   it.each([
-    'D:\\Tools\\PkgSteward\\pkgsteward_be\\src',
-    'D:\\Tools\\PkgSteward\\pkgsteward_fe',
+    'D:\\Tools\\PkgSteward\\apps\\api\\src',
+    'D:\\Tools\\PkgSteward\\apps\\web',
     'C:\\Users\\alice\\AppData\\Local\\PkgSteward\\logs',
   ])('blocks PkgSteward folders and their contents: %s', (p) =>
     expect(deny(p)).not.toBeNull(),
@@ -171,7 +171,7 @@ describe('isInsideProtectedTree (Scanner pruning)', () => {
     'C:\\Windows',
     'C:\\Windows\\System32',
     'E:\\Program Files\\x',
-    'D:\\Tools\\PkgSteward\\pkgsteward_be',
+    'D:\\Tools\\PkgSteward\\apps\\api',
     'C:\\Users\\alice\\AppData\\Local\\PkgSteward\\cache',
   ])('prunes %s', (p) => expect(inside(p)).toBe(true));
   it.each(['C:\\', 'C:\\Users', 'C:\\Users\\alice', 'D:\\Tools', 'D:\\Scan'])(
@@ -185,7 +185,7 @@ describe('POSIX (CI only)', () => {
     platform: 'posix',
     env: {},
     homeDir: '/home/alice',
-    appInstallDir: '/opt/pkgsteward/pkgsteward_be',
+    appInstallDir: '/opt/pkgsteward/apps/api',
     sourceCheckoutDir: null,
     dataDir: '/home/alice/.local/share/PkgSteward',
   });
@@ -198,7 +198,7 @@ describe('POSIX (CI only)', () => {
   });
   it('allows folders inside home and is case-sensitive', () => {
     expect(denyPosix('/home/alice/code')).toBeNull();
-    expect(denyPosix('/opt/PkgSteward/pkgsteward_be')).toBeNull();
-    expect(denyPosix('/opt/pkgsteward/pkgsteward_be/src')).not.toBeNull();
+    expect(denyPosix('/opt/PkgSteward/apps/api')).toBeNull();
+    expect(denyPosix('/opt/pkgsteward/apps/api/src')).not.toBeNull();
   });
 });

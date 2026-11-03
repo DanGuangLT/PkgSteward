@@ -14,8 +14,8 @@ body:
     attributes:
       label: Area
       options:
-        - Backend (pkgsteward_be)
-        - Frontend (pkgsteward_fe)
+        - Backend (apps/api)
+        - Frontend (apps/web)
         - Documentation
         - CI / tooling
         - Other

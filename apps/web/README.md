@@ -1,4 +1,4 @@
-# pkgsteward_fe
+# @pkgsteward/web
 
 Frontend of **PkgSteward**. Next.js 16 (App Router) + React 19 + TypeScript, Tailwind CSS v4, shadcn/ui (Radix),
 next-themes and next-intl.
@@ -26,7 +26,7 @@ pnpm dev        # http://localhost:24680
 
 ## Frontend listen address
 
-Set these variables in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env`:
+Set these variables in `apps/web/.env.local` or `apps/web/.env`:
 
 | Variable | Default when empty or unset | Allowed values |
 |---|---|---|
@@ -42,17 +42,17 @@ origin used in your browser (for example, `http://localhost:24680`; IPv6 uses `h
 
 ## Backend connection
 
-In `pkgsteward_fe/`, copy `.env.example` to `.env.local` before starting the frontend:
+In `apps/web/`, copy `.env.example` to `.env.local` before starting the frontend:
 
 ```powershell
 Copy-Item .env.example .env.local
 ```
 
 `API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host and port must match
-`HOST` and `PORT` in `pkgsteward_be/.env`; update `API_BASE_URL` whenever the backend address changes.
+`HOST` and `PORT` in `apps/api/.env`; update `API_BASE_URL` whenever the backend address changes.
 Use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
 This variable is read only on the server; do not add the `NEXT_PUBLIC_` prefix.
-Start the backend first by running `pnpm dev` in `pkgsteward_be/`, then start the frontend as above.
+Start the backend first by running `pnpm dev` in `apps/api/`, then start the frontend as above.
 
 The server loads the initial scan results. Browser scan requests use same-origin Route Handlers at
 `/api/scans`, `/api/scans/[id]` and `/api/scans/[id]/cancel`; the server calls the backend.
@@ -153,7 +153,7 @@ Browser requests use same-origin Route Handlers under `app/api/npm-runs/**`; the
 `GET /api/npm-runs/context?path=...`, `POST /api/npm-runs`, `GET /api/npm-runs/latest`,
 `GET /api/npm-runs/:id`, `GET /api/npm-runs/:id/logs?cursor=...`, and `POST /api/npm-runs/:id/cancel`.
 For fixed command arguments, environment/config limits and process cleanup details, see the backend's
-[Command runner API](../pkgsteward_be/README.md#command-runner-api).
+[Command runner API](../api/README.md#command-runner-api).
 
 ## Disk usage
 

@@ -1,4 +1,4 @@
-# pkgsteward_be
+# @pkgsteward/api
 
 Backend of **PkgSteward**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
 machine. NestJS 11 + TypeScript.
@@ -47,7 +47,7 @@ Full list in `.env.example`.
 Values in settings.json inside the data folder override environment variables.
 
 The frontend has its own `PORT` (default `24680`, integer `1`–`65535`) and `HOST` (default `127.0.0.1`,
-only `127.0.0.1`, `localhost` or `::1`), set in `pkgsteward_fe/.env.local` or `pkgsteward_fe/.env`.
+only `127.0.0.1`, `localhost` or `::1`), set in `apps/web/.env.local` or `apps/web/.env`.
 For each frontend variable, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
 When changing the frontend address, update this backend's `LIST_ORIGIN_CORS` to match the origin used in the
 browser (for example, `http://localhost:24680`). When changing this backend's `PORT` or `HOST`, update the
