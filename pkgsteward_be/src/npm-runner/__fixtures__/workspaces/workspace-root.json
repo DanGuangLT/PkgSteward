@@ -1,0 +1,6 @@
+{
+  "name": "TEST-workspace-root",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": { "dev": "echo TEST" }
+}

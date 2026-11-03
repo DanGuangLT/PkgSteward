@@ -67,7 +67,7 @@ describe('MutationGateService', () => {
     expect(thrown).toMatchObject({
       statusCode: 409,
       code: 'CONFLICT',
-      message: 'A file operation is in progress',
+      message: 'A file operation or command run is in progress',
     });
     expect(gate.isBusy()).toBe(true);
   });

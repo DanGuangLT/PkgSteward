@@ -5,6 +5,8 @@ export interface IProcessInfo {
   name: string;
   executablePath: string | null;
   commandLine: string | null;
+  parentPid?: number | null;
+  creationTime?: string | null;
 }
 
 export type ProcessSnapshotResult =
@@ -13,5 +15,5 @@ export type ProcessSnapshotResult =
 
 export interface IProcessSnapshot {
   /** Captures process metadata without throwing or logging command lines. */
-  capture(): Promise<ProcessSnapshotResult>;
+  capture(timeoutMs?: number): Promise<ProcessSnapshotResult>;
 }

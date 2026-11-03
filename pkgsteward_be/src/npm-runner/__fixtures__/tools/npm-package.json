@@ -1,0 +1,6 @@
+{
+  "name": "npm",
+  "version": "11.17.0",
+  "description": "TEST metadata, never imported or executed",
+  "bin": { "npm": "bin/npm-cli.js" }
+}

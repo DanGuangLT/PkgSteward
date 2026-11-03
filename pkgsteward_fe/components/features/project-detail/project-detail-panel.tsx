@@ -4,6 +4,7 @@ import { AlertTriangleIcon, CheckIcon, CircleIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
+import type { ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
@@ -41,7 +42,7 @@ function ProjectSectionStatus({ title, section, progress }: {
   )
 }
 
-export function ProjectDetailPanel({ detail }: { detail: ProjectDetail }) {
+export function ProjectDetailPanel({ detail, runner, runnerBusy = false }: { detail: ProjectDetail; runner?: ReactNode; runnerBusy?: boolean }) {
   const t = useTranslations("projectDetail")
   const format = useFormatter()
   const router = useRouter()
@@ -76,10 +77,12 @@ export function ProjectDetailPanel({ detail }: { detail: ProjectDetail }) {
         {local.warnings.filter(code => code !== "REGISTRY_CONFIG_UNSUPPORTED").map(code => <ProjectErrorMessage key={code} code={code} />)}
       </section>
 
+      {runner}
+
       <section className="min-w-0 space-y-4" aria-label={t("analysis.start")}>
         <p id="project-registry-notice" className="text-body-sm">{t("analysis.publicRegistryNotice")}</p>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <Button type="button" disabled={busy || refreshing || blocked}
+          <Button type="button" variant={runner ? "secondary" : "default"} disabled={busy || refreshing || blocked || runnerBusy}
             aria-describedby={blocked ? "project-registry-notice project-registry-blocked" : "project-registry-notice"}
             className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.start(local.requestPath) }}>{t("analysis.start")}</Button>
           <Button type="button" variant="secondary" disabled={busy || refreshing} className="h-auto min-h-10 whitespace-normal"

@@ -1,0 +1,6 @@
+{
+  "name": "pnpm",
+  "version": "11.22.0",
+  "description": "TEST metadata, never imported or executed",
+  "bin": { "pnpm": "bin/pnpm.mjs" }
+}

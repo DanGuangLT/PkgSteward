@@ -259,6 +259,76 @@ export interface FileTreeLevel {
 }
 
 export type ProjectManager = "npm" | "pnpm" | "yarn" | "unknown" | "ambiguous"
+export type RunAction = "install_all" | "install_one" | "update_all" | "update_one" | "uninstall_one" | "script"
+export type RunStatus = "running" | "stopping" | "completed" | "failed" | "cancelled" | "timed_out" | "termination_failed"
+export type RunFailureCode =
+  | "PROJECT_NOT_SCANNED" | "INPUT_CHANGED" | "WORKSPACE_LEAF" | "UNSUPPORTED_MANAGER"
+  | "LOCKFILE_MISMATCH" | "TOOL_NOT_FOUND" | "TOOL_LAYOUT_UNSUPPORTED" | "TOOL_VERSION_MISMATCH"
+  | "CONFIG_UNSUPPORTED" | "INVALID_PACKAGE_SPEC" | "SCRIPT_NOT_FOUND" | "SCRIPT_NAME_UNSUPPORTED"
+  | "READERS_RUNNING" | "RUNNING" | "SPAWN_FAILED" | "COMMAND_FAILED" | "CANCELLED" | "TIMED_OUT"
+  | "SHUTDOWN" | "TERMINATION_UNCONFIRMED" | "AUDIT_WRITE_FAILED" | "CACHE_INVALIDATION_FAILED" | "INTERNAL_SERVER_ERROR"
+export type RunWarningCode = "NO_LOCKFILE" | "PACKAGE_MANAGER_PIN_DIFFERS" | "OUTPUT_TRUNCATED"
+  | "OUTPUT_ENCODING_LOSS" | "LOGS_MAY_CONTAIN_SECRETS" | "PROJECT_CODE_EXECUTION" | "PATH_RACE_RESIDUAL"
+
+export interface RunRequest {
+  path: string
+  action: RunAction
+  inputHash: string
+  requestId: string
+  package?: string
+  script?: string
+}
+export interface RunStart { jobId: string; requestId: string; status: RunStatus }
+export interface RunnerScript { name: string; command: string; eligible: boolean }
+export interface RunnerContext {
+  requestPath: string
+  path: string
+  scanId: string
+  inputHash: string
+  manager: ProjectManager
+  version: string | null
+  available: boolean
+  reason: RunFailureCode | null
+  scripts: RunnerScript[]
+  warnings: RunWarningCode[]
+}
+export interface RunJob extends RunStart {
+  requestPath: string
+  path: string
+  scanId: string
+  action: RunAction
+  manager: ProjectManager
+  version: string | null
+  package: string | null
+  script: string | null
+  phase: "preflight" | "executing" | "stopping" | "finalizing" | "done"
+  startedAt: string
+  finishedAt: string | null
+  spawned: boolean
+  exitCode: number | null
+  signal: string | null
+  failureCode: RunFailureCode | null
+  stopReason: "cancel" | "timeout" | "shutdown" | null
+  terminationVerified: boolean
+  mayHaveChanged: boolean
+  gateHeld: boolean
+  auditWritten: boolean
+  refreshRequired: boolean
+  warningCodes: RunWarningCode[]
+  firstCursor: number
+  endCursor: number
+  droppedBytes: number
+}
+export interface RunLogChunk { seq: number; stream: "stdout" | "stderr"; text: string }
+export interface RunLogPage {
+  jobId: string
+  firstCursor: number
+  nextCursor: number
+  endCursor: number
+  truncated: boolean
+  droppedBytes: number
+  chunks: RunLogChunk[]
+}
 export type AnalysisStatus = "running" | "completed" | "cancelled" | "timed_out" | "failed"
 export type AnalysisSectionState = "pending" | "running" | "complete" | "partial" | "unavailable"
 export type AnalysisPhase = "reading" | "outdated" | "audit" | "validating" | "done"

@@ -24,6 +24,8 @@ pkgsteward_be/docs_API/
 # Logs
 logs/
 *.log
+# Route Handler GET /api/npm-runs/[id]/logs là mã nguồn, không phải log
+!/pkgsteward_fe/app/api/npm-runs/\[id\]/logs/
 
 # Dữ liệu runtime khi chạy từ mã nguồn (PKGSTEWARD_DATA_DIR mặc định)
 /PkgStewardLog/

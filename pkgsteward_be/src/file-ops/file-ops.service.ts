@@ -116,6 +116,10 @@ export class FileOpsService implements IFileOpsService {
     @Inject(RECYCLE_BIN) private readonly recycleBin: IRecycleBin,
   ) {}
 
+  hasRunningPreview(): boolean {
+    return this.previews.hasRunningPreview();
+  }
+
   async startExecute(input: IExecuteInput): Promise<IOperationStart> {
     const { previewId, paths } = input;
     const requested = new Set<string>();

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import type { Dirent } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { plainToInstance } from 'class-transformer';
 import {
@@ -35,6 +36,7 @@ import type {
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
 import { SCAN_WALKER } from '@/scanner/scan-walker';
+import { inspectScanDirectory } from '@/scanner/project-metadata';
 import { makeScanCacheKey, ScannerCache } from '@/scanner/scanner-cache';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
@@ -175,6 +177,43 @@ export class ScannerService
       ...latest,
       projects,
       orphanNodeModules,
+    });
+  }
+
+  async refreshProject(path: string): Promise<void> {
+    const latest = this.latest;
+    if (!latest) return;
+    const comparable = toComparable(path, this.platform);
+    const index = latest.projects.findIndex(
+      (project) => toComparable(project.path, this.platform) === comparable,
+    );
+    if (index === -1) return;
+    const directory = latest.projects[index].path;
+    let entries: Dirent[] | null;
+    try {
+      entries = await scanFs.readdir(directory);
+    } catch (error) {
+      // Lệnh chạy có thể xoá cả thư mục dự án: bỏ mục đó, không giữ cổng mãi.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+      entries = null;
+    }
+    const { project } = entries
+      ? await inspectScanDirectory(directory, entries, {
+          platform: this.platform,
+          fs: scanFs,
+          signal: new AbortController().signal,
+        })
+      : { project: null };
+    const projects = [...latest.projects];
+    if (project) projects[index] = project;
+    else projects.splice(index, 1);
+    const result: IStoredScanResult = { ...latest, projects };
+    this.latest = result;
+    await this.cache.save({
+      schemaVersion: 1,
+      key: this.configuration().key,
+      result: structuredClone(result),
     });
   }
 

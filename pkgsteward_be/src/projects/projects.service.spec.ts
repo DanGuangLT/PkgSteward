@@ -204,6 +204,172 @@ describe('ProjectsService read-only job lifecycle', () => {
     jest.restoreAllMocks();
   });
 
+  it('ignores mutation invalidation when no analysis job is retained', () => {
+    const f = fixture();
+    expect(() => f.service.invalidateAfterMutation(ROOT)).not.toThrow();
+    expect(f.service.hasRunningAnalysis()).toBe(false);
+    expect(readInput).not.toHaveBeenCalled();
+    expect(f.analyze).not.toHaveBeenCalled();
+    expect(f.assertIdle).not.toHaveBeenCalled();
+  });
+
+  it.each(['completed', 'cancelled', 'timed_out', 'failed'] as const)(
+    'marks a retained %s job stale without changing its outcome or findings',
+    async (status) => {
+      const f = fixture(1000);
+      const errorLog = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      const started = await f.service.start({ path: REQUEST });
+      if (status === 'completed') {
+        f.pending.resolve(complete());
+        await flush();
+      } else if (status === 'cancelled') {
+        f.service.cancel(started.jobId);
+      } else if (status === 'timed_out') {
+        jest.advanceTimersByTime(1000);
+      } else {
+        f.pending.reject(new Error('TEST analyzer failure'));
+        await flush();
+      }
+      const before = f.service.get(started.jobId);
+      expect(before.status).toBe(status);
+      const warningCodes = {
+        completed: ['INPUT_CHANGED'],
+        cancelled: ['CANCELLED', 'INPUT_CHANGED'],
+        timed_out: ['INPUT_CHANGED', 'TIMED_OUT'],
+        failed: ['INPUT_CHANGED', 'INTERNAL_SERVER_ERROR'],
+      };
+      const reads = readInput.mock.calls.length;
+      f.service.invalidateAfterMutation('d:\\PROJECTS\\app\\.');
+      const after = f.service.get(started.jobId);
+      expect(after).toEqual({
+        ...before,
+        stale: true,
+        warningCodes: warningCodes[status],
+      });
+      expect(before.stale).toBe(false);
+      f.service.invalidateAfterMutation(ROOT);
+      expect(f.service.get(started.jobId)).toEqual(after);
+      expect(readInput).toHaveBeenCalledTimes(reads);
+      expect(f.analyze).toHaveBeenCalledTimes(1);
+      expect(f.assertIdle).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
+      expect(errorLog).toHaveBeenCalledTimes(status === 'failed' ? 1 : 0);
+    },
+  );
+
+  it('sorts and deduplicates INPUT_CHANGED with existing warnings after mutation', async () => {
+    const f = fixture();
+    const started = await f.service.start({ path: REQUEST });
+    f.pending.resolve({
+      ...complete(),
+      warningCodes: [
+        'REGISTRY_UNAVAILABLE',
+        'INPUT_CHANGED',
+        'CANCELLED',
+        'INPUT_CHANGED',
+      ],
+    });
+    await flush();
+    f.service.invalidateAfterMutation(ROOT);
+    expect(f.service.get(started.jobId).warningCodes).toEqual([
+      'CANCELLED',
+      'INPUT_CHANGED',
+      'REGISTRY_UNAVAILABLE',
+    ]);
+    f.service.invalidateAfterMutation(ROOT);
+    expect(f.service.get(started.jobId).warningCodes).toEqual([
+      'CANCELLED',
+      'INPUT_CHANGED',
+      'REGISTRY_UNAVAILABLE',
+    ]);
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'cancels a running analysis with INPUT_CHANGED and ignores late %s and snapshots',
+    async (outcome) => {
+      const f = fixture(1000);
+      const started = await f.service.start({ path: REQUEST });
+      const update = complete();
+      update.audit.state = 'running';
+      update.audit.items = [
+        {
+          id: 'TEST-advisory',
+          name: 'pkg',
+          title: 'TEST finding',
+          url: null,
+          severity: 'high',
+          range: '<2',
+          affectedVersions: ['1.0.0'],
+          direct: true,
+        },
+      ];
+      update.warningCodes = ['REGISTRY_UNAVAILABLE'];
+      f.analysisDeps().onSnapshot({ ...update, phase: 'audit' });
+      const before = f.service.get(started.jobId);
+      f.service.invalidateAfterMutation(REQUEST);
+      const cancelled = f.service.get(started.jobId);
+      expect(cancelled).toMatchObject({
+        jobId: started.jobId,
+        status: 'cancelled',
+        stale: true,
+        partial: true,
+        phase: 'done',
+        failureCode: 'INPUT_CHANGED',
+        finishedAt: NOW,
+        checkedAt: null,
+        outdated: before.outdated,
+        audit: {
+          state: 'partial',
+          items: update.audit.items,
+          failureCode: 'INPUT_CHANGED',
+          warningCodes: ['INPUT_CHANGED'],
+        },
+        warningCodes: ['INPUT_CHANGED', 'REGISTRY_UNAVAILABLE'],
+      });
+      expect(f.signal().aborted).toBe(true);
+      expect(f.service.hasRunningAnalysis()).toBe(false);
+      expect(jest.getTimerCount()).toBe(0);
+      f.analysisDeps().onSnapshot({ ...complete(), phase: 'done' });
+      if (outcome === 'resolve') f.pending.resolve(complete());
+      else f.pending.reject(new Error('TEST late analyzer failure'));
+      await flush();
+      jest.advanceTimersByTime(2000);
+      f.service.invalidateAfterMutation(ROOT);
+      expect(f.service.get(started.jobId)).toEqual(cancelled);
+      expect(f.analyze).toHaveBeenCalledTimes(1);
+      expect(readInput).toHaveBeenCalledTimes(1);
+      expect(f.assertIdle).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    ['running', 'D:\\projects'],
+    ['running', `${ROOT}\\child`],
+    ['running', `${ROOT}-other`],
+    ['completed', 'D:\\projects'],
+    ['completed', `${ROOT}\\child`],
+    ['completed', `${ROOT}-other`],
+  ] as const)(
+    'does not invalidate a %s job for another path %s',
+    async (status, path) => {
+      const f = fixture(1000);
+      const started = await f.service.start({ path: REQUEST });
+      if (status === 'completed') {
+        f.pending.resolve(complete());
+        await flush();
+      }
+      const before = f.service.get(started.jobId);
+      const reads = readInput.mock.calls.length;
+      f.service.invalidateAfterMutation(path);
+      expect(f.service.get(started.jobId)).toEqual(before);
+      expect(f.signal().aborted).toBe(status === 'completed');
+      expect(readInput).toHaveBeenCalledTimes(reads);
+      expect(f.analyze).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('returns manifest and locked versions from local reads, without checking gate or starting analysis', async () => {
     const f = fixture();
     f.assertIdle.mockImplementation(() => {

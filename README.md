@@ -16,7 +16,17 @@ versions) safely.
 
 - **Local and single-user by design:** no accounts, no authentication, no database. Data is read from the
   filesystem at the time of each request.
-- **Safety first:** every destructive or machine-wide action goes through a *preview → confirm* flow.
+- **Safety first:** file deletions and machine-wide changes go through a *preview → confirm* flow; project
+  commands (below) start in one click next to a permanent trust notice.
+- **Project commands:** run install/update/uninstall or a declared script from project details with npm 11 or
+  pnpm 11, live logs and Stop; workspace members support scripts only. Run starts in one click without confirmation.
+
+> [!WARNING]
+> Only run projects you trust. Commands execute project/lifecycle code and configuration (`.npmrc`, pnpmfile,
+> plugins) with your user rights and no sandbox; they may use the network, shared stores and files outside the
+> project. Logs may reveal secrets. There is no rollback; stopped/failed runs may leave partial changes. Stop
+> may miss processes that escape the tracked tree, and a junction swap at launch is not fully prevented.
+> See [Command runner API](pkgsteward_be/README.md#command-runner-api) for tool/config limits and cleanup behavior.
 
 ## Requirements
 

@@ -10,4 +10,5 @@ export interface IProjectsService {
   get(jobId: string): IProjectAnalysisJob;
   cancel(jobId: string): IProjectAnalysisJob;
   hasRunningAnalysis(): boolean;
+  invalidateAfterMutation(path: string): void;
 }

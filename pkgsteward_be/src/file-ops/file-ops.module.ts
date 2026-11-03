@@ -17,5 +17,6 @@ import { ScannerModule } from '@/scanner/scanner.module';
     { provide: FILE_OPS_FS, useFactory: createFileOpsFs },
     { provide: DISK_FS, useFactory: createDiskFs },
   ],
+  exports: [FileOpsService],
 })
 export class FileOpsModule {}

@@ -1,0 +1,12 @@
+{
+  "name": "TEST-command-project",
+  "version": "1.0.0",
+  "dependencies": { "alpha": "^1.0.0" },
+  "scripts": {
+    "dev": "echo TEST",
+    "install": "echo TEST script collision",
+    "env": "echo TEST script collision",
+    "add": "echo TEST script collision",
+    "--unsupported": "echo TEST disabled script"
+  }
+}
