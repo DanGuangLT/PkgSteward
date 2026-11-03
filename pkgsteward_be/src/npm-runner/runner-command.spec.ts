@@ -34,18 +34,24 @@ const rows: [RunAction, Partial<IRunRequest>, string[], string[]][] = [
     ['install', '--save-prod', '--', '@scope/alpha@1.2.3'],
     [
       'add',
+      '--global=false',
       '--save-prod',
       '--reporter=append-only',
       '--',
       '@scope/alpha@1.2.3',
     ],
   ],
-  ['update_all', {}, ['update'], ['update', '--reporter=append-only']],
+  [
+    'update_all',
+    {},
+    ['update'],
+    ['update', '--global=false', '--reporter=append-only'],
+  ],
   [
     'update_one',
     { package: 'alpha' },
     ['update', '--', 'alpha'],
-    ['update', '--reporter=append-only', '--', 'alpha'],
+    ['update', '--global=false', '--reporter=append-only', '--', 'alpha'],
   ],
   [
     'uninstall_one',
@@ -71,13 +77,12 @@ describe('runner command grammar and fixed argv', () => {
                 '--no-audit',
                 '--no-fund',
                 '--no-progress',
+                '--update-notifier=false',
               ]
-            : [
-                '--dir',
-                context.path,
-                '--global=false',
-                '--manage-package-manager-versions=false',
-              ];
+            : // pnpm 11.22 (RT1): only add/update accept --global; the
+              // version-switch setting is pm-on-fail (default "download").
+              // update-notifier / verify-deps-before-run go through the env.
+              ['--dir', context.path, '--pm-on-fail=warn'];
         expect(buildRunCommand(context, request(action, extra))).toEqual({
           file: context.tool?.file,
           args: [

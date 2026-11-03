@@ -77,6 +77,23 @@ describe('runner child environment (A8)', () => {
     const keys = Object.keys(env).map((key) => key.toLowerCase());
     expect(new Set(keys).size).toBe(keys.length);
   });
+  it('forces pnpm 11 config that has no CLI flag: no implicit install, no update check (RT1)', () => {
+    const user = {
+      PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'install',
+      pnpm_config_update_notifier: 'true',
+    };
+    const pnpm = buildRunnerEnvironment(user, tool(), 'pnpm', 'script');
+    expect(pnpm).toMatchObject({
+      pnpm_config_verify_deps_before_run: 'false',
+      pnpm_config_update_notifier: 'false',
+    });
+    const keys = Object.keys(pnpm).map((key) => key.toLowerCase());
+    expect(new Set(keys).size).toBe(keys.length);
+    const npm = buildRunnerEnvironment({}, tool(), 'npm', 'script');
+    expect(Object.keys(npm).some((key) => /^pnpm_config_/i.test(key))).toBe(
+      false,
+    );
+  });
   it('keeps only absolute local PATH entries without expanding variables', () => {
     const env = buildRunnerEnvironment(
       {

@@ -14,7 +14,6 @@ export function buildRunnerEnvironment(
   action: RunAction,
 ): NodeJS.ProcessEnv {
   void tool;
-  void manager;
   const denied = new Set([
     ...SETTINGS_FILE_KEYS,
     'PKGSTEWARD_DATA_DIR',
@@ -55,6 +54,15 @@ export function buildRunnerEnvironment(
     COREPACK_ENABLE_NETWORK: '0',
     COREPACK_ENABLE_AUTO_PIN: '0',
     COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+    // pnpm 11.22 rejects these as CLI flags (RT1); its env config prefix is
+    // pnpm_config_. Default verify-deps-before-run=install made a script run
+    // also install and run lifecycle scripts.
+    ...(manager === 'pnpm'
+      ? {
+          pnpm_config_verify_deps_before_run: 'false',
+          pnpm_config_update_notifier: 'false',
+        }
+      : {}),
   };
   for (const [key, value] of Object.entries(forced)) {
     for (const existing of Object.keys(env))

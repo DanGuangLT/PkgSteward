@@ -115,13 +115,12 @@ export function buildRunCommand(
         '--no-audit',
         '--no-fund',
         '--no-progress',
+        '--update-notifier=false',
       ]
-    : [
-        '--dir',
-        cwd,
-        '--global=false',
-        '--manage-package-manager-versions=false',
-      ];
+    : // pnpm 11.22 (RT1): only add/update accept --global (set below); the
+      // version switch is pm-on-fail, default "download" when a pin exists.
+      // update-notifier / verify-deps-before-run go through the child env.
+      ['--dir', cwd, '--pm-on-fail=warn'];
   switch (input.action) {
     case 'install_all':
       args.push(
@@ -134,17 +133,34 @@ export function buildRunCommand(
       args.push(
         ...(npm
           ? ['install', '--save-prod', '--', spec!]
-          : ['add', '--save-prod', '--reporter=append-only', '--', spec!]),
+          : [
+              'add',
+              '--global=false',
+              '--save-prod',
+              '--reporter=append-only',
+              '--',
+              spec!,
+            ]),
       );
       break;
     case 'update_all':
-      args.push(...(npm ? ['update'] : ['update', '--reporter=append-only']));
+      args.push(
+        ...(npm
+          ? ['update']
+          : ['update', '--global=false', '--reporter=append-only']),
+      );
       break;
     case 'update_one':
       args.push(
         ...(npm
           ? ['update', '--', spec!]
-          : ['update', '--reporter=append-only', '--', spec!]),
+          : [
+              'update',
+              '--global=false',
+              '--reporter=append-only',
+              '--',
+              spec!,
+            ]),
       );
       break;
     case 'uninstall_one':
