@@ -1,19 +1,24 @@
-import type { RunnerPathQueryDto } from '../dto/runner-path-query.dto';
-import type { StartNpmRunDto } from '../dto/start-npm-run.dto';
-import type { RunIdParamDto } from '../dto/run-id-param.dto';
-import type { RunLogQueryDto } from '../dto/run-log-query.dto';
+import type { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
+import type { StartNpmRunDto } from '@/npm-runner/dto/start-npm-run.dto';
+import type { RunIdParamDto } from '@/npm-runner/dto/run-id-param.dto';
+import type { RunLogQueryDto } from '@/npm-runner/dto/run-log-query.dto';
+import type { Response } from 'express';
+import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import type {
   IRunJob,
   IRunLogPage,
   IRunStart,
   IRunnerContext,
-} from './npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
 
 export interface INpmRunnerController {
-  context(query: RunnerPathQueryDto): Promise<IRunnerContext>;
-  start(body: StartNpmRunDto): Promise<IRunStart>;
-  latest(): IRunJob;
-  get(params: RunIdParamDto): IRunJob;
-  logs(params: RunIdParamDto, query: RunLogQueryDto): IRunLogPage;
-  cancel(params: RunIdParamDto): Promise<IRunJob>;
+  context(query: RunnerPathQueryDto): Promise<IApiResponse<IRunnerContext>>;
+  start(body: StartNpmRunDto): Promise<IApiResponse<IRunStart>>;
+  latest(): IApiResponse<IRunJob>;
+  get(params: RunIdParamDto): IApiResponse<IRunJob>;
+  logs(params: RunIdParamDto, query: RunLogQueryDto): IApiResponse<IRunLogPage>;
+  cancel(
+    params: RunIdParamDto,
+    response: Response,
+  ): Promise<IApiResponse<IRunJob>>;
 }

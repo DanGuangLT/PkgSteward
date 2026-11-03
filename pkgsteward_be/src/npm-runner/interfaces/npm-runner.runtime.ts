@@ -2,22 +2,21 @@ import type {
   IRunJob,
   IRunnerCommand,
   IRunnerInputDeps,
-} from './npm-runner.types';
+} from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  IRunProcess,
+  IRunProcessCallbacks,
+} from '@/npm-runner/runner-process';
+import type { IWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 
-export interface IRunnerProcess {
-  pid: number | null;
-  settled: Promise<{ exitCode: number | null; signal: string | null }>;
-  stop(): Promise<{ terminationVerified: boolean }>;
-}
-export interface IRunnerLaunchCallbacks {
-  signal: AbortSignal;
-  onOutput(stream: 'stdout' | 'stderr', bytes: Buffer): void;
-  onExit(exitCode: number | null, signal: string | null): void;
-}
+export const NPM_RUNNER_RUNTIME = Symbol('NPM_RUNNER_RUNTIME');
+export const NPM_RUNNER_FS = Symbol('NPM_RUNNER_FS');
+export const NPM_RUNNER_PROCESS = Symbol('NPM_RUNNER_PROCESS');
 // Structural seams keep the runner independent of existing services' implementations.
 export interface INpmRunnerRuntime {
   input: IRunnerInputDeps;
   env: Readonly<NodeJS.ProcessEnv>;
+  processes: IWindowsRunnerProcess | null;
   timeoutMs: number | undefined;
   gate: { tryEnter(): symbol | null; leave(token: symbol): void };
   readers: {
@@ -35,12 +34,11 @@ export interface INpmRunnerRuntime {
     clearDiskUsage(): void;
     staleAnalysis(path: string): void;
   };
-  appPaths: { ensureCacheDir(): Promise<string> };
   launch(
     command: IRunnerCommand,
     env: NodeJS.ProcessEnv,
-    callbacks: IRunnerLaunchCallbacks,
-  ): IRunnerProcess;
+    callbacks: IRunProcessCallbacks,
+  ): IRunProcess;
   now(): Date;
   uuid(): string;
   setTimer(
