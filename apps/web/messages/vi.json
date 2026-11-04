@@ -957,6 +957,7 @@
       "REGISTRY_AUTH_REQUIRED": "Registry yêu cầu thông tin đăng nhập. Chưa hỗ trợ thao tác registry này.",
       "INVENTORY_FAILED": "Không đọc được danh sách đầy đủ. Chặn thay đổi cho tới khi xác minh được.",
       "POSTCONDITION_FAILED": "Không xác minh được trạng thái gói sau thao tác. Có thể đã thay đổi dở dang.",
+      "MANAGER_DISABLED": "Phiên bản này chưa quản lý được gói global của trình quản lý gói này. Tạm thời hãy quản lý trong terminal.",
       "NO_PREVIEW": "Tạo và kiểm tra bản xem trước trước.",
       "RISK_NOT_ACKNOWLEDGED": "Xác nhận đã hiểu rủi ro trên toàn máy trước khi tiếp tục.",
       "CONFIRM_TEXT_MISMATCH": "Nội dung xác nhận phải khớp chính xác.",

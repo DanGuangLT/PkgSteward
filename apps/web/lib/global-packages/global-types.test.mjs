@@ -4,7 +4,7 @@ import { ApiError } from "../api/response.ts"
 import { globalError } from "./global-types.ts"
 
 test("global errors use codes/reasons only; unknown reason never becomes a display key", () => {
-  for (const reason of ["RUNNING", "PREVIEW_CHANGED", "PREVIEW_EXPIRED", "PREVIEW_CONSUMED", "REQUEST_MISMATCH", "PROTECTED_PACKAGE", "REGISTRY_CONFIG_UNSUPPORTED", "POSTCONDITION_FAILED"]) {
+  for (const reason of ["RUNNING", "PREVIEW_CHANGED", "PREVIEW_EXPIRED", "PREVIEW_CONSUMED", "REQUEST_MISMATCH", "PROTECTED_PACKAGE", "REGISTRY_CONFIG_UNSUPPORTED", "POSTCONDITION_FAILED", "MANAGER_DISABLED"]) {
     assert.deepEqual(globalError(new ApiError(409, "TEST arbitrary message", "CONFLICT", { reason })), { code: reason, statusCode: 409 })
   }
   for (const details of [{ reason: "TEST_FUTURE_REASON" }, { reason: {} }]) {

@@ -231,10 +231,11 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 
 ## Global packages
 
-Open `/global-packages` to manage installed global packages with **npm 11 or pnpm 11**. Yarn is not supported;
+Open `/global-packages` to manage installed global packages with **npm 11**. The pnpm tab explains that pnpm global packages cannot be
+managed in this version yet. Yarn is not supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
-and read the installed inventory. The npm/pnpm tabs show tool version, global root, bin directory, package
+and read the installed inventory. The npm tab shows tool version, global root, bin directory, package
 versions and bins, with an as-of time and stale indicator. Empty, unavailable, protected, linked and invalid
 states remain distinct; protected and linked packages have no mutation controls.
 

@@ -947,6 +947,7 @@
       "REGISTRY_AUTH_REQUIRED": "The registry requires credentials. This registry operation is unsupported.",
       "INVENTORY_FAILED": "Inventory could not be read completely. Changes remain disabled until it can be verified.",
       "POSTCONDITION_FAILED": "The resulting package state could not be verified. A partial change is possible.",
+      "MANAGER_DISABLED": "This version cannot manage global packages of this package manager yet. Manage them in a terminal for now.",
       "NO_PREVIEW": "Request and review a preview first.",
       "RISK_NOT_ACKNOWLEDGED": "Acknowledge the machine-wide risks before confirming.",
       "CONFIRM_TEXT_MISMATCH": "The confirmation text must match exactly.",
