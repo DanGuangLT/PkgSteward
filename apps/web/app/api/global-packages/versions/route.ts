@@ -1,0 +1,7 @@
+import { startGlobalVersions } from "@/lib/api/global-packages"
+import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
+import type { GlobalVersionsRequest } from "@/lib/global-packages/global-types"
+
+export async function POST(request: Request): Promise<Response> {
+  return respondWithEnvelope(request, async () => startGlobalVersions(await readJsonBody<GlobalVersionsRequest>(request)))
+}
