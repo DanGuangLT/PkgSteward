@@ -1,0 +1,8 @@
+{
+  "_test": "TEST không phải yêu cầu nghiệp vụ",
+  "current": { "name": "@test/tool", "version": "1.2.3", "bin": { "test-tool": "bin/tool.js" } },
+  "target": { "name": "@test/tool", "version": "2.0.0-beta.1", "bin": { "test-tool": "dist/tool.js", "test-helper": "dist/helper.js" }, "dist": { "integrity": "sha512-VEVTVC1ub3QtYW4taW50ZWdyaXR5", "tarball": "https://registry.npmjs.org/@test/tool/-/tool-2.0.0-beta.1.tgz" } },
+  "binless": { "name": "test-binless", "version": "1.0.0" },
+  "typescript": { "name": "typescript", "version": "5.0.0", "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } },
+  "protected": { "name": "npm", "version": "11.0.0", "bin": { "npm": "bin/npm-cli.js", "npx": "bin/npx-cli.js" } }
+}

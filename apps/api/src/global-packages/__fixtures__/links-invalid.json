@@ -1,0 +1,9 @@
+{
+  "_test": "TEST không phải yêu cầu nghiệp vụ",
+  "externalLink": { "name": "test-linked", "version": "file:D:/TEST/outside", "path": "D:\\TEST\\m7\\global\\node_modules\\test-linked", "target": "D:\\TEST\\outside", "linked": true },
+  "unknownPnpmLink": { "name": "test-unknown-layout", "version": "1.0.0", "target": "D:\\TEST\\unknown-store", "linked": true },
+  "invalidManifest": { "name": "test-invalid", "version": "latest", "bin": { "test-invalid": "../escape.js" } },
+  "protectedBin": { "name": "test-collision", "version": "1.0.0", "bin": { "NODE": "bin/test.js" } },
+  "malformedNpm": { "dependencies": [] },
+  "malformedPnpm": { "name": "TEST-wrong-root-type" }
+}

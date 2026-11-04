@@ -1,0 +1,10 @@
+{
+  "name": "TEST-global-inventory",
+  "description": "TEST không phải yêu cầu nghiệp vụ",
+  "path": "D:\\TEST\\m7\\npm-prefix",
+  "dependencies": {
+    "@test/tool": { "version": "1.2.3", "path": "D:\\TEST\\m7\\npm-prefix\\node_modules\\@test\\tool" },
+    "typescript": { "version": "5.0.0", "path": "D:\\TEST\\m7\\npm-prefix\\node_modules\\typescript" },
+    "npm": { "version": "11.0.0", "path": "D:\\TEST\\m7\\npm-prefix\\node_modules\\npm" }
+  }
+}
