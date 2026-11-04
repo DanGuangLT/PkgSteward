@@ -374,11 +374,13 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Global packages API
 
-List, remove or change an installed global package with **npm 11 or pnpm 11** on Windows. Yarn is not supported.
+List, remove or change an installed global package with **npm 11** on Windows. pnpm is listed as unavailable
+(`MANAGER_DISABLED`): pnpm 11 rejects the configuration flags this feature pins, so pnpm global packages are not
+probed or changed yet. Yarn is not supported.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
-An explicit **Refresh** discovers locations through read-only manager queries: npm prefix/root/config/cache,
-or pnpm global directory/root/bin/store/config. Queries use a neutral working directory, not a scanned project;
+An explicit **Refresh** discovers locations through read-only manager queries: npm prefix/root/config/cache.
+Queries use a neutral working directory, not a scanned project;
 the tools may still write caches. GET requests and page loads only read retained RAM snapshots and never run commands.
 Preview and execute recheck the discovered locations and configuration; clients cannot supply paths, argv or environment.
 
@@ -402,7 +404,7 @@ All routes below use `/api/v1/global-packages` and the standard response envelop
 | `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
 | `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
 
-`manager` is `npm` or `pnpm`; `action` is `remove` or `change`. `targetVersion` is required only for change and
+`manager` is `npm` or `pnpm` (pnpm jobs currently fail with `MANAGER_DISABLED`); `action` is `remove` or `change`. `targetVersion` is required only for change and
 must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
 Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
 are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
@@ -449,22 +451,21 @@ Commands launch the verified JavaScript entry point through the backend's `node.
 closed stdin and no shell launcher. Each mutation uses the manager's discovered locations as this fixed prefix:
 
 - npm: `--prefix <prefix> --userconfig <user-config> --globalconfig <global-config> --cache <cache>`
-- pnpm: `--dir <neutral-cwd> --pm-on-fail=warn --userconfig <user-config> --globalconfig <global-config> --global-dir <global-dir> --global-bin-dir <bin-dir> --store-dir <store>`
 
 For public-registry operations, append `--registry https://registry.npmjs.org`; removals under unsupported registry
 configuration omit it. npm then appends `--no-audit --no-fund --no-progress --update-notifier=false`.
 The following arguments come last:
 
-| Action | npm | pnpm |
-|---|---|---|
-| Remove | `uninstall --global -- <name>` | `remove --global --reporter=append-only -- <name>` |
-| Change | `install --global -- <name>@<exact-version>` | `add --global --reporter=append-only -- <name>@<exact-version>` |
+| Action | npm |
+|---|---|
+| Remove | `uninstall --global -- <name>` |
+| Change | `install --global -- <name>@<exact-version>` |
 
 No arbitrary arguments, elevation, tool-download fallback or automatic mutation retry is available. The child
 uses the command runner's sanitized environment: backend settings, `NODE_ENV`, `NODE_OPTIONS`, project-run
 markers and `npm_*` keys are stripped, and PATH retains absolute entries only. Global operations additionally
 strip `pnpm_config_*`, `PNPM_HOME`, `NODE_AUTH_TOKEN`, `COREPACK_NPM_TOKEN` and `YARN_*` keys before building it.
-Validated location overrides become explicit flags; pnpm receives the resolved bin directory as `PNPM_HOME`.
+Validated location overrides become explicit flags.
 Mutations force `CI=1`, disable Corepack downloads/network/auto-pinning, and disable color output.
 This controls launch configuration; it does not isolate lifecycle code.
 

@@ -171,6 +171,63 @@ describe('M7 RAM reads and admission', () => {
     expect(f.child.launch).not.toHaveBeenCalled();
   });
 
+  it('reports pnpm as disabled without probing it and fails pnpm versions/preview jobs', async () => {
+    const f = setup();
+    const start = await f.service.inventory({ requestId: TEST_REQUEST_ID });
+    expect((await done(f.service, start.jobId)).status).toBe('completed');
+    expect(
+      f.service
+        .getSnapshot()!
+        .managers.find((manager) => manager.manager === 'pnpm'),
+    ).toEqual({
+      manager: 'pnpm',
+      available: false,
+      reason: 'MANAGER_DISABLED',
+      version: null,
+      globalRoot: null,
+      binDir: null,
+      packages: [],
+    });
+    expect(
+      f.service
+        .getSnapshot()!
+        .managers.find((manager) => manager.manager === 'npm')!.available,
+    ).toBe(true);
+    const versions = await f.service.versions({
+      requestId: TEST_EXECUTE_ID,
+      manager: 'pnpm',
+      package: 'test-tool',
+    });
+    expect(await done(f.service, versions.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'MANAGER_DISABLED',
+    });
+    const preview = await f.service.preview(
+      testRequest({
+        requestId: '00000000-0000-4000-8000-000000000105',
+        manager: 'pnpm',
+      }),
+    );
+    expect(await done(f.service, preview.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'MANAGER_DISABLED',
+      preview: null,
+    });
+    expect(
+      f.location.mock.calls.filter(([manager]) => manager === 'pnpm'),
+    ).toHaveLength(0);
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it('still previews npm while pnpm is disabled', async () => {
+    const f = setup();
+    const preview = await f.ready();
+    expect(preview.manager).toBe('npm');
+    expect(
+      f.location.mock.calls.filter(([manager]) => manager === 'pnpm'),
+    ).toHaveLength(0);
+  });
+
   it.each(['inventory', 'versions', 'preview'] as const)(
     '%s uses the single M7 slot and no gate even when a mutation elsewhere owns it',
     async (kind) => {

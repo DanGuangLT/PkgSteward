@@ -17,6 +17,7 @@ import type {
   IGlobalVersionsRequest,
 } from '@/global-packages/interfaces/global-packages.types';
 import {
+  GLOBAL_DISABLED_MANAGERS,
   GLOBAL_MANAGERS,
   GLOBAL_REASON_CODES,
 } from '@/global-packages/interfaces/global-packages.types';
@@ -527,6 +528,8 @@ export class GlobalPackagesService
     manager: GlobalManager,
     activity: GlobalJob,
   ): Promise<IGlobalResolvedLocation> {
+    if (GLOBAL_DISABLED_MANAGERS.includes(manager))
+      throw fail('MANAGER_DISABLED');
     const location = await discoverGlobalLocation(manager, {
       fs: this.runtime.fs,
       environment: this.runtime.environment,
@@ -624,6 +627,7 @@ export class GlobalPackagesService
           'TOOL_NOT_FOUND',
           'TOOL_VERSION_MISMATCH',
           'TOOL_LAYOUT_UNSUPPORTED',
+          'MANAGER_DISABLED',
         ].includes(reasonOf(error))
       )
         throw error;
@@ -738,6 +742,7 @@ export class GlobalPackagesService
             'TOOL_LAYOUT_UNSUPPORTED',
             'LOCATION_AMBIGUOUS',
             'CONFIG_UNSUPPORTED',
+            'MANAGER_DISABLED',
           ].includes(reason)
         )
           throw error;
