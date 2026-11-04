@@ -79,18 +79,19 @@ const locationKeys = new Set([
   'global-bin-dir',
   'store-dir',
 ]);
-const inertKeys = new Set([
-  'audit',
-  'fund',
-  'progress',
-  'color',
-  'update-notifier',
-  'save-exact',
-  'save-prefix',
-  'loglevel',
-  'user-agent',
-  'always-auth',
+const toolPluginKeys = new Set([
+  'onload-script',
+  'pnpmfile',
+  'global-pnpmfile',
+  'yarn-path',
+  'manage-package-manager-versions',
+  'node-options',
 ]);
+const policyKey = (key: string): boolean =>
+  key === 'registry' ||
+  /^@[^:]+:registry$/.test(key) ||
+  locationKeys.has(key) ||
+  toolPluginKeys.has(key);
 const policySummary = (): IGlobalNpmrcPolicy => ({
   defaultRegistry: null,
   scopedRegistries: [],
@@ -113,6 +114,7 @@ const inspectEntry = (
   const value = raw.trim();
   if (
     !key ||
+    toolPluginKeys.has(key) ||
     hasControl(key) ||
     hasControl(value) ||
     substituted(key) ||
@@ -138,7 +140,7 @@ const inspectEntry = (
   }
   if (locationKeys.has(key)) {
     if (!absoluteLocation(value)) summary.provenanceKnown = false;
-  } else if (!inertKeys.has(key)) summary.provenanceKnown = false;
+  }
 };
 
 export function parseGlobalNpmrc(text: string): IGlobalNpmrcPolicy {
@@ -160,7 +162,7 @@ export function parseGlobalNpmrc(text: string): IGlobalNpmrcPolicy {
       continue;
     }
     const value = trimmed.slice(separator + 1).trim();
-    if (seen.has(key) && seen.get(key) !== value)
+    if (policyKey(key) && seen.has(key) && seen.get(key) !== value)
       summary.provenanceKnown = false;
     seen.set(key, value);
     inspectEntry(summary, key, value);
@@ -189,7 +191,11 @@ const inspectRegistryEnvironment = (
     if (value === undefined) continue;
     bytes += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8');
     if (bytes > GLOBAL_CONFIG_TOTAL_LIMIT) return refuse('LIMIT_EXCEEDED');
-    if (seen.has(lower) && seen.get(lower) !== value)
+    if (
+      policyKey(rawKey.replace(/_/g, '-')) &&
+      seen.has(lower) &&
+      seen.get(lower) !== value
+    )
       summary.provenanceKnown = false;
     seen.set(lower, value);
     inspectEntry(summary, rawKey.replace(/_/g, '-'), value);

@@ -172,10 +172,12 @@ describe('bounded inert npmrc policy parser', () => {
   it.each([
     'registry=${TEST_REGISTRY}',
     'prefix=${HOME}',
-    'include=other.npmrc',
     'onload-script=TEST.js',
     'pnpmfile=TEST.cjs',
     'global-pnpmfile=TEST.cjs',
+    'yarn-path=TEST.cjs',
+    'manage-package-manager-versions=false',
+    'node-options=--require TEST.cjs',
     'registry=$(TEST)',
     'registry=`TEST`',
     'registry=https://one.invalid\nREGISTRY=https://two.invalid',
@@ -214,6 +216,73 @@ describe('bounded inert npmrc policy parser', () => {
 });
 
 describe('registry change policy (remove remains offline-capable)', () => {
+  it.each([
+    'init-author-name=x\nstrict-ssl=false',
+    'python=D:\\TEST\\python.exe\ninit-license=MIT',
+    'include=other.npmrc',
+    'include=TEST.npmrc',
+  ])(
+    'ignores unrelated npmrc keys when assessing registry policy: %s',
+    (config) => {
+      expect(parseGlobalNpmrc(config).provenanceKnown).toBe(true);
+      expect(
+        assessGlobalRegistryPolicy(registryInput({ configs: [config] })),
+      ).toEqual({
+        changeAllowed: true,
+        reason: null,
+        publicAuthPresent: false,
+      });
+    },
+  );
+  it('ignores ordinary npm/pnpm injected environment config keys', () => {
+    expect(
+      assessGlobalRegistryPolicy(
+        registryInput({
+          environment: {
+            npm_config_node_gyp: 'D:\\TEST\\node-gyp.js',
+            npm_config_user_agent: 'pnpm/11.22.0 npm/? node/v24.0.0 win32 x64',
+            pnpm_config_node_gyp: 'D:\\TEST\\node-gyp.js',
+            pnpm_config_strict_ssl: 'false',
+          },
+        }),
+      ),
+    ).toEqual({ changeAllowed: true, reason: null, publicAuthPresent: false });
+  });
+  it.each([
+    'onload-script',
+    'pnpmfile',
+    'global-pnpmfile',
+    'yarn-path',
+    'manage-package-manager-versions',
+    'node-options',
+  ])('refuses tool/plugin provenance for %s while allowing remove', (key) => {
+    const environmentKey = key.replace(/-/g, '_');
+    const sources: Partial<IGlobalRegistryInput>[] = [
+      { configs: [`${key}=TEST`] },
+      { environment: { [`npm_config_${environmentKey}`]: 'TEST' } },
+      {
+        environment: {
+          [`PNPM_CONFIG_${environmentKey.toUpperCase()}`]: 'TEST',
+        },
+      },
+    ];
+    for (const source of sources) {
+      expect(assessGlobalRegistryPolicy(registryInput(source))).toEqual({
+        changeAllowed: false,
+        reason: 'REGISTRY_CONFIG_UNSUPPORTED',
+        publicAuthPresent: false,
+      });
+      expect(
+        assessGlobalRegistryPolicy(
+          registryInput({ ...source, action: 'remove' }),
+        ),
+      ).toEqual({
+        changeAllowed: false,
+        reason: null,
+        publicAuthPresent: false,
+      });
+    }
+  });
   it.each(['https://registry.npmjs.org', 'https://registry.npmjs.org/'])(
     'allows public registry %s with public auth',
     (registry) => {
@@ -242,7 +311,6 @@ describe('registry change policy (remove remains offline-capable)', () => {
     { configs: ['registry=https://TEST-user:TEST-pass@registry.npmjs.org/'] },
     { configs: ['@test:registry=https://registry.npmjs.org/'] },
     { configs: ['registry=${TEST_REGISTRY}'] },
-    { configs: ['include=TEST.npmrc'] },
     { provenanceKnown: false },
     { environment: { NPM_CONFIG_REGISTRY: 'https://private.invalid/' } },
     { environment: { npm_config_registry: '${TEST_REGISTRY}' } },

@@ -106,3 +106,41 @@ export interface IGlobalRuntime {
     signal: AbortSignal,
   ): Promise<IRunnerTool>;
 }
+
+export interface IGlobalResolvedLocation extends IGlobalLocation {
+  cwd: string;
+  protectedPaths: readonly string[];
+  missingConfigPaths?: readonly string[];
+}
+export interface IGlobalCommand {
+  file: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}
+export interface IGlobalProbeOptions {
+  cwd: string;
+  env: Readonly<NodeJS.ProcessEnv>;
+  signal: AbortSignal;
+  timeout: number;
+  maxBuffer: { stdout: number; stderr: number };
+  shell: false;
+  extendEnv: false;
+  stdin: 'ignore';
+  encoding: 'buffer';
+  reject: false;
+}
+export interface IGlobalProbeResult {
+  stdout: Uint8Array;
+  stderr: Uint8Array;
+  exitCode: number | null;
+  terminationVerified: boolean;
+  overflowed?: boolean;
+  timedOut?: boolean;
+}
+// The injected launcher must bound capture and verify termination, including aborts.
+export type GlobalProbeSpawn = (
+  file: string,
+  args: readonly string[],
+  options: IGlobalProbeOptions,
+) => Promise<IGlobalProbeResult>;
