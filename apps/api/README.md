@@ -372,6 +372,135 @@ The optional deletion tests in `src/file-ops/file-ops.real-fs.spec.ts` delete re
 `PKGSTEWARD_REAL_FS_TEST_DIR` and `PKGSTEWARD_DESTRUCTIVE_FS_TEST=1` on Windows. They work only inside a new UUID
 folder of that directory, and leave two small `pkgsteward-test-*` folders in the Recycle Bin.
 
+## Global packages API
+
+List, remove or change an installed global package with **npm 11** on Windows. pnpm is listed as unavailable
+(`MANAGER_DISABLED`): pnpm 11 rejects the configuration flags this feature pins, so pnpm global packages are not
+probed or changed yet. Yarn is not supported.
+The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
+unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
+An explicit **Refresh** discovers locations through read-only manager queries: npm prefix/root/config/cache.
+Queries use a neutral working directory, not a scanned project;
+the tools may still write caches. GET requests and page loads only read retained RAM snapshots and never run commands.
+Preview and execute recheck the discovered locations and configuration; clients cannot supply paths, argv or environment.
+
+**Only change global packages you trust.** Their lifecycle and transitive code runs with your user privileges,
+without a sandbox, and can write across the machine, access the network and start subprocesses. Other programs
+using a removed or changed package are affected; the app cannot discover all consumers. Failure, cancellation or
+timeout may leave a package partly changed. Processes can escape tracking. After a backend crash, inspect and end
+leftover processes in Windows Task Manager before proceeding. There is no rollback.
+
+All routes below use `/api/v1/global-packages` and the standard response envelope, with `Cache-Control: no-store`.
+
+| Endpoint | Body and result |
+|---|---|
+| `GET /api/v1/global-packages` | `200` with inventory, availability, `asOf` and `stale`, or `data: null` before refresh |
+| `POST /api/v1/global-packages/inventory` | `{ requestId }`; `202` with `{ jobId, requestId, previewId, status }` |
+| `POST /api/v1/global-packages/versions` | `{ requestId, manager, package }`; `202` with a job whose completed snapshot contains `versions` and `tags` |
+| `POST /api/v1/global-packages/preview` | `{ requestId, manager, package, action, targetVersion? }`; `202` with a job whose ready snapshot contains `preview` |
+| `POST /api/v1/global-packages/execute` | `{ requestId, previewId, confirm: true, acknowledgedRisks: ["MACHINE_WIDE"], confirmText }`; `202` after preflight with the accepted mutation job |
+| `GET /api/v1/global-packages/jobs/latest` | `200` with the latest retained activity, or `data: null` |
+| `GET /api/v1/global-packages/jobs/:id` | `200` with job status, preview/version results, exit and cleanup state; no command or filesystem work |
+| `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
+| `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
+
+`manager` is `npm` or `pnpm` (pnpm jobs currently fail with `MANAGER_DISABLED`); `action` is `remove` or `change`. `targetVersion` is required only for change and
+must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
+Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
+are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
+
+### Preview, protection and registry policy
+
+- **Confirmation:** a ready preview lasts five minutes. Review manager/version, global root, bin directory,
+  current and resolved target version, declared bin changes and warnings. Every operation is high risk and
+  requires `confirm: true`, acknowledgement of `MACHINE_WIDE`, and the exact, case-sensitive server text:
+  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`. Whitespace is not trimmed.
+  Bin differences describe declared metadata, not all effects of scripts or transitive packages.
+- **Revalidation and replay:** execute rechecks tool, location, config, inventory, ownership, package/bin and
+  target metadata before mutation. Tags are resolved to an exact version and checked again; moved tags require
+  another preview. Wrong consent returns `400 VALIDATION_ERROR`. Changed, expired or consumed previews return
+  `409 CONFLICT` with `details.reason` such as `PREVIEW_CHANGED`, `PREVIEW_EXPIRED` or `PREVIEW_CONSUMED`.
+  The retained identical request/payload returns its job; mismatched reuse returns `REQUEST_MISMATCH`.
+  Unknown/evicted previews and jobs return `404 NOT_FOUND`. A lost response requires checking latest status;
+  do not automatically resend execute. Restart loses the in-memory receipt.
+- **Protected packages:** `npm`, `corepack`, `pnpm`, `yarn`, `@yarnpkg/cli`, `@yarnpkg/cli-dist` and `pkgsteward`.
+  Current or target bins named `node`, `npm`, `npx`, `pnpm`, `pnpx`, `yarn`, `yarnpkg`, `corepack` or `pkgsteward`
+  are also protected, case-insensitively, including their Windows shim extensions. Overlap with tool distributions,
+  the Node executable, app installation, source checkout or data directory is refused. Confirmation cannot override
+  protection. Linked packages are read-only (`LINKED_PACKAGE`); unsafe bins, collisions or incomplete ownership
+  prevent mutation (`BIN_CONFLICT`).
+- **Registry:** version lookup and change use only `https://registry.npmjs.org`. Public-registry login tokens in
+  user/global config do not disable change; the package manager can consume its config credentials. The app's HTTP
+  metadata requests do not forward credentials or follow redirects. A custom/mirror default registry, a scoped
+  registry matching the package, or unknown config/environment provenance disables lookup/change with
+  `REGISTRY_CONFIG_UNSUPPORTED`; remove remains allowed when location/protection checks pass, without metadata lookup.
+  Tool/plugin keys `onload-script`, `pnpmfile`, `global-pnpmfile`, `yarn-path`,
+  `manage-package-manager-versions` and `node-options` also disable change. Interpolation and conflicting or unsafe
+  location settings are refused. Config secrets are not returned or logged. A typed exact target still requires
+  online metadata; selecting the installed version returns `NO_VERSION_CHANGE`. Major changes, downgrades and
+  prereleases produce warnings.
+
+Other HTTP errors include `403 FORBIDDEN` for unsafe/protected targets, `409 CONFLICT` for busy or unsupported
+state/configuration (`RUNNING`, `LOCATION_AMBIGUOUS`, `CONFIG_UNSUPPORTED`, `LIMIT_EXCEEDED`),
+`429 RATE_LIMITED` and `503 SERVICE_UNAVAILABLE` for unavailable Windows/tool support. Use `code` and
+`details.reason`, not message text. A command's nonzero exit is a failed job, not a successful package change.
+
+### Fixed arguments and child environment
+
+Commands launch the verified JavaScript entry point through the backend's `node.exe`, using argument arrays,
+closed stdin and no shell launcher. Each mutation uses the manager's discovered locations as this fixed prefix:
+
+- npm: `--prefix <prefix> --userconfig <user-config> --globalconfig <global-config> --cache <cache>`
+
+For public-registry operations, append `--registry https://registry.npmjs.org`; removals under unsupported registry
+configuration omit it. npm then appends `--no-audit --no-fund --no-progress --update-notifier=false`.
+The following arguments come last:
+
+| Action | npm |
+|---|---|
+| Remove | `uninstall --global -- <name>` |
+| Change | `install --global -- <name>@<exact-version>` |
+
+No arbitrary arguments, elevation, tool-download fallback or automatic mutation retry is available. The child
+uses the command runner's sanitized environment: backend settings, `NODE_ENV`, `NODE_OPTIONS`, project-run
+markers and `npm_*` keys are stripped, and PATH retains absolute entries only. Global operations additionally
+strip `pnpm_config_*`, `PNPM_HOME`, `NODE_AUTH_TOKEN`, `COREPACK_NPM_TOKEN` and `YARN_*` keys before building it.
+Validated location overrides become explicit flags.
+Mutations force `CI=1`, disable Corepack downloads/network/auto-pinning, and disable color output.
+This controls launch configuration; it does not isolate lifecycle code.
+
+### Lifecycle, audit and limits
+
+- **Concurrency:** one global activity at a time across both managers, including refresh/version/preview jobs.
+  Execute shares the mutation lock with file operations and the project command runner, held through stop,
+  verification, audit and cleanup. Read-only global activities use their own slot without taking that lock;
+  execute does not wait for existing scans, disk measurements, analyses or file-operation previews.
+- **Timeout and stop:** `NPM_COMMAND_TIMEOUT_MS` bounds the activity, including preflight; empty/unset means no
+  time limit. Cancellation stops tracked processes and verifies termination using the runner's Windows process
+  cleanup. Unverified termination produces `termination_failed` and retains the lock. Cancel retries cleanup,
+  including pending finalization, without spawning the mutation again. Poll/log/cancel remain available.
+- **Results:** statuses are `running`, `stopping`, `completed`, `failed`, `cancelled`, `timed_out` and
+  `termination_failed`. Inspect `mutationSpawned`, `mayHaveChanged`, `exitCode`, `failureCode`,
+  `terminationVerified`, `gateHeld`, `auditWritten` and `refreshRequired`. Exit zero alone is insufficient;
+  completion also checks the package is absent after remove, or matches the target version/bins after change.
+  A failed postcondition reports `POSTCONDITION_FAILED`.
+- **Freshness:** any spawned mutation invalidates both managers' inventory and all previews. Inventory is
+  refreshed after verified stop; a failed refresh leaves stale/error state. Project scan entries, analyses and
+  disk-size caches are not refreshed by this feature. Inspect lifecycle side effects separately and explicitly
+  rescan, recheck or remeasure when needed.
+- **Audit:** `logs/dangerous-operations.jsonl` in the data folder records intent/result for
+  `global-packages.remove`, `global-packages.change` and `global-packages.cancel`, including job/target identity
+  and outcome/cleanup facts, without command output, environment or config secrets. Intent failure prevents
+  mutation; result-write failure retains the lock. Cancellation still attempts to stop processes if auditing fails.
+- **Retention and bounds:** one inventory and the latest activity/log live in RAM; restart loses them. Up to
+  16 previews are retained, each bounded to 256 KiB. Config files are limited to 1 MiB each / 8 MiB total;
+  inventory to 10,000 rows, depth 64 and 1 MiB per manifest / 32 MiB total. Query output is bounded to 1 MiB per
+  location query / 8 MiB per list, with 64 KiB diagnostic stderr. Version options are limited to 10,000;
+  metadata is bounded to 4 MiB per exact-version response / 64 MiB per packument, with at most four HTTP requests
+  concurrently. Limits fail explicitly rather than reporting an empty success. Output uses the runner's
+  1 MiB / 4,096-chunk ring and 64 KiB / 256-chunk pages; older output is dropped and reported. Logs are plain
+  text with filtering, but scripts can still print unrecognized secrets.
+
 ## Documentation
 
 - Project overview and setup: [`README.md`](../../README.md)

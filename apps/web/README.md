@@ -229,6 +229,67 @@ While the page is idle it checks about every 3 seconds for a running deletion, s
 tab, is picked up. After a reload the page also resumes a preview it started, using `sessionStorage`. A preview started in
 another tab cannot be resumed; wait for it to finish before starting a new one.
 
+## Global packages
+
+Open `/global-packages` to manage installed global packages with **npm 11**. The pnpm tab explains that pnpm global packages cannot be
+managed in this version yet. Yarn is not supported;
+missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
+retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
+and read the installed inventory. The npm tab shows tool version, global root, bin directory, package
+versions and bins, with an as-of time and stale indicator. Empty, unavailable, protected, linked and invalid
+states remain distinct; protected and linked packages have no mutation controls.
+
+**Only change global packages you trust.** Lifecycle and transitive code runs with your user privileges,
+without a sandbox, and can affect the whole machine. Other programs using the package may break. A failed,
+cancelled or timed-out change can leave the package partly changed. Processes can escape tracking; after a
+backend crash, inspect and end leftover processes in Windows Task Manager. There is no rollback.
+
+- **Remove or change:** Remove starts a preview. Change opens a target field accepting an exact version or
+  dist-tag; **Load versions** explicitly fetches public-registry choices, and **Preview** resolves the chosen
+  target to an exact version. Ranges, URLs, paths and command flags are unavailable. Custom/mirror registries,
+  matching scoped registries or unsupported tool/plugin configuration disable change; remove can remain available.
+  Public npm registry login tokens do not by themselves disable change. Package managers, Node/app files and
+  protected command bins cannot be changed here.
+- **Review and confirm:** the dialog shows manager/version, package, location, current → exact target (or removal),
+  declared bin additions/removals/replacements, high risk, and lifecycle/consumer/partial-change/crash warnings.
+  Tick the machine-wide risk acknowledgement and type the exact displayed text:
+  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`.
+  Cancel has initial focus. Previews expire after five minutes; changing manager/package/action/target clears
+  earlier consent. Expiry or a `409` conflict requires another preview; execution is never automatic.
+- **Track and stop:** the activity panel shows status, phase, exit code, signal, stop reason, warnings and plain-text
+  output. Cancel requests process termination. **Retry cleanup** retries pending termination/finalization while
+  the lock remains held, without running the mutation again. Only one global activity runs at a time across
+  both managers; mutations share the lock with file deletions and project commands. Leaving or hiding the page
+  does not cancel backend work. Empty `NPM_COMMAND_TIMEOUT_MS` means no time limit.
+- **Unknown outcomes:** a lost start/cancel response is unconfirmed. Refresh activity status to recover the latest
+  job; retry polling after a poll error. A lost job after restart/replacement does not prove processes stopped.
+  The page blocks new actions during unresolved tracking and never automatically retries execute or cancel.
+  Backend restart loses retained jobs and output; intent/result records remain in the audit log.
+- **Refresh after changes:** any spawned mutation invalidates inventory and previews for both managers, even on
+  failure, cancellation or timeout. Stale/refresh-required messages remain visible when refresh cannot finish;
+  use Refresh before relying on the package list again. This feature does not refresh project scan entries,
+  package analyses or disk sizes. Check possible lifecycle side effects separately and explicitly rescan,
+  recheck or remeasure when needed.
+
+Browser requests use same-origin Route Handlers; the server calls the backend:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/global-packages` | Read retained inventory without starting commands |
+| `POST /api/global-packages/inventory` | Explicitly refresh inventory |
+| `POST /api/global-packages/versions` | Load public registry versions/tags |
+| `POST /api/global-packages/preview` | Prepare a remove/change preview |
+| `POST /api/global-packages/execute` | Submit the displayed preview and explicit consent |
+| `GET /api/global-packages/jobs/latest` | Recover the latest activity |
+| `GET /api/global-packages/jobs/:id` | Read activity status and preview/version results |
+| `GET /api/global-packages/jobs/:id/logs?cursor=...` | Read output by cursor |
+| `POST /api/global-packages/jobs/:id/cancel` | Cancel or retry cleanup |
+
+Execute/cancel have no client timeout or automatic POST retry. Active tracking polls about once per second,
+pauses when hidden and resumes when visible. Logs are bounded plain text, with dropped output reported;
+filtering cannot hide every secret a script prints. For exact API bodies/status codes, protected names,
+registry rules, fixed command arguments and limits, see [Global packages API](../api/README.md#global-packages-api).
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:

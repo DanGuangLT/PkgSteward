@@ -17,6 +17,7 @@ import { ScannerModule } from '@/scanner/scanner.module';
 import { FileOpsModule } from '@/file-ops/file-ops.module';
 import { ProjectsModule } from '@/projects/projects.module';
 import { NpmRunnerModule } from '@/npm-runner/npm-runner.module';
+import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NpmRunnerModule } from '@/npm-runner/npm-runner.module';
     FileOpsModule,
     ProjectsModule,
     NpmRunnerModule,
+    GlobalPackagesModule,
   ],
   controllers: [AppController],
   providers: [

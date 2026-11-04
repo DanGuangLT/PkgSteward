@@ -1,0 +1,10 @@
+[
+  {
+    "name": "TEST-global-inventory",
+    "description": "TEST không phải yêu cầu nghiệp vụ",
+    "path": "D:\\TEST\\m7\\pnpm-global",
+    "dependencies": {
+      "@test/tool": { "version": "1.2.3", "path": "D:\\TEST\\m7\\pnpm-global\\node_modules\\@test\\tool" }
+    }
+  }
+]

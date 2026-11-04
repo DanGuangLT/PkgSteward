@@ -1,0 +1,472 @@
+import 'reflect-metadata';
+import { win32 } from 'node:path';
+import { AppException } from '@/common/exceptions/app.exception';
+import {
+  assertGlobalLocationsDistinct,
+  discoverGlobalLocation,
+  runGlobalProbe,
+} from '@/global-packages/global-location';
+import type { IGlobalLocationDeps } from '@/global-packages/global-location';
+import {
+  expectGlobalReason,
+  memoryFs,
+  probeResult,
+  TEST_PATHS as P,
+  testSpawn,
+  testLocation,
+  testTool,
+} from '@/global-packages/__fixtures__/global-adapters';
+import type { IGlobalCommand } from '@/global-packages/interfaces/global-packages.runtime';
+import * as runnerTools from '@/npm-runner/runner-tool';
+
+describe('bounded cancellable probe boundary', () => {
+  const command: IGlobalCommand = {
+    file: P.node,
+    args: [testTool('npm').entry!, 'root', '--global'],
+    cwd: P.cwd,
+    env: { CI: '1' },
+  };
+  it.each(['path', 'list'] as const)(
+    'applies finite launch and capture options to %s',
+    async (kind) => {
+      const spawn = testSpawn();
+      const signal = new AbortController().signal;
+      await runGlobalProbe(command, kind, signal, spawn);
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(spawn).toHaveBeenCalledWith(
+        command.file,
+        command.args,
+        expect.objectContaining({
+          cwd: P.cwd,
+          env: command.env,
+          shell: false,
+          extendEnv: false,
+          stdin: 'ignore',
+          encoding: 'buffer',
+          reject: false,
+          timeout: 30_000,
+          maxBuffer: {
+            stdout: (kind === 'path' ? 1 : 8) * 1024 * 1024,
+            stderr: 64 * 1024,
+          },
+        }),
+      );
+      expect(spawn.mock.calls[0][2].signal).toBeInstanceOf(AbortSignal);
+    },
+  );
+  it.each([
+    ['path', 1024 * 1024 + 1],
+    ['list', 8 * 1024 * 1024 + 1],
+  ] as const)('rejects oversized %s output', async (kind, size) => {
+    const spawn = testSpawn().mockResolvedValue(
+      probeResult({}, { stdout: Buffer.alloc(size) }),
+    );
+    await expectGlobalReason(
+      () => runGlobalProbe(command, kind, new AbortController().signal, spawn),
+      'LIMIT_EXCEEDED',
+    );
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+  it('refuses stderr overflow rather than accepting partial capture', async () => {
+    const spawn = testSpawn().mockResolvedValue(
+      probeResult({}, { stderr: Buffer.alloc(64 * 1024 + 1) }),
+    );
+    await expectGlobalReason(
+      () =>
+        runGlobalProbe(command, 'path', new AbortController().signal, spawn),
+      'LIMIT_EXCEEDED',
+    );
+  });
+  it('does not expose ANSI, control characters or raw probe stderr in errors', async () => {
+    const spawn = testSpawn().mockResolvedValue(
+      probeResult(
+        {},
+        {
+          exitCode: 1,
+          stderr: Buffer.from('\u001b[31mTEST-private-config\u0000\u001b[0m'),
+        },
+      ),
+    );
+    let caught: unknown;
+    try {
+      await runGlobalProbe(
+        command,
+        'path',
+        new AbortController().signal,
+        spawn,
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AppException);
+    expect((caught as AppException).details).toMatchObject({
+      reason: 'COMMAND_FAILED',
+    });
+    expect(JSON.stringify(caught)).not.toMatch(
+      /TEST-private-config|\\u001b|\\u0000/,
+    );
+  });
+  it('refuses unconfirmed termination', async () => {
+    const spawn = testSpawn().mockResolvedValue(
+      probeResult({}, { terminationVerified: false }),
+    );
+    await expectGlobalReason(
+      () =>
+        runGlobalProbe(command, 'path', new AbortController().signal, spawn),
+      'TERMINATION_UNCONFIRMED',
+    );
+  });
+  it('does not spawn after cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('TEST cancelled'));
+    const spawn = testSpawn();
+    await expect(
+      runGlobalProbe(command, 'path', controller.signal, spawn),
+    ).rejects.toThrow('TEST cancelled');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+  it('passes in-flight abort to the real probe and consumes rejection without retry', async () => {
+    const controller = new AbortController();
+    const spawn = testSpawn().mockImplementation(
+      (_file, _args, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            'abort',
+            () => reject(new Error('TEST aborted')),
+            { once: true },
+          );
+        }),
+    );
+    const result = runGlobalProbe(command, 'path', controller.signal, spawn);
+    const rejected = expect(result).rejects.toThrow();
+    await Promise.resolve();
+    controller.abort();
+    await rejected;
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('verified installed-tool location discovery', () => {
+  const controller = () => new AbortController();
+  function setup() {
+    const memory = memoryFs();
+    for (const value of Object.values(P))
+      memory.put(value, { directory: true });
+    memory.put(P.node, { text: 'TEST node identity' });
+    memory.put(P.userconfig, { text: '' });
+    memory.put(P.globalconfig, { text: '' });
+    memory.put(win32.join(P.prefix, 'node_modules'), { directory: true });
+    memory.put(win32.join(P.global, 'node_modules'), { directory: true });
+    const outputs = new Map<string, string>([
+      ['prefix', P.prefix],
+      ['root:npm', win32.join(P.prefix, 'node_modules')],
+      ['root:pnpm', win32.join(P.global, 'node_modules')],
+      ['global-dir', P.global],
+      ['bin', P.bin],
+      ['store', P.store],
+      ['userconfig', P.userconfig],
+      ['globalconfig', P.globalconfig],
+      ['cache', P.cache],
+    ]);
+    const spawn = testSpawn().mockImplementation((_file, args) => {
+      const manager = args[0] === testTool('npm').entry ? 'npm' : 'pnpm';
+      const key = args.includes('root')
+        ? `root:${manager}`
+        : args.includes('bin')
+          ? 'bin'
+          : args.includes('store')
+            ? 'store'
+            : args.at(-1)!;
+      return Promise.resolve(
+        probeResult(null, {
+          stdout: Buffer.from(`${outputs.get(key) ?? ''}\r\n`),
+        }),
+      );
+    });
+    const makeDirectory = jest
+      .fn<Promise<void>, [string]>()
+      .mockImplementation((path) => {
+        memory.put(path, { directory: true });
+        return Promise.resolve();
+      });
+    const deps: IGlobalLocationDeps = {
+      fs: memory.fs,
+      environment: { USERPROFILE: P.profile, PATH: 'D:\\TEST\\AppData\\npm' },
+      execPath: P.node,
+      paths: {
+        cacheDir: win32.dirname(P.cwd),
+        appInstallDir: P.app,
+        sourceCheckoutDir: P.source,
+        dataDir: P.data,
+      },
+      scannedProjectPaths: ['D:\\TEST\\project'],
+      signal: controller().signal,
+      spawn,
+      makeDirectory,
+    };
+    return { ...memory, deps, spawn, outputs, makeDirectory };
+  }
+  beforeEach(() => {
+    jest
+      .spyOn(runnerTools, 'resolveRunnerTool')
+      .mockImplementation((manager) => {
+        if (manager !== 'npm' && manager !== 'pnpm')
+          throw new Error('TEST unsupported manager');
+        return Promise.resolve(testTool(manager));
+      });
+    jest
+      .spyOn(runnerTools, 'revalidateRunnerTool')
+      .mockResolvedValue(undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+  it.each(['npm', 'pnpm'] as const)(
+    'uses M6 resolver and derives canonical %s tuple',
+    async (manager) => {
+      const { deps, spawn } = setup();
+      const location = await discoverGlobalLocation(manager, deps);
+      expect(jest.mocked(runnerTools.resolveRunnerTool)).toHaveBeenCalledWith(
+        manager,
+        expect.objectContaining({
+          execPath: P.node,
+          platform: 'win32',
+          projectPaths: deps.scannedProjectPaths,
+        }),
+        deps.fs,
+      );
+      expect(location).toMatchObject({
+        manager,
+        tool: testTool(manager),
+        cwd: P.cwd,
+        globalRoot: win32.join(
+          manager === 'npm' ? P.prefix : P.global,
+          'node_modules',
+        ),
+        binDir: manager === 'npm' ? P.prefix : P.bin,
+        userConfig: P.userconfig,
+        globalConfig: P.globalconfig,
+      });
+      expect(location.configIdentities).toHaveLength(2);
+      expect(location.configIdentities[0].sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(spawn).toHaveBeenCalledTimes(manager === 'npm' ? 5 : 6);
+      for (const [file, args, options] of spawn.mock.calls) {
+        expect(file).toBe(P.node);
+        expect(args[0]).toBe(testTool(manager).entry);
+        expect(args).not.toContain('--version');
+        expect(options.cwd).toBe(P.cwd);
+      }
+    },
+  );
+  it('protects distributions and the Node file, never the Node directory', async () => {
+    const { deps } = setup();
+    const location = await discoverGlobalLocation('npm', deps);
+    expect([...location.protectedPaths].sort()).toEqual(
+      [P.npm, P.pnpm, P.node, P.app, P.source, P.data].sort(),
+    );
+    expect(location.protectedPaths).not.toContain(win32.dirname(P.node));
+  });
+  it('allows a prefix inside the Node install directory', async () => {
+    const { deps, outputs, put } = setup();
+    const prefix = win32.dirname(P.node);
+    outputs.set('prefix', prefix);
+    outputs.set('root:npm', win32.join(prefix, 'node_modules'));
+    put(win32.join(prefix, 'node_modules'), { directory: true });
+    expect((await discoverGlobalLocation('npm', deps)).prefix).toBe(prefix);
+  });
+  it.each([
+    'TOOL_NOT_FOUND',
+    'TOOL_VERSION_MISMATCH',
+    'TOOL_LAYOUT_UNSUPPORTED',
+  ] as const)(
+    'propagates %s and never probes a shim or fallback',
+    async (reason) => {
+      const { deps, spawn } = setup();
+      jest
+        .mocked(runnerTools.resolveRunnerTool)
+        .mockRejectedValue(runnerTools.runnerFailure(reason));
+      await expectGlobalReason(
+        () => discoverGlobalLocation('npm', deps),
+        reason,
+      );
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    '',
+    'undefined',
+    'null',
+    'D:\\TEST\\one\nD:\\TEST\\two',
+    'relative',
+    '\\\\server\\share',
+    '\\\\?\\D:\\TEST',
+    'D:\\',
+    P.profile,
+    'C:\\Windows\\Temp',
+    P.app,
+    P.source,
+    P.data,
+    'D:\\TEST\\project',
+    'D:\\TEST\\project\\global',
+  ])('refuses unsafe or ambiguous prefix %p', async (prefix) => {
+    const { deps, outputs, put } = setup();
+    outputs.set('prefix', prefix);
+    outputs.set('root:npm', win32.join(prefix, 'node_modules'));
+    put(prefix, { directory: true });
+    put(win32.join(prefix, 'node_modules'), { directory: true });
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+  it('refuses a global root that contradicts the returned prefix', async () => {
+    const { deps, outputs } = setup();
+    outputs.set('root:npm', 'D:\\TEST\\other\\node_modules');
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+  it('does not guess pnpm global-dir when the probe omits it', async () => {
+    const { deps, outputs } = setup();
+    outputs.set('global-dir', 'undefined');
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+  it('rejects redirected ancestors even when a leaf realpath appears safe', async () => {
+    const { deps, put } = setup();
+    put('D:\\TEST', { directory: true, link: true, real: 'E:\\TEST' });
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+  it('never creates a missing global layout', async () => {
+    const { deps, outputs, makeDirectory } = setup();
+    outputs.set('prefix', 'D:\\TEST\\missing');
+    outputs.set('root:npm', 'D:\\TEST\\missing\\node_modules');
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+    expect(makeDirectory.mock.calls.every(([path]) => path === P.cwd)).toBe(
+      true,
+    );
+  });
+  it('rejects a nonempty neutral cwd rather than cleaning it', async () => {
+    const { deps, readdir } = setup();
+    readdir.mockResolvedValue(['package.json']);
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'CONFIG_UNSUPPORTED',
+    );
+  });
+  it('refuses a pnpm bin override that disagrees with the discovered bin', async () => {
+    const { deps } = setup();
+    deps.environment = {
+      ...deps.environment,
+      PNPM_HOME: 'D:\\TEST\\other-bin',
+    };
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+  it.each(['package.json', '.npmrc', 'pnpm-workspace.yaml', '.pnpmfile.cjs'])(
+    'rejects a project/config/plugin ancestor containing %s',
+    async (name) => {
+      const { deps, put, spawn } = setup();
+      put(win32.join(win32.dirname(P.cwd), name), {
+        text: 'TEST unexpected ancestor',
+      });
+      await expectGlobalReason(
+        () => discoverGlobalLocation('npm', deps),
+        'CONFIG_UNSUPPORTED',
+      );
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
+  it('checks cancellation before discovery', async () => {
+    const { deps, spawn } = setup();
+    const abort = controller();
+    abort.abort(new Error('TEST stop'));
+    deps.signal = abort.signal;
+    await expect(discoverGlobalLocation('npm', deps)).rejects.toThrow(
+      'TEST stop',
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+  it('preserves a resolver identity change and never starts a probe', async () => {
+    const { deps, spawn } = setup();
+    jest
+      .mocked(runnerTools.revalidateRunnerTool)
+      .mockRejectedValue(runnerTools.runnerFailure('INPUT_CHANGED'));
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'INPUT_CHANGED',
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+  it('stops discovery after a cancellation at a probe await boundary', async () => {
+    const { deps, spawn } = setup();
+    const abort = controller();
+    deps.signal = abort.signal;
+    spawn.mockImplementationOnce(() => {
+      abort.abort(new Error('TEST cancelled after probe'));
+      return Promise.resolve(
+        probeResult(null, { stdout: Buffer.from(P.prefix) }),
+      );
+    });
+    await expect(discoverGlobalLocation('npm', deps)).rejects.toThrow(
+      'TEST cancelled after probe',
+    );
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+  it.each([P.userconfig, P.globalconfig])(
+    'refuses a redirected config %s',
+    async (path) => {
+      const { deps, put, open } = setup();
+      put(path, { link: true, real: 'E:\\TEST\\outside.npmrc' });
+      await expectGlobalReason(
+        () => discoverGlobalLocation('npm', deps),
+        'CONFIG_UNSUPPORTED',
+      );
+      expect(
+        open.mock.calls.some(([opened]) => opened.startsWith('E:\\')),
+      ).toBe(false);
+    },
+  );
+  it('omits source-checkout protection only when there is no source checkout', async () => {
+    const { deps } = setup();
+    deps.paths.sourceCheckoutDir = null;
+    const result = await discoverGlobalLocation('npm', deps);
+    expect(result.protectedPaths).not.toContain(P.source);
+    expect(result.protectedPaths).toEqual(
+      expect.arrayContaining([P.npm, P.pnpm, P.node, P.app, P.data]),
+    );
+  });
+});
+
+describe('cross-manager location ambiguity', () => {
+  it('accepts distinct discovered roots and bins without changing their tuples', () => {
+    const locations = [testLocation('npm'), testLocation('pnpm')];
+    const before = JSON.stringify(locations);
+    expect(() => assertGlobalLocationsDistinct(locations)).not.toThrow();
+    expect(JSON.stringify(locations)).toBe(before);
+  });
+  it.each(['same-root', 'nested-root', 'same-bin'] as const)(
+    'refuses %s across managers',
+    async (kind) => {
+      const npm = testLocation('npm');
+      const pnpm = testLocation('pnpm');
+      if (kind === 'same-root') pnpm.globalRoot = npm.globalRoot.toUpperCase();
+      if (kind === 'nested-root')
+        pnpm.globalRoot = win32.join(npm.globalRoot, 'nested');
+      if (kind === 'same-bin') pnpm.binDir = npm.binDir;
+      await expectGlobalReason(
+        () => assertGlobalLocationsDistinct([npm, pnpm]),
+        'LOCATION_AMBIGUOUS',
+      );
+    },
+  );
+});

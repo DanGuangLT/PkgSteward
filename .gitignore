@@ -24,8 +24,9 @@ apps/api/docs_API/
 # Logs
 logs/
 *.log
-# Route Handler GET /api/npm-runs/[id]/logs là mã nguồn, không phải log
+# Route Handler GET /api/npm-runs/[id]/logs và /api/global-packages/jobs/[id]/logs là mã nguồn, không phải log
 !/apps/web/app/api/npm-runs/\[id\]/logs/
+!/apps/web/app/api/global-packages/jobs/\[id\]/logs/
 
 # Dữ liệu runtime khi chạy từ mã nguồn (PKGSTEWARD_DATA_DIR mặc định)
 /PkgStewardLog/
