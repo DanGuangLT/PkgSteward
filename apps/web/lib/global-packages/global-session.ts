@@ -66,6 +66,9 @@ export interface GlobalSession {
   getSnapshot(): GlobalState
 }
 
+// The backend reports the command result before postcondition, audit and gate release finish: only phase "done" is final.
+const settling = (job: GlobalJob): boolean => job.status === "running" || job.status === "stopping" || job.phase !== "done"
+
 export function initialGlobalState(snapshot: GlobalSnapshot | null = null): GlobalState {
   return { phase: "idle", generation: 0, snapshot, snapshotError: null, requestId: null, previewId: null,
     jobId: null, job: null, logs: initialRunnerLogs(), form: initialGlobalPreviewForm(), error: null,
@@ -123,7 +126,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       || !Number.isSafeInteger(job.endCursor) || job.endCursor < 0) invalidResponse()
   }
   function finishDrain() {
-    if (state.job && state.job.status !== "running" && state.job.status !== "stopping" && !needsLogDrain(state.logs, state.job)) {
+    if (state.job && !settling(state.job) && !needsLogDrain(state.logs, state.job)) {
       publish({ ...state, phase: "idle" })
     }
   }
@@ -146,7 +149,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const snapshot = changedMutation && state.snapshot ? { ...state.snapshot, stale: true } : state.snapshot
     publish({ ...state, job, previewId: job.previewId, form, snapshot, cancelPending: false, cancelUnknown: false, error: null, pollError: null })
     if (disposed || generation !== state.generation) return
-    const terminal = job.status !== "running" && job.status !== "stopping"
+    const terminal = !settling(job)
     if (terminal && (job.kind === "inventory" || job.mutationSpawned)) {
       const key = `${job.jobId}:${job.gateHeld}:${job.refreshRequired}`
       if (refreshedJob !== key) {
@@ -163,7 +166,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   function canPoll(): boolean {
     return !disposed && visibility.isVisible() && state.phase === "tracking" && state.jobId !== null
       && !state.cancelPending && !state.pollError && (!commandRequest || (commandKind === "start" && state.job !== null))
-      && (!state.job || state.job.status === "running" || state.job.status === "stopping" || needsLogDrain(state.logs, state.job))
+      && (!state.job || settling(state.job) || needsLogDrain(state.logs, state.job))
   }
   async function poll(): Promise<void> {
     if (pollRequest || !canPoll() || !state.jobId) return
@@ -173,7 +176,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const generation = state.generation
     const id = state.jobId
     const cursor = state.logs.cursor
-    const needStatus = !state.job || state.job.status === "running" || state.job.status === "stopping"
+    const needStatus = !state.job || settling(state.job)
     pollRequest = controller
     // Keep this slot until both reads settle, even when abort is ignored.
     const [status, output] = await Promise.allSettled([

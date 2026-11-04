@@ -209,6 +209,24 @@ test("all terminal states drain final logs and notify mutation once; no status l
   }
 })
 
+test("a completed mutation still finalizing keeps polling until phase done, then notifies once", async t => {
+  const h = harness(t)
+  await h.mutate()
+  const finalizing = terminal({ kind: "mutation", previewId, mutationSpawned: true, mayHaveChanged: true, phase: "finalizing",
+    finishedAt: null, gateHeld: true, auditWritten: false })
+  await h.cycle(finalizing, page([0]))
+  assert.deepEqual(h.mutations, [])
+  assert.equal(h.all("snapshot").length, 0)
+  await h.tick(1000)
+  assert.equal(h.all("get").length, 2)
+  await h.cycle(terminal({ kind: "mutation", previewId, mutationSpawned: true, mayHaveChanged: true }), page([0]))
+  assert.deepEqual(h.mutations, [id])
+  assert.equal(h.session.getSnapshot().job.gateHeld, false)
+  assert.equal(h.all("snapshot").length, 1)
+  await h.tick(5000)
+  assert.equal(h.all("get").length, 2)
+})
+
 test("inventory completion reads snapshot without a new activity; refresh failure keeps stale state", async t => {
   for (const failed of [false, true]) {
     const h = harness(t)
