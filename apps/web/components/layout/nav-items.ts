@@ -14,5 +14,6 @@ export const navItems = [
   { href: "/", labelKey: "projects" },
   { href: "/disk-usage", labelKey: "diskUsage" },
   { href: "/cleanup", labelKey: "cleanup" },
+  { href: "/global-packages", labelKey: "globalPackages" },
   { href: "/design-system", labelKey: "designSystem" },
 ] as const satisfies readonly NavItem[]
