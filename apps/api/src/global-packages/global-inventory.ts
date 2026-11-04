@@ -116,13 +116,22 @@ export function parseGlobalInventory(
         : Array.isArray(raw) && raw.length === 1
           ? raw[0]
           : null;
+    // npm 11 omits `dependencies` when the global prefix has no packages (real trial).
+    const dependencies =
+      manager === 'npm' &&
+      isProjectRecord(root) &&
+      !Object.hasOwn(root, 'dependencies')
+        ? {}
+        : isProjectRecord(root)
+          ? root.dependencies
+          : null;
     if (
       !isProjectRecord(root) ||
       partial(root) ||
-      !isProjectRecord(root.dependencies)
+      !isProjectRecord(dependencies)
     )
       throw failed();
-    const entries = Object.entries(root.dependencies);
+    const entries = Object.entries(dependencies);
     if (entries.length > 10_000) throw failed();
     const packages: IGlobalListedPackage[] = [];
     for (const [name, entry] of entries) {

@@ -48,10 +48,17 @@ describe('strict bounded global list parsers', () => {
       ).toEqual([]);
     },
   );
+  it.each([{}, { name: 'npm-prefix' }])(
+    'accepts an npm root without a dependency map as empty (npm 11 omits it for an empty prefix) %p',
+    (value) => {
+      expect(parseGlobalInventory('npm', probeResult(value))).toEqual([]);
+    },
+  );
   it.each([
     ['npm', []],
-    ['npm', {}],
     ['npm', null],
+    ['npm', { error: { code: 'ELSPROBLEMS' } }],
+    ['npm', { problems: ['TEST missing'] }],
     ['npm', { dependencies: [] }],
     ['pnpm', {}],
     ['pnpm', []],
