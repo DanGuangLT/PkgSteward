@@ -74,6 +74,7 @@ interface IActiveGlobal {
   cancelRequested: boolean;
   cancelIntent: boolean;
   cancelResult: string | null;
+  preflight: Promise<void> | null;
 }
 
 const fail = (reason: GlobalReasonCode, status = 409): AppException =>
@@ -215,17 +216,36 @@ export class GlobalPackagesService
       throw error;
     }
     const accepted = this.startSnapshot(active.activity);
+    let preflightReady!: () => void;
+    let preflightFailed!: (error: unknown) => void;
+    active.preflight = new Promise<void>((resolve, reject) => {
+      preflightReady = resolve;
+      preflightFailed = reject;
+    });
+    // Direct service callers may only poll; HTTP observes this rejection separately.
+    void active.preflight.catch(() => undefined);
     active.activity.run(async (activity) => {
-      const facts = await this.executeFacts(active.request!, activity);
-      activity.checkpoint();
-      assertGlobalPreviewUnchanged(record.facts, facts);
-      // TTL and consumption are checked again after all awaited preflight work.
-      const ready = this.previews.get(request.previewId);
-      validateGlobalConfirmation(ready.preview, request);
-      this.previews.consume(request.previewId);
-      active.consumed = true;
-      active.facts = structuredClone(facts);
-      active.location = facts.location as IGlobalResolvedLocation;
+      let facts: IGlobalPreviewFacts;
+      try {
+        facts = await this.executeFacts(active.request!, activity);
+        activity.checkpoint();
+        assertGlobalPreviewUnchanged(record.facts, facts);
+        // TTL and consumption are checked again after awaited preflight work.
+        const ready = this.previews.get(request.previewId);
+        validateGlobalConfirmation(ready.preview, request);
+        this.previews.consume(request.previewId);
+        active.consumed = true;
+        active.facts = structuredClone(facts);
+        active.location = facts.location as IGlobalResolvedLocation;
+      } catch (error) {
+        if (activity.signal.aborted) preflightReady();
+        else {
+          if (reasonOf(error) === 'PREVIEW_CHANGED') this.previews.clear();
+          preflightFailed(error);
+        }
+        throw error;
+      }
+      preflightReady();
       try {
         await this.appendMutation(
           active,
@@ -257,6 +277,11 @@ export class GlobalPackagesService
       await activity.launch(command);
     });
     return await Promise.resolve(accepted);
+  }
+
+  async waitForPreflight(id: string): Promise<void> {
+    const active = this.requireJob(id);
+    await active.preflight;
   }
 
   getLatest(): IGlobalJob | null {
@@ -422,6 +447,7 @@ export class GlobalPackagesService
       cancelRequested: false,
       cancelIntent: false,
       cancelResult: null,
+      preflight: null,
     };
     this.current = active;
     return active;

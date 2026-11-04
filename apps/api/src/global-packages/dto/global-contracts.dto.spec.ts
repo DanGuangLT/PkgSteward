@@ -224,6 +224,12 @@ describe('global execute and polling DTO contracts', () => {
   ])('execute rejects client facts %p', (extra) => {
     expect(errors(GlobalExecuteDto, { ...consent, ...extra })).not.toEqual([]);
   });
+  it.each(['0', '42'])('accepts canonical query-string cursor %p', (cursor) => {
+    expect(errors(GlobalLogQueryDto, { cursor })).toEqual([]);
+    expect(plainToInstance(GlobalLogQueryDto, { cursor }).cursor).toBe(
+      Number(cursor),
+    );
+  });
   it('defaults an absent cursor to zero', () => {
     expect(plainToInstance(GlobalLogQueryDto, {}).cursor).toBe(0);
     expect(errors(GlobalLogQueryDto, {})).toEqual([]);
@@ -241,7 +247,8 @@ describe('global execute and polling DTO contracts', () => {
     Infinity,
     Number.MAX_SAFE_INTEGER + 1,
     null,
-    '0',
+    '-1',
+    '1e2',
     ' 1',
     true,
   ])('rejects cursor without coercion %p', (cursor) => {

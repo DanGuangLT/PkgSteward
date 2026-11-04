@@ -15,6 +15,8 @@ export interface IGlobalPackagesService {
   versions(input: IGlobalVersionsRequest): Promise<IGlobalJobStart>;
   preview(input: IGlobalPreviewRequest): Promise<IGlobalJobStart>;
   execute(input: IGlobalExecuteRequest): Promise<IGlobalJobStart>;
+  // HTTP waits for fresh-facts validation while provisional jobs remain pollable.
+  waitForPreflight?(id: string): Promise<void>;
   getLatest(): IGlobalJob | null;
   getJob(id: string): IGlobalJob;
   getLogs(id: string, cursor: number): IGlobalLogPage;

@@ -153,6 +153,8 @@ export type GlobalProbeSpawn = (
 ) => Promise<IGlobalProbeResult>;
 
 export const GLOBAL_PACKAGES_RUNTIME = Symbol('GLOBAL_PACKAGES_RUNTIME');
+export const GLOBAL_PACKAGES_FS = Symbol('GLOBAL_PACKAGES_FS');
+export const GLOBAL_PACKAGES_PROCESS = Symbol('GLOBAL_PACKAGES_PROCESS');
 
 export interface IGlobalServiceRuntime extends IGlobalRuntime {
   platform: NodeJS.Platform;

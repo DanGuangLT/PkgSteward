@@ -90,9 +90,15 @@ export async function readGlobalDirectory(
 }
 
 // M6 owns actual execa launch, output drain and verified process-tree stopping.
+export interface IGlobalProbeBindings {
+  launch?: typeof launchRun;
+  retain?(process: IRunProcess): void;
+  launchFailed?(): void;
+}
 export function createGlobalProbeSpawn(
   tool: IRunnerTool,
   deps: IRunProcessDeps,
+  bindings: IGlobalProbeBindings = {},
 ): GlobalProbeSpawn {
   return async (file, args, options) => {
     options.signal.throwIfAborted();
@@ -115,30 +121,37 @@ export function createGlobalProbeSpawn(
       stop.abort(new Error('Probe deadline exceeded'));
     }, options.timeout);
     try {
-      const process: IRunProcess = launchRun(
-        {
-          file,
-          args: [...args],
-          cwd: options.cwd,
-          manager: tool.manager,
-          version: tool.version,
-        },
-        options.env,
-        {
-          signal,
-          onExit: () => undefined,
-          onOutput: (stream: 'stdout' | 'stderr', chunk: Buffer) => {
-            sizes[stream] += chunk.byteLength;
-            if (sizes[stream] > options.maxBuffer[stream]) {
-              overflowed = true;
-              if (!signal.aborted)
-                stop.abort(new Error('Probe capture limit exceeded'));
-            } else if (stream === 'stdout' && !overflowed)
-              output.push(Buffer.from(chunk));
+      let process: IRunProcess;
+      try {
+        process = (bindings.launch ?? launchRun)(
+          {
+            file,
+            args: [...args],
+            cwd: options.cwd,
+            manager: tool.manager,
+            version: tool.version,
           },
-        },
-        deps,
-      );
+          options.env,
+          {
+            signal,
+            onExit: () => undefined,
+            onOutput: (stream: 'stdout' | 'stderr', chunk: Buffer) => {
+              sizes[stream] += chunk.byteLength;
+              if (sizes[stream] > options.maxBuffer[stream]) {
+                overflowed = true;
+                if (!signal.aborted)
+                  stop.abort(new Error('Probe capture limit exceeded'));
+              } else if (stream === 'stdout' && !overflowed)
+                output.push(Buffer.from(chunk));
+            },
+          },
+          deps,
+        );
+      } catch (error) {
+        bindings.launchFailed?.();
+        throw error;
+      }
+      bindings.retain?.(process);
       const result: IRunProcessExit = await process.settled;
       return {
         stdout: Buffer.concat(output),
