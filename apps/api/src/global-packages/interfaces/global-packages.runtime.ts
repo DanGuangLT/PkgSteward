@@ -8,6 +8,11 @@ import type {
   GlobalManager,
   IGlobalBin,
 } from '@/global-packages/interfaces/global-packages.types';
+import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
+import type {
+  IRunProcess,
+  IRunProcessCallbacks,
+} from '@/npm-runner/runner-process';
 
 export const GLOBAL_ENVIRONMENT_KEYS = [
   'npm_config_prefix',
@@ -94,6 +99,8 @@ export interface IGlobalPreviewFacts {
   current: IGlobalPackageFacts;
   target: IGlobalTargetFacts | null;
   binOwners: IGlobalBinOwner[];
+  registryChangeAllowed?: boolean;
+  locations?: IGlobalLocation[];
 }
 // Infrastructure inputs only; no controller accepts paths, argv or environment.
 export interface IGlobalRuntime {
@@ -144,3 +151,41 @@ export type GlobalProbeSpawn = (
   args: readonly string[],
   options: IGlobalProbeOptions,
 ) => Promise<IGlobalProbeResult>;
+
+export const GLOBAL_PACKAGES_RUNTIME = Symbol('GLOBAL_PACKAGES_RUNTIME');
+
+export interface IGlobalServiceRuntime extends IGlobalRuntime {
+  platform: NodeJS.Platform;
+  execPath: string;
+  paths: {
+    cacheDir: string;
+    appInstallDir: string;
+    sourceCheckoutDir: string | null;
+    dataDir: string;
+  };
+  scannedProjectPaths(): readonly string[];
+  makeDirectory(path: string): Promise<void>;
+  probe: GlobalProbeSpawn;
+  fetcher: typeof fetch;
+  launch: GlobalMutationLaunch;
+  timeoutMs: number | undefined;
+  uuid(): string;
+  setTimer(callback: () => void, milliseconds: number): unknown;
+  clearTimer(handle: unknown): void;
+  gate: {
+    tryEnter(): symbol | null;
+    leave(token: symbol): void;
+  };
+  audit: IGlobalAuditSink;
+  // Must retry stop/verification of retained probe identities, never launch another probe.
+  verifyProbeTermination?(): Promise<boolean>;
+}
+
+export interface IGlobalAuditSink {
+  append(record: IAuditRecord): Promise<void>;
+}
+
+export type GlobalMutationLaunch = (
+  command: IGlobalCommand,
+  callbacks: IRunProcessCallbacks,
+) => IRunProcess;
