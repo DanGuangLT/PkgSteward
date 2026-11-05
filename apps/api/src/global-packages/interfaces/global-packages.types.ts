@@ -11,8 +11,7 @@ import type {
 
 export const GLOBAL_MANAGERS = ['npm', 'pnpm'] as const;
 export type GlobalManager = (typeof GLOBAL_MANAGERS)[number];
-// pnpm 11 CLI rejects the pinned config flags (--userconfig/--globalconfig) and derives its
-// global bin dir differently: listed but never probed or changed until its own support lands.
+// pnpm 11 remains disabled until config, inventory and integration checks pass.
 export const GLOBAL_DISABLED_MANAGERS: readonly GlobalManager[] = ['pnpm'];
 export const GLOBAL_ACTIONS = ['remove', 'change'] as const;
 export type GlobalAction = (typeof GLOBAL_ACTIONS)[number];
@@ -46,6 +45,8 @@ export const GLOBAL_REASON_CODES = [
   'INVENTORY_FAILED',
   'POSTCONDITION_FAILED',
   'MANAGER_DISABLED',
+  'PNPM_GLOBAL_NOT_CONFIGURED',
+  'GLOBAL_GROUP_UNSUPPORTED',
 ] as const;
 export type GlobalReasonCode = (typeof GLOBAL_REASON_CODES)[number];
 export const GLOBAL_WARNING_CODES = [

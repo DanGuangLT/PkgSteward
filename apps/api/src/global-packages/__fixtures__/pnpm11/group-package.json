@@ -1,0 +1,5 @@
+{
+  "TEST": "không phải yêu cầu nghiệp vụ; hand-written single-dependency pnpm 11 group",
+  "private": true,
+  "dependencies": { "is-number": "7.0.0" }
+}

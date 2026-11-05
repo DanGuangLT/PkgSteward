@@ -1,0 +1,19 @@
+{
+  "TEST": "không phải yêu cầu nghiệp vụ; hand-written RT0b shape, links are data only",
+  "root": "D:\\TEST\\pnpm-global\\v11",
+  "index": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "installDir": "81fc-1a1aa104925-e77952ba3460596d",
+  "files": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "node_modules/.modules.yaml",
+    "node_modules/.package-map.json",
+    "node_modules/.pnpm/lock.yaml"
+  ],
+  "packageLink": "node_modules/is-number",
+  "packageTarget": "D:\\TEST\\pnpm-store\\v11\\links\\@\\is-number\\7.0.0\\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\node_modules\\is-number",
+  "packageManifest": { "name": "is-number", "version": "7.0.0" },
+  "binExample": { "name": "semver", "version": "7.7.3", "bin": { "semver": "bin/semver.js" } },
+  "globalShims": ["semver", "semver.CMD", "semver.ps1"],
+  "groupedDependencies": { "is-number": "7.0.0", "is-odd": "3.0.1" }
+}

@@ -1,0 +1,12 @@
+# TEST không phải yêu cầu nghiệp vụ. Hand-written pnpm 11 paths; no real auth.
+globalDir: 'D:\TEST\pnpm-global'
+globalBinDir: 'D:\TEST\pnpm-bin'
+storeDir: 'D:\TEST\pnpm-store\v11'
+cacheDir: 'D:\TEST\pnpm-cache'
+stateDir: 'D:\TEST\pnpm-state'
+npmrcAuthFile: 'D:\TEST\config\auth.npmrc'
+registry: https://registry.npmjs.org
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+allowBuilds:
+  test-native: false

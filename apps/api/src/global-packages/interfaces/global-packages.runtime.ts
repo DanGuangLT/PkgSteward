@@ -10,6 +10,12 @@ import type {
 } from '@/global-packages/interfaces/global-packages.types';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import type {
+  IPnpmGlobalConfig,
+  IPnpmGlobalGroupFacts,
+  IPnpmGlobalInventoryFacts,
+  IPnpmGlobalPolicy,
+} from '@/global-packages/interfaces/pnpm-global.types';
+import type {
   IRunProcess,
   IRunProcessCallbacks,
 } from '@/npm-runner/runner-process';
@@ -45,6 +51,7 @@ export interface IGlobalRegistryInput {
   configs: readonly string[];
   environment: Readonly<NodeJS.ProcessEnv>;
   provenanceKnown: boolean;
+  pnpmPolicies?: readonly IPnpmGlobalPolicy[];
 }
 export interface IGlobalRegistryDecision {
   changeAllowed: boolean;
@@ -63,6 +70,7 @@ export interface IGlobalLocation {
   userConfig: string;
   globalConfig: string;
   configIdentities: IGlobalConfigIdentity[];
+  pnpm?: IPnpmGlobalConfig;
 }
 export interface IGlobalBinOwner {
   name: string;
@@ -85,6 +93,7 @@ export interface IGlobalPackageFacts {
   manifest: IGlobalConfigIdentity;
   bins: IGlobalBin[];
   binIdentities: IRunnerFileIdentity[];
+  pnpmGroup?: IPnpmGlobalGroupFacts;
 }
 export interface IGlobalTargetFacts {
   name: string;
@@ -101,6 +110,7 @@ export interface IGlobalPreviewFacts {
   binOwners: IGlobalBinOwner[];
   registryChangeAllowed?: boolean;
   locations?: IGlobalLocation[];
+  pnpmInventory?: IPnpmGlobalInventoryFacts;
 }
 // Infrastructure inputs only; no controller accepts paths, argv or environment.
 export interface IGlobalRuntime {
@@ -124,6 +134,9 @@ export interface IGlobalCommand {
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+  shell?: false;
+  extendEnv?: false;
+  stdin?: 'ignore';
 }
 export interface IGlobalProbeOptions {
   cwd: string;
