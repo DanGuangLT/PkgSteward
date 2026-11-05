@@ -288,6 +288,10 @@ export class GlobalPackagesService
         publicRegistry: finalFacts.registryChangeAllowed === true,
       });
       activity.checkpoint();
+      // Launch only runs tools registered by a fresh verified resolution; static pnpm
+      // discovery spawns nothing, so resolve here (launch rejects a changed identity).
+      await this.runtime.resolveTool(active.request!.manager, activity.signal);
+      activity.checkpoint();
       await activity.launch(command);
     });
     return await Promise.resolve(accepted);

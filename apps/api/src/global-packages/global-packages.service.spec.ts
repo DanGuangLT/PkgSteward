@@ -820,6 +820,27 @@ describe('pnpm 11 service integration', () => {
     expect(JSON.stringify(f.audit.mock.calls)).not.toContain(secret);
   });
 
+  // Owner RT1: static pnpm discovery never registered the tool, so launch refused it (SPAWN_FAILED).
+  it('verifies and registers the pnpm tool right before launching the mutation', async () => {
+    const f = setupPnpmService();
+    const preview = await f.ready();
+    const resolveTool = jest.spyOn(f.runtime, 'resolveTool');
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    expect(resolveTool).toHaveBeenCalledWith(
+      'pnpm',
+      expect.any(AbortSignal) as unknown,
+    );
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(resolveTool.mock.invocationCallOrder[0]).toBeLessThan(
+      f.child.launch.mock.invocationCallOrder[0],
+    );
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'completed',
+    });
+  });
+
   it('removes offline under custom pnpm routing with exact remove argv and separate home/bin', async () => {
     const f = setupPnpmService();
     f.location.pnpm!.policy.defaultRegistry = 'custom';
