@@ -826,6 +826,9 @@
   "globalPackages": {
     "title": "Gói global",
     "inventory": "Gói đã cài đặt",
+    "statusLabel": "Trạng thái",
+    "actions": "Thao tác",
+    "ready": "Có thể quản lý",
     "loading": "Đang đọc danh sách đã lưu và tác vụ gần nhất…",
     "pageError": "Không đọc được dữ liệu gói global. Thử lại chỉ đọc danh sách và tác vụ đã lưu.",
     "retry": "Thử lại",

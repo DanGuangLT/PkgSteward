@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangleIcon, CircleIcon, LoaderCircleIcon } from "lucide-react"
+import { AlertTriangleIcon, CircleIcon, LoaderCircleIcon, RefreshCwIcon, RotateCwIcon, SquareIcon, type LucideIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 import type messages from "@/messages/vi.json"
 
-export function GlobalActionLabel({ pending, children }: { pending: boolean; children: ReactNode }) {
-  return <>{pending ? <LoaderCircleIcon aria-hidden="true" className="size-4 shrink-0 animate-spin" /> : null}{children}</>
+export function GlobalActionLabel({ pending, icon: Icon, children }: { pending: boolean; icon?: LucideIcon; children: ReactNode }) {
+  return <>{pending ? <LoaderCircleIcon aria-hidden="true" className="size-4 shrink-0 animate-spin" /> : Icon ? <Icon aria-hidden="true" className="size-4 shrink-0" /> : null}<span className="min-w-0 [overflow-wrap:anywhere]">{children}</span></>
 }
 
 export function GlobalCodeMessage({ code, kind = "errors" }: { code: string; kind?: "errors" | "warnings" | "risk" }) {
@@ -55,17 +55,17 @@ export function GlobalPackageJob({ controller }: { controller: GlobalController 
     </div>
     <p className="text-body-sm text-muted-foreground">{t("job.continues")}</p>
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      {canCancel ? <Button type="button" variant="secondary" className="h-auto min-h-10 whitespace-normal"
+      {canCancel ? <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
         aria-busy={state.cancelPending}
         disabled={state.cancelPending || state.cancelUnknown || state.refreshing || (!cleanup && cancelledJob === state.jobId)}
-        onClick={() => { setCancelledJob(state.jobId); void cancel() }}><GlobalActionLabel pending={state.cancelPending}>{t(state.cancelPending ? "loadingCancel" : cleanup ? "job.retryCleanup" : "job.cancel")}</GlobalActionLabel></Button> : null}
-      <Button type="button" variant="secondary" className="h-auto min-h-10 whitespace-normal"
+        onClick={() => { setCancelledJob(state.jobId); void cancel() }}><GlobalActionLabel pending={state.cancelPending} icon={cleanup ? RotateCwIcon : SquareIcon}>{t(state.cancelPending ? "loadingCancel" : cleanup ? "job.retryCleanup" : "job.cancel")}</GlobalActionLabel></Button> : null}
+      <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
         aria-busy={state.refreshing}
         disabled={state.refreshing || state.cancelPending || state.phase === "starting"
           || (state.phase === "tracking" && !state.startUnknown && !state.cancelUnknown && !state.pollError)}
-        onClick={() => { void refresh() }}><GlobalActionLabel pending={state.refreshing}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</GlobalActionLabel></Button>
+        onClick={() => { void refresh() }}><GlobalActionLabel pending={state.refreshing} icon={RefreshCwIcon}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</GlobalActionLabel></Button>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
-        className="h-auto min-h-10 whitespace-normal" onClick={retryPoll}>{t("job.retryPoll")}</Button> : null}
+        className="h-auto min-h-10 border-border whitespace-normal" onClick={retryPoll}><RotateCwIcon aria-hidden="true" />{t("job.retryPoll")}</Button> : null}
     </div>
     {state.startUnknown ? <p className="text-body-sm">{t("job.startUnknown")}</p> : null}
     {state.cancelUnknown ? <p className="text-body-sm">{t("job.cancelUnknown")}</p> : null}

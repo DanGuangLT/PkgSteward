@@ -1,6 +1,7 @@
 "use client"
 
 import { useId } from "react"
+import { DownloadIcon, EyeIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,18 +34,18 @@ export function GlobalPackageActions({ manager, pkg, controller, blocked, onPrev
 
   return <div className="min-w-0 space-y-3">
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 whitespace-normal"
+      <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 max-w-full border-border whitespace-normal"
         aria-busy={previewingRemove} aria-label={previewingRemove ? `${t("loadingPreview")} ${pkg.name}` : t("removePackage", { name: pkg.name })}
-        onClick={event => onPreview({ manager, package: pkg.name, action: "remove" }, event.currentTarget)}><GlobalActionLabel pending={previewingRemove}>{t(previewingRemove ? "loadingPreview" : "remove")}</GlobalActionLabel></Button>
-      <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 whitespace-normal"
+        onClick={event => onPreview({ manager, package: pkg.name, action: "remove" }, event.currentTarget)}><GlobalActionLabel pending={previewingRemove} icon={Trash2Icon}>{t(previewingRemove ? "loadingPreview" : "remove")}</GlobalActionLabel></Button>
+      <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 max-w-full border-border whitespace-normal"
         aria-busy={loadingVersions} aria-expanded={editing} aria-controls={`${id}-change`}
         aria-label={loadingVersions ? `${t("loadingVersions")} ${pkg.name}` : t("changePackage", { name: pkg.name })}
         onClick={() => {
           controller.select(editing ? { manager, package: "", action: "remove" } : change)
           if (!editing) void controller.loadVersions({ manager, package: pkg.name })
-        }}><GlobalActionLabel pending={loadingVersions}>{t(loadingVersions ? "loadingVersions" : "change")}</GlobalActionLabel></Button>
+        }}><GlobalActionLabel pending={loadingVersions} icon={PencilIcon}>{t(loadingVersions ? "loadingVersions" : "change")}</GlobalActionLabel></Button>
     </div>
-    {editing ? <div id={`${id}-change`} className="min-w-0 space-y-3 rounded-md bg-muted p-4">
+    {editing ? <div id={`${id}-change`} className="min-w-0 space-y-3 rounded-md border border-border bg-muted p-4 [overflow-wrap:anywhere]">
       <p role="status" aria-live="polite" aria-atomic="true" className="text-body-sm">{loadingVersions ? t("loadingVersions") : options ? t("versionsReady") : t("versionsHint")}</p>
       {options ? <div className="min-w-0 space-y-2">
         <Label htmlFor={`${id}-versions`}>{t("availableVersions")}</Label>
@@ -62,10 +63,10 @@ export function GlobalPackageActions({ manager, pkg, controller, blocked, onPrev
         onChange={event => controller.select({ ...change, targetVersion: event.target.value })} />
       <p id={`${id}-hint`} className="text-body-sm text-muted-foreground">{t("versionHint")}</p>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 whitespace-normal"
-          aria-busy={loadingVersions} onClick={() => { void controller.loadVersions({ manager, package: pkg.name }) }}><GlobalActionLabel pending={loadingVersions}>{t(loadingVersions ? "loadingVersions" : "loadVersions")}</GlobalActionLabel></Button>
+        <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 max-w-full border-border whitespace-normal"
+          aria-busy={loadingVersions} onClick={() => { void controller.loadVersions({ manager, package: pkg.name }) }}><GlobalActionLabel pending={loadingVersions} icon={DownloadIcon}>{t(loadingVersions ? "loadingVersions" : "loadVersions")}</GlobalActionLabel></Button>
         <Button type="button" variant="secondary" disabled={blocked || !selection.targetVersion?.trim()}
-          aria-busy={previewingChange} className="h-auto min-h-10 whitespace-normal" onClick={event => onPreview(change, event.currentTarget)}><GlobalActionLabel pending={previewingChange}>{t(previewingChange ? "loadingPreview" : "preview")}</GlobalActionLabel></Button>
+          aria-busy={previewingChange} className="h-auto min-h-10 max-w-full border-border whitespace-normal" onClick={event => onPreview(change, event.currentTarget)}><GlobalActionLabel pending={previewingChange} icon={EyeIcon}>{t(previewingChange ? "loadingPreview" : "preview")}</GlobalActionLabel></Button>
       </div>
     </div> : null}
   </div>

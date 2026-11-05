@@ -816,6 +816,9 @@
   "globalPackages": {
     "title": "Global packages",
     "inventory": "Installed packages",
+    "statusLabel": "Status",
+    "actions": "Actions",
+    "ready": "Manageable",
     "loading": "Loading the saved inventory and latest activity…",
     "pageError": "Could not read global package data. Retrying only reads saved inventory and activity.",
     "retry": "Try again",
