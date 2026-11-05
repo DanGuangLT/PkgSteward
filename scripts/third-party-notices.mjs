@@ -35,9 +35,10 @@ const listLicenses = (dir) => {
   return JSON.parse(out);
 };
 
-const cell = (value) => String(value ?? '').replace(/\|/g, '\\|').trim();
-// Keep the author's name only: drop "<email>" and "(url)" parts.
-const authorName = (author) => cell(String(author ?? '').replace(/<[^>]*>|\([^)]*\)/g, '')) || '—';
+// Escape "\" too, so a value ending in "\" cannot escape the next "|".
+const cell = (value) => String(value ?? '').replace(/[\\|]/g, '\\$&').trim();
+// Keep the author's name only: npm writes "Name <email> (url)", so take the text before the first "<" or "(".
+const authorName = (author) => cell(String(author ?? '').split(/[<(]/, 1)[0]) || '—';
 const homepage = (pkg) => pkg.homepage || `https://www.npmjs.com/package/${pkg.name}`;
 const byName = (a, b) => a.name.localeCompare(b.name, 'en');
 
