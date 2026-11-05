@@ -18,6 +18,11 @@ import {
 } from '@/global-packages/__fixtures__/global-adapters';
 import type { IGlobalCommand } from '@/global-packages/interfaces/global-packages.runtime';
 import * as runnerTools from '@/npm-runner/runner-tool';
+import {
+  PNPM_TEST_PATHS as Q,
+  pnpmLocation,
+} from '@/global-packages/__fixtures__/pnpm11/facts';
+import { readGlobalInventory } from '@/global-packages/global-inventory';
 
 describe('bounded cancellable probe boundary', () => {
   const command: IGlobalCommand = {
@@ -219,7 +224,7 @@ describe('verified installed-tool location discovery', () => {
       .mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
-  it.each(['npm', 'pnpm'] as const)(
+  it.each(['npm'] as const)(
     'uses M6 resolver and derives canonical %s tuple',
     async (manager) => {
       const { deps, spawn } = setup();
@@ -237,17 +242,14 @@ describe('verified installed-tool location discovery', () => {
         manager,
         tool: testTool(manager),
         cwd: P.cwd,
-        globalRoot: win32.join(
-          manager === 'npm' ? P.prefix : P.global,
-          'node_modules',
-        ),
-        binDir: manager === 'npm' ? P.prefix : P.bin,
+        globalRoot: win32.join(P.prefix, 'node_modules'),
+        binDir: P.prefix,
         userConfig: P.userconfig,
         globalConfig: P.globalconfig,
       });
       expect(location.configIdentities).toHaveLength(2);
       expect(location.configIdentities[0].sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(spawn).toHaveBeenCalledTimes(manager === 'npm' ? 5 : 6);
+      expect(spawn).toHaveBeenCalledTimes(5);
       for (const [file, args, options] of spawn.mock.calls) {
         expect(file).toBe(P.node);
         expect(args[0]).toBe(testTool(manager).entry);
@@ -325,14 +327,6 @@ describe('verified installed-tool location discovery', () => {
       'LOCATION_AMBIGUOUS',
     );
   });
-  it('does not guess pnpm global-dir when the probe omits it', async () => {
-    const { deps, outputs } = setup();
-    outputs.set('global-dir', 'undefined');
-    await expectGlobalReason(
-      () => discoverGlobalLocation('pnpm', deps),
-      'LOCATION_AMBIGUOUS',
-    );
-  });
   it('rejects redirected ancestors even when a leaf realpath appears safe', async () => {
     const { deps, put } = setup();
     put('D:\\TEST', { directory: true, link: true, real: 'E:\\TEST' });
@@ -359,17 +353,6 @@ describe('verified installed-tool location discovery', () => {
     await expectGlobalReason(
       () => discoverGlobalLocation('npm', deps),
       'CONFIG_UNSUPPORTED',
-    );
-  });
-  it('refuses a pnpm bin override that disagrees with the discovered bin', async () => {
-    const { deps } = setup();
-    deps.environment = {
-      ...deps.environment,
-      PNPM_HOME: 'D:\\TEST\\other-bin',
-    };
-    await expectGlobalReason(
-      () => discoverGlobalLocation('pnpm', deps),
-      'LOCATION_AMBIGUOUS',
     );
   });
   it.each(['package.json', '.npmrc', 'pnpm-workspace.yaml', '.pnpmfile.cjs'])(
@@ -445,11 +428,176 @@ describe('verified installed-tool location discovery', () => {
       expect.arrayContaining([P.npm, P.pnpm, P.node, P.app, P.data]),
     );
   });
+
+  function setupPnpm() {
+    const h = setup();
+    h.deps.environment = {
+      USERPROFILE: Q.profile,
+      PNPM_HOME: Q.home,
+      XDG_CONFIG_HOME: 'D:\\TEST\\xdg',
+      PATH: `${Q.bin};C:\\Program Files\\nodejs`,
+    };
+    for (const path of [Q.home, Q.bin, Q.store])
+      h.put(path, { directory: true });
+    h.put(Q.yaml, {
+      text: JSON.stringify({
+        globalDir: Q.global,
+        globalBinDir: Q.bin,
+        storeDir: Q.store,
+        npmrcAuthFile: Q.auth,
+      }),
+    });
+    return h;
+  }
+
+  it('uses M6 resolver and static pnpm 11 config without discovery spawn', async () => {
+    const h = setupPnpm();
+    const location = await discoverGlobalLocation('pnpm', h.deps);
+    expect(jest.mocked(runnerTools.resolveRunnerTool)).toHaveBeenCalledWith(
+      'pnpm',
+      expect.objectContaining({ execPath: P.node, platform: 'win32' }),
+      h.deps.fs,
+    );
+    expect(location).toMatchObject({
+      manager: 'pnpm',
+      tool: testTool('pnpm'),
+      prefix: null,
+      globalDir: Q.global,
+      globalRoot: Q.root,
+      binDir: Q.bin,
+      pnpm: { homeDir: Q.home, binDir: Q.bin, globalRoot: Q.root },
+    });
+    expect(location.configIdentities).toContainEqual(
+      expect.objectContaining({
+        file: expect.objectContaining({ path: Q.yaml }) as unknown,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/) as unknown,
+      }),
+    );
+    expect(location.protectedPaths).toEqual(
+      expect.arrayContaining([P.npm, P.pnpm, P.node, P.app, P.source, P.data]),
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'TOOL_NOT_FOUND',
+    'TOOL_VERSION_MISMATCH',
+    'TOOL_LAYOUT_UNSUPPORTED',
+    'INPUT_CHANGED',
+  ] as const)(
+    'propagates pnpm resolver failure %s with zero spawn',
+    async (reason) => {
+      const h = setupPnpm();
+      if (reason === 'INPUT_CHANGED')
+        jest
+          .mocked(runnerTools.revalidateRunnerTool)
+          .mockRejectedValue(runnerTools.runnerFailure(reason));
+      else
+        jest
+          .mocked(runnerTools.resolveRunnerTool)
+          .mockRejectedValue(runnerTools.runnerFailure(reason));
+      await expectGlobalReason(
+        () => discoverGlobalLocation('pnpm', h.deps),
+        reason,
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not guess a pnpm global dir when a late selector disagrees with static config', async () => {
+    const h = setupPnpm();
+    h.deps.environment = {
+      ...h.deps.environment,
+      pnpm_config_global_dir: 'D:\\TEST\\other-global',
+    };
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', h.deps),
+      'CONFIG_UNSUPPORTED',
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+
+  it('refuses a pnpm bin override that disagrees with the static YAML bin', async () => {
+    const h = setupPnpm();
+    h.deps.environment = {
+      ...h.deps.environment,
+      pnpm_config_global_bin_dir: 'D:\\TEST\\other-bin',
+    };
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', h.deps),
+      'CONFIG_UNSUPPORTED',
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing-bin', 'not-on-path', 'relative-path'] as const)(
+    'reports unconfigured pnpm for %s without creating layout or spawning',
+    async (kind) => {
+      const h = setupPnpm();
+      if (kind === 'missing-bin')
+        h.entries.delete(win32.resolve(Q.bin).toLowerCase());
+      else
+        h.deps.environment = {
+          ...h.deps.environment,
+          PATH:
+            kind === 'relative-path' ? 'pnpm-bin' : 'C:\\Program Files\\nodejs',
+        };
+      await expectGlobalReason(
+        () => discoverGlobalLocation('pnpm', h.deps),
+        'PNPM_GLOBAL_NOT_CONFIGURED',
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+      expect(h.makeDirectory.mock.calls.every(([path]) => path === P.cwd)).toBe(
+        true,
+      );
+    },
+  );
+
+  it('keeps configured pnpm with a missing root available and pins empty inventory absence', async () => {
+    const h = setupPnpm();
+    const location = await discoverGlobalLocation('pnpm', h.deps);
+    expect(location.pnpm!.missingDirectoryPaths).toContain(Q.root);
+    const result = await readGlobalInventory(location, h.deps);
+    expect(result.packages).toEqual([]);
+    expect(result.ownershipComplete).toBe(true);
+    expect(h.spawn).not.toHaveBeenCalled();
+    expect(h.makeDirectory.mock.calls.every(([path]) => path === P.cwd)).toBe(
+      true,
+    );
+  });
+
+  it.each([P.app, P.source, P.data, 'D:\\TEST\\project', 'C:\\Windows\\Temp'])(
+    'applies pnpm scope protection to configured directory %s',
+    async (path) => {
+      const h = setupPnpm();
+      h.put(Q.yaml, {
+        text: JSON.stringify({ globalDir: path, globalBinDir: Q.bin }),
+      });
+      await expectGlobalReason(
+        () => discoverGlobalLocation('pnpm', h.deps),
+        'LOCATION_AMBIGUOUS',
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses redirected pnpm root ancestors before reading inventory', async () => {
+    const h = setupPnpm();
+    h.put(Q.global, { directory: true, link: true, real: 'E:\\TEST\\outside' });
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', h.deps),
+      'LOCATION_AMBIGUOUS',
+    );
+    expect(h.open.mock.calls.some(([path]) => path.startsWith('E:\\'))).toBe(
+      false,
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
 });
 
 describe('cross-manager location ambiguity', () => {
   it('accepts distinct discovered roots and bins without changing their tuples', () => {
-    const locations = [testLocation('npm'), testLocation('pnpm')];
+    const locations = [testLocation('npm'), pnpmLocation()];
     const before = JSON.stringify(locations);
     expect(() => assertGlobalLocationsDistinct(locations)).not.toThrow();
     expect(JSON.stringify(locations)).toBe(before);
@@ -458,7 +606,7 @@ describe('cross-manager location ambiguity', () => {
     'refuses %s across managers',
     async (kind) => {
       const npm = testLocation('npm');
-      const pnpm = testLocation('pnpm');
+      const pnpm = pnpmLocation();
       if (kind === 'same-root') pnpm.globalRoot = npm.globalRoot.toUpperCase();
       if (kind === 'nested-root')
         pnpm.globalRoot = win32.join(npm.globalRoot, 'nested');

@@ -271,6 +271,31 @@ describe('global command descriptors (argv require RT0)', () => {
 
 describe('read-only query vectors', () => {
   it.each([
+    'list',
+    'global-dir',
+    'root',
+    'bin',
+    'store',
+    'userconfig',
+    'globalconfig',
+  ] as const)(
+    'refuses pnpm %s without static config instead of using the legacy query adapter',
+    async (query) => {
+      await expectGlobalReason(
+        () =>
+          buildGlobalQuery({
+            manager: 'pnpm',
+            tool: testTool('pnpm'),
+            cwd: P.cwd,
+            environment: {},
+            captured: {},
+            query,
+          }),
+        'CONFIG_UNSUPPORTED',
+      );
+    },
+  );
+  it.each([
     ['npm', 'prefix', ['config', 'get', 'prefix']],
     ['npm', 'root', ['root', '--global']],
     ['npm', 'userconfig', ['config', 'get', 'userconfig']],

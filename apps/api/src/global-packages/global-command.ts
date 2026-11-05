@@ -291,9 +291,7 @@ function buildPnpmGlobalCommand(input: IGlobalMutationInput): IGlobalCommand {
 
 function buildPnpmGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
   const config = input.pnpm;
-  // Temporary M7 adapter, unreachable through the disabled product manager.
-  // Removed when static discovery/inventory replace its callers.
-  if (!config) return buildLegacyPnpmQuery(input);
+  if (!config) return fail('CONFIG_UNSUPPORTED');
   if (input.query !== 'list') return fail('CONFIG_UNSUPPORTED');
   if (!isGlobalAbsolutePath(config.globalDir))
     return fail('LOCATION_AMBIGUOUS');
@@ -342,43 +340,4 @@ function pnpmEnvironment(
   // Keep build/release policy in the original consumed YAML. In particular,
   // pnpm 11.22.0:166500-166503,168242-168245 silently ignores env allow-builds.
   return env;
-}
-
-function buildLegacyPnpmQuery(input: IGlobalQueryInput): IGlobalCommand {
-  const captured = captureGlobalEnvironment(input.captured);
-  const argv: Partial<Record<GlobalQuery | 'list', string[]>> = {
-    list: ['list', '--global', '--depth=0', '--json'],
-    root: ['root', '--global'],
-    userconfig: ['config', 'get', 'userconfig'],
-    globalconfig: ['config', 'get', 'globalconfig'],
-    'global-dir': ['config', 'get', 'global-dir'],
-    bin: ['bin', '--global'],
-    store: ['store', 'path'],
-  };
-  const tail = argv[input.query];
-  if (!tail) return fail('CONFIG_UNSUPPORTED');
-  const paths: [string, string | undefined][] = [
-    ['--userconfig', captured.npm_config_userconfig],
-    ['--globalconfig', captured.npm_config_globalconfig],
-    ['--global-dir', captured.pnpm_config_global_dir],
-    ['--global-bin-dir', captured.pnpm_config_global_bin_dir],
-    ['--store-dir', captured.pnpm_config_store_dir],
-  ];
-  const env = environmentFor(input.environment, input.tool, 'pnpm', 'remove');
-  if (captured.PNPM_HOME) env.PNPM_HOME = captured.PNPM_HOME;
-  return {
-    file: input.tool.file,
-    cwd: input.cwd,
-    args: [
-      input.tool.entry!,
-      '--dir',
-      input.cwd,
-      '--pm-on-fail=warn',
-      ...paths.flatMap(([flag, path]) =>
-        path === undefined ? [] : [flag, path],
-      ),
-      ...tail,
-    ],
-    env,
-  };
 }

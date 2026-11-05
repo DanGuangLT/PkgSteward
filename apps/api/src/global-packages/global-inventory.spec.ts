@@ -13,6 +13,7 @@ import {
   testSpawn,
 } from '@/global-packages/__fixtures__/global-adapters';
 import type { GlobalManager } from '@/global-packages/interfaces/global-packages.types';
+import { pnpmInventoryFixture } from '@/global-packages/__fixtures__/pnpm11/inventory';
 
 const list = (manager: GlobalManager, dependencies: unknown): unknown =>
   manager === 'npm' ? { dependencies } : [{ path: P.global, dependencies }];
@@ -186,7 +187,7 @@ describe('manifest/identity/ownership cross-check', () => {
     };
     return { ...memory, deps, location, spawn, root, manifest };
   }
-  it.each(['npm', 'pnpm'] as const)(
+  it.each(['npm'] as const)(
     'cross-checks %s list against bounded handle-read manifests',
     async (manager) => {
       const { location, deps, spawn, manifest, open } = setup(manager);
@@ -217,7 +218,7 @@ describe('manifest/identity/ownership cross-check', () => {
       expect(args).not.toContain('--global=false');
     },
   );
-  it.each(['npm', 'pnpm'] as const)(
+  it.each(['npm'] as const)(
     'shows an external %s link without reading its manifest',
     async (manager) => {
       const { deps, location, put, root, open } = setup(manager);
@@ -235,16 +236,59 @@ describe('manifest/identity/ownership cross-check', () => {
       ).toBe(false);
     },
   );
-  it('keeps an unproven pnpm internal link inert too', async () => {
-    const { deps, location, put, root, open } = setup('pnpm');
-    put(root, {
+  it('cross-checks pnpm 11 group metadata against bounded linked manifests without list spawn', async () => {
+    const h = pnpmInventoryFixture();
+    const result = await readGlobalInventory(h.location, h.deps);
+    expect(result.packages).toEqual([
+      {
+        name: 'is-number',
+        version: '7.0.0',
+        bins: [],
+        status: 'manageable',
+        reason: null,
+      },
+    ]);
+    expect(result.facts[0].manifest.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(h.open).toHaveBeenCalledWith(
+      win32.join(h.group.links[0].target, 'package.json'),
+    );
+    expect(result.pnpmInventory?.groups[0].installDir).toBe(h.group.installDir);
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+  it('shows an external pnpm 11 link without reading its manifest', async () => {
+    const h = pnpmInventoryFixture();
+    h.put(h.group.links[0].logical, {
+      directory: true,
+      link: true,
+      real: 'E:\\TEST\\outside',
+    });
+    const result = await readGlobalInventory(h.location, h.deps);
+    expect(result.packages[0]).toMatchObject({
+      status: 'linked',
+      reason: 'LINKED_PACKAGE',
+    });
+    expect(result.ownershipComplete).toBe(false);
+    expect(result.facts).toEqual([]);
+    expect(h.open.mock.calls.some(([path]) => path.startsWith('E:\\'))).toBe(
+      false,
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+  it('keeps an unproven pnpm 11 internal link inert outside the proven store links root', async () => {
+    const h = pnpmInventoryFixture();
+    const unproven = win32.join(P.global, '.pnpm', 'tool');
+    h.put(h.group.links[0].logical, {
       link: true,
       directory: true,
-      real: win32.join(P.global, '.pnpm', 'tool'),
+      real: unproven,
     });
-    const result = await readGlobalInventory(location, deps);
+    const result = await readGlobalInventory(h.location, h.deps);
     expect(result.packages[0].status).toBe('linked');
-    expect(open).not.toHaveBeenCalled();
+    expect(result.ownershipComplete).toBe(false);
+    expect(h.open.mock.calls.some(([path]) => path.startsWith(unproven))).toBe(
+      false,
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
   });
   it('does not read a list-supplied path outside the global root', async () => {
     const { deps, location, spawn, open } = setup();

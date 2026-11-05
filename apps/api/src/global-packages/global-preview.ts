@@ -23,6 +23,12 @@ import {
   globalConfirmText,
 } from '@/global-packages/global-policy';
 import { validateConfirmation } from '@/core/risk/confirmation';
+import type { IGlobalConfigIdentity } from '@/global-packages/interfaces/global-packages.runtime';
+import type {
+  IPnpmGlobalConfig,
+  IPnpmGlobalGroupFacts,
+  IPnpmGlobalLinkFacts,
+} from '@/global-packages/interfaces/pnpm-global.types';
 
 export const GLOBAL_PREVIEW_LIMIT = 16;
 export const GLOBAL_PREVIEW_BYTES = 256 * 1024;
@@ -81,6 +87,38 @@ function snapshotLocation(location: IGlobalLocation): IGlobalLocation {
       ...identity,
       file: snapshotIdentity(identity.file),
     })),
+    ...(location.pnpm ? { pnpm: snapshotPnpmConfig(location.pnpm) } : {}),
+  };
+}
+
+const snapshotConfigIdentity = (
+  identity: IGlobalConfigIdentity,
+): IGlobalConfigIdentity => ({
+  ...identity,
+  file: snapshotIdentity(identity.file),
+});
+const snapshotLink = (link: IPnpmGlobalLinkFacts): IPnpmGlobalLinkFacts => ({
+  ...link,
+  identity: snapshotIdentity(link.identity),
+});
+function snapshotPnpmConfig(config: IPnpmGlobalConfig): IPnpmGlobalConfig {
+  return {
+    ...config,
+    configIdentities: config.configIdentities.map(snapshotConfigIdentity),
+    directoryIdentities: config.directoryIdentities.map(snapshotIdentity),
+  };
+}
+function snapshotGroup(group: IPnpmGlobalGroupFacts): IPnpmGlobalGroupFacts {
+  return {
+    ...group,
+    index: snapshotLink(group.index),
+    directory: snapshotIdentity(group.directory),
+    manifest: snapshotConfigIdentity(group.manifest),
+    lockfile: snapshotConfigIdentity(group.lockfile),
+    modules: snapshotConfigIdentity(group.modules),
+    packageMap: snapshotConfigIdentity(group.packageMap),
+    virtualStoreLockfile: snapshotConfigIdentity(group.virtualStoreLockfile),
+    packageLinks: group.packageLinks.map(snapshotLink),
   };
 }
 
@@ -98,8 +136,85 @@ export function snapshotGlobalPreviewFacts(
         file: snapshotIdentity(facts.current.manifest.file),
       },
       binIdentities: facts.current.binIdentities.map(snapshotIdentity),
+      ...(facts.current.pnpmGroup
+        ? { pnpmGroup: snapshotGroup(facts.current.pnpmGroup) }
+        : {}),
     },
+    ...(facts.pnpmInventory
+      ? {
+          pnpmInventory: {
+            ...facts.pnpmInventory,
+            groups: facts.pnpmInventory.groups.map(snapshotGroup),
+            unreferencedDirectories:
+              facts.pnpmInventory.unreferencedDirectories.map(snapshotIdentity),
+            shimIdentities: facts.pnpmInventory.shimIdentities?.map(
+              snapshotConfigIdentity,
+            ),
+          },
+        }
+      : {}),
   });
+}
+
+const configIdentityFacts = (identity: IGlobalConfigIdentity) => ({
+  sha256: identity.sha256,
+  file: identityFacts(identity.file),
+});
+const pathSet = (paths: readonly string[]) => paths.map(pathKey).sort();
+const linkFacts = (link: IPnpmGlobalLinkFacts) => ({
+  logicalPath: pathKey(link.logicalPath),
+  realPath: pathKey(link.realPath),
+  identity: identityFacts(link.identity),
+});
+function groupFacts(group: IPnpmGlobalGroupFacts) {
+  return {
+    ...group,
+    index: linkFacts(group.index),
+    installDir: pathKey(group.installDir),
+    directory: identityFacts(group.directory),
+    manifest: configIdentityFacts(group.manifest),
+    lockfile: configIdentityFacts(group.lockfile),
+    modules: configIdentityFacts(group.modules),
+    packageMap: configIdentityFacts(group.packageMap),
+    virtualStoreLockfile: configIdentityFacts(group.virtualStoreLockfile),
+    directDependencies: [...group.directDependencies].sort(),
+    packageLinks: group.packageLinks
+      .map(linkFacts)
+      .sort((a, b) => a.logicalPath.localeCompare(b.logicalPath)),
+    storeDir: pathKey(group.storeDir),
+    virtualStoreDir: pathKey(group.virtualStoreDir),
+  };
+}
+function pnpmConfigFacts(config: IPnpmGlobalConfig) {
+  return {
+    ...config,
+    homeDir: pathKey(config.homeDir),
+    globalDir: pathKey(config.globalDir),
+    globalRoot: pathKey(config.globalRoot),
+    binDir: pathKey(config.binDir),
+    storeDir: config.storeDir === null ? null : pathKey(config.storeDir),
+    cacheDir: pathKey(config.cacheDir),
+    stateDir: pathKey(config.stateDir),
+    configDir: pathKey(config.configDir),
+    authFile: pathKey(config.authFile),
+    originalPath: pathSet(config.originalPath),
+    missingConfigPaths: pathSet(config.missingConfigPaths),
+    missingDirectoryPaths: pathSet(config.missingDirectoryPaths),
+    configIdentities: config.configIdentities
+      .map(configIdentityFacts)
+      .sort((a, b) => a.file.path.localeCompare(b.file.path)),
+    directoryIdentities: identities(config.directoryIdentities),
+    selectors: Object.fromEntries(
+      Object.entries(config.selectors).map(([name, value]) => [
+        name,
+        value === undefined ? undefined : pathKey(value),
+      ]),
+    ),
+    policy: {
+      ...config.policy,
+      scopedRegistries: [...config.policy.scopedRegistries].sort(),
+    },
+  };
 }
 
 function locationFacts(location: IGlobalLocation) {
@@ -128,6 +243,7 @@ function locationFacts(location: IGlobalLocation) {
         file: identityFacts(identity.file),
       }))
       .sort((a, b) => a.file.path.localeCompare(b.file.path)),
+    pnpm: location.pnpm ? pnpmConfigFacts(location.pnpm) : undefined,
   };
 }
 
@@ -147,12 +263,29 @@ function comparable(facts: IGlobalPreviewFacts) {
       },
       bins: sortBins(current.bins),
       binIdentities: identities(current.binIdentities),
+      pnpmGroup: current.pnpmGroup ? groupFacts(current.pnpmGroup) : undefined,
     },
     target: target ? { ...target, bins: sortBins(target.bins) } : null,
     binOwners: [...facts.binOwners].sort((a, b) =>
       a.name.localeCompare(b.name),
     ),
     registryChangeAllowed: facts.registryChangeAllowed,
+    pnpmInventory: facts.pnpmInventory
+      ? {
+          ...facts.pnpmInventory,
+          groups: facts.pnpmInventory.groups
+            .map(groupFacts)
+            .sort((a, b) =>
+              a.index.logicalPath.localeCompare(b.index.logicalPath),
+            ),
+          unreferencedDirectories: identities(
+            facts.pnpmInventory.unreferencedDirectories,
+          ),
+          shimIdentities: facts.pnpmInventory.shimIdentities
+            ?.map(configIdentityFacts)
+            .sort((a, b) => a.file.path.localeCompare(b.file.path)),
+        }
+      : undefined,
   };
 }
 

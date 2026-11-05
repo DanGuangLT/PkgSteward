@@ -97,4 +97,5 @@ export interface IPnpmGlobalInventoryFacts {
   groups: readonly IPnpmGlobalGroupFacts[];
   unreferencedDirectories: readonly IRunnerFileIdentity[];
   ownershipComplete: boolean;
+  shimIdentities?: readonly IGlobalConfigIdentity[];
 }
