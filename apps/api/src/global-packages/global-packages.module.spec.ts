@@ -11,16 +11,19 @@ import {
 } from '@/global-packages/global-packages.module';
 import type { IGlobalRuntimeBindings } from '@/global-packages/global-packages.module';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
+import { discoverGlobalLocation } from '@/global-packages/global-location';
 import type { IGlobalProbeOptions } from '@/global-packages/interfaces/global-packages.runtime';
 import {
   TEST_PATHS,
   testTool,
 } from '@/global-packages/__fixtures__/global-adapters';
 import {
+  deferred,
   testProcess,
   testRuntime,
 } from '@/global-packages/__fixtures__/global-lifecycle';
 import type { launchRun } from '@/npm-runner/runner-process';
+import type { RunnerStopOutcome } from '@/platform/windows/windows-runner-process';
 
 function bindings() {
   const f = testRuntime();
@@ -209,6 +212,77 @@ describe('GlobalPackagesModule runtime bindings', () => {
     expect(await runtime.verifyProbeTermination!()).toBe(true);
     expect(child.stop).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['verified', 'unconfirmed'] as const)(
+    'accounts for both cancelled discovery probes when termination is %s',
+    async (termination) => {
+      const b = bindings();
+      b.f.fs.put(TEST_PATHS.cwd, { directory: true });
+      const children = [testProcess(), testProcess()];
+      const stops = children.map(() => deferred<RunnerStopOutcome>());
+      children.forEach((child, index) => {
+        child.stop.mockImplementationOnce(() => stops[index].promise);
+      });
+      b.launchProcess.mockImplementation((_command, _env, callbacks) => {
+        const child = children[b.launchProcess.mock.calls.length - 1];
+        // Model launchRun's abort -> stop -> verified settlement boundary.
+        callbacks.signal.addEventListener(
+          'abort',
+          () => {
+            void child.stop().then((outcome) => {
+              child.exit({ exitCode: null, termination: outcome });
+            });
+          },
+          { once: true },
+        );
+        return child.process;
+      });
+      const runtime = createGlobalPackagesRuntime(b.input);
+      const abort = new AbortController();
+      let settled = false;
+      const pending = discoverGlobalLocation('npm', {
+        fs: runtime.fs,
+        environment: runtime.environment,
+        execPath: runtime.execPath,
+        paths: runtime.paths,
+        scannedProjectPaths: runtime.scannedProjectPaths(),
+        makeDirectory: (path: string) => runtime.makeDirectory(path),
+        signal: abort.signal,
+        spawn: runtime.probe,
+      }).catch((error: unknown) => {
+        settled = true;
+        return error;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(b.launchProcess).toHaveBeenCalledTimes(2);
+      const reason = new Error('TEST cancelled concurrent discovery');
+      abort.abort(reason);
+      for (const child of children) expect(child.stop).toHaveBeenCalledTimes(1);
+      stops[0].resolve(termination);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      stops[1].resolve(termination);
+      const error: unknown = await pending;
+      if (termination === 'verified') {
+        expect(error).toBe(reason);
+        expect(await runtime.verifyProbeTermination!()).toBe(true);
+        for (const child of children)
+          expect(child.stop).toHaveBeenCalledTimes(1);
+      } else {
+        expect(error).toMatchObject({
+          details: { reason: 'TERMINATION_UNCONFIRMED' },
+        });
+        children[0].stop.mockResolvedValueOnce('unconfirmed');
+        expect(await runtime.verifyProbeTermination!()).toBe(false);
+        for (const child of children)
+          expect(child.stop).toHaveBeenCalledTimes(2);
+        expect(await runtime.verifyProbeTermination!()).toBe(true);
+        expect(children[0].stop).toHaveBeenCalledTimes(3);
+        expect(children[1].stop).toHaveBeenCalledTimes(2);
+      }
+      expect(b.launchProcess).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('returns SERVICE_UNAVAILABLE on non-Windows activity starts without IO', async () => {
     const b = bindings();

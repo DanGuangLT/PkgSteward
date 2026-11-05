@@ -16,7 +16,10 @@ import {
   testLocation,
   testTool,
 } from '@/global-packages/__fixtures__/global-adapters';
-import type { IGlobalCommand } from '@/global-packages/interfaces/global-packages.runtime';
+import type {
+  IGlobalCommand,
+  IGlobalProbeResult,
+} from '@/global-packages/interfaces/global-packages.runtime';
 import * as runnerTools from '@/npm-runner/runner-tool';
 import {
   PNPM_TEST_PATHS as Q,
@@ -224,6 +227,166 @@ describe('verified installed-tool location discovery', () => {
       .mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
+
+  // TEST không phải yêu cầu nghiệp vụ. Settlement includes process verification.
+  function controlledProbes(spawn: ReturnType<typeof testSpawn>) {
+    const original = spawn.getMockImplementation()!;
+    const probes: {
+      query: string;
+      signal: AbortSignal;
+      stopped: boolean;
+      complete(patch?: Partial<IGlobalProbeResult>): Promise<void>;
+    }[] = [];
+    let active = 0;
+    let peak = 0;
+    spawn.mockImplementation((file, args, options) => {
+      active++;
+      peak = Math.max(peak, active);
+      return new Promise((resolve) => {
+        const probe = {
+          query: args.includes('root') ? 'root' : args.at(-1)!,
+          signal: options.signal,
+          stopped: false,
+          async complete(patch: Partial<IGlobalProbeResult> = {}) {
+            const result = await original(file, args, options);
+            options.signal.removeEventListener('abort', abort);
+            active--;
+            resolve({ ...result, ...patch });
+          },
+        };
+        const abort = () => {
+          probe.stopped = true;
+        };
+        options.signal.addEventListener('abort', abort, { once: true });
+        probes.push(probe);
+      });
+    });
+    return { probes, active: () => active, peak: () => peak };
+  }
+  const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  it('keeps two full probe lifecycles in flight and preserves results despite reverse completion', async () => {
+    const { deps, spawn } = setup();
+    const expected = await discoverGlobalLocation('npm', deps);
+    spawn.mockClear();
+    const h = controlledProbes(spawn);
+    const pending = discoverGlobalLocation('npm', deps);
+    await tick();
+    expect(h.probes.map(({ query }) => query)).toEqual(['prefix', 'root']);
+    expect(h.active()).toBe(2);
+    // Keep prefix alive while the other slot completes all remaining probes.
+    for (let i = 1; i < 5; i++) {
+      await h.probes[i].complete();
+      await tick();
+      expect(h.active()).toBe(i === 4 ? 1 : 2);
+      expect(h.probes).toHaveLength(Math.min(i + 2, 5));
+    }
+    await h.probes[0].complete();
+    // Fixture stat objects carry fresh function instances per run; compare the data.
+    const plain = (value: unknown): unknown =>
+      JSON.parse(JSON.stringify(value)) as unknown;
+    expect(plain(await pending)).toEqual(plain(expected));
+    expect(h.probes.map(({ query }) => query)).toEqual([
+      'prefix',
+      'root',
+      'userconfig',
+      'globalconfig',
+      'cache',
+    ]);
+    expect(h.peak()).toBe(2);
+    expect(h.active()).toBe(0);
+    expect(spawn).toHaveBeenCalledTimes(5);
+  });
+
+  it('stops probe 3 when probe 2 fails, waits for verification, and never starts probe 4', async () => {
+    const { deps, spawn } = setup();
+    const h = controlledProbes(spawn);
+    let settled = false;
+    const result = discoverGlobalLocation('npm', deps).catch(
+      (error: unknown) => {
+        settled = true;
+        return error;
+      },
+    );
+    await tick();
+    await h.probes[0].complete();
+    await tick();
+    expect(h.probes.map(({ query }) => query)).toEqual([
+      'prefix',
+      'root',
+      'userconfig',
+    ]);
+    await h.probes[1].complete({ timedOut: true });
+    await tick();
+    expect(h.probes[2].stopped).toBe(true);
+    expect(h.probes).toHaveLength(3);
+    expect(settled).toBe(false);
+    await h.probes[2].complete({ exitCode: null });
+    expect(await result).toMatchObject({ details: { reason: 'TIMED_OUT' } });
+    expect(h.active()).toBe(0);
+    expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it('cancels both launched probes and waits for both verification results', async () => {
+    const { deps, spawn } = setup();
+    const abort = controller();
+    deps.signal = abort.signal;
+    const h = controlledProbes(spawn);
+    let settled = false;
+    const result = discoverGlobalLocation('npm', deps).catch(
+      (error: unknown) => {
+        settled = true;
+        return error;
+      },
+    );
+    await tick();
+    expect(h.probes).toHaveLength(2);
+    const reason = new Error('TEST cancel npm discovery');
+    abort.abort(reason);
+    expect(h.probes.every((probe) => probe.stopped)).toBe(true);
+    await h.probes[1].complete({ exitCode: null });
+    await tick();
+    expect(settled).toBe(false);
+    await h.probes[0].complete({ exitCode: null });
+    expect(await result).toBe(reason);
+    expect(h.active()).toBe(0);
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('chooses the earlier query error when two probes fail together', async () => {
+    const { deps, spawn } = setup();
+    spawn.mockImplementation((_file, args) =>
+      Promise.resolve(
+        probeResult(null, {
+          stdout: Buffer.from('TEST invalid path'),
+          ...(args.includes('root') ? { exitCode: 1 } : {}),
+        }),
+      ),
+    );
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves query order when a later failure settles first in the same turn', async () => {
+    const { deps, spawn } = setup();
+    const h = controlledProbes(spawn);
+    const pending = expectGlobalReason(
+      () => discoverGlobalLocation('npm', deps),
+      'LOCATION_AMBIGUOUS',
+    );
+    await tick();
+    await Promise.all([
+      h.probes[1].complete({ timedOut: true }),
+      h.probes[0].complete({ stdout: Buffer.from('TEST invalid prefix') }),
+    ]);
+    await pending;
+    expect(h.active()).toBe(0);
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['npm'] as const)(
     'uses M6 resolver and derives canonical %s tuple',
     async (manager) => {

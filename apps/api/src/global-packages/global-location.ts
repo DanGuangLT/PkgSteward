@@ -258,6 +258,54 @@ export async function runGlobalProbe(
   return { ...result, stderr: Buffer.alloc(0) };
 }
 
+async function probeLocationPaths(
+  commands: readonly IGlobalCommand[],
+  signal: AbortSignal,
+  spawn: GlobalProbeSpawn,
+): Promise<string[]> {
+  const stop = new AbortController();
+  const siblingStopped = new Error('Global location sibling probe stopped');
+  const probeSignal = AbortSignal.any([signal, stop.signal]);
+  const paths: string[] = [];
+  const failures: { index: number; error: unknown }[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (!probeSignal.aborted && next < commands.length) {
+      const index = next++;
+      try {
+        // A slot covers launch, output drain and Windows tree verification.
+        const result = await runGlobalProbe(
+          commands[index],
+          'path',
+          probeSignal,
+          spawn,
+        );
+        signal.throwIfAborted();
+        let path: string;
+        try {
+          path = new TextDecoder('utf-8', { fatal: true })
+            .decode(result.stdout)
+            .replace(/\r?\n$/, '');
+        } catch {
+          throw failure('LOCATION_AMBIGUOUS');
+        }
+        if (!isGlobalAbsolutePath(path)) throw failure('LOCATION_AMBIGUOUS');
+        paths[index] = win32.resolve(path);
+      } catch (error) {
+        // Sibling cancellation must not replace the originating probe error.
+        if (error !== siblingStopped) failures.push({ index, error });
+        stop.abort(siblingStopped);
+      }
+    }
+  };
+  // Never return while a sibling still owns a process/verification slot.
+  await Promise.allSettled([worker(), worker()]);
+  if (failures.length)
+    throw failures.sort((a, b) => a.index - b.index)[0].error;
+  signal.throwIfAborted();
+  return paths;
+}
+
 async function prepareCwd(deps: IGlobalLocationDeps): Promise<{
   cwd: string;
   ancestorConfigs: IGlobalResolvedLocation['configIdentities'];
@@ -414,9 +462,8 @@ export async function discoverGlobalLocation(
     'globalconfig',
     'cache',
   ];
-  const found = new Map<GlobalQuery, string>();
-  for (const query of queries) {
-    const result = await runGlobalProbe(
+  const paths = await probeLocationPaths(
+    queries.map((query) =>
       buildGlobalQuery({
         manager,
         tool,
@@ -425,22 +472,13 @@ export async function discoverGlobalLocation(
         captured,
         query,
       }),
-      'path',
-      deps.signal,
-      deps.spawn,
-    );
-    deps.signal.throwIfAborted();
-    let path: string;
-    try {
-      path = new TextDecoder('utf-8', { fatal: true })
-        .decode(result.stdout)
-        .replace(/\r?\n$/, '');
-    } catch {
-      throw failure('LOCATION_AMBIGUOUS');
-    }
-    if (!isGlobalAbsolutePath(path)) throw failure('LOCATION_AMBIGUOUS');
-    found.set(query, win32.resolve(path));
-  }
+    ),
+    deps.signal,
+    deps.spawn,
+  );
+  const found = new Map<GlobalQuery, string>(
+    queries.map((query, index) => [query, paths[index]]),
+  );
   const globalRoot = found.get('root')!;
   const prefix = found.get('prefix')!;
   const globalDir = null;
