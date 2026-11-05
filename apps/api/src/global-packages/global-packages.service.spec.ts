@@ -306,6 +306,56 @@ afterEach(() => {
 });
 
 describe('pnpm 11 service integration', () => {
+  it('keeps pnpm available when the API inherits npm run environment', async () => {
+    const f = setupPnpmService();
+    f.fs.put(Q.yaml, {
+      text: `globalDir: '${Q.global}'\nglobalBinDir: '${Q.bin}'\n`,
+    });
+    Object.assign(f.runtime.environment, {
+      USERPROFILE: Q.profile,
+      XDG_CONFIG_HOME: 'D:\\TEST\\xdg',
+      npm_config_prefix: 'D:\\TEST\\npm',
+      npm_config_globalconfig: 'D:\\TEST\\npm\\etc\\npmrc',
+      npm_config_userconfig: Q.auth,
+      npm_config_cache: 'D:\\TEST\\npm-cache',
+      npm_config_node_gyp: 'D:\\TEST\\npm\\node-gyp.js',
+      npm_config_user_agent: 'npm/11.13.0 node/v24.16.0 win32 x64',
+    });
+    for (const path of [Q.home, Q.bin, f.location.cwd])
+      f.fs.put(path, { directory: true });
+    f.discover.mockImplementation((manager, deps) =>
+      manager === 'npm'
+        ? Promise.resolve({ ...testLocation(), ...testFacts().location })
+        : readPnpmGlobalConfig({
+            fs: f.runtime.fs,
+            environment: f.runtime.environment,
+            signal: deps.signal,
+            tool: f.location.tool,
+            cwd: f.location.cwd,
+            checkDirectory: (path) =>
+              locationAdapter.assertGlobalDirectory(
+                path,
+                f.runtime.fs,
+                deps.signal,
+                true,
+              ),
+          }).then(() => f.location),
+    );
+    const start = await f.service.inventory({ requestId: f.uuid() });
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+    expect(f.service.getSnapshot()!.managers).toEqual([
+      expect.objectContaining({ manager: 'npm', available: true }),
+      expect.objectContaining({
+        manager: 'pnpm',
+        available: true,
+        reason: null,
+      }),
+    ]);
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
   it('isolates a real 1048577-byte pnpm config in npm inventory, preview and execute', async () => {
     const f = setupPnpmService();
     f.fs.put(Q.yaml, { text: 'x'.repeat(1_048_577) });

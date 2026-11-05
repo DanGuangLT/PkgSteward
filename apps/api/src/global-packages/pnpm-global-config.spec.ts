@@ -61,6 +61,85 @@ function setup(
 }
 
 describe('pnpm 11 static config and source facts', () => {
+  it.each(['lower', 'upper'])(
+    'reads config under npm run environment (%s case), retaining the auth selector',
+    async (casing) => {
+      const authFile = 'D:\\TEST\\npm-run.npmrc';
+      const injected = {
+        npm_config_prefix: 'D:\\TEST\\npm',
+        npm_config_globalconfig: 'D:\\TEST\\npm\\etc\\npmrc',
+        npm_config_userconfig: authFile,
+        npm_config_cache: 'D:\\TEST\\npm-cache',
+        npm_config_user_agent: 'npm/11.13.0 node/v24.16.0 win32 x64',
+        npm_config_node_gyp: 'D:\\TEST\\npm\\node-gyp.js',
+        npm_config_local_prefix: 'D:\\TEST\\api',
+        npm_config_global_prefix: 'D:\\TEST\\npm',
+        npm_config_init_module: 'D:\\TEST\\profile\\.npm-init.js',
+        npm_config_npm_version: '11.13.0',
+        npm_config_noproxy: '',
+      };
+      const environment = Object.fromEntries(
+        Object.entries(injected).map(([key, value]) => [
+          casing === 'upper' ? key.toUpperCase() : key,
+          value,
+        ]),
+      );
+      const h = setup(environment, `globalBinDir: '${Q.bin}'`);
+      h.put(authFile, {
+        text: '//registry.npmjs.org/:_authToken=TEST-not-a-token',
+      });
+      const config = await readPnpmGlobalConfig(h.deps);
+      expect(config.authFile).toBe(authFile);
+      expect(config.policy).toMatchObject({
+        publicAuthPresent: true,
+        unknownRouting: false,
+        changeUnsupported: false,
+      });
+      expect(JSON.stringify(config)).not.toContain('TEST-not-a-token');
+    },
+  );
+
+  it('reads config under pnpm run environment without mistaking obsolete PM settings for hooks', async () => {
+    // pnpm 11.22.0:168216,169205-169206 consumes verify-deps-before-run;
+    // 168175,168966-168967 consumes pm-on-fail. These values enable neither
+    // auto-install-before-run nor PM download. The schema gate ignores the
+    // removed manage-package-manager-versions key (166500-166503).
+    const h = setup({
+      npm_config_user_agent: 'pnpm/11.22.0 npm/? node/v24.16.0 win32 x64',
+      pnpm_config_verify_deps_before_run: 'false',
+      pnpm_config_pm_on_fail: 'ignore',
+      pnpm_config_manage_package_manager_versions: 'false',
+    });
+    expect((await readPnpmGlobalConfig(h.deps)).policy).toMatchObject({
+      unknownRouting: false,
+      changeUnsupported: false,
+    });
+  });
+
+  it.each(['false', 'true'])(
+    'ignores schema-less PM management env (%s), while refusing the same key in YAML/INI',
+    async (value) => {
+      const h = setup({ PNPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: value });
+      expect(
+        (await readPnpmGlobalConfig(h.deps)).policy.changeUnsupported,
+      ).toBe(false);
+      for (const [file, text] of [
+        [
+          Q.yaml,
+          `${fixture('config.yaml')}\nmanagePackageManagerVersions: ${value}`,
+        ],
+        [Q.auth, `manage-package-manager-versions=${value}`],
+      ]) {
+        const source = setup();
+        source.put(file, { text });
+        await expectGlobalReason(
+          () => readPnpmGlobalConfig(source.deps),
+          'CONFIG_UNSUPPORTED',
+        );
+      }
+    },
+  );
+
   it.each(['workspace', 'config', 'environment'] as const)(
     'refuses lockfileDir hook-root redirection from %s before either mutation',
     async (source) => {
@@ -196,6 +275,9 @@ describe('pnpm 11 static config and source facts', () => {
     'refuses unproven executable/layout selectors from %s for change and remove',
     async (source) => {
       for (const key of unprovenSelectors) {
+        // pnpm 11.22.0:166500-166503: obsolete PM management has no env schema.
+        if (source === 'environment' && key === 'managePackageManagerVersions')
+          continue;
         const envKey = `pnpm_config_${key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`;
         const h = setup(
           source === 'environment' ? { [envKey]: 'D:\\TEST\\foreign' } : {},
@@ -858,9 +940,8 @@ describe('pnpm 11 registry policy unions YAML, INI and original environment', ()
   );
 
   it.each([
-    { npm_config_registry: 'https://private.invalid' },
     { pnpm_config_registry: 'https://private.invalid' },
-    { 'npm_config_@test:registry': 'https://private.invalid' },
+    { 'pnpm_config_@test:registry': 'https://private.invalid' },
     {
       pnpm_config__auth:
         '{"https://private.invalid/":{"@":{"authToken":"TEST-not-a-token"}}}',
@@ -884,6 +965,73 @@ describe('pnpm 11 registry policy unions YAML, INI and original environment', ()
       });
     },
   );
+
+  it.each([
+    { npm_config_registry: 'https://private.invalid/' },
+    { NPM_CONFIG_REGISTRY: 'https://private.invalid/' },
+    { 'npm_config_@test:registry': 'https://private.invalid/' },
+    { npm_config__auth: 'not JSON, but ignored by pnpm' },
+    { npm_config_pnpmfile: 'D:\\TEST\\hook.cjs' },
+    { npm_config_ignore_scripts: 'true' },
+  ])(
+    'ignores non-URL npm env settings for pnpm routing: %p',
+    async (environment) => {
+      const config = await readPnpmGlobalConfig(setup(environment).deps);
+      expect(config.policy).toMatchObject({
+        defaultRegistry: 'public',
+        unknownRouting: false,
+        changeUnsupported: false,
+      });
+      expect(
+        assessPnpmGlobalRegistryPolicy(policyInput({ environment })),
+      ).toMatchObject({
+        changeAllowed: true,
+        reason: null,
+        publicAuthPresent: false,
+      });
+    },
+  );
+
+  it.each([
+    ['private.invalid', false],
+    ['registry.npmjs.org', true],
+  ] as const)(
+    'retains URL-scoped npm env auth policy for %s without retaining credentials',
+    async (host, publicAuthPresent) => {
+      const environment = {
+        [`npm_config_//${host}/:_authToken`]: 'TEST-not-a-token',
+      };
+      const h = setup(environment);
+      h.put(Q.auth, { text: '' });
+      const config = await readPnpmGlobalConfig(h.deps);
+      expect(config.policy).toMatchObject({
+        publicAuthPresent,
+        unknownRouting: false,
+        changeUnsupported: false,
+      });
+      const policy = assessPnpmGlobalRegistryPolicy(
+        policyInput({ environment }),
+      );
+      expect(policy).toMatchObject({ changeAllowed: true, publicAuthPresent });
+      expect(JSON.stringify({ config, policy })).not.toContain(
+        'TEST-not-a-token',
+      );
+    },
+  );
+
+  it('still refuses URL-scoped npm env token helpers', async () => {
+    const environment = {
+      'npm_config_//private.invalid/:tokenHelper': 'D:\\TEST\\helper.cmd',
+    };
+    await expectGlobalReason(
+      () => readPnpmGlobalConfig(setup(environment).deps),
+      'CONFIG_UNSUPPORTED',
+    );
+    expect(
+      assessPnpmGlobalRegistryPolicy(policyInput({ environment }))
+        .changeAllowed,
+    ).toBe(false);
+  });
 
   it('does not let a later public source conceal earlier custom routing', () => {
     expect(

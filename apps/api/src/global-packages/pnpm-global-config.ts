@@ -611,6 +611,16 @@ function parseEnvironment(
     // Directory selectors are validated separately; never reinterpret them as YAML.
     if (SELECTORS.some((selector) => selector.toLowerCase() === lower))
       continue;
+    // pnpm 11.22.0:166631 reads only pnpm_config_* settings. npm env is
+    // consumed for userconfig (168563,169025-169027) and URL auth
+    // (167715-167731,168025), not npm run's prefix/cache/registry settings.
+    // Other npm env consumers (native loading/lifecycle/workspace lookup) do
+    // not receive inherited npm_* in our sanitized global-command environment.
+    if (lower.startsWith('npm_config_') && !setting.startsWith('//')) continue;
+    // 166500-166503 ignores keys without a schema;168098-168226 has no
+    // manage-package-manager-versions schema. Its only bundle occurrence is
+    // the obsolete npm env write at322274. Keep YAML/INI refusal unchanged.
+    if (setting === 'manage_package_manager_versions') continue;
     const normalized = normalizedKey(setting);
     if (Object.hasOwn(yamlSafetyKeys, normalized)) {
       // pnpm 11.22.0:166500-166503,168242-168245: allow-builds has no env
