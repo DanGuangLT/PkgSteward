@@ -1,0 +1,4 @@
+# Root settings only: each app in apps/ keeps its own pnpm-workspace.yaml and lockfile.
+# Without this, a repeat `pnpm install` at the root reports "Already up to date" and skips the
+# postinstall that installs both apps (scripts/install-apps.mjs).
+optimisticRepeatInstall: false
