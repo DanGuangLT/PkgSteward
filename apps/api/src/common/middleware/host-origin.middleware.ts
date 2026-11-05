@@ -14,8 +14,15 @@ export const isAllowedHost = (
   return LOOPBACK_HOSTNAMES.some((name) => value === `${name}:${port}`);
 };
 
+// Vòng lặp thay regex /\/+$/: regex đó chạy O(n²) với Origin gồm nhiều '/' rồi ký tự khác.
+const trimTrailingSlashes = (value: string) => {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
+};
+
 const normalizeOrigin = (origin: string) =>
-  origin.trim().replace(/\/+$/, '').toLowerCase();
+  trimTrailingSlashes(origin.trim()).toLowerCase();
 
 export const isAllowedOrigin = (
   origin: string,

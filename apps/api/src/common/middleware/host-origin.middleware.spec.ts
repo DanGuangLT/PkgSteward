@@ -51,6 +51,19 @@ describe('isAllowedOrigin', () => {
   );
   it('rejects everything when no origin is configured', () =>
     expect(isAllowedOrigin('http://localhost:24680', [])).toBe(false));
+  it('accepts the configured Origin with several trailing slashes', () =>
+    expect(isAllowedOrigin('http://localhost:24680///', allowed)).toBe(true));
+  it('accepts an Origin that ends in a long run of slashes', () =>
+    expect(
+      isAllowedOrigin(`http://localhost:24680${'/'.repeat(100_000)}`, allowed),
+    ).toBe(true));
+  // Cắt '/' cuối phải tuyến tính: regex /\/+$/ mất ~4 s với chuỗi này (CodeQL polynomial ReDoS).
+  it('rejects slashes followed by another character in linear time', () => {
+    const origin = `http://localhost:24680${'/'.repeat(100_000)}x`;
+    const started = performance.now();
+    expect(isAllowedOrigin(origin, allowed)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe('isWriteMethod / parseAllowedOrigins', () => {
