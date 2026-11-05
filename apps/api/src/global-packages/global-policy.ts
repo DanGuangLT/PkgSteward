@@ -21,6 +21,7 @@ export const GLOBAL_PROTECTED_PACKAGES = [
   'npm',
   'corepack',
   'pnpm',
+  '@pnpm/exe',
   'yarn',
   '@yarnpkg/cli',
   '@yarnpkg/cli-dist',
@@ -203,6 +204,28 @@ export function assertGlobalPackageMutable(
     const key = binKey(bin.name);
     if (owners.has(key) && owners.get(key) !== input.packageName)
       return fail('BIN_CONFLICT');
+  }
+  if (input.pnpmGroup) assertPnpmGlobalPackageMutable(input);
+}
+
+function assertPnpmGlobalPackageMutable(input: IGlobalProtectionInput): void {
+  const group = input.pnpmGroup!;
+  const base = { ...input, pnpmGroup: undefined, groupPackages: undefined };
+  // pnpm mutates the entire install directory; its links are already proven by inventory.
+  for (const packageRoot of [
+    group.installDir,
+    ...group.packageLinks.flatMap((link) => [link.logicalPath, link.realPath]),
+  ])
+    assertGlobalPackageMutable({ ...base, packageRoot });
+  for (const member of input.groupPackages ?? []) {
+    assertGlobalPackageMutable({
+      ...base,
+      packageName: member.name,
+      packageRoot: member.packageRoot,
+      currentBins: member.bins,
+      targetBins: [],
+      binOwners: [],
+    });
   }
 }
 export function assessGlobalVersionChange(

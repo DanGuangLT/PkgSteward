@@ -6,11 +6,17 @@ import * as inventoryAdapter from '@/global-packages/global-inventory';
 import { GlobalRegistry } from '@/global-packages/global-registry';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
 import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
-import type { IGlobalProbeResult } from '@/global-packages/interfaces/global-packages.runtime';
 import type {
+  IGlobalProbeResult,
+  IGlobalResolvedLocation,
+} from '@/global-packages/interfaces/global-packages.runtime';
+import type {
+  GlobalManager,
+  GlobalReasonCode,
   IGlobalExecuteRequest,
   IGlobalJob,
   IGlobalPreview,
+  IGlobalPreviewRequest,
 } from '@/global-packages/interfaces/global-packages.types';
 import {
   deferred,
@@ -29,6 +35,167 @@ import {
   probeResult,
   testLocation,
 } from '@/global-packages/__fixtures__/global-adapters';
+import { pnpmPreviewFacts } from '@/global-packages/__fixtures__/pnpm11/inventory';
+import { PNPM_TEST_PATHS as Q } from '@/global-packages/__fixtures__/pnpm11/facts';
+import type { IPnpmGlobalPolicy } from '@/global-packages/interfaces/pnpm-global.types';
+
+// TEST không phải yêu cầu nghiệp vụ. Memory-only service boundary; no host IO.
+const emptyPnpmInventory = (): IGlobalInventoryResult => ({
+  packages: [],
+  facts: [],
+  binOwners: [],
+  ownershipComplete: true,
+  pnpmInventory: {
+    groups: [],
+    unreferencedDirectories: [],
+    ownershipComplete: true,
+  },
+});
+
+async function finishPnpmJob(
+  service: GlobalPackagesService,
+  id: string,
+): Promise<IGlobalJob> {
+  for (let index = 0; index < 2000; index++) {
+    const job = service.getJob(id);
+    if (job.phase === 'done') return job;
+    await Promise.resolve();
+  }
+  throw new Error('TEST pnpm job did not finish within mocked microtasks');
+}
+
+function setupPnpmService(change = false) {
+  const fixture = testRuntime();
+  const facts = pnpmPreviewFacts();
+  const location: IGlobalResolvedLocation = {
+    ...testLocation('pnpm'),
+    ...facts.location,
+  };
+  facts.location = location;
+  fixture.runtime.environment = {
+    PATH: `${Q.bin};C:\\Program Files\\nodejs;C:\\Windows\\System32`,
+    PNPM_HOME: Q.home,
+  };
+  fixture.fs.put(Q.yaml, { text: 'registry: https://registry.npmjs.org/\n' });
+  fixture.fs.put(Q.auth, { text: '' });
+  location.globalConfig = Q.yaml;
+  location.configIdentities = [
+    testConfigIdentity(Q.yaml, 'registry: https://registry.npmjs.org/\n'),
+    testConfigIdentity(Q.auth),
+  ];
+  location.pnpm!.configIdentities = [...location.configIdentities];
+  const unavailable = new Map<GlobalManager, GlobalReasonCode>();
+  const discover = jest
+    .spyOn(locationAdapter, 'discoverGlobalLocation')
+    .mockImplementation((manager) => {
+      const reason = unavailable.get(manager);
+      if (reason)
+        return Promise.reject(
+          new AppException(409, 'TEST manager unavailable', 'CONFLICT', {
+            reason,
+          }),
+        );
+      return Promise.resolve(
+        manager === 'pnpm'
+          ? location
+          : { ...testLocation(), ...testFacts().location },
+      );
+    });
+  let before: IGlobalInventoryResult = {
+    ...testInventory(facts),
+    pnpmInventory: facts.pnpmInventory,
+  };
+  let after = emptyPnpmInventory();
+  const inventory = jest
+    .spyOn(inventoryAdapter, 'readGlobalInventory')
+    .mockImplementation((resolved) =>
+      Promise.resolve(
+        resolved.manager === 'npm'
+          ? testInventory()
+          : fixture.child.launch.mock.calls.length
+            ? after
+            : before,
+      ),
+    );
+  const versions = jest
+    .spyOn(GlobalRegistry.prototype, 'getVersions')
+    .mockResolvedValue({
+      manager: 'pnpm',
+      package: 'is-number',
+      versions: ['7.0.0', '8.0.0'],
+      tags: { latest: '8.0.0' },
+    });
+  const targetFacts = {
+    ...testFacts(true).target!,
+    name: 'is-number',
+    version: '8.0.0',
+    bins: [],
+  };
+  const target = jest
+    .spyOn(GlobalRegistry.prototype, 'getTarget')
+    .mockResolvedValue(targetFacts);
+  const service = new GlobalPackagesService(fixture.runtime);
+  const request = (
+    patch: Partial<IGlobalPreviewRequest> = {},
+  ): IGlobalPreviewRequest => ({
+    requestId: fixture.uuid(),
+    manager: 'pnpm',
+    package: 'is-number',
+    action: change ? 'change' : 'remove',
+    ...(change ? { targetVersion: 'latest' } : {}),
+    ...patch,
+  });
+  const ready = async (): Promise<IGlobalPreview> => {
+    const start = await service.preview(request());
+    const job = await finishPnpmJob(service, start.jobId);
+    expect(job).toMatchObject({ status: 'completed', failureCode: null });
+    expect(job.preview).not.toBeNull();
+    return job.preview!;
+  };
+  const consent = (
+    preview: IGlobalPreview,
+    patch: Partial<IGlobalExecuteRequest> = {},
+  ) =>
+    testConsent({
+      requestId: fixture.uuid(),
+      previewId: preview.previewId,
+      confirmText: preview.confirmText,
+      ...patch,
+    });
+  return {
+    ...fixture,
+    service,
+    facts,
+    location,
+    unavailable,
+    discover,
+    inventory,
+    versions,
+    target,
+    targetFacts,
+    request,
+    ready,
+    consent,
+    before: () => before,
+    replaceBefore: (value: IGlobalInventoryResult) => {
+      before = value;
+    },
+    post: (value: IGlobalInventoryResult) => {
+      after = value;
+    },
+    config: (text: string) => {
+      fixture.fs.put(Q.yaml, { text });
+      const identity = testConfigIdentity(Q.yaml, text);
+      location.configIdentities = [identity, testConfigIdentity(Q.auth)];
+      location.pnpm!.configIdentities = [...location.configIdentities];
+    },
+    absent: () => {
+      const path = win32.join(Q.config, 'auth.ini');
+      location.pnpm!.missingConfigPaths = [path];
+      return path;
+    },
+  };
+}
 
 const emptyInventory = (): IGlobalInventoryResult => ({
   packages: [],
@@ -137,6 +304,675 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('pnpm 11 service integration', () => {
+  it('lists ready pnpm and npm independently, without pnpm list or mutation', async () => {
+    const f = setupPnpmService();
+    const start = await f.service.inventory({ requestId: f.uuid() });
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'completed',
+    });
+    expect(f.service.getSnapshot()!.managers).toEqual([
+      expect.objectContaining({ manager: 'npm', available: true }),
+      expect.objectContaining({
+        manager: 'pnpm',
+        available: true,
+        reason: null,
+        version: '11.22.0',
+        globalRoot: Q.root,
+        binDir: Q.bin,
+        packages: [
+          expect.objectContaining({
+            name: 'is-number',
+            status: 'manageable',
+          }) as unknown,
+        ],
+      }),
+    ]);
+    expect(f.probe).not.toHaveBeenCalled();
+    expect(f.child.launch).not.toHaveBeenCalled();
+    expect(f.tryEnter).not.toHaveBeenCalled();
+  });
+
+  it('accepts a ready bin/PATH with an absent versioned root as empty inventory', async () => {
+    const f = setupPnpmService();
+    f.location.pnpm!.missingDirectoryPaths = [Q.root];
+    f.replaceBefore(emptyPnpmInventory());
+    const start = await f.service.inventory({ requestId: f.uuid() });
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+    expect(f.service.getSnapshot()!.managers[1]).toMatchObject({
+      available: true,
+      packages: [],
+    });
+    expect(f.probe).not.toHaveBeenCalled();
+  });
+
+  it('preserves npm inventory if pnpm static inventory is unreadable', async () => {
+    const f = setupPnpmService();
+    f.inventory.mockImplementation((location) =>
+      location.manager === 'pnpm'
+        ? Promise.reject(
+            new AppException(
+              409,
+              'TEST unreadable pnpm inventory',
+              'CONFLICT',
+              { reason: 'INVENTORY_FAILED' },
+            ),
+          )
+        : Promise.resolve(testInventory()),
+    );
+    const start = await f.service.inventory({ requestId: f.uuid() });
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+    expect(f.service.getSnapshot()!.managers).toEqual([
+      expect.objectContaining({ manager: 'npm', available: true }),
+      expect.objectContaining({
+        manager: 'pnpm',
+        available: false,
+        reason: 'INVENTORY_FAILED',
+        packages: [],
+      }),
+    ]);
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'PNPM_GLOBAL_NOT_CONFIGURED',
+    'CONFIG_UNSUPPORTED',
+    'LOCATION_AMBIGUOUS',
+    'TOOL_NOT_FOUND',
+    'TOOL_VERSION_MISMATCH',
+  ] as const)(
+    'surfaces pnpm %s per manager while preserving npm inventory',
+    async (reason) => {
+      const f = setupPnpmService();
+      f.unavailable.set('pnpm', reason);
+      const start = await f.service.inventory({ requestId: f.uuid() });
+      expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+        'completed',
+      );
+      expect(f.service.getSnapshot()!.managers).toEqual([
+        expect.objectContaining({ manager: 'npm', available: true }),
+        {
+          manager: 'pnpm',
+          version: null,
+          available: false,
+          reason,
+          globalRoot: null,
+          binDir: null,
+          packages: [],
+        },
+      ]);
+      expect(f.probe).not.toHaveBeenCalled();
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['PNPM_GLOBAL_NOT_CONFIGURED', 'CONFIG_UNSUPPORTED'] as const)(
+    'still previews npm when pnpm discovery returns %s',
+    async (reason) => {
+      const f = setupPnpmService();
+      f.unavailable.set('pnpm', reason);
+      const start = await f.service.preview(
+        f.request({ manager: 'npm', package: 'test-tool' }),
+      );
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'completed',
+        preview: { manager: 'npm', package: 'test-tool' },
+      });
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['versions', 'preview'] as const)(
+    'returns setup reason for pnpm %s without fetch or spawn',
+    async (kind) => {
+      const f = setupPnpmService();
+      f.unavailable.set('pnpm', 'PNPM_GLOBAL_NOT_CONFIGURED');
+      const request = f.request();
+      const start =
+        kind === 'versions'
+          ? await f.service.versions(request)
+          : await f.service.preview(request);
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'PNPM_GLOBAL_NOT_CONFIGURED',
+        mutationSpawned: false,
+      });
+      expect(f.versions).not.toHaveBeenCalled();
+      expect(f.target).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['root', 'bin', 'cross'] as const)(
+    'never swallows discovered %s overlap as manager unavailability',
+    async (kind) => {
+      const f = setupPnpmService();
+      const npm = testLocation();
+      if (kind === 'root') f.location.globalRoot = npm.globalRoot;
+      if (kind === 'bin') f.location.binDir = npm.binDir;
+      if (kind === 'cross')
+        f.location.binDir = win32.join(npm.globalRoot, 'test-bin');
+      for (const activity of ['inventory', 'preview'] as const) {
+        const start =
+          activity === 'inventory'
+            ? await f.service.inventory({ requestId: f.uuid() })
+            : await f.service.preview(
+                f.request({ manager: 'npm', package: 'test-tool' }),
+              );
+        expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+          status: 'failed',
+          failureCode: 'LOCATION_AMBIGUOUS',
+        });
+      }
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['remove', 'change'] as const)(
+    'surfaces readonly group reason for %s before metadata or mutation',
+    async (action) => {
+      const f = setupPnpmService();
+      f.before().packages[0].status = 'invalid';
+      f.before().packages[0].reason = 'GLOBAL_GROUP_UNSUPPORTED';
+      const start = await f.service.preview(
+        f.request({
+          action,
+          ...(action === 'change' ? { targetVersion: 'latest' } : {}),
+        }),
+      );
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'GLOBAL_GROUP_UNSUPPORTED',
+      });
+      expect(f.target).not.toHaveBeenCalled();
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  const blockedPolicies: readonly Partial<IPnpmGlobalPolicy>[] = [
+    { defaultRegistry: 'custom' },
+    { unknownRouting: true },
+    { changeUnsupported: true },
+  ];
+  it.each(blockedPolicies)(
+    'blocks versions/change from pinned pnpm policy %p without metadata calls',
+    async (patch) => {
+      const f = setupPnpmService(true);
+      Object.assign(f.location.pnpm!.policy, patch);
+      for (const kind of ['versions', 'preview'] as const) {
+        const request = f.request();
+        const start =
+          kind === 'versions'
+            ? await f.service.versions(request)
+            : await f.service.preview(request);
+        expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+          status: 'failed',
+          failureCode: 'REGISTRY_CONFIG_UNSUPPORTED',
+        });
+      }
+      expect(f.versions).not.toHaveBeenCalled();
+      expect(f.target).not.toHaveBeenCalled();
+      expect(f.fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['@test/tool', false],
+    ['@unrelated/tool', true],
+  ] as const)(
+    'honors matching scope policy for %s (allowed=%s)',
+    async (packageName, allowed) => {
+      const f = setupPnpmService();
+      f.location.pnpm!.policy.scopedRegistries = ['@test'];
+      const start = await f.service.versions(
+        f.request({ package: packageName }),
+      );
+      const job = await finishPnpmJob(f.service, start.jobId);
+      expect(job.status).toBe(allowed ? 'completed' : 'failed');
+      if (!allowed) expect(job.failureCode).toBe('REGISTRY_CONFIG_UNSUPPORTED');
+      expect(f.versions).toHaveBeenCalledTimes(allowed ? 1 : 0);
+    },
+  );
+
+  it('passes only typed pnpm policy summaries to registry lookup, never raw YAML or auth', async () => {
+    const f = setupPnpmService();
+    const secret = 'TEST-public-auth-value';
+    f.fs.put(Q.auth, { text: `//registry.npmjs.org/:_authToken=${secret}\n` });
+    f.location.pnpm!.policy.publicAuthPresent = true;
+    f.location.configIdentities[1] = testConfigIdentity(
+      Q.auth,
+      `//registry.npmjs.org/:_authToken=${secret}\n`,
+    );
+    f.location.pnpm!.configIdentities = [...f.location.configIdentities];
+    const start = await f.service.versions(f.request());
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+    const input = f.versions.mock.calls[0][0];
+    expect(input.pnpmPolicies).toEqual([f.location.pnpm!.policy]);
+    expect(input.configs).toEqual([]);
+    expect(JSON.stringify(input)).not.toContain(secret);
+    expect(JSON.stringify(f.service.getJob(start.jobId))).not.toContain(secret);
+    expect(JSON.stringify(f.audit.mock.calls)).not.toContain(secret);
+  });
+
+  it('removes offline under custom pnpm routing with exact remove argv and separate home/bin', async () => {
+    const f = setupPnpmService();
+    f.location.pnpm!.policy.defaultRegistry = 'custom';
+    f.config('registry: https://TEST-private.invalid/\n');
+    const preview = await f.ready();
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(f.child.launch.mock.calls[0][0]).toMatchObject({
+      args: [
+        f.location.tool.entry,
+        '--dir',
+        f.location.cwd,
+        '--pm-on-fail=warn',
+        'remove',
+        '--global',
+        '--global-dir',
+        Q.global,
+        '--store-dir',
+        Q.store,
+        '--reporter=append-only',
+        '--',
+        'is-number',
+      ],
+      env: { PNPM_HOME: Q.home, pnpm_config_npmrc_auth_file: Q.auth },
+      shell: false,
+      extendEnv: false,
+      stdin: 'ignore',
+    });
+    expect(f.versions).not.toHaveBeenCalled();
+    expect(f.target).not.toHaveBeenCalled();
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'completed',
+      auditWritten: true,
+      gateHeld: false,
+    });
+    expect(f.probe).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(f.audit.mock.calls.map(([record]) => record.phase)).toEqual([
+      'intent',
+      'result',
+    ]);
+    expect(f.audit.mock.calls[0][0]).toMatchObject({
+      method: 'pnpm:remove',
+      targets: [Q.root, 'is-number'],
+    });
+  });
+
+  it('changes to one pinned exact version with static postinventory', async () => {
+    const f = setupPnpmService(true);
+    const preview = await f.ready();
+    const post = testInventory(f.facts);
+    post.packages[0] = { ...post.packages[0], version: '8.0.0' };
+    post.facts = [{ ...f.facts.current, version: '8.0.0' }];
+    post.pnpmInventory = f.facts.pnpmInventory;
+    f.post(post);
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    expect(f.child.launch.mock.calls[0][0].args).toEqual([
+      f.location.tool.entry,
+      '--dir',
+      f.location.cwd,
+      '--pm-on-fail=warn',
+      'add',
+      '--global',
+      '--global-dir',
+      Q.global,
+      '--global-bin-dir',
+      Q.bin,
+      '--store-dir',
+      Q.store,
+      '--registry',
+      'https://registry.npmjs.org',
+      '--reporter=append-only',
+      '--',
+      'is-number@8.0.0',
+    ]);
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'completed',
+      mutationSpawned: true,
+      gateHeld: false,
+    });
+    expect(f.probe).not.toHaveBeenCalled();
+  });
+
+  it('uses the proven metadata store when config leaves storeDir at its default', async () => {
+    const f = setupPnpmService();
+    f.location.storeDir = null;
+    f.location.pnpm!.storeDir = null;
+    const preview = await f.ready();
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    const command = f.child.launch.mock.calls[0][0];
+    expect(command.args[command.args.indexOf('--store-dir') + 1]).toBe(Q.store);
+    f.child.exit();
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+  });
+
+  it.each(
+    (['before', 'after-intent'] as const).flatMap((timing) =>
+      (['config', 'absence', 'group', 'link', 'shim', 'policy'] as const).map(
+        (kind) => ({ timing, kind }),
+      ),
+    ),
+  )('pins $kind facts $timing', async ({ timing, kind }) => {
+    const f = setupPnpmService();
+    const missing = f.absent();
+    const preview = await f.ready();
+    const change = () => {
+      if (kind === 'config') f.config('minimumReleaseAge: 1440\n');
+      if (kind === 'absence') {
+        f.fs.put(missing, { text: 'registry=https://registry.npmjs.org/\n' });
+        f.location.pnpm!.missingConfigPaths = [];
+        f.location.pnpm!.configIdentities = [
+          ...f.location.pnpm!.configIdentities,
+          testConfigIdentity(missing, 'registry=https://registry.npmjs.org/\n'),
+        ];
+        f.location.configIdentities = [...f.location.pnpm!.configIdentities];
+      }
+      if (kind === 'group')
+        f.facts.current.pnpmGroup!.lockfile.sha256 += '-changed';
+      if (kind === 'link')
+        f.facts.current.pnpmGroup!.packageLinks[0].identity.stat.ino = 991;
+      if (kind === 'shim')
+        f.facts.pnpmInventory!.shimIdentities![0].sha256 += '-changed';
+      if (kind === 'policy') f.location.pnpm!.policy.changeUnsupported = true;
+    };
+    if (timing === 'before') change();
+    else
+      f.audit.mockImplementationOnce(() => {
+        change();
+        return Promise.resolve();
+      });
+    const start = await f.service.execute(f.consent(preview));
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'PREVIEW_CHANGED',
+      mutationSpawned: false,
+    });
+    expect(f.child.launch).not.toHaveBeenCalled();
+    expect(
+      f.audit.mock.calls.filter(([record]) => record.phase === 'intent'),
+    ).toHaveLength(timing === 'before' ? 0 : 1);
+  });
+
+  it.each(['logical', 'store', 'install'] as const)(
+    'recomputes pnpm %s protection from private facts',
+    async (kind) => {
+      const f = setupPnpmService();
+      const group = f.facts.current.pnpmGroup!;
+      const root =
+        kind === 'logical'
+          ? group.packageLinks[0].logicalPath
+          : kind === 'store'
+            ? f.facts.current.packageRoot
+            : group.installDir;
+      f.location.protectedPaths = [win32.join(root, 'protected-child')];
+      const start = await f.service.preview(f.request());
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'PROTECTED_PACKAGE',
+      });
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['before', 'after-intent'] as const)(
+    'refuses pnpm add orphan cleanup %s, including a fresh orphan',
+    async (timing) => {
+      const f = setupPnpmService(true);
+      if (timing === 'before')
+        f.facts.pnpmInventory!.unreferencedDirectories = [
+          {
+            ...f.facts.current.pnpmGroup!.directory,
+            path: win32.join(Q.root, '1-1-0123456789abcdef'),
+            stat: {
+              ...f.facts.current.pnpmGroup!.directory.stat,
+              mtimeMs: f.clock.now().getTime(),
+              ctimeMs: f.clock.now().getTime(),
+            },
+          },
+        ];
+      if (timing === 'before') {
+        const start = await f.service.preview(f.request());
+        const job = await finishPnpmJob(f.service, start.jobId);
+        expect(job.status).toBe('failed');
+        expect(job.preview).toBeNull();
+      } else {
+        const preview = await f.ready();
+        f.audit.mockImplementationOnce(() => {
+          f.facts.pnpmInventory!.unreferencedDirectories = [
+            {
+              ...f.facts.current.pnpmGroup!.directory,
+              path: win32.join(Q.root, '1-1-0123456789abcdef'),
+              stat: {
+                ...f.facts.current.pnpmGroup!.directory.stat,
+                mtimeMs: f.clock.now().getTime(),
+                ctimeMs: f.clock.now().getTime(),
+              },
+            },
+          ];
+          return Promise.resolve();
+        });
+        const start = await f.service.execute(f.consent(preview));
+        expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+          status: 'failed',
+          failureCode: 'PREVIEW_CHANGED',
+        });
+      }
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows remove with an unrelated orphan when all ownership is proven', async () => {
+    const f = setupPnpmService();
+    f.facts.pnpmInventory!.unreferencedDirectories = [
+      {
+        ...f.facts.current.pnpmGroup!.directory,
+        path: win32.join(Q.root, '1-1-0123456789abcdef'),
+        stat: {
+          ...f.facts.current.pnpmGroup!.directory.stat,
+          mtimeMs: f.clock.now().getTime(),
+          ctimeMs: f.clock.now().getTime(),
+        },
+      },
+    ];
+    expect((await f.ready()).action).toBe('remove');
+  });
+
+  it.each(['remove', 'change'] as const)(
+    'refuses unproven inventory ownership for %s',
+    async (action) => {
+      const f = setupPnpmService(action === 'change');
+      f.before().ownershipComplete = false;
+      f.facts.pnpmInventory!.ownershipComplete = false;
+      const start = await f.service.preview(f.request());
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'BIN_CONFLICT',
+      });
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['setup', 'group'] as const)(
+    'maps newly lost %s proof at execute to PREVIEW_CHANGED',
+    async (kind) => {
+      const f = setupPnpmService();
+      const preview = await f.ready();
+      if (kind === 'setup')
+        f.unavailable.set('pnpm', 'PNPM_GLOBAL_NOT_CONFIGURED');
+      else {
+        f.before().packages[0].status = 'invalid';
+        f.before().packages[0].reason = 'GLOBAL_GROUP_UNSUPPORTED';
+      }
+      const start = await f.service.execute(f.consent(preview));
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'PREVIEW_CHANGED',
+        mutationSpawned: false,
+      });
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains exact consent, shared gate and execute replay for pnpm', async () => {
+    const f = setupPnpmService();
+    const preview = await f.ready();
+    for (const patch of [{ confirmText: 'wrong' }, { acknowledgedRisks: [] }])
+      await expect(
+        f.service.execute(f.consent(preview, patch)),
+      ).rejects.toBeInstanceOf(AppException);
+    expect(f.tryEnter).not.toHaveBeenCalled();
+    f.tryEnter.mockReturnValueOnce(null);
+    await expectGlobalReason(
+      () => f.service.execute(f.consent(preview)),
+      'RUNNING',
+    );
+    const request = f.consent(preview);
+    const start = await f.service.execute(request);
+    expect((await f.service.execute(request)).jobId).toBe(start.jobId);
+    await flushJobs();
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    f.child.exit();
+    expect((await finishPnpmJob(f.service, start.jobId)).gateHeld).toBe(false);
+  });
+
+  it('refuses spawn on intent audit failure', async () => {
+    const f = setupPnpmService();
+    const preview = await f.ready();
+    f.audit.mockRejectedValueOnce(new Error('TEST intent failed'));
+    const start = await f.service.execute(f.consent(preview));
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      failureCode: 'AUDIT_WRITE_FAILED',
+      mutationSpawned: false,
+    });
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it.each(['remove', 'change'] as const)(
+    'never certifies %s from incomplete static postinventory',
+    async (action) => {
+      const f = setupPnpmService(action === 'change');
+      const preview = await f.ready();
+      const post = emptyPnpmInventory();
+      post.ownershipComplete = false;
+      post.pnpmInventory!.ownershipComplete = false;
+      f.post(post);
+      const start = await f.service.execute(f.consent(preview));
+      await flushJobs();
+      f.child.exit();
+      const job = await finishPnpmJob(f.service, start.jobId);
+      expect(job.status).toBe('failed');
+      expect(job.failureCode).toBe('INVENTORY_FAILED');
+      expect(job.gateHeld).toBe(true);
+      expect(job.refreshRequired).toBe(true);
+      expect(f.child.launch).toHaveBeenCalledTimes(1);
+      expect(f.probe).not.toHaveBeenCalled();
+    },
+  );
+
+  it('fails postcondition if the removed name remains in a different pnpm group', async () => {
+    const f = setupPnpmService();
+    const preview = await f.ready();
+    const post = testInventory(f.facts);
+    const group = f.facts.current.pnpmGroup!;
+    const installDir = win32.join(Q.root, '1234-1a1aa104925-bbbbbbbbbbbbbbbb');
+    post.facts = [{ ...f.facts.current, pnpmGroup: { ...group, installDir } }];
+    post.pnpmInventory = {
+      groups: [post.facts[0].pnpmGroup!],
+      ownershipComplete: true,
+      unreferencedDirectories: [],
+    };
+    f.post(post);
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'POSTCONDITION_FAILED',
+    });
+  });
+
+  it('does not accept duplicate exact rows as one successful change', async () => {
+    const f = setupPnpmService(true);
+    const preview = await f.ready();
+    const post = testInventory(f.facts);
+    post.packages = [0, 1].map(() => ({
+      ...post.packages[0],
+      version: '8.0.0',
+    }));
+    post.facts = [0, 1].map(() => ({ ...f.facts.current, version: '8.0.0' }));
+    post.pnpmInventory = f.facts.pnpmInventory;
+    f.post(post);
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'POSTCONDITION_FAILED',
+    });
+  });
+
+  it('holds gate on result audit failure and retries cleanup without a second mutation', async () => {
+    const f = setupPnpmService();
+    const preview = await f.ready();
+    f.audit.mockImplementation((record) =>
+      record.phase === 'result'
+        ? Promise.reject(new Error('TEST audit failed'))
+        : Promise.resolve(),
+    );
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+      gateHeld: true,
+      failureCode: 'AUDIT_WRITE_FAILED',
+    });
+    f.audit.mockResolvedValue(undefined);
+    await f.service.cancel(start.jobId);
+    await flushJobs();
+    expect(f.service.getJob(start.jobId).gateHeld).toBe(false);
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['cancel', 'timeout'] as const)(
+    'preserves %s and static cleanup with no pnpm list spawn',
+    async (stop) => {
+      const f = setupPnpmService();
+      f.runtime.timeoutMs = 1000;
+      const preview = await f.ready();
+      const start = await f.service.execute(f.consent(preview));
+      await flushJobs();
+      if (stop === 'cancel') await f.service.cancel(start.jobId);
+      else f.clock.advance(1000);
+      f.child.exit({ exitCode: null, signal: 'SIGTERM' });
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: stop === 'cancel' ? 'cancelled' : 'timed_out',
+        mutationSpawned: true,
+        gateHeld: false,
+      });
+      expect(f.child.stop).toHaveBeenCalled();
+      expect(f.child.launch).toHaveBeenCalledTimes(1);
+      expect(f.probe).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('M7 RAM reads and admission', () => {
   it('returns null on a fresh instance; snapshot/latest GET never spawn or fetch', () => {
     const f = setup();
@@ -171,63 +1007,14 @@ describe('M7 RAM reads and admission', () => {
     expect(f.child.launch).not.toHaveBeenCalled();
   });
 
-  it('reports pnpm as disabled without probing it and fails pnpm versions/preview jobs', async () => {
-    const f = setup();
-    const start = await f.service.inventory({ requestId: TEST_REQUEST_ID });
-    expect((await done(f.service, start.jobId)).status).toBe('completed');
-    expect(
-      f.service
-        .getSnapshot()!
-        .managers.find((manager) => manager.manager === 'pnpm'),
-    ).toEqual({
-      manager: 'pnpm',
-      available: false,
-      reason: 'MANAGER_DISABLED',
-      version: null,
-      globalRoot: null,
-      binDir: null,
-      packages: [],
-    });
-    expect(
-      f.service
-        .getSnapshot()!
-        .managers.find((manager) => manager.manager === 'npm')!.available,
-    ).toBe(true);
-    const versions = await f.service.versions({
-      requestId: TEST_EXECUTE_ID,
-      manager: 'pnpm',
-      package: 'test-tool',
-    });
-    expect(await done(f.service, versions.jobId)).toMatchObject({
-      status: 'failed',
-      failureCode: 'MANAGER_DISABLED',
-    });
-    const preview = await f.service.preview(
-      testRequest({
-        requestId: '00000000-0000-4000-8000-000000000105',
-        manager: 'pnpm',
-      }),
-    );
-    expect(await done(f.service, preview.jobId)).toMatchObject({
-      status: 'failed',
-      failureCode: 'MANAGER_DISABLED',
-      preview: null,
-    });
-    expect(
-      f.location.mock.calls.filter(([manager]) => manager === 'pnpm'),
-    ).toHaveLength(0);
-    expect(f.child.launch).not.toHaveBeenCalled();
-  });
-
-  it('still previews npm while pnpm is disabled', async () => {
+  it('still previews npm with pnpm enabled and independently discovered', async () => {
     const f = setup();
     const preview = await f.ready();
     expect(preview.manager).toBe('npm');
     expect(
       f.location.mock.calls.filter(([manager]) => manager === 'pnpm'),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
-
   it.each(['inventory', 'versions', 'preview'] as const)(
     '%s uses the single M7 slot and no gate even when a mutation elsewhere owns it',
     async (kind) => {

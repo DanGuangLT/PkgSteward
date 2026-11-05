@@ -96,8 +96,8 @@ const job: IGlobalJob = {
 };
 
 describe('global public contract and entity exclusions', () => {
-  it('keeps pnpm disabled while serializing setup and group reasons', () => {
-    expect(GLOBAL_DISABLED_MANAGERS).toEqual(['pnpm']);
+  it('enables both managers while retaining disabled, setup and group reasons', () => {
+    expect(GLOBAL_DISABLED_MANAGERS).toEqual([]);
     expect(GLOBAL_REASON_CODES).toEqual(
       expect.arrayContaining([
         'MANAGER_DISABLED',

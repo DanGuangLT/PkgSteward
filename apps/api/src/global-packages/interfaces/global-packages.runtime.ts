@@ -85,6 +85,9 @@ export interface IGlobalProtectionInput {
   binOwners: readonly IGlobalBinOwner[];
   ownershipComplete: boolean;
   protectedPaths: readonly string[];
+  // Internal-link proof and all packages affected by a pnpm install-dir mutation.
+  pnpmGroup?: IPnpmGlobalGroupFacts;
+  groupPackages?: readonly IGlobalPackageFacts[];
 }
 export interface IGlobalPackageFacts {
   name: string;

@@ -11,8 +11,7 @@ import type {
 
 export const GLOBAL_MANAGERS = ['npm', 'pnpm'] as const;
 export type GlobalManager = (typeof GLOBAL_MANAGERS)[number];
-// pnpm 11 remains disabled until config, inventory and integration checks pass.
-export const GLOBAL_DISABLED_MANAGERS: readonly GlobalManager[] = ['pnpm'];
+export const GLOBAL_DISABLED_MANAGERS: readonly GlobalManager[] = [];
 export const GLOBAL_ACTIONS = ['remove', 'change'] as const;
 export type GlobalAction = (typeof GLOBAL_ACTIONS)[number];
 export const GLOBAL_JOB_KINDS = [
