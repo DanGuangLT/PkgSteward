@@ -1,11 +1,12 @@
 "use client"
 
 import { AlertTriangleIcon, CircleIcon, LoaderCircleIcon, RefreshCwIcon, RotateCwIcon, SquareIcon, type LucideIcon } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useState, type ReactNode, type RefObject } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { globalMutationSucceeded } from "@/lib/global-packages/global-session"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 import type messages from "@/messages/vi.json"
 
@@ -22,12 +23,14 @@ export function GlobalCodeMessage({ code, kind = "errors" }: { code: string; kin
   return <>{t(t.has(key) ? key : "errors.UNKNOWN")}</>
 }
 
-export function GlobalPackageJob({ controller }: { controller: GlobalController }) {
+export function GlobalPackageJob({ controller, headingRef }: { controller: GlobalController; headingRef: RefObject<HTMLHeadingElement | null> }) {
   const t = useTranslations("globalPackages")
   const format = useFormatter()
   const { state, cancel, refresh, retryPoll } = controller
   const [cancelledJob, setCancelledJob] = useState<string | null>(null)
   const job = state.job
+  const result = state.mutationResult
+  const succeeded = result !== null && globalMutationSucceeded(result)
   const status = state.phase === "lost" ? "lost" : state.startUnknown ? "startUnknown"
     : state.cancelUnknown ? "cancelUnknown" : state.phase === "starting" ? "starting"
     : job?.status ?? (state.phase === "tracking" ? "running" : "idle")
@@ -44,7 +47,14 @@ export function GlobalPackageJob({ controller }: { controller: GlobalController 
     ? t(activeKind === "versions" ? "loadingVersions" : activeKind === "preview" ? "loadingPreview" : activeKind === "mutation" ? "loadingExecute" : "loadingInventory") : null
 
   return <section className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6" aria-label={t("job.title")}>
-    <h2 className="text-heading-lg">{t("job.title")}</h2>
+    <h2 ref={headingRef} tabIndex={-1} className="scroll-mt-24 rounded-sm text-heading-lg focus-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring">{t("job.title")}</h2>
+    <div role="status" aria-live="polite" aria-atomic="true">
+      {result ? <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-body-sm">
+        <p className="font-semibold">{t(succeeded ? "outcome.success" : "outcome.failure", { name: result.package ?? t("package") })}</p>
+        {result.failureCode ? <p><GlobalCodeMessage code={result.failureCode} /></p> : null}
+        {!succeeded ? <p>{t(result.mutationSpawned ? "job.mayHaveChanged" : "outcome.unchanged")}</p> : <p>{t("outcome.refreshHint")}</p>}
+      </div> : null}
+    </div>
     <div className="flex flex-wrap items-center gap-3">
       <Badge variant="secondary" className="h-auto min-h-6 max-w-full whitespace-normal"><Icon aria-hidden="true" />{statusLabel}</Badge>
       {job ? <span className="text-body-sm">{t(`job.kind.${job.kind}`)} · {t(`job.phase.${job.phase}`)}</span> : null}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useState, type RefObject } from "react"
+import { useEffect, useId, useState } from "react"
 import { AlertTriangleIcon, EyeIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
@@ -19,11 +19,10 @@ import type { GlobalController } from "@/components/features/global-packages/glo
 
 const permanentWarnings = ["lifecycle", "consumers", "partial", "crash", "rollback"] as const
 
-export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fallbackFocusRef, onCancel }: {
+export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, onCancel }: {
   controller: GlobalController
   blocked: boolean
-  returnFocusRef: RefObject<HTMLElement | null>
-  fallbackFocusRef: RefObject<HTMLElement | null>
+  onCloseAutoFocus(event: Event, previewId: string): void
   onCancel(): void
 }) {
   const t = useTranslations("globalPackages")
@@ -45,11 +44,7 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
-      onCloseAutoFocus={event => {
-        const target = returnFocusRef.current?.isConnected && !returnFocusRef.current.matches(":disabled")
-          ? returnFocusRef.current : fallbackFocusRef.current
-        if (target) { event.preventDefault(); target.focus() }
-      }}>
+      onCloseAutoFocus={event => onCloseAutoFocus(event, preview.previewId)}>
       <AlertDialogHeader>
         <AlertDialogTitle>{t("dialog.title")}</AlertDialogTitle>
         <AlertDialogDescription>{t("dialog.description")}</AlertDialogDescription>
