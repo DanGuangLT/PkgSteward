@@ -22,7 +22,7 @@ một cách an toàn.
 
 - Windows 11
 - Node.js 24 (xem [`.nvmrc`](.nvmrc))
-- pnpm 11
+- pnpm 11 (khuyên dùng), npm hoặc Yarn 1 để cài đặt; `start-dev.bat` và `start-prod.bat` cần pnpm
 
 ## Bắt đầu
 
@@ -31,9 +31,16 @@ một cách an toàn.
 ```bash
 git clone https://github.com/LienThuan04/PkgSteward.git
 cd PkgSteward
-cd apps/api && pnpm install && cd ../..
-cd apps/web && pnpm install && cd ../..
+
+# Chạy một trong các lệnh sau ở thư mục gốc; lệnh sẽ cài cả apps/api và apps/web cho từng trình quản lý gói mà bạn dùng (chỉ chạy 1 trong 3 lệnh sau):
+pnpm install
+npm install
+yarn install
 ```
+
+Lệnh cài ở thư mục gốc chạy cùng trình quản lý gói đó bên trong `apps/api` và `apps/web`. Chỉ pnpm đọc
+các file `pnpm-lock.yaml` có sẵn trong repo, nơi ghi đúng phiên bản đã kiểm thử. npm và Yarn sẽ lấy phiên
+bản mới nhất mà từng `package.json` cho phép, và lockfile do chúng tạo ra không được commit.
 
 ### 2. Cấu hình
 

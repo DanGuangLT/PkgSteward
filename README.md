@@ -32,7 +32,7 @@ versions) safely.
 
 - Windows 11
 - Node.js 24 (see [`.nvmrc`](.nvmrc))
-- pnpm 11
+- pnpm 11 (recommended), npm or Yarn 1 to install; `start-dev.bat` and `start-prod.bat` need pnpm
 
 ## Getting started
 
@@ -41,9 +41,16 @@ versions) safely.
 ```bash
 git clone https://github.com/LienThuan04/PkgSteward.git
 cd PkgSteward
-cd apps/api && pnpm install && cd ../..
-cd apps/web && pnpm install && cd ../..
+
+# Run one of these at the repository root; it installs both apps/api and apps/web for each package manager you use (run only one of the following three commands):
+pnpm install
+npm install
+yarn install
 ```
+
+The root install runs the same package manager inside `apps/api` and `apps/web`. Only pnpm reads the
+committed `pnpm-lock.yaml` files, which pin the tested versions. npm and Yarn resolve the newest versions
+allowed by each `package.json`, and the lockfiles they create are not committed.
 
 ### 2. Configure
 
