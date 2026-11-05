@@ -374,14 +374,16 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Global packages API
 
-List, remove or change an installed global package with **npm 11** on Windows. pnpm is listed as unavailable
-(`MANAGER_DISABLED`): pnpm 11 rejects the configuration flags this feature pins, so pnpm global packages are not
-probed or changed yet. Yarn is not supported.
+List, remove or change an installed global package with **npm 11 or pnpm 11** on Windows. Other pnpm majors
+are refused (`TOOL_VERSION_MISMATCH`); Yarn is not supported.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
-An explicit **Refresh** discovers locations through read-only manager queries: npm prefix/root/config/cache.
-Queries use a neutral working directory, not a scanned project;
-the tools may still write caches. GET requests and page loads only read retained RAM snapshots and never run commands.
+An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.
+These queries use a neutral working directory, not a scanned project; the tool may still write caches.
+pnpm discovery and inventory listing read configuration and filesystem metadata statically; no pnpm command runs
+until execute. pnpm globals must already be set up: run `pnpm setup` in a terminal, ensure its global bin directory
+is on PATH, open a new terminal, then restart PkgSteward. Otherwise availability reports `PNPM_GLOBAL_NOT_CONFIGURED`.
+The app does not run setup or edit PATH. GET requests and page loads only read retained RAM snapshots and never run commands.
 Preview and execute recheck the discovered locations and configuration; clients cannot supply paths, argv or environment.
 
 **Only change global packages you trust.** Their lifecycle and transitive code runs with your user privileges,
@@ -404,7 +406,7 @@ All routes below use `/api/v1/global-packages` and the standard response envelop
 | `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
 | `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
 
-`manager` is `npm` or `pnpm` (pnpm jobs currently fail with `MANAGER_DISABLED`); `action` is `remove` or `change`. `targetVersion` is required only for change and
+`manager` is `npm` or `pnpm`; `action` is `remove` or `change`. `targetVersion` is required only for change and
 must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
 Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
 are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
@@ -423,12 +425,17 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
   The retained identical request/payload returns its job; mismatched reuse returns `REQUEST_MISMATCH`.
   Unknown/evicted previews and jobs return `404 NOT_FOUND`. A lost response requires checking latest status;
   do not automatically resend execute. Restart loses the in-memory receipt.
-- **Protected packages:** `npm`, `corepack`, `pnpm`, `yarn`, `@yarnpkg/cli`, `@yarnpkg/cli-dist` and `pkgsteward`.
+- **Protected packages:** `npm`, `corepack`, `pnpm`, `@pnpm/exe`, `yarn`, `@yarnpkg/cli`, `@yarnpkg/cli-dist` and `pkgsteward`.
   Current or target bins named `node`, `npm`, `npx`, `pnpm`, `pnpx`, `yarn`, `yarnpkg`, `corepack` or `pkgsteward`
   are also protected, case-insensitively, including their Windows shim extensions. Overlap with tool distributions,
   the Node executable, app installation, source checkout or data directory is refused. Confirmation cannot override
   protection. Linked packages are read-only (`LINKED_PACKAGE`); unsafe bins, collisions or incomplete ownership
   prevent mutation (`BIN_CONFLICT`).
+- **pnpm layout:** inventory validates the versioned global root, group metadata, internal links into the store
+  and package/bin ownership. Packages installed together in one `pnpm add -g` are read-only
+  (`GLOBAL_GROUP_UNSUPPORTED`): change or removal could affect the whole group; manage them in a terminal.
+  Unreferenced physical install directories block change because pnpm add can clean them up; remove does not
+  perform that cleanup. Ambiguous, external or incomplete layouts cannot be mutated.
 - **Registry:** version lookup and change use only `https://registry.npmjs.org`. Public-registry login tokens in
   user/global config do not disable change; the package manager can consume its config credentials. The app's HTTP
   metadata requests do not forward credentials or follow redirects. A custom/mirror default registry, a scoped
@@ -439,6 +446,10 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
   location settings are refused. Config secrets are not returned or logged. A typed exact target still requires
   online metadata; selecting the installed version returns `NO_VERSION_CHANGE`. Major changes, downgrades and
   prereleases produce warnings.
+- **pnpm configuration:** settings that can load code or move the layout make pnpm read-only
+  (`CONFIG_UNSUPPORTED`), including pnpmfile/hooks, `lockfileDir`, layout/workspace directories, shell/Node
+  execution options and override/extension maps. Registry restrictions alone still allow remove when the
+  location and protection checks pass.
 
 Other HTTP errors include `403 FORBIDDEN` for unsafe/protected targets, `409 CONFLICT` for busy or unsupported
 state/configuration (`RUNNING`, `LOCATION_AMBIGUOUS`, `CONFIG_UNSUPPORTED`, `LIMIT_EXCEEDED`),
@@ -448,7 +459,7 @@ state/configuration (`RUNNING`, `LOCATION_AMBIGUOUS`, `CONFIG_UNSUPPORTED`, `LIM
 ### Fixed arguments and child environment
 
 Commands launch the verified JavaScript entry point through the backend's `node.exe`, using argument arrays,
-closed stdin and no shell launcher. Each mutation uses the manager's discovered locations as this fixed prefix:
+closed stdin and no shell launcher. Each npm mutation uses its discovered locations as this fixed prefix:
 
 - npm: `--prefix <prefix> --userconfig <user-config> --globalconfig <global-config> --cache <cache>`
 
@@ -461,11 +472,23 @@ The following arguments come last:
 | Remove | `uninstall --global -- <name>` |
 | Change | `install --global -- <name>@<exact-version>` |
 
+pnpm uses these exact arguments after its JavaScript entry point (`W` = neutral working directory,
+`G` = unversioned global base, `B` = global bin directory, `S` = versioned store; all are validated locations):
+
+```text
+--dir W --pm-on-fail=warn add --global --global-dir G --global-bin-dir B --store-dir S --registry https://registry.npmjs.org --reporter=append-only -- NAME@EXACT
+--dir W --pm-on-fail=warn remove --global --global-dir G --store-dir S --reporter=append-only -- NAME
+```
+
+`NAME` is the selected package and `EXACT` the resolved version. Remove takes no registry or bin-directory flag;
+its bin directory comes from pinned configuration. pnpm does not receive npm's user/global-config flags.
+
 No arbitrary arguments, elevation, tool-download fallback or automatic mutation retry is available. The child
 uses the command runner's sanitized environment: backend settings, `NODE_ENV`, `NODE_OPTIONS`, project-run
 markers and `npm_*` keys are stripped, and PATH retains absolute entries only. Global operations additionally
-strip `pnpm_config_*`, `PNPM_HOME`, `NODE_AUTH_TOKEN`, `COREPACK_NPM_TOKEN` and `YARN_*` keys before building it.
-Validated location overrides become explicit flags.
+strip inherited `PNPM_*` switches (case-insensitively), `NODE_AUTH_TOKEN`, `COREPACK_NPM_TOKEN` and `YARN_*` keys
+before building it. Validated location overrides become explicit flags or pinned pnpm environment settings,
+including its home, original auth-file path, cache/state paths and fixed safety settings.
 Mutations force `CI=1`, disable Corepack downloads/network/auto-pinning, and disable color output.
 This controls launch configuration; it does not isolate lifecycle code.
 

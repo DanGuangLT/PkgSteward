@@ -6,6 +6,8 @@ import {
   GLOBAL_JOB_KINDS,
   GLOBAL_JOB_STATUSES,
   GLOBAL_MANAGERS,
+  GLOBAL_DISABLED_MANAGERS,
+  GLOBAL_REASON_CODES,
 } from '@/global-packages/interfaces/global-packages.types';
 import type {
   IGlobalJob,
@@ -23,6 +25,14 @@ import {
 } from '@/global-packages/global-config';
 import { normalizeGlobalBins } from '@/global-packages/global-policy';
 import { assessRisk } from '@/core/risk/risk';
+import {
+  pnpmConfigFacts,
+  PNPM_TEST_PATHS as Q,
+} from '@/global-packages/__fixtures__/pnpm11/facts';
+import type {
+  IPnpmGlobalGroupFacts,
+  IPnpmGlobalInventoryFacts,
+} from '@/global-packages/interfaces/pnpm-global.types';
 
 // Fixed, inert repository fixtures only; never a PM command or a client path.
 const fixture = (name: string): string =>
@@ -86,6 +96,97 @@ const job: IGlobalJob = {
 };
 
 describe('global public contract and entity exclusions', () => {
+  it('enables both managers while retaining disabled, setup and group reasons', () => {
+    expect(GLOBAL_DISABLED_MANAGERS).toEqual([]);
+    expect(GLOBAL_REASON_CODES).toEqual(
+      expect.arrayContaining([
+        'MANAGER_DISABLED',
+        'PNPM_GLOBAL_NOT_CONFIGURED',
+        'GLOBAL_GROUP_UNSUPPORTED',
+      ]),
+    );
+    const snapshot = {
+      revision: 'TEST-pnpm11',
+      asOf: preview.createdAt,
+      stale: false,
+      managers: [
+        {
+          manager: 'pnpm',
+          version: '11.22.0',
+          available: false,
+          reason: 'PNPM_GLOBAL_NOT_CONFIGURED',
+          globalRoot: null,
+          binDir: null,
+          packages: [],
+        },
+      ],
+    };
+    expect(
+      instanceToPlain(plainToInstance(GlobalSnapshotEntity, snapshot)),
+    ).toEqual(snapshot);
+    expect(
+      instanceToPlain(
+        plainToInstance(GlobalJobEntity, {
+          ...job,
+          manager: 'pnpm',
+          failureCode: 'GLOBAL_GROUP_UNSUPPORTED',
+        }),
+      ),
+    ).toEqual({
+      ...job,
+      manager: 'pnpm',
+      failureCode: 'GLOBAL_GROUP_UNSUPPORTED',
+    });
+  });
+
+  it('excludes pnpm config/group/GVS identities from public snapshots and previews', () => {
+    const identity = {
+      path: 'D:\\TEST\\group\\package.json',
+      stat: {
+        size: 1,
+        mtimeMs: 1,
+        ctimeMs: 1,
+        dev: 1,
+        ino: 1,
+        isFile: () => true,
+        isDirectory: () => false,
+        isSymbolicLink: () => false,
+      },
+    };
+    const configIdentity = { file: identity, sha256: 'TEST-hash' };
+    const link = { logicalPath: Q.root, realPath: 'D:\\TEST\\group', identity };
+    const group: IPnpmGlobalGroupFacts = {
+      index: link,
+      installDir: link.realPath,
+      directory: identity,
+      manifest: configIdentity,
+      lockfile: configIdentity,
+      modules: configIdentity,
+      packageMap: configIdentity,
+      virtualStoreLockfile: configIdentity,
+      directDependencies: ['is-number', 'is-odd'],
+      packageLinks: [link],
+      storeDir: Q.store,
+      virtualStoreDir: `${Q.store}\\links`,
+    };
+    const inventory: IPnpmGlobalInventoryFacts = {
+      groups: [group],
+      unreferencedDirectories: [identity],
+      ownershipComplete: false,
+    };
+    const projected = instanceToPlain(
+      plainToInstance(GlobalJobEntity, {
+        ...job,
+        pnpm: pnpmConfigFacts(),
+        pnpmInventory: inventory,
+        preview: { ...preview, pnpm: pnpmConfigFacts(), pnpmGroup: group },
+      }),
+    );
+    expect(projected).toEqual(job);
+    expect(JSON.stringify(projected)).not.toMatch(
+      /homeDir|authFile|selectors|packageLinks|unreferencedDirectories/,
+    );
+  });
   it('limits managers/actions/kinds and reuses the M6 status values', () => {
     expect(GLOBAL_MANAGERS).toEqual(['npm', 'pnpm']);
     expect(GLOBAL_ACTIONS).toEqual(['remove', 'change']);
@@ -158,6 +259,51 @@ describe('global public contract and entity exclusions', () => {
 });
 
 describe('hand-written inert TEST fixture contracts', () => {
+  it.each([
+    'config.yaml',
+    'auth.ini',
+    'public-auth.npmrc',
+    'group-package.json',
+    'pnpm-lock.yaml',
+    'modules.yaml',
+    'layout.json',
+  ])('marks pnpm11/%s as inert TEST data', (name) => {
+    const text = fixture(`pnpm11/${name}`);
+    expect(text).toContain('TEST');
+    expect(text).toContain('không phải yêu cầu nghiệp vụ');
+    expect(Buffer.byteLength(text, 'utf8')).toBeLessThan(
+      GLOBAL_CONFIG_FILE_LIMIT,
+    );
+    expect(text).not.toMatch(
+      /"(?:scripts|preinstall|postinstall|prepare)"\s*:|BEGIN PRIVATE KEY/,
+    );
+  });
+
+  it('records pnpm 11 index/group/GVS paths as data without creating real links', () => {
+    const layout = object(json('pnpm11/layout.json'));
+    expect(layout.index).toMatch(/^[a-f0-9]{64}$/);
+    expect(layout.installDir).toMatch(
+      /^[a-f0-9]{4}-[a-f0-9]{11}-[a-f0-9]{16}$/,
+    );
+    expect(layout.files).toEqual([
+      'package.json',
+      'pnpm-lock.yaml',
+      'node_modules/.modules.yaml',
+      'node_modules/.package-map.json',
+      'node_modules/.pnpm/lock.yaml',
+    ]);
+    expect(layout.packageTarget).toMatch(
+      /\\v11\\links\\@\\is-number\\7\.0\.0\\[a-f0-9]{64}\\node_modules\\is-number$/,
+    );
+    expect(object(json('pnpm11/group-package.json')).dependencies).toEqual({
+      'is-number': '7.0.0',
+    });
+    expect(layout.groupedDependencies).toEqual({
+      'is-number': '7.0.0',
+      'is-odd': '3.0.1',
+    });
+    expect(layout.globalShims).toEqual(['semver', 'semver.CMD', 'semver.ps1']);
+  });
   it.each([
     'npm-list.json',
     'pnpm-list.json',

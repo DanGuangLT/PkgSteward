@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useId, useState, type RefObject } from "react"
-import { AlertTriangleIcon } from "lucide-react"
+import { useEffect, useId, useState } from "react"
+import { AlertTriangleIcon, EyeIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
-import { GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { GlobalActionLabel, GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { globalActionPending } from "@/lib/global-packages/global-session"
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -18,11 +19,10 @@ import type { GlobalController } from "@/components/features/global-packages/glo
 
 const permanentWarnings = ["lifecycle", "consumers", "partial", "crash", "rollback"] as const
 
-export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fallbackFocusRef, onCancel }: {
+export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, onCancel }: {
   controller: GlobalController
   blocked: boolean
-  returnFocusRef: RefObject<HTMLElement | null>
-  fallbackFocusRef: RefObject<HTMLElement | null>
+  onCloseAutoFocus(event: Event, previewId: string): void
   onCancel(): void
 }) {
   const t = useTranslations("globalPackages")
@@ -39,14 +39,12 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
   const error = globalConsentError(state.form, now)
   const expired = error === "PREVIEW_EXPIRED"
   const pending = state.phase === "starting"
+  const executing = globalActionPending(state, "mutation")
+  const previewing = globalActionPending(state, "preview")
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
-      onCloseAutoFocus={event => {
-        const target = returnFocusRef.current?.isConnected && !returnFocusRef.current.matches(":disabled")
-          ? returnFocusRef.current : fallbackFocusRef.current
-        if (target) { event.preventDefault(); target.focus() }
-      }}>
+      onCloseAutoFocus={event => onCloseAutoFocus(event, preview.previewId)}>
       <AlertDialogHeader>
         <AlertDialogTitle>{t("dialog.title")}</AlertDialogTitle>
         <AlertDialogDescription>{t("dialog.description")}</AlertDialogDescription>
@@ -83,8 +81,8 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
         <p>{t("dialog.expiresAt", { time: format.dateTime(new Date(preview.expiresAt), { timeStyle: "medium" }) })}</p>
         {expired ? <div role="alert" className="space-y-3 rounded-md border border-border p-4">
           <p>{t("errors.PREVIEW_EXPIRED")}</p>
-          <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 whitespace-normal"
-            onClick={() => { void previewAgain(state.form.selection) }}>{t("previewAgain")}</Button>
+          <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 border-border whitespace-normal"
+            onClick={() => { void previewAgain(state.form.selection) }}><GlobalActionLabel pending={previewing} icon={EyeIcon}>{t(previewing ? "loadingPreview" : "previewAgain")}</GlobalActionLabel></Button>
         </div> : null}
         <div className="flex min-w-0 items-start gap-3">
           <Checkbox id={`${id}-risk`} checked={state.form.acknowledged} disabled={blocked || expired}
@@ -102,9 +100,9 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
         {state.error ? <p role="alert"><GlobalCodeMessage code={state.error.code} /></p> : null}
       </div>
       <AlertDialogFooter>
-        <AlertDialogCancel disabled={pending}>{t("cancel")}</AlertDialogCancel>
+        <AlertDialogCancel disabled={pending} className="h-auto min-h-10 border-border whitespace-normal"><XIcon aria-hidden="true" />{t("cancel")}</AlertDialogCancel>
         <Button type="button" variant="destructive" disabled={blocked || error !== null}
-          className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}>{t(pending ? "dialog.sending" : preview.action === "remove" ? "dialog.confirmRemove" : "dialog.confirmChange")}</Button>
+          aria-busy={executing} className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}><GlobalActionLabel pending={executing} icon={preview.action === "remove" ? Trash2Icon : PencilIcon}>{t(executing ? "loadingExecute" : preview.action === "remove" ? "dialog.confirmRemove" : "dialog.confirmChange")}</GlobalActionLabel></Button>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

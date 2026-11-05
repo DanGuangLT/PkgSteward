@@ -1,16 +1,22 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ApiError } from "../api/response.ts"
-import { createGlobalSession, initialGlobalState } from "./global-session.ts"
+import { createGlobalSession, initialGlobalState, globalActionPending, globalMutationSucceeded } from "./global-session.ts"
 import { RUNNER_LOG_MAX_BYTES, RUNNER_LOG_MAX_CHUNKS } from "../npm-runner/runner-log-view.ts"
 
-// TEST data; not business requirements. All IO, timers and visibility are fakes.
+// TEST data; không phải yêu cầu nghiệp vụ. All IO, timers and visibility are fakes.
 const id = "00000000-0000-4000-8000-000000000001"
 const requestId = "00000000-0000-4000-8000-000000000002"
 const previewId = "00000000-0000-4000-8000-000000000003"
 const epoch = Date.parse("2026-01-01T00:00:00Z")
 const selection = { manager: "npm", package: "@test/tool", action: "remove" }
 const snapshot = { revision: "TEST-revision", asOf: new Date(epoch).toISOString(), stale: false, managers: [] }
+const npmInventory = { manager: "npm", version: "11.0.0", available: true, reason: null,
+  globalRoot: "D:\\TEST\\npm\\node_modules", binDir: "D:\\TEST\\npm",
+  packages: [{ name: "@test/npm-tool", version: "1.0.0", bins: [], status: "manageable", reason: null }] }
+const pnpmInventory = { manager: "pnpm", version: "11.22.0", available: true, reason: null,
+  globalRoot: "D:\\TEST\\pnpm\\global\\v11", binDir: "D:\\TEST\\pnpm\\bin",
+  packages: [{ name: "@test/tool", version: "1.0.0", bins: [], status: "manageable", reason: null }] }
 const preview = {
   ...selection, previewId, createdAt: new Date(epoch).toISOString(), expiresAt: new Date(epoch + 300000).toISOString(),
   managerVersion: "11.0.0", currentVersion: "1.0.0", requestedVersion: null, targetVersion: null,
@@ -55,8 +61,15 @@ function harness(t) {
   return { session, requests, timers, listeners, changes, mutations, all, last,
     async init(latest = null) { await session.refresh(snapshot, latest); await flush() },
     async start() { const done = session.inventory(); last("inventory").resolve({ jobId: id, requestId, previewId: null, status: "running" }); await done; await flush() },
-    async ready() { session.select(selection); await session.refresh(snapshot, terminal({ kind: "preview", ...selection, previewId, preview })); session.consent({ acknowledged: true, confirmText: preview.confirmText }); await flush() },
-    async mutate() { await this.ready(); const done = session.execute(); last("execute").resolve({ jobId: id, requestId, previewId, status: "running" }); await done; await flush() },
+    async ready(manager = "npm") {
+      const selected = { ...selection, manager }
+      const displayed = { ...preview, manager, managerVersion: manager === "pnpm" ? "11.22.0" : preview.managerVersion,
+        confirmText: `REMOVE GLOBAL ${manager} @test/tool` }
+      session.select(selected)
+      await session.refresh(snapshot, terminal({ kind: "preview", ...selected, previewId, preview: displayed }))
+      session.consent({ acknowledged: true, confirmText: displayed.confirmText }); await flush()
+    },
+    async mutate(manager = "npm") { await this.ready(manager); const done = session.execute(); last("execute").resolve({ jobId: id, requestId, previewId, status: "running" }); await done; await flush() },
     async tick(ms) { now += ms; for (const [n, timer] of [...timers]) if (timer.at <= now) { timers.delete(n); timer.callback() }; await flush() },
     async visible(value) { visible = value; for (const cb of listeners) cb(); await flush() },
     async cycle(status = job(), output = page()) { last("get")?.resolve(status); last("logs")?.resolve(output); await flush() },
@@ -75,6 +88,268 @@ test("initial state and server seeding perform no implicit activity POST", async
   await h.session.refresh(snapshot, job())
   assert.equal(h.all("get").length, 1)
   assert.equal(h.all("inventory").length, 0)
+})
+
+test("versions loading identifies the pressed row before acceptance and keeps choices through preview", async t => {
+  const h = harness(t)
+  await h.init()
+  const selected = { ...selection, manager: "pnpm", action: "change", targetVersion: "2.0.0" }
+  h.session.select({ ...selected, targetVersion: "" })
+  const done = h.session.loadVersions(selected)
+  assert.deepEqual(h.session.getSnapshot().activity, { kind: "versions", manager: "pnpm", package: selection.package, action: null })
+  assert.equal(h.session.getSnapshot().phase, "starting")
+  assert.equal(globalActionPending(h.session.getSnapshot(), "versions", selected), true)
+  assert.equal(globalActionPending(h.session.getSnapshot(), "preview", selected), false)
+  assert.equal(globalActionPending(h.session.getSnapshot(), "versions", { ...selected, manager: "npm" }), false)
+  assert.equal(globalActionPending(h.session.getSnapshot(), "versions", { ...selected, package: "@test/other" }), false)
+  const choices = { manager: "pnpm", package: selection.package, versions: ["2.0.0", "1.0.0"], tags: { latest: "2.0.0" } }
+  h.last("versions").resolve({ jobId: id, requestId, previewId: null, status: "running" })
+  await done; await h.cycle(terminal({ kind: "versions", manager: "pnpm", package: selection.package,
+    versions: { ...choices, versions: ["1.0.0", "2.0.0"] } }), page())
+  assert.deepEqual(h.session.getSnapshot().versions, choices)
+  assert.equal(globalActionPending(h.session.getSnapshot(), "versions", selected), false)
+  const next = h.session.preview(selected)
+  assert.deepEqual(h.session.getSnapshot().activity, { kind: "preview", manager: "pnpm", package: selection.package, action: "change" })
+  assert.deepEqual(h.session.getSnapshot().versions, choices)
+  h.last("preview").reject(new ApiError(409, "TEST", "CONFLICT", { reason: "NO_VERSION_CHANGE" }))
+  await next
+  assert.deepEqual(h.session.getSnapshot().versions, choices)
+  assert.equal(h.all("execute").length, 0)
+})
+
+test("success requires finalized verified execution, never a completed command still settling", () => {
+  const completed = terminal({ kind: "mutation", mutationSpawned: true })
+  assert.equal(globalMutationSucceeded(completed), true)
+  for (const patch of [{ phase: "finalizing" }, { gateHeld: true }, { refreshRequired: true }, { auditWritten: false },
+    { terminationVerified: false }, { failureCode: "POSTCONDITION_FAILED" }, { mutationSpawned: false }, { exitCode: 1 }]) {
+    assert.equal(globalMutationSucceeded({ ...completed, ...patch }), false)
+  }
+})
+
+test("successful execute waits for finalization and log drain, refreshes inventory once, retains its outcome", async t => {
+  const h = harness(t)
+  await h.mutate()
+  const completed = terminal({ kind: "mutation", previewId, mutationSpawned: true, endCursor: 2 })
+  await h.cycle(completed, page([0], { endCursor: 2 }))
+  assert.equal(h.all("inventory").length, 0)
+  assert.deepEqual(h.session.getSnapshot().mutationResult, completed)
+  await h.tick(1000)
+  h.last("logs").resolve(page([1])); await flush()
+  assert.equal(h.all("inventory").length, 1)
+  assert.equal(h.session.getSnapshot().activity.kind, "inventory")
+  assert.deepEqual(h.session.getSnapshot().mutationResult, completed)
+  h.last("inventory").resolve({ jobId: "TEST-inventory", requestId, previewId: null, status: "running" }); await flush()
+  await h.cycle(terminal({ jobId: "TEST-inventory" }), page([], { jobId: "TEST-inventory" }))
+  h.last("snapshot").resolve({ ...snapshot, revision: "TEST-refreshed" }); await flush()
+  assert.equal(h.session.getSnapshot().snapshot.revision, "TEST-refreshed")
+  assert.deepEqual(h.session.getSnapshot().mutationResult, completed)
+  await h.tick(5000)
+  assert.equal(h.all("inventory").length, 1)
+  assert.equal(h.all("execute").length, 1)
+})
+
+test("failed or uncertain mutations keep rows and never trigger automatic inventory or execute", async t => {
+  for (const mutationSpawned of [false, true]) {
+    const h = harness(t)
+    await h.mutate()
+    const failed = terminal({ kind: "mutation", previewId, mutationSpawned, status: "failed", failureCode: "SPAWN_FAILED" })
+    await h.cycle(failed, page())
+    assert.deepEqual(h.session.getSnapshot().mutationResult, failed)
+    assert.deepEqual(h.session.getSnapshot().snapshot.managers, snapshot.managers)
+    assert.equal(h.session.getSnapshot().snapshot.stale, mutationSpawned)
+    assert.equal(h.all("snapshot").length, 0)
+    assert.equal(h.all("inventory").length, 0)
+    assert.equal(h.all("execute").length, 1)
+  }
+})
+
+test("automatic inventory failure preserves the successful outcome without retrying either POST", async t => {
+  const h = harness(t)
+  await h.mutate()
+  const completed = terminal({ kind: "mutation", previewId, mutationSpawned: true })
+  await h.cycle(completed, page())
+  assert.equal(h.all("inventory").length, 1)
+  h.last("inventory").reject(new ApiError(409, "TEST", "CONFLICT", { reason: "READERS_RUNNING" }))
+  await flush(); await h.tick(5000)
+  assert.deepEqual(h.session.getSnapshot().mutationResult, completed)
+  assert.equal(h.session.getSnapshot().snapshot.stale, true)
+  assert.equal(h.session.getSnapshot().error.code, "READERS_RUNNING")
+  assert.equal(h.all("inventory").length, 1)
+  assert.equal(h.all("execute").length, 1)
+})
+
+test("mounting a retained completed mutation reports its outcome without an implicit inventory POST", async t => {
+  const h = harness(t)
+  const completed = terminal({ kind: "mutation", previewId, mutationSpawned: true })
+  await h.init(completed)
+  assert.deepEqual(h.session.getSnapshot().mutationResult, completed)
+  assert.equal(h.all("inventory").length, 0)
+})
+
+test("a successful cleanup response refreshes once even when no poll is needed", async t => {
+  const h = harness(t)
+  await h.mutate()
+  await h.cycle(terminal({ kind: "mutation", previewId, mutationSpawned: true,
+    status: "termination_failed", gateHeld: true, terminationVerified: false }), page())
+  const done = h.session.cancel()
+  h.last("cancel").resolve(terminal({ kind: "mutation", previewId, mutationSpawned: true }))
+  await done; await flush()
+  assert.equal(h.all("inventory").length, 1)
+  assert.equal(h.all("execute").length, 1)
+})
+
+test("starting another execution clears the prior outcome while retaining package rows", async t => {
+  const h = harness(t)
+  await h.init(terminal({ kind: "mutation", previewId, mutationSpawned: false, status: "failed", failureCode: "SPAWN_FAILED" }))
+  assert.ok(h.session.getSnapshot().mutationResult)
+  const preparing = h.session.preview(selection)
+  h.last("preview").resolve({ jobId: "TEST-next-preview", requestId, previewId, status: "running" })
+  await preparing
+  await h.cycle(terminal({ jobId: "TEST-next-preview", kind: "preview", ...selection, previewId, preview }),
+    page([], { jobId: "TEST-next-preview" }))
+  h.session.consent({ acknowledged: true, confirmText: preview.confirmText })
+  const done = h.session.execute()
+  assert.equal(h.session.getSnapshot().mutationResult, null)
+  assert.deepEqual(h.session.getSnapshot().snapshot, snapshot)
+  h.last("execute").reject(new ApiError(409, "TEST", "CONFLICT"))
+  await done
+})
+
+test("pnpm 11 availability and readonly group rows coexist with manageable npm without implicit activity", async t => {
+  const h = harness(t)
+  const grouped = { ...pnpmInventory.packages[0], status: "invalid", reason: "GLOBAL_GROUP_UNSUPPORTED" }
+  await h.session.refresh({ ...snapshot, managers: [npmInventory,
+    { ...pnpmInventory, packages: [...pnpmInventory.packages, { ...grouped, name: "@test/grouped" }] }] }, null)
+  const managers = h.session.getSnapshot().snapshot.managers
+  assert.equal(managers[0].manager, "npm")
+  assert.equal(managers[0].available, true)
+  assert.equal(managers[0].packages[0].status, "manageable")
+  assert.equal(managers[0].packages[0].reason, null)
+  assert.equal(managers[1].manager, "pnpm")
+  assert.equal(managers[1].version, "11.22.0")
+  assert.equal(managers[1].available, true)
+  assert.equal(managers[1].reason, null)
+  assert.equal(managers[1].packages[0].status, "manageable")
+  assert.equal(managers[1].packages[1].status, "invalid")
+  assert.equal(managers[1].packages[1].reason, "GLOBAL_GROUP_UNSUPPORTED")
+  assert.equal(h.requests.length, 0)
+})
+
+test("pnpm setup and legacy disabled reasons remain per-manager while npm remains available", async t => {
+  for (const reason of ["PNPM_GLOBAL_NOT_CONFIGURED", "MANAGER_DISABLED"]) {
+    const h = harness(t)
+    await h.session.refresh({ ...snapshot, managers: [npmInventory,
+      { ...pnpmInventory, available: false, reason, globalRoot: null, binDir: null, packages: [] }] }, null)
+    const managers = h.session.getSnapshot().snapshot.managers
+    assert.equal(managers[0].available, true)
+    assert.equal(managers[0].reason, null)
+    assert.equal(managers[0].packages[0].name, "@test/npm-tool")
+    assert.equal(managers[1].available, false)
+    assert.equal(managers[1].reason, reason)
+    assert.equal(managers[1].globalRoot, null)
+    assert.equal(managers[1].binDir, null)
+    assert.deepEqual(managers[1].packages, [])
+    assert.equal(h.requests.length, 0)
+  }
+})
+
+for (const reason of ["PNPM_GLOBAL_NOT_CONFIGURED", "GLOBAL_GROUP_UNSUPPORTED"]) {
+  test(`pnpm failed jobs retain ${reason} without triggering another activity`, async t => {
+    const h = harness(t)
+    await h.session.refresh({ ...snapshot, managers: [npmInventory, pnpmInventory] },
+      terminal({ kind: "preview", manager: "pnpm", package: "@test/tool", status: "failed", exitCode: null, failureCode: reason }))
+    assert.equal(h.session.getSnapshot().job.failureCode, reason)
+    assert.equal(h.session.getSnapshot().job.manager, "pnpm")
+    assert.equal(h.session.getSnapshot().phase, "idle")
+    assert.equal(h.session.getSnapshot().form.preview, null)
+    assert.equal(h.requests.length, 0)
+  })
+
+  for (const method of ["versions", "preview"]) {
+    test(`pnpm ${method} rejection exposes ${reason} without automatic retry or mutation`, async t => {
+      const h = harness(t)
+      await h.init()
+      const selected = { ...selection, manager: "pnpm" }
+      const done = method === "versions" ? h.session.loadVersions(selected) : h.session.preview(selected)
+      assert.equal(h.last(method).args[0].manager, "pnpm")
+      h.last(method).reject(new ApiError(409, "TEST unrelated message", "CONFLICT", { reason }))
+      await done; await h.tick(10000)
+      assert.equal(h.session.getSnapshot().error.code, reason)
+      assert.equal(h.session.getSnapshot().startUnknown, false)
+      assert.equal(h.session.getSnapshot().form.preview, null)
+      assert.equal(h.all(method).length, 1)
+      assert.equal(h.all("execute").length, 0)
+      assert.equal(h.all("latest").length, 0)
+    })
+  }
+
+  test(`pnpm execute rejection ${reason} clears displayed consent and requires a new preview`, async t => {
+    const h = harness(t)
+    await h.ready("pnpm")
+    const done = h.session.execute()
+    h.last("execute").reject(new ApiError(409, "TEST unrelated message", "CONFLICT", { reason }))
+    await done
+    const state = h.session.getSnapshot()
+    assert.equal(state.form.preview, null)
+    assert.equal(state.form.acknowledged, false)
+    assert.equal(state.form.confirmText, "")
+    assert.equal(state.error.code, reason)
+    await h.tick(10000); await h.session.execute()
+    assert.equal(h.all("execute").length, 1)
+    assert.equal(h.all("preview").length, 0)
+  })
+}
+
+test("pnpm execute requires its displayed consent and recovers a lost response without resubmitting", async t => {
+  const h = harness(t)
+  await h.ready("pnpm")
+  h.session.consent({ acknowledged: false })
+  await h.session.execute()
+  assert.equal(h.session.getSnapshot().error.code, "RISK_NOT_ACKNOWLEDGED")
+  h.session.consent({ acknowledged: true, confirmText: preview.confirmText })
+  await h.session.execute()
+  assert.equal(h.session.getSnapshot().error.code, "CONFIRM_TEXT_MISMATCH")
+  assert.equal(h.all("execute").length, 0)
+  h.session.consent({ confirmText: "REMOVE GLOBAL pnpm @test/tool" })
+  const done = h.session.execute(); void h.session.execute()
+  assert.deepEqual(h.last("execute").args[0], { previewId, requestId, confirm: true,
+    acknowledgedRisks: ["MACHINE_WIDE"], confirmText: "REMOVE GLOBAL pnpm @test/tool" })
+  h.last("execute").reject(new ApiError(503, "TEST lost response", "BACKEND_UNAVAILABLE")); await flush()
+  assert.equal(h.session.getSnapshot().startUnknown, true)
+  assert.equal(h.session.getSnapshot().form.preview.manager, "pnpm")
+  h.last("latest").resolve(job({ kind: "mutation", manager: "pnpm", previewId, gateHeld: true }))
+  await done; await flush()
+  assert.equal(h.session.getSnapshot().startUnknown, false)
+  assert.equal(h.session.getSnapshot().phase, "tracking")
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.equal(h.session.getSnapshot().form.acknowledged, false)
+  await h.session.execute(); await h.tick(5000)
+  assert.equal(h.all("execute").length, 1)
+})
+
+test("pnpm completed commands remain active until finalizing, audit and gate release finish", async t => {
+  const h = harness(t)
+  await h.mutate("pnpm")
+  await h.cycle(terminal({ kind: "mutation", manager: "pnpm", previewId, mutationSpawned: true,
+    mayHaveChanged: true, phase: "finalizing", finishedAt: null, gateHeld: true, auditWritten: false }))
+  assert.equal(h.session.getSnapshot().phase, "tracking")
+  assert.deepEqual(h.mutations, [])
+  assert.equal(h.all("snapshot").length, 0)
+  await h.session.inventory(); await h.session.preview({ ...selection, manager: "pnpm" })
+  assert.equal(h.all("inventory").length, 0)
+  assert.equal(h.all("preview").length, 0)
+  await h.tick(1000)
+  await h.cycle(terminal({ kind: "mutation", manager: "pnpm", previewId, mutationSpawned: true, mayHaveChanged: true }))
+  assert.equal(h.session.getSnapshot().mutationResult.gateHeld, false)
+  assert.equal(h.session.getSnapshot().mutationResult.auditWritten, true)
+  assert.deepEqual(h.mutations, [id])
+  assert.equal(h.all("inventory").length, 1)
+  h.last("inventory").resolve({ jobId: "TEST-inventory", requestId, previewId: null, status: "running" }); await flush()
+  await h.cycle(terminal({ jobId: "TEST-inventory" }), page([], { jobId: "TEST-inventory" }))
+  h.last("snapshot").resolve({ ...snapshot, managers: [npmInventory, pnpmInventory] }); await flush()
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.session.getSnapshot().snapshot.stale, false)
+  assert.equal(h.all("execute").length, 1)
 })
 
 test("one activity slot; status/log run once per cycle; next timer is 1s after both settle", async t => {
@@ -197,13 +472,13 @@ test("all terminal states drain final logs and notify mutation once; no status l
     await h.cycle(terminal({ kind: "mutation", previewId, status, mutationSpawned: true, mayHaveChanged: true, gateHeld: status === "termination_failed", endCursor: 3 }), page([0], { endCursor: 3 }))
     assert.deepEqual(h.mutations, [id])
     assert.equal(h.session.getSnapshot().snapshot.stale, true)
-    assert.equal(h.all("snapshot").length, 1)
-    h.last("snapshot").resolve({ ...snapshot, stale: status !== "completed" }); await flush()
+    assert.equal(h.all("snapshot").length, 0)
     await h.tick(1000)
     assert.equal(h.all("get").length, 1)
     h.last("logs").resolve(page([1, 2])); await flush(); await h.tick(5000)
-    assert.equal(h.session.getSnapshot().phase, "idle")
-    assert.deepEqual(h.session.getSnapshot().logs.chunks.map(c => c.seq), [0, 1, 2])
+    assert.equal(h.session.getSnapshot().phase, status === "completed" ? "starting" : "idle")
+    assert.equal(h.all("inventory").length, status === "completed" ? 1 : 0)
+    if (status !== "completed") assert.deepEqual(h.session.getSnapshot().logs.chunks.map(c => c.seq), [0, 1, 2])
     assert.deepEqual(h.mutations, [id])
     assert.equal(h.timers.size, 0)
   }
@@ -221,8 +496,9 @@ test("a completed mutation still finalizing keeps polling until phase done, then
   assert.equal(h.all("get").length, 2)
   await h.cycle(terminal({ kind: "mutation", previewId, mutationSpawned: true, mayHaveChanged: true }), page([0]))
   assert.deepEqual(h.mutations, [id])
-  assert.equal(h.session.getSnapshot().job.gateHeld, false)
-  assert.equal(h.all("snapshot").length, 1)
+  assert.equal(h.session.getSnapshot().mutationResult.gateHeld, false)
+  assert.equal(h.all("snapshot").length, 0)
+  assert.equal(h.all("inventory").length, 1)
   await h.tick(5000)
   assert.equal(h.all("get").length, 2)
 })

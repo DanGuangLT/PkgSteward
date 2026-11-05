@@ -23,6 +23,11 @@ import {
   TEST_PREVIEW_ID,
 } from '@/global-packages/__fixtures__/global-lifecycle';
 import { expectGlobalReason } from '@/global-packages/__fixtures__/global-adapters';
+import {
+  plainPnpmPreviewFacts,
+  pnpmPreviewFacts,
+} from '@/global-packages/__fixtures__/pnpm11/inventory';
+import type { IPnpmGlobalGroupFacts } from '@/global-packages/interfaces/pnpm-global.types';
 
 describe('M7 preview construction and server confirmation', () => {
   it('builds a remove preview with shared high risk and declared bin diff', () => {
@@ -472,6 +477,402 @@ describe('M7 execute comparator', () => {
     actual.location.configIdentities.reverse();
     actual.current.bins.reverse();
     Object.assign(actual.current.manifest.file.stat, { atimeMs: 999 });
+    expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
+  });
+});
+
+const pnpmChanges: [string, FactsChange][] = [
+  [
+    'pnpm shim content',
+    (f) => {
+      f.pnpmInventory!.shimIdentities![0].sha256 = 'changed';
+    },
+  ],
+  [
+    'pnpm shim file identity',
+    (f) => {
+      f.pnpmInventory!.shimIdentities![0].file.stat.ino = 99;
+    },
+  ],
+  [
+    'pnpm home',
+    (f) => {
+      f.location.pnpm!.homeDir += '-moved';
+    },
+  ],
+  [
+    'pnpm store',
+    (f) => {
+      f.location.pnpm!.storeDir += '-moved';
+    },
+  ],
+  [
+    'pnpm state',
+    (f) => {
+      f.location.pnpm!.stateDir += '-moved';
+    },
+  ],
+  [
+    'pnpm config directory',
+    (f) => {
+      f.location.pnpm!.configDir += '-moved';
+    },
+  ],
+  [
+    'pnpm original PATH membership',
+    (f) => {
+      f.location.pnpm!.originalPath = [];
+    },
+  ],
+  [
+    'pnpm selector',
+    (f) => {
+      f.location.pnpm!.selectors = { PNPM_HOME: 'D:\\TEST\\other-home' };
+    },
+  ],
+  [
+    'pnpm source content',
+    (f) => {
+      f.location.pnpm!.configIdentities[0].sha256 = 'changed';
+    },
+  ],
+  [
+    'pnpm source identity',
+    (f) => {
+      f.location.pnpm!.configIdentities[0].file.stat.ino = 99;
+    },
+  ],
+  [
+    'pnpm source appearance',
+    (f) => {
+      f.location.pnpm!.missingConfigPaths = [];
+    },
+  ],
+  [
+    'pnpm directory appearance',
+    (f) => {
+      f.location.pnpm!.missingDirectoryPaths = [];
+    },
+  ],
+  [
+    'pnpm directory identity',
+    (f) => {
+      f.location.pnpm!.directoryIdentities[0].stat.ino = 99;
+    },
+  ],
+  [
+    'pnpm policy',
+    (f) => {
+      f.location.pnpm!.policy.unknownRouting = true;
+    },
+  ],
+  [
+    'pnpm build policy',
+    (f) => {
+      f.location.pnpm!.safety.allowBuilds = { 'test-native': true };
+    },
+  ],
+  [
+    'pnpm release age',
+    (f) => {
+      f.location.pnpm!.safety.minimumReleaseAge = 0;
+    },
+  ],
+  [
+    'pnpm config disappearance',
+    (f) => {
+      delete f.location.pnpm;
+    },
+  ],
+  [
+    'group index identity',
+    (f) => {
+      f.pnpmInventory!.groups[0].index.identity.stat.ino = 99;
+    },
+  ],
+  [
+    'group index target',
+    (f) => {
+      f.pnpmInventory!.groups[0].index.realPath += '-moved';
+    },
+  ],
+  [
+    'group install directory',
+    (f) => {
+      f.pnpmInventory!.groups[0].installDir += '-moved';
+    },
+  ],
+  [
+    'group directory identity',
+    (f) => {
+      f.pnpmInventory!.groups[0].directory.stat.ino = 99;
+    },
+  ],
+  [
+    'group direct dependencies',
+    (f) => {
+      f.pnpmInventory!.groups[0].directDependencies = ['other'];
+    },
+  ],
+  [
+    'group package link identity',
+    (f) => {
+      f.pnpmInventory!.groups[0].packageLinks[0].identity.stat.ino = 99;
+    },
+  ],
+  [
+    'group package link target',
+    (f) => {
+      f.pnpmInventory!.groups[0].packageLinks[0].realPath += '-moved';
+    },
+  ],
+  [
+    'group package link path',
+    (f) => {
+      f.pnpmInventory!.groups[0].packageLinks[0].logicalPath += '-moved';
+    },
+  ],
+  [
+    'group store root',
+    (f) => {
+      f.pnpmInventory!.groups[0].storeDir += '-moved';
+    },
+  ],
+  [
+    'group virtual store root',
+    (f) => {
+      f.pnpmInventory!.groups[0].virtualStoreDir += '-moved';
+    },
+  ],
+  [
+    'group disappearance',
+    (f) => {
+      f.pnpmInventory!.groups = [];
+    },
+  ],
+  [
+    'ownership completeness',
+    (f) => {
+      f.pnpmInventory!.ownershipComplete = false;
+    },
+  ],
+  [
+    'orphan appearance',
+    (f) => {
+      f.pnpmInventory!.unreferencedDirectories = [
+        testIdentity(
+          'D:\\TEST\\pnpm-global\\v11\\81fe-1a1aa104925-e77952ba3460596f',
+        ),
+      ];
+    },
+  ],
+  [
+    'inventory disappearance',
+    (f) => {
+      delete f.pnpmInventory;
+    },
+  ],
+  [
+    'current group identity',
+    (f) => {
+      f.current.pnpmGroup!.directory.stat.ino = 99;
+    },
+  ],
+  [
+    'current group disappearance',
+    (f) => {
+      delete f.current.pnpmGroup;
+    },
+  ],
+  [
+    'pnpm shim identity',
+    (f) => {
+      f.current.binIdentities[0].stat.ino = 99;
+    },
+  ],
+];
+const metadataKeys = [
+  'manifest',
+  'lockfile',
+  'modules',
+  'packageMap',
+  'virtualStoreLockfile',
+] as const;
+for (const name of metadataKeys) {
+  pnpmChanges.push(
+    [
+      `group ${name} content`,
+      (f) => {
+        f.pnpmInventory!.groups[0][name].sha256 = 'changed';
+      },
+    ],
+    [
+      `group ${name} identity`,
+      (f) => {
+        f.pnpmInventory!.groups[0][name].file.stat.ino = 99;
+      },
+    ],
+  );
+}
+
+function groupFiles(group: IPnpmGlobalGroupFacts) {
+  return [
+    group.index.identity,
+    group.directory,
+    ...metadataKeys.map((name) => group[name].file),
+    ...group.packageLinks.map((link) => link.identity),
+  ];
+}
+
+describe('pnpm 11 preview config, group and link facts', () => {
+  it.each(pnpmChanges)(
+    'refuses changed %s before any mutation launch',
+    async (_name, change) => {
+      const expected = plainPnpmPreviewFacts();
+      const actual = plainPnpmPreviewFacts();
+      change(actual);
+      const launch = jest.fn<void, []>();
+      await expectGlobalReason(() => {
+        assertGlobalPreviewUnchanged(expected, actual);
+        launch();
+      }, 'PREVIEW_CHANGED');
+      expect(launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains plain independent config, group and link stat snapshots', () => {
+    const live = pnpmPreviewFacts();
+    live.pnpmInventory!.unreferencedDirectories = [
+      testIdentity('D:\\TEST\\orphan'),
+    ];
+    const retained = snapshotGlobalPreviewFacts(live);
+    const files = [
+      ...retained.location.pnpm!.directoryIdentities,
+      ...retained.location.pnpm!.configIdentities.map((config) => config.file),
+      ...groupFiles(retained.current.pnpmGroup!),
+      ...retained.pnpmInventory!.groups.flatMap(groupFiles),
+      ...retained.pnpmInventory!.unreferencedDirectories,
+      ...retained.pnpmInventory!.shimIdentities!.map(
+        (identity) => identity.file,
+      ),
+    ];
+    for (const file of files) {
+      expect(
+        Object.values(file.stat).some((value) => typeof value === 'function'),
+      ).toBe(false);
+    }
+    expect(() => structuredClone(retained)).not.toThrow();
+    live.location.pnpm!.directoryIdentities[0].stat.ino = 99;
+    live.pnpmInventory!.groups[0].index.identity.stat.ino = 99;
+    expect(retained.location.pnpm!.directoryIdentities[0].stat.ino).toBe(2);
+    expect(retained.pnpmInventory!.groups[0].index.identity.stat.ino).toBe(2);
+  });
+
+  it('pins pnpm config even when npm is the selected manager', async () => {
+    const expected = testFacts();
+    expected.locations = [expected.location, plainPnpmPreviewFacts().location];
+    const actual = JSON.parse(JSON.stringify(expected)) as IGlobalPreviewFacts;
+    actual.locations![1].pnpm!.selectors = {
+      PNPM_HOME: 'D:\\TEST\\other-home',
+    };
+    await expectGlobalReason(
+      () => assertGlobalPreviewUnchanged(expected, actual),
+      'PREVIEW_CHANGED',
+    );
+  });
+
+  it('pins existing orphan identities as well as orphan appearances', async () => {
+    const expected = plainPnpmPreviewFacts();
+    expected.pnpmInventory!.unreferencedDirectories = [
+      testIdentity('D:\\TEST\\orphan'),
+    ];
+    const actual = JSON.parse(JSON.stringify(expected)) as IGlobalPreviewFacts;
+    actual.pnpmInventory!.unreferencedDirectories[0].stat.ino = 99;
+    await expectGlobalReason(
+      () => assertGlobalPreviewUnchanged(expected, actual),
+      'PREVIEW_CHANGED',
+    );
+  });
+
+  it('accepts unchanged pnpm facts and ignores every new fact access time', () => {
+    const expected = plainPnpmPreviewFacts();
+    const actual = plainPnpmPreviewFacts();
+    const files = [
+      ...actual.location.pnpm!.directoryIdentities,
+      ...actual.location.pnpm!.configIdentities.map((config) => config.file),
+      ...groupFiles(actual.current.pnpmGroup!),
+      ...actual.pnpmInventory!.groups.flatMap(groupFiles),
+      ...actual.current.binIdentities,
+      ...actual.pnpmInventory!.shimIdentities!.map((identity) => identity.file),
+    ];
+    for (const file of files)
+      Object.assign(file.stat, { atime: new Date(999), atimeMs: 999 });
+    expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
+  });
+
+  it('ignores set ordering in config, groups, dependencies, links and orphan identities', () => {
+    const expected = plainPnpmPreviewFacts();
+    expected.location.pnpm!.configIdentities = [
+      ...expected.location.configIdentities,
+      {
+        file: testIdentity('D:\\TEST\\pnpm-config\\auth.ini'),
+        sha256: 'test-hash',
+      },
+    ];
+    expected.location.pnpm!.missingConfigPaths = [
+      'D:\\TEST\\one.ini',
+      'D:\\TEST\\two.ini',
+    ];
+    expected.location.pnpm!.missingDirectoryPaths = [
+      'D:\\TEST\\one',
+      'D:\\TEST\\two',
+    ];
+    expected.location.pnpm!.policy.scopedRegistries = ['@one', '@two'];
+    const group = expected.pnpmInventory!.groups[0];
+    group.directDependencies = ['is-number', 'test-other'];
+    group.packageLinks = [
+      ...group.packageLinks,
+      { ...group.packageLinks[0], logicalPath: 'D:\\TEST\\other-link' },
+    ];
+    const second = {
+      ...group,
+      installDir: `${group.installDir}-other`,
+      index: {
+        ...group.index,
+        logicalPath: `${group.index.logicalPath}-other`,
+      },
+    };
+    expected.pnpmInventory!.groups = [group, second];
+    expected.pnpmInventory!.unreferencedDirectories = [
+      testIdentity('D:\\TEST\\orphan-a'),
+      testIdentity('D:\\TEST\\orphan-b'),
+    ];
+    const actual = JSON.parse(JSON.stringify(expected)) as IGlobalPreviewFacts;
+    actual.location.pnpm!.configIdentities = [
+      ...actual.location.pnpm!.configIdentities,
+    ].reverse();
+    actual.location.pnpm!.directoryIdentities = [
+      ...actual.location.pnpm!.directoryIdentities,
+    ].reverse();
+    actual.location.pnpm!.missingConfigPaths = [
+      ...actual.location.pnpm!.missingConfigPaths,
+    ].reverse();
+    actual.location.pnpm!.missingDirectoryPaths = [
+      ...actual.location.pnpm!.missingDirectoryPaths,
+    ].reverse();
+    actual.location.pnpm!.policy.scopedRegistries = [
+      ...actual.location.pnpm!.policy.scopedRegistries,
+    ].reverse();
+    actual.pnpmInventory!.groups = [...actual.pnpmInventory!.groups]
+      .reverse()
+      .map((item) => ({
+        ...item,
+        directDependencies: [...item.directDependencies].reverse(),
+        packageLinks: [...item.packageLinks].reverse(),
+      }));
+    actual.pnpmInventory!.unreferencedDirectories = [
+      ...actual.pnpmInventory!.unreferencedDirectories,
+    ].reverse();
     expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
   });
 });

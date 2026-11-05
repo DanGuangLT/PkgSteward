@@ -25,6 +25,7 @@ import type {
   IGlobalPreviewFacts,
   IGlobalResolvedLocation,
   IGlobalRegistryInput,
+  IGlobalPackageFacts,
   GlobalProbeSpawn,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import {
@@ -45,6 +46,8 @@ import {
   discoverGlobalLocation,
 } from '@/global-packages/global-location';
 import { readGlobalInventory } from '@/global-packages/global-inventory';
+import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
+import { assessPnpmGlobalRegistryPolicy } from '@/global-packages/pnpm-global-config';
 import { GlobalRegistry } from '@/global-packages/global-registry';
 import {
   assessGlobalRegistryPolicy,
@@ -100,6 +103,16 @@ const reasonOf = (error: unknown): GlobalReasonCode => {
     'INTERNAL_SERVER_ERROR'
   );
 };
+// Failed static pnpm discovery/inventory must not disable npm. Stop/termination
+// signals are control flow; the caller also checks the activity signal first.
+const isolatablePnpmError = (error: unknown): boolean =>
+  !['CANCELLED', 'TIMED_OUT', 'SHUTDOWN', 'TERMINATION_UNCONFIRMED'].includes(
+    reasonOf(error),
+  ) &&
+  !(
+    error instanceof Error &&
+    ['AbortError', 'TimeoutError'].includes(error.name)
+  );
 const auditState = (job: IGlobalJob): string =>
   JSON.stringify({
     status: job.status,
@@ -274,6 +287,10 @@ export class GlobalPackagesService
         exactVersion: finalFacts.target?.version ?? null,
         publicRegistry: finalFacts.registryChangeAllowed === true,
       });
+      activity.checkpoint();
+      // Launch only runs tools registered by a fresh verified resolution; static pnpm
+      // discovery spawns nothing, so resolve here (launch rejects a changed identity).
+      await this.runtime.resolveTool(active.request!.manager, activity.signal);
       activity.checkpoint();
       await activity.launch(command);
     });
@@ -488,7 +505,7 @@ export class GlobalPackagesService
           activity.signal,
         );
         activity.checkpoint();
-        if (!assessGlobalRegistryPolicy(policy).changeAllowed)
+        if (!this.registryDecision(location, policy).changeAllowed)
           throw fail('REGISTRY_CONFIG_UNSUPPORTED');
         const result = await this.registry.getVersions(
           { ...policy, manager: versions.manager },
@@ -564,6 +581,8 @@ export class GlobalPackagesService
     request: IGlobalPreviewRequest,
     signal: AbortSignal,
   ): Promise<IGlobalRegistryInput> {
+    if (location.manager === 'pnpm')
+      return await this.pnpmRegistryInput(location, request, signal);
     const configs: string[] = [];
     const identities: IGlobalResolvedLocation['configIdentities'] = [];
     const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
@@ -606,6 +625,105 @@ export class GlobalPackagesService
     };
   }
 
+  private registryDecision(
+    location: IGlobalResolvedLocation,
+    input: IGlobalRegistryInput,
+  ) {
+    return location.manager === 'pnpm'
+      ? assessPnpmGlobalRegistryPolicy(input)
+      : assessGlobalRegistryPolicy(input);
+  }
+
+  private async pnpmRegistryInput(
+    location: IGlobalResolvedLocation,
+    request: IGlobalPreviewRequest,
+    signal: AbortSignal,
+  ): Promise<IGlobalRegistryInput> {
+    const config = location.pnpm;
+    if (!config) throw fail('CONFIG_UNSUPPORTED');
+    const identities: IGlobalResolvedLocation['configIdentities'] = [];
+    const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
+    const paths = new Set([
+      ...config.configIdentities.map((identity) => identity.file.path),
+      ...config.missingConfigPaths,
+    ]);
+    for (const path of paths) {
+      const data = await readRunnerFile(
+        path,
+        GLOBAL_CONFIG_FILE_LIMIT,
+        this.runtime.fs,
+        signal,
+        'win32',
+        {
+          optional: true,
+          budget,
+          checkParent: () =>
+            assertGlobalDirectory(
+              win32.dirname(path),
+              this.runtime.fs,
+              signal,
+              true,
+            ),
+        },
+      );
+      signal.throwIfAborted();
+      if (data)
+        identities.push({
+          file: data.identity,
+          sha256: createHash('sha256').update(data.bytes).digest('hex'),
+        });
+    }
+    assertGlobalConfigUnchanged(config.configIdentities, identities);
+    assertGlobalConfigUnchanged(location.configIdentities, identities);
+    return {
+      packageName: request.package,
+      action: request.action,
+      configs: [],
+      // Discovery has already unioned every original file/environment source.
+      environment: {},
+      provenanceKnown: true,
+      pnpmPolicies: [config.policy],
+    };
+  }
+
+  private assertPnpmInventoryMutable(
+    request: IGlobalPreviewRequest,
+    location: IGlobalResolvedLocation,
+    inventory: IGlobalInventoryResult,
+    current: IGlobalPackageFacts,
+  ): void {
+    if (location.manager !== 'pnpm') return;
+    const group = current.pnpmGroup;
+    if (!group || !location.pnpm || !inventory.pnpmInventory)
+      throw fail('INVENTORY_FAILED');
+    if (
+      !inventory.ownershipComplete ||
+      !inventory.pnpmInventory.ownershipComplete
+    )
+      throw fail('BIN_CONFLICT');
+    if (
+      inventory.packages.filter((row) => row.name === request.package)
+        .length !== 1 ||
+      inventory.facts.filter((facts) => facts.name === request.package)
+        .length !== 1
+    )
+      throw fail('INVENTORY_FAILED');
+    if (group.directDependencies.length !== 1)
+      throw fail('GLOBAL_GROUP_UNSUPPORTED');
+    if (group.directDependencies[0] !== request.package)
+      throw fail('INVENTORY_FAILED');
+    if (
+      request.action === 'change' &&
+      inventory.pnpmInventory.unreferencedDirectories.length
+    )
+      throw fail('INVENTORY_FAILED');
+    // With default-store discovery, inventory proves the actual store from group metadata.
+    if (location.storeDir === null) {
+      location.storeDir = group.storeDir;
+      location.pnpm = { ...location.pnpm, storeDir: group.storeDir };
+    }
+  }
+
   private async readFacts(
     request: IGlobalPreviewRequest,
     activity: GlobalJob,
@@ -623,6 +741,7 @@ export class GlobalPackagesService
     } catch (error) {
       activity.checkpoint();
       if (
+        !(request.manager === 'npm' && isolatablePnpmError(error)) &&
         ![
           'TOOL_NOT_FOUND',
           'TOOL_VERSION_MISMATCH',
@@ -649,11 +768,12 @@ export class GlobalPackagesService
     if (!row || !current) throw fail(row?.reason ?? 'INVENTORY_FAILED');
     if (row.status !== 'manageable')
       throw fail(row.reason ?? 'PROTECTED_PACKAGE', 403);
+    this.assertPnpmInventoryMutable(request, location, inventory, current);
     const policy = await this.registryInput(location, request, activity.signal);
     activity.checkpoint();
     if (
       request.action === 'change' &&
-      !assessGlobalRegistryPolicy(policy).changeAllowed
+      !this.registryDecision(location, policy).changeAllowed
     )
       throw fail('REGISTRY_CONFIG_UNSUPPORTED');
     const target =
@@ -679,6 +799,7 @@ export class GlobalPackagesService
       current = inventory.facts.find((entry) => entry.name === request.package);
       if (!row || !current || row.status !== 'manageable')
         throw fail('PREVIEW_CHANGED');
+      this.assertPnpmInventoryMutable(request, location, inventory, current);
     }
     assertGlobalPackageMutable({
       packageName: request.package,
@@ -689,14 +810,24 @@ export class GlobalPackagesService
       binOwners: inventory.binOwners,
       ownershipComplete: inventory.ownershipComplete,
       protectedPaths: location.protectedPaths,
+      pnpmGroup: current.pnpmGroup,
+      groupPackages: current.pnpmGroup
+        ? inventory.facts.filter(
+            (entry) =>
+              entry.pnpmGroup?.installDir.toLowerCase() ===
+              current.pnpmGroup!.installDir.toLowerCase(),
+          )
+        : undefined,
     });
     return snapshotGlobalPreviewFacts({
       location,
       current,
       target,
       binOwners: inventory.binOwners,
-      registryChangeAllowed: assessGlobalRegistryPolicy(policy).changeAllowed,
+      registryChangeAllowed: this.registryDecision(location, policy)
+        .changeAllowed,
       locations,
+      pnpmInventory: inventory.pnpmInventory,
     });
   }
 
@@ -718,6 +849,13 @@ export class GlobalPackagesService
           'CONFIG_UNSUPPORTED',
           'TOOL_VERSION_MISMATCH',
           'TOOL_LAYOUT_UNSUPPORTED',
+          ...(request.manager === 'pnpm'
+            ? [
+                'PNPM_GLOBAL_NOT_CONFIGURED',
+                'GLOBAL_GROUP_UNSUPPORTED',
+                'INVENTORY_FAILED',
+              ]
+            : []),
         ].includes(reasonOf(error))
       )
         throw fail('PREVIEW_CHANGED');
@@ -736,6 +874,7 @@ export class GlobalPackagesService
         activity.checkpoint();
         const reason = reasonOf(error);
         if (
+          !(manager === 'pnpm' && isolatablePnpmError(error)) &&
           ![
             'TOOL_NOT_FOUND',
             'TOOL_VERSION_MISMATCH',
@@ -743,6 +882,7 @@ export class GlobalPackagesService
             'LOCATION_AMBIGUOUS',
             'CONFIG_UNSUPPORTED',
             'MANAGER_DISABLED',
+            'PNPM_GLOBAL_NOT_CONFIGURED',
           ].includes(reason)
         )
           throw error;
@@ -759,12 +899,29 @@ export class GlobalPackagesService
       }
       locations.push(location);
       assertGlobalLocationsDistinct(locations);
-      const result = await readGlobalInventory(location, {
-        fs: this.runtime.fs,
-        environment: this.runtime.environment,
-        signal: activity.signal,
-        spawn: this.probeFor(activity),
-      });
+      let result: IGlobalInventoryResult;
+      try {
+        result = await readGlobalInventory(location, {
+          fs: this.runtime.fs,
+          environment: this.runtime.environment,
+          signal: activity.signal,
+          spawn: this.probeFor(activity),
+        });
+      } catch (error) {
+        activity.checkpoint();
+        // Location overlap was checked above and must never be swallowed here.
+        if (manager !== 'pnpm' || !isolatablePnpmError(error)) throw error;
+        managers.push({
+          manager,
+          available: false,
+          reason: reasonOf(error),
+          version: null,
+          globalRoot: null,
+          binDir: null,
+          packages: [],
+        });
+        continue;
+      }
       activity.checkpoint();
       managers.push({
         manager,
@@ -860,6 +1017,12 @@ export class GlobalPackagesService
           spawn: this.probeFor(active.activity),
         });
         const request = active.request!;
+        if (
+          request.manager === 'pnpm' &&
+          (!result.ownershipComplete ||
+            result.pnpmInventory?.ownershipComplete !== true)
+        )
+          throw fail('INVENTORY_FAILED');
         const row = result.packages.find(
           (entry) => entry.name === request.package,
         );
@@ -873,6 +1036,12 @@ export class GlobalPackagesService
             ? !row && !facts
             : !!row &&
               !!facts &&
+              (request.manager !== 'pnpm' ||
+                (result.packages.filter(
+                  (entry) => entry.name === request.package,
+                ).length === 1 &&
+                  result.facts.filter((entry) => entry.name === request.package)
+                    .length === 1)) &&
               row.status === 'manageable' &&
               row.version === active.facts?.target?.version &&
               facts.version === active.facts?.target?.version &&

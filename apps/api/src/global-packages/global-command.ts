@@ -18,8 +18,31 @@ import {
 } from '@/global-packages/global-policy';
 import type { GlobalReasonCode } from '@/global-packages/interfaces/global-packages.types';
 import { buildRunnerEnvironment } from '@/npm-runner/runner-environment';
+import type { IPnpmGlobalConfig } from '@/global-packages/interfaces/pnpm-global.types';
 
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org';
+// pnpm 11.22.0:214230-214250,272082: auto-approval ignores non-TTY consent.
+// 31685/304141,52491/297086,55739,36066: test platform/fs overrides.
+// 254775-254789: TABTAB_DEBUG opens an arbitrary append destination.
+// 20914,255492,205067,206407: parser/loader debug;290154: TLS verification.
+const UNSAFE_CHILD_ENVIRONMENT = new Set([
+  '_ISEXE_TEST_PLATFORM_',
+  '__MINIMATCH_TESTING_PLATFORM__',
+  '__IS_WSL_TEST__',
+  'TEST_GRACEFUL_FS_GLOBAL_PATCH',
+  'TABTAB_DEBUG',
+  'DEBUG',
+  'DEBUG_CLI',
+  'DEBUG_NOPT',
+  'NOPT_DEBUG',
+  'TINYGLOBBY_DEBUG',
+  'NODE_DEBUG',
+  'NODE_DEBUG_NATIVE',
+  'PNP_DEBUG_LEVEL',
+  'NM_DEBUG_LEVEL',
+  'NODE_TLS_REJECT_UNAUTHORIZED',
+  'NODE_PATH',
+]);
 const fail = (reason: GlobalReasonCode): never => {
   throw new AppException(
     reason === 'INVALID_PACKAGE_SPEC' ? 400 : 409,
@@ -86,14 +109,14 @@ function environmentFor(
   tool: IRunnerTool,
   manager: GlobalManager,
   action: GlobalAction,
-  bin?: string,
 ): NodeJS.ProcessEnv {
   const clean: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(snapshot)) {
     if (
-      /^(?:pnpm_config_|PNPM_HOME$|NODE_AUTH_TOKEN$|COREPACK_NPM_TOKEN$|YARN_)/i.test(
-        key,
-      )
+      // Remove every inherited PNPM_* input, including mixed-case test/internal
+      // switches. Only validated home/config selectors are restored below.
+      /^(?:PNPM_|NODE_AUTH_TOKEN$|COREPACK_NPM_TOKEN$|YARN_)/i.test(key) ||
+      UNSAFE_CHILD_ENVIRONMENT.has(key.toUpperCase())
     )
       continue;
     clean[key] = value;
@@ -104,7 +127,6 @@ function environmentFor(
     manager,
     action === 'remove' ? 'uninstall_one' : 'install_one',
   );
-  if (manager === 'pnpm' && bin) env.PNPM_HOME = bin;
   return env;
 }
 
@@ -125,6 +147,7 @@ export interface IGlobalQueryInput {
   environment: Readonly<NodeJS.ProcessEnv>;
   captured: GlobalEnvironmentCapture;
   query: GlobalQuery | 'list';
+  pnpm?: IPnpmGlobalConfig;
 }
 export interface IGlobalMutationInput {
   location: IGlobalResolvedLocation;
@@ -138,41 +161,21 @@ export interface IGlobalMutationInput {
 export function buildGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
   const { manager, tool, cwd, query } = input;
   assertLauncher(manager, tool, cwd);
+  if (manager === 'pnpm') return buildPnpmGlobalQuery(input);
   const captured = captureGlobalEnvironment(input.captured);
   const paths: [string, string | undefined][] = [
-    ...(manager === 'npm'
-      ? [
-          ['--prefix', captured.npm_config_prefix] as [
-            string,
-            string | undefined,
-          ],
-        ]
-      : []),
+    ['--prefix', captured.npm_config_prefix],
     ['--userconfig', captured.npm_config_userconfig],
     ['--globalconfig', captured.npm_config_globalconfig],
-    ...(manager === 'npm'
-      ? [['--cache', captured.npm_config_cache] as [string, string | undefined]]
-      : ([
-          ['--global-dir', captured.pnpm_config_global_dir],
-          ['--global-bin-dir', captured.pnpm_config_global_bin_dir],
-          ['--store-dir', captured.pnpm_config_store_dir],
-        ] as [string, string | undefined][])),
+    ['--cache', captured.npm_config_cache],
   ];
   const argv: Partial<Record<GlobalQuery | 'list', string[]>> = {
     list: ['list', '--global', '--depth=0', '--json'],
     root: ['root', '--global'],
     userconfig: ['config', 'get', 'userconfig'],
     globalconfig: ['config', 'get', 'globalconfig'],
-    ...(manager === 'npm'
-      ? {
-          prefix: ['config', 'get', 'prefix'],
-          cache: ['config', 'get', 'cache'],
-        }
-      : {
-          'global-dir': ['config', 'get', 'global-dir'],
-          bin: ['bin', '--global'],
-          store: ['store', 'path'],
-        }),
+    prefix: ['config', 'get', 'prefix'],
+    cache: ['config', 'get', 'cache'],
   };
   const tail = argv[query];
   if (!tail) return fail('CONFIG_UNSUPPORTED');
@@ -181,21 +184,13 @@ export function buildGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
     cwd,
     args: [
       tool.entry!,
-      ...(manager === 'npm'
-        ? ['--update-notifier=false']
-        : ['--dir', cwd, '--pm-on-fail=warn']),
+      '--update-notifier=false',
       ...paths.flatMap(([flag, path]) =>
         path === undefined ? [] : [flag, path],
       ),
       ...tail,
     ],
-    env: environmentFor(
-      input.environment,
-      tool,
-      manager,
-      'remove',
-      captured.PNPM_HOME ?? captured.pnpm_config_global_bin_dir,
-    ),
+    env: environmentFor(input.environment, tool, manager, 'remove'),
   };
 }
 
@@ -214,66 +209,33 @@ export function buildGlobalCommand(
     return fail('INVALID_PACKAGE_SPEC');
   if (action === 'change' && !input.publicRegistry)
     return fail('REGISTRY_CONFIG_UNSUPPORTED');
-  const paths =
-    manager === 'npm'
-      ? [
-          location.prefix,
-          location.userConfig,
-          location.globalConfig,
-          location.cacheDir,
-        ]
-      : [
-          location.userConfig,
-          location.globalConfig,
-          location.globalDir,
-          location.binDir,
-          location.storeDir,
-        ];
+  if (manager === 'pnpm') return buildPnpmGlobalCommand(input);
+  const paths = [
+    location.prefix,
+    location.userConfig,
+    location.globalConfig,
+    location.cacheDir,
+  ];
   if (paths.some((value) => !value || !isGlobalAbsolutePath(value)))
     return fail('LOCATION_AMBIGUOUS');
-  const common =
-    manager === 'npm'
-      ? [
-          '--prefix',
-          location.prefix!,
-          '--userconfig',
-          location.userConfig,
-          '--globalconfig',
-          location.globalConfig,
-          '--cache',
-          location.cacheDir!,
-        ]
-      : [
-          '--dir',
-          cwd,
-          '--pm-on-fail=warn',
-          '--userconfig',
-          location.userConfig,
-          '--globalconfig',
-          location.globalConfig,
-          '--global-dir',
-          location.globalDir!,
-          '--global-bin-dir',
-          location.binDir,
-          '--store-dir',
-          location.storeDir!,
-        ];
+  const common = [
+    '--prefix',
+    location.prefix!,
+    '--userconfig',
+    location.userConfig,
+    '--globalconfig',
+    location.globalConfig,
+    '--cache',
+    location.cacheDir!,
+  ];
   if (input.publicRegistry) common.push('--registry', PUBLIC_REGISTRY);
-  if (manager === 'npm')
-    common.push(
-      '--no-audit',
-      '--no-fund',
-      '--no-progress',
-      '--update-notifier=false',
-    );
-  const verb =
-    manager === 'npm'
-      ? action === 'remove'
-        ? 'uninstall'
-        : 'install'
-      : action === 'remove'
-        ? 'remove'
-        : 'add';
+  common.push(
+    '--no-audit',
+    '--no-fund',
+    '--no-progress',
+    '--update-notifier=false',
+  );
+  const verb = action === 'remove' ? 'uninstall' : 'install';
   return {
     file: tool.file,
     cwd,
@@ -282,16 +244,123 @@ export function buildGlobalCommand(
       ...common,
       verb,
       '--global',
-      ...(manager === 'pnpm' ? ['--reporter=append-only'] : []),
       '--',
       action === 'remove' ? packageName : `${packageName}@${exactVersion}`,
     ],
-    env: environmentFor(
-      input.environment,
-      tool,
-      manager,
-      action,
-      location.binDir,
-    ),
+    env: environmentFor(input.environment, tool, manager, action),
   };
+}
+
+// pnpm 11 commands use pinned configuration rather than npm's config flags.
+function buildPnpmGlobalCommand(input: IGlobalMutationInput): IGlobalCommand {
+  const { location, action, packageName, exactVersion } = input;
+  const config = location.pnpm;
+  if (!config) return fail('CONFIG_UNSUPPORTED');
+  if (
+    action === 'change' &&
+    (config.policy.changeUnsupported || config.policy.unknownRouting)
+  )
+    return fail('REGISTRY_CONFIG_UNSUPPORTED');
+  const paths = [
+    config.homeDir,
+    config.globalDir,
+    config.globalRoot,
+    config.binDir,
+    config.storeDir,
+    config.cacheDir,
+    config.stateDir,
+    config.configDir,
+    config.authFile,
+  ];
+  if (paths.some((path) => !path || !isGlobalAbsolutePath(path)))
+    return fail('LOCATION_AMBIGUOUS');
+  for (const [actual, pinned] of [
+    [location.globalDir, config.globalDir],
+    [location.globalRoot, config.globalRoot],
+    [location.binDir, config.binDir],
+    [location.storeDir, config.storeDir],
+    [location.cacheDir, config.cacheDir],
+    [location.userConfig, config.authFile],
+  ]) {
+    if (!actual || !pinned || comparable(actual) !== comparable(pinned))
+      return fail('LOCATION_AMBIGUOUS');
+  }
+  return {
+    file: location.tool.file,
+    cwd: location.cwd,
+    args: [
+      location.tool.entry!,
+      '--dir',
+      location.cwd,
+      '--pm-on-fail=warn',
+      action === 'change' ? 'add' : 'remove',
+      '--global',
+      '--global-dir',
+      config.globalDir,
+      ...(action === 'change' ? ['--global-bin-dir', config.binDir] : []),
+      '--store-dir',
+      config.storeDir!,
+      ...(action === 'change' ? ['--registry', PUBLIC_REGISTRY] : []),
+      '--reporter=append-only',
+      '--',
+      action === 'change' ? `${packageName}@${exactVersion}` : packageName,
+    ],
+    env: pnpmEnvironment(input.environment, location.tool, action, config),
+    shell: false,
+    extendEnv: false,
+    stdin: 'ignore',
+  };
+}
+
+function buildPnpmGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
+  const config = input.pnpm;
+  if (!config) return fail('CONFIG_UNSUPPORTED');
+  if (input.query !== 'list') return fail('CONFIG_UNSUPPORTED');
+  if (!isGlobalAbsolutePath(config.globalDir))
+    return fail('LOCATION_AMBIGUOUS');
+  return {
+    file: input.tool.file,
+    cwd: input.cwd,
+    args: [
+      input.tool.entry!,
+      '--dir',
+      input.cwd,
+      '--pm-on-fail=warn',
+      'list',
+      '--global',
+      '--global-dir',
+      config.globalDir,
+      '--depth=0',
+      '--json',
+    ],
+    env: pnpmEnvironment(input.environment, input.tool, 'remove', config),
+    shell: false,
+    extendEnv: false,
+    stdin: 'ignore',
+  };
+}
+
+const comparable = (path: string): string => win32.resolve(path).toLowerCase();
+
+function pnpmEnvironment(
+  snapshot: Readonly<NodeJS.ProcessEnv>,
+  tool: IRunnerTool,
+  action: GlobalAction,
+  config: IPnpmGlobalConfig,
+): NodeJS.ProcessEnv {
+  const env = environmentFor(snapshot, tool, 'pnpm', action);
+  if (
+    !env.PATH?.split(';').some(
+      (path) => comparable(path) === comparable(config.binDir),
+    )
+  )
+    return fail('PNPM_GLOBAL_NOT_CONFIGURED');
+  env.PNPM_HOME = config.homeDir;
+  env.pnpm_config_npmrc_auth_file = config.authFile;
+  env.pnpm_config_cache_dir = config.cacheDir;
+  env.pnpm_config_state_dir = config.stateDir;
+  env.pnpm_config_config_dir = config.configDir;
+  // Keep build/release policy in the original consumed YAML. In particular,
+  // pnpm 11.22.0:166500-166503,168242-168245 silently ignores env allow-builds.
+  return env;
 }

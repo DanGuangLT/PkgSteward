@@ -1,0 +1,13 @@
+# TEST không phải yêu cầu nghiệp vụ. node_modules/.modules.yaml, not a real store.
+layoutVersion: 5
+packageManager: pnpm@11.22.0
+storeDir: 'D:\TEST\pnpm-store\v11'
+virtualStoreDir: 'D:\TEST\pnpm-store\v11\links'
+virtualStoreDirMaxLength: 60
+nodeLinker: isolated
+included:
+  dependencies: true
+  devDependencies: true
+  optionalDependencies: true
+pendingBuilds: []
+skipped: []

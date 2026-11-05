@@ -36,6 +36,7 @@ import {
   resolveRunnerTool,
   revalidateRunnerTool,
 } from '@/npm-runner/runner-tool';
+import { readPnpmGlobalConfig } from '@/global-packages/pnpm-global-config';
 
 const failure = (reason: GlobalReasonCode): AppException =>
   new AppException(409, 'Global location or probe is unavailable', 'CONFLICT', {
@@ -257,6 +258,54 @@ export async function runGlobalProbe(
   return { ...result, stderr: Buffer.alloc(0) };
 }
 
+async function probeLocationPaths(
+  commands: readonly IGlobalCommand[],
+  signal: AbortSignal,
+  spawn: GlobalProbeSpawn,
+): Promise<string[]> {
+  const stop = new AbortController();
+  const siblingStopped = new Error('Global location sibling probe stopped');
+  const probeSignal = AbortSignal.any([signal, stop.signal]);
+  const paths: string[] = [];
+  const failures: { index: number; error: unknown }[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (!probeSignal.aborted && next < commands.length) {
+      const index = next++;
+      try {
+        // A slot covers launch, output drain and Windows tree verification.
+        const result = await runGlobalProbe(
+          commands[index],
+          'path',
+          probeSignal,
+          spawn,
+        );
+        signal.throwIfAborted();
+        let path: string;
+        try {
+          path = new TextDecoder('utf-8', { fatal: true })
+            .decode(result.stdout)
+            .replace(/\r?\n$/, '');
+        } catch {
+          throw failure('LOCATION_AMBIGUOUS');
+        }
+        if (!isGlobalAbsolutePath(path)) throw failure('LOCATION_AMBIGUOUS');
+        paths[index] = win32.resolve(path);
+      } catch (error) {
+        // Sibling cancellation must not replace the originating probe error.
+        if (error !== siblingStopped) failures.push({ index, error });
+        stop.abort(siblingStopped);
+      }
+    }
+  };
+  // Never return while a sibling still owns a process/verification slot.
+  await Promise.allSettled([worker(), worker()]);
+  if (failures.length)
+    throw failures.sort((a, b) => a.index - b.index)[0].error;
+  signal.throwIfAborted();
+  return paths;
+}
+
 async function prepareCwd(deps: IGlobalLocationDeps): Promise<{
   cwd: string;
   ancestorConfigs: IGlobalResolvedLocation['configIdentities'];
@@ -368,6 +417,7 @@ export async function discoverGlobalLocation(
   deps: IGlobalLocationDeps,
 ): Promise<IGlobalResolvedLocation> {
   deps.signal.throwIfAborted();
+  if (manager === 'pnpm') return discoverPnpmGlobalLocation(deps);
   const captured = captureGlobalEnvironment(deps.environment);
   const snapshot = {
     platform: 'win32' as const,
@@ -405,13 +455,15 @@ export async function discoverGlobalLocation(
       throw error;
   }
   const { cwd, ancestorConfigs } = await prepareCwd(deps);
-  const queries: GlobalQuery[] =
-    manager === 'npm'
-      ? ['prefix', 'root', 'userconfig', 'globalconfig', 'cache']
-      : ['global-dir', 'root', 'bin', 'store', 'userconfig', 'globalconfig'];
-  const found = new Map<GlobalQuery, string>();
-  for (const query of queries) {
-    const result = await runGlobalProbe(
+  const queries: GlobalQuery[] = [
+    'prefix',
+    'root',
+    'userconfig',
+    'globalconfig',
+    'cache',
+  ];
+  const paths = await probeLocationPaths(
+    queries.map((query) =>
       buildGlobalQuery({
         manager,
         tool,
@@ -420,32 +472,20 @@ export async function discoverGlobalLocation(
         captured,
         query,
       }),
-      'path',
-      deps.signal,
-      deps.spawn,
-    );
-    deps.signal.throwIfAborted();
-    let path: string;
-    try {
-      path = new TextDecoder('utf-8', { fatal: true })
-        .decode(result.stdout)
-        .replace(/\r?\n$/, '');
-    } catch {
-      throw failure('LOCATION_AMBIGUOUS');
-    }
-    if (!isGlobalAbsolutePath(path)) throw failure('LOCATION_AMBIGUOUS');
-    found.set(query, win32.resolve(path));
-  }
+    ),
+    deps.signal,
+    deps.spawn,
+  );
+  const found = new Map<GlobalQuery, string>(
+    queries.map((query, index) => [query, paths[index]]),
+  );
   const globalRoot = found.get('root')!;
-  const prefix = found.get('prefix') ?? null;
-  const globalDir = found.get('global-dir') ?? null;
-  const binDir = manager === 'npm' ? prefix! : found.get('bin')!;
+  const prefix = found.get('prefix')!;
+  const globalDir = null;
+  const binDir = prefix;
   const cacheDir = found.get('cache') ?? null;
-  const storeDir = found.get('store') ?? null;
-  if (
-    comparable(globalRoot) !==
-    comparable(win32.join(prefix ?? globalDir!, 'node_modules'))
-  )
+  const storeDir = null;
+  if (comparable(globalRoot) !== comparable(win32.join(prefix, 'node_modules')))
     throw failure('LOCATION_AMBIGUOUS');
   for (const path of [
     prefix,
@@ -464,17 +504,8 @@ export async function discoverGlobalLocation(
   const overrides: [string | undefined, string | null][] = [
     [captured.npm_config_userconfig, userConfig],
     [captured.npm_config_globalconfig, globalConfig],
-    ...((manager === 'npm'
-      ? [
-          [captured.npm_config_prefix, prefix],
-          [captured.npm_config_cache, cacheDir],
-        ]
-      : [
-          [captured.pnpm_config_global_dir, globalDir],
-          [captured.pnpm_config_global_bin_dir, binDir],
-          [captured.pnpm_config_store_dir, storeDir],
-          [captured.PNPM_HOME, binDir],
-        ]) as [string | undefined, string | null][]),
+    [captured.npm_config_prefix, prefix],
+    [captured.npm_config_cache, cacheDir],
   ];
   if (
     overrides.some(
@@ -558,6 +589,116 @@ export async function discoverGlobalLocation(
     globalConfig,
     configIdentities,
     missingConfigPaths,
+    cwd,
+    protectedPaths: [
+      ...new Set([
+        ...tools.map((installed) => installed.packageDir),
+        tool.file,
+        deps.paths.appInstallDir,
+        ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
+        deps.paths.dataDir,
+      ]),
+    ],
+  };
+}
+
+async function discoverPnpmGlobalLocation(
+  deps: IGlobalLocationDeps,
+): Promise<IGlobalResolvedLocation> {
+  const { fs, signal } = deps;
+  signal.throwIfAborted();
+  const snapshot = {
+    platform: 'win32' as const,
+    execPath: deps.execPath,
+    env: deps.environment,
+    projectPaths: deps.scannedProjectPaths,
+    signal,
+  };
+  const tool = await resolveRunnerTool('pnpm', snapshot, fs);
+  await revalidateRunnerTool(tool, fs, signal);
+  signal.throwIfAborted();
+  const tools = [tool];
+  try {
+    tools.push(await resolveRunnerTool('npm', snapshot, fs));
+  } catch (error) {
+    signal.throwIfAborted();
+    if (
+      !(error instanceof AppException) ||
+      ![
+        'TOOL_NOT_FOUND',
+        'TOOL_VERSION_MISMATCH',
+        'TOOL_LAYOUT_UNSUPPORTED',
+      ].includes(
+        String((error.details as { reason?: string } | undefined)?.reason),
+      )
+    )
+      throw error;
+  }
+  const { cwd, ancestorConfigs } = await prepareCwd(deps);
+  const pnpm = await readPnpmGlobalConfig({
+    fs,
+    signal,
+    tool,
+    cwd,
+    environment: deps.environment,
+    // Source parents may be a user profile or the installed tool. They are
+    // read-only inputs; destination scope is checked separately below.
+    checkDirectory: (path) => assertGlobalDirectory(path, fs, signal, true),
+  });
+  for (const path of [
+    pnpm.homeDir,
+    pnpm.globalDir,
+    pnpm.globalRoot,
+    pnpm.binDir,
+    pnpm.storeDir,
+    pnpm.cacheDir,
+    pnpm.stateDir,
+    pnpm.configDir,
+  ]) {
+    if (path !== null) assertLocationScope(path, deps);
+  }
+  if (
+    overlaps(pnpm.globalRoot, pnpm.binDir) ||
+    (pnpm.storeDir &&
+      (overlaps(pnpm.storeDir, pnpm.globalRoot) ||
+        overlaps(pnpm.storeDir, pnpm.binDir)))
+  )
+    throw failure('LOCATION_AMBIGUOUS');
+  if (
+    ancestorConfigs.some(
+      (ancestor) =>
+        !pnpm.configIdentities.some(
+          (identity) =>
+            comparable(identity.file.path) === comparable(ancestor.file.path),
+        ),
+    )
+  )
+    throw failure('CONFIG_UNSUPPORTED');
+  assertGlobalConfigUnchanged(
+    ancestorConfigs,
+    pnpm.configIdentities.filter((identity) =>
+      ancestorConfigs.some(
+        (ancestor) =>
+          comparable(identity.file.path) === comparable(ancestor.file.path),
+      ),
+    ),
+  );
+  await revalidateRunnerTool(tool, fs, signal);
+  signal.throwIfAborted();
+  return {
+    manager: 'pnpm',
+    tool,
+    prefix: null,
+    globalDir: pnpm.globalDir,
+    globalRoot: pnpm.globalRoot,
+    binDir: pnpm.binDir,
+    cacheDir: pnpm.cacheDir,
+    storeDir: pnpm.storeDir,
+    userConfig: pnpm.authFile,
+    globalConfig: win32.join(pnpm.configDir, 'config.yaml'),
+    configIdentities: [...pnpm.configIdentities],
+    missingConfigPaths: [...pnpm.missingConfigPaths],
+    pnpm,
     cwd,
     protectedPaths: [
       ...new Set([
