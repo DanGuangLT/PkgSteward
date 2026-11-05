@@ -49,7 +49,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const missing = (error: unknown): boolean =>
   record(error) && error.code === 'ENOENT';
-const installName = /^[a-f0-9]{4}-[a-f0-9]{11}-[a-f0-9]{16}$/i;
+// pnpm 11.22.0 globalPackageDir.js:191868 leaves PID/time hex unpadded.
+const installName = /^[a-f0-9]+-[a-f0-9]+-[a-f0-9]{16}$/i;
 const indexName = /^[a-f0-9]{64}$/i;
 const sameEntry = (a: IRunnerFileIdentity, b: IRunnerFileIdentity): boolean =>
   key(a.path) === key(b.path) &&
@@ -60,8 +61,44 @@ const sameEntry = (a: IRunnerFileIdentity, b: IRunnerFileIdentity): boolean =>
   a.stat.isDirectory?.() === b.stat.isDirectory?.() &&
   a.stat.isSymbolicLink() === b.stat.isSymbolicLink();
 
+function parseJson(text: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(text);
+  if (!record(value)) throw failed();
+  const objects: (Set<string> | null)[] = [];
+  // Tokenize only syntactically valid JSON. JSON.parse alone loses duplicates.
+  for (const match of text.matchAll(/"(?:[^"\\]|\\[\s\S])*"|[{}[\]]/g)) {
+    const token = match[0];
+    if (token === '{' || token === '[') {
+      objects.push(token === '{' ? new Set() : null);
+      if (objects.length > 64) throw failed();
+    } else if (token === '}' || token === ']') objects.pop();
+    else if (
+      text
+        .slice(match.index + token.length)
+        .trimStart()
+        .startsWith(':')
+    ) {
+      const name: unknown = JSON.parse(token);
+      const names = objects.at(-1);
+      if (
+        typeof name !== 'string' ||
+        !names ||
+        names.has(name) ||
+        ['__proto__', 'constructor', 'prototype', '<<'].includes(name)
+      )
+        throw failed();
+      names.add(name);
+    }
+  }
+  return value;
+}
+
 // Preserve duplicate-key evidence; reject aliases, tags and excessive nesting.
-function parseData(text: string): Record<string, unknown> {
+function parseData(
+  text: string,
+  format: 'json' | 'yaml',
+): Record<string, unknown> {
+  if (format === 'json') return parseJson(text);
   const doc = parseDocument(text, { uniqueKeys: true, merge: false });
   if (doc.errors.length || doc.warnings.length) throw failed();
   const inspect = (node: unknown, depth: number): void => {
@@ -100,6 +137,255 @@ interface IGroup {
   references: Record<string, string>;
   packageMap: Record<string, unknown>;
   storeProven: boolean;
+}
+
+// @zkochan/cmd-shim in pnpm 11.22.0: generateCmdShim:44287,
+// generateShShim:44335, generatePwshShim:44463. Match argument positions and
+// generated control flow, never an expected path appearing among foreign args.
+const shPrologue = [
+  'link="$0"',
+  'hops=0',
+  'while [ -L "$link" ] && [ "$hops" -lt 40 ]; do',
+  'hops=$((hops+1))',
+  'target=$(readlink "$link")',
+  'case "$target" in',
+  '/*) link="$target" ;;',
+  '*)  link="$(dirname "$link")/$target" ;;',
+  'esac',
+  'done',
+  'basedir=$(dirname "$(echo "$link" | sed -e \'s,\\\\,/,g\')")',
+  'basedir_win="$basedir"',
+  'exe=""',
+  'msys=""',
+  'case `uname -a` in',
+  '*CYGWIN*|*MINGW*|*MSYS*)',
+  'if command -v cygpath > /dev/null 2>&1; then',
+  'basedir_win=`cygpath -w "$basedir"`',
+  'fi',
+  'exe=".exe"',
+  'msys="true"',
+  ';;',
+  '*WSL2*)',
+  'if command -v wslpath > /dev/null 2>&1; then',
+  'basedir_win="$(wslpath -w "$basedir" 2> /dev/null)"',
+  'if [ $? -ne 0 ] || [ -z "$basedir_win" ]; then',
+  'basedir_win="$basedir"',
+  'else',
+  'exe=".exe"',
+  'fi',
+  'fi',
+  ';;',
+  'esac',
+];
+
+function shimControl(
+  line: string,
+  extension: string,
+): 'if' | 'elif' | 'else' | 'end' | null {
+  if (extension === '.cmd') {
+    if (
+      /^@?IF (?:NOT DEFINED NODE_PATH|EXIST "%~dp0\\node\.exe") \($/i.test(line)
+    )
+      return 'if';
+    if (/^\) ELSE \($/i.test(line)) return 'else';
+    if (line === ')') return 'end';
+  } else if (extension === '.ps1') {
+    if (
+      /^if \((?:\$MyInvocation\.ExpectingInput|Test-Path "\$basedir\/node\$exe"|\$PSVersionTable\.PSVersion -lt "6\.0" -or \$IsWindows|\[string\]::IsNullOrEmpty\(\$env_node_path\))\) \{$/i.test(
+        line,
+      )
+    )
+      return 'if';
+    if (/^\} else \{$/i.test(line)) return 'else';
+    if (line === '}') return 'end';
+  } else {
+    if (/^if \[ -z "\$NODE_PATH" \]; then$/.test(line)) return 'if';
+    if (
+      /^(?:if|elif) (?:\[ -n "\$exe" \] && \[ -x "\$basedir\/node\.exe" \]|\[ -x "\$basedir\/node(?:\.exe)?" \]|command -v node >\/dev\/null 2>&1|\[ -n "\$exe" \] && command -v node\.exe >\/dev\/null 2>&1); then$/.test(
+        line,
+      )
+    )
+      return line.startsWith('elif') ? 'elif' : 'if';
+    if (line === 'else') return 'else';
+    if (line === 'fi') return 'end';
+  }
+  return null;
+}
+
+function shimStatement(line: string, extension: string): boolean {
+  // Only literal generated environment setup/restoration is allowed. Unknown
+  // commands, substitutions, inline operators and injected invocations refuse.
+  const literal = '[^"%$`&|<>^!\\r\\n]*';
+  if (extension === '.cmd')
+    return (
+      /^(?:@?SETLOCAL|@?ECHO off|@SET PATHEXT=%PATHEXT:;\.JS;=;%)$/i.test(
+        line,
+      ) ||
+      new RegExp(
+        `^@SET "(?:PATH=${literal}:%PATH%|NODE_PATH=${literal}(?:;%NODE_PATH%)?)"$`,
+        'i',
+      ).test(line)
+    );
+  if (extension === '.ps1')
+    return (
+      [
+        '$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent',
+        '$exe=""',
+        '$exe=".exe"',
+        '$pathsep=":"',
+        '$pathsep=";"',
+        '$env_node_path=$env:NODE_PATH',
+        '$env_path=$env:PATH',
+        '$env:NODE_PATH=$new_node_path',
+        '$env:NODE_PATH="$new_node_path$pathsep$env_node_path"',
+        '$env:PATH="$prepend_path$pathsep$env:PATH"',
+        '$env:NODE_PATH=$env_node_path',
+        '$env:PATH=$env_path',
+        '$ret=0',
+        '$ret=$LASTEXITCODE',
+        'exit $ret',
+        'exit $LASTEXITCODE',
+      ].includes(line) ||
+      new RegExp(`^\\$(?:new_node_path|prepend_path)="${literal}"$`).test(line)
+    );
+  return (
+    line === 'exit $?' ||
+    new RegExp(
+      `^export (?:NODE_PATH="${literal}(?::\\$NODE_PATH)?"|PATH="${literal}:\\$PATH")$`,
+    ).test(line)
+  );
+}
+
+function ownedShim(
+  text: string,
+  file: string,
+  nodeFile: string,
+  accepted: ReadonlySet<string>,
+): boolean {
+  const extension = win32.extname(file).toLowerCase();
+  if (!['', '.cmd', '.ps1'].includes(extension)) return false;
+  let lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !(extension !== '.cmd' && line.startsWith('#')));
+  if (extension === '' && lines[0] === shPrologue[0]) {
+    if (!shPrologue.every((line, i) => line === lines[i])) return false;
+    lines = lines.slice(shPrologue.length);
+  }
+  const target = (token: string): boolean => {
+    if (!/^"[^"\r\n]+"$/.test(token)) return false;
+    const value = token
+      .slice(1, -1)
+      .replace(
+        /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir_win|\$basedir)/i,
+        win32.dirname(file),
+      );
+    // Generated shims use basedir/../ paths; normalize those only after the
+    // known prefix expansion, while rejecting remaining shell interpolation.
+    return (
+      !/[$%`!^&]/.test(value) &&
+      /^[a-z]:[\\/]/i.test(value) &&
+      !Array.from(value).some(
+        (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+      ) &&
+      isGlobalAbsolutePath(win32.resolve(value)) &&
+      accepted.has(key(value))
+    );
+  };
+  const node = (token: string): boolean => {
+    if (/^"?node(?:\.exe)?"?$/i.test(token)) return true;
+    if (
+      (extension === '.cmd' && /^"%~dp0\\node\.exe"$/i.test(token)) ||
+      (extension === '.ps1' && /^"(?:\$basedir\/)?node\$exe"$/.test(token)) ||
+      (extension === '' && /^"\$basedir\/node(?:\.exe)?"$/.test(token))
+    )
+      return true;
+    return (
+      /^"[^"\r\n]+"$/.test(token) &&
+      !/[$%`]/.test(token) &&
+      key(token.slice(1, -1)) === key(nodeFile)
+    );
+  };
+  const invocation = (line: string): boolean => {
+    const prefix =
+      extension === '.cmd'
+        ? /^@?/
+        : extension === '.ps1'
+          ? /^(?:\$input\s+\|\s+)?&\s+/
+          : /^exec\s+/;
+    if (!prefix.test(line)) return false;
+    const command = line.replace(prefix, '');
+    const matches = [...command.matchAll(/"[^"\r\n]*"|[^\s"]+/g)];
+    if (
+      matches.some(
+        (match, i) =>
+          i > 0 &&
+          !/^\s+$/.test(
+            command.slice(
+              matches[i - 1].index + matches[i - 1][0].length,
+              match.index,
+            ),
+          ),
+      )
+    )
+      return false;
+    const tokens = matches.map((match) => match[0]);
+    if (command.replace(/"[^"\r\n]*"|[^\s"]+/g, '').trim()) return false;
+    if (
+      tokens.pop() !==
+      (extension === '.cmd' ? '%*' : extension === '.ps1' ? '$args' : '"$@"')
+    )
+      return false;
+    if (tokens.length === 1) return target(tokens[0]);
+    const executable = tokens.shift();
+    if (!executable || !node(executable)) return false;
+    if (tokens[0] === '--preserve-symlinks') tokens.shift();
+    return tokens.length === 1 && target(tokens[0]);
+  };
+  let counts = new Set([0]);
+  const frames: {
+    incoming: Set<number>;
+    branches: Set<number>;
+    hasElse: boolean;
+  }[] = [];
+  for (const line of lines) {
+    if (
+      /^exit\s/i.test(line) &&
+      (line !== lines.at(-1) ||
+        frames.length ||
+        counts.size !== 1 ||
+        !counts.has(1))
+    )
+      return false;
+    const control = shimControl(line, extension);
+    if (control === 'if') {
+      if (frames.length >= 64) return false;
+      frames.push({
+        incoming: new Set(counts),
+        branches: new Set(),
+        hasElse: false,
+      });
+    } else if (control === 'else' || control === 'elif') {
+      const frame = frames.at(-1);
+      if (!frame || frame.hasElse) return false;
+      for (const count of counts) frame.branches.add(count);
+      counts = new Set(frame.incoming);
+      frame.hasElse = control === 'else';
+    } else if (control === 'end') {
+      const frame = frames.pop();
+      if (!frame) return false;
+      counts = new Set([
+        ...frame.branches,
+        ...counts,
+        ...(!frame.hasElse ? frame.incoming : []),
+      ]);
+    } else if (!shimStatement(line, extension)) {
+      if (!invocation(line)) return false;
+      counts = new Set([...counts].map((count) => count + 1));
+      if (counts.has(2)) return false;
+    }
+  }
+  return frames.length === 0 && counts.size === 1 && counts.has(1);
 }
 
 class PnpmInventoryReader {
@@ -187,7 +473,10 @@ class PnpmInventoryReader {
     );
     if (!data) throw failed();
     return {
-      value: parseData(data.text),
+      value: parseData(
+        data.text,
+        win32.extname(path).toLowerCase() === '.json' ? 'json' : 'yaml',
+      ),
       identity: {
         file: data.identity,
         sha256: createHash('sha256').update(data.bytes).digest('hex'),
@@ -354,10 +643,15 @@ class PnpmInventoryReader {
     } catch {
       this.deps.signal.throwIfAborted();
     }
+    const metadataVersion =
+      typeof modules.value.packageManager === 'string' &&
+      modules.value.packageManager.startsWith('pnpm@')
+        ? modules.value.packageManager.slice('pnpm@'.length)
+        : null;
     if (
       modules.value.layoutVersion !== 5 ||
-      modules.value.packageManager !==
-        this.location.tool.manager + '@' + this.location.tool.version ||
+      !isGlobalExactVersion(metadataVersion) ||
+      semver.major(metadataVersion) !== 11 ||
       modules.value.nodeLinker !== 'isolated'
     )
       storeProven = false;
@@ -620,34 +914,7 @@ class PnpmInventoryReader {
           ),
         ]),
     );
-    let invocations = 0;
-    for (const line of text.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || /^(?:#|::|@?rem\s)/i.test(trimmed)) continue;
-      const invocation =
-        extension === '.cmd'
-          ? line.includes('%*') && /(?:%_prog%|node(?:\.exe)?)/i.test(line)
-          : extension === '.ps1'
-            ? line.includes('&') && line.includes('$args')
-            : /^exec\s/.test(trimmed) && line.includes('"$@"');
-      if (!invocation) continue;
-      const targets = [...line.matchAll(/"([^"\r\n]+)"/g)]
-        .map((match) => match[1])
-        .filter((argument) => {
-          const expanded = argument.replace(
-            /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir)/i,
-            win32.dirname(file),
-          );
-          return (
-            !/[$%`]/.test(expanded) &&
-            isGlobalAbsolutePath(expanded) &&
-            accepted.has(key(expanded))
-          );
-        });
-      if (targets.length !== 1) return false;
-      invocations++;
-    }
-    return invocations > 0;
+    return ownedShim(text, file, this.location.tool.file, accepted);
   }
 
   private async shims(

@@ -4,6 +4,7 @@ import { readPnpmGlobalInventory } from '@/global-packages/pnpm-global-inventory
 import { expectGlobalReason } from '@/global-packages/__fixtures__/global-adapters';
 import { PNPM_TEST_PATHS as Q } from '@/global-packages/__fixtures__/pnpm11/facts';
 import { pnpmInventoryFixture } from '@/global-packages/__fixtures__/pnpm11/inventory';
+import { pnpmNodeShims } from '@/global-packages/__fixtures__/pnpm11/shims';
 
 describe('pnpm 11 static install groups and ownership', () => {
   function cliFixture() {
@@ -43,6 +44,278 @@ describe('pnpm 11 static install groups and ownership', () => {
     }
     return { ...h, group, link };
   }
+
+  it.each([false, true])(
+    'accepts source-derived pnpm Node shim control flow (pinned executable=%s)',
+    async (pinned) => {
+      const h = cliFixture();
+      for (const directory of [Q.bin, win32.join(h.group.modulesDir, '.bin')]) {
+        const target = win32.join(
+          directory === Q.bin ? h.group.index : h.group.installDir,
+          'node_modules',
+          'test-cli',
+          'bin',
+          'cli.js',
+        );
+        for (const [extension, text] of Object.entries(
+          pnpmNodeShims(
+            target,
+            directory,
+            pinned ? h.location.tool.file : undefined,
+          ),
+        ))
+          h.put(win32.join(directory, `test-cli${extension}`), { text });
+      }
+      const result = await readPnpmGlobalInventory(h.location, h.deps);
+      expect(result.packages[0]).toMatchObject({
+        status: 'manageable',
+        reason: null,
+      });
+      expect(result.binOwners).toContainEqual({
+        name: 'test-cli',
+        owner: 'test-cli',
+      });
+      expect(result.ownershipComplete).toBe(true);
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      '.cmd',
+      (target: string) =>
+        `#not-a-cmd-comment & node "E:\\TEST\\foreign.js"\r\nnode "${target}" %*\r\n`,
+    ],
+    [
+      '.ps1',
+      (target: string) =>
+        `::not-a-pwsh-comment; & node "E:\\TEST\\foreign.js"\n& node "${target}" $args\n`,
+    ],
+    [
+      '',
+      (target: string) =>
+        `::not-a-sh-comment; node "E:\\TEST\\foreign.js"\nexec node "${target}" "$@"\n`,
+    ],
+    ['.cmd', (target: string) => `node"${target}" %*\r\n`],
+    ['.ps1', (target: string) => `& node"${target}" $args\n`],
+    ['', (target: string) => `exec node"${target}" "$@"\n`],
+    [
+      '.cmd',
+      (target: string) =>
+        `@ECHO off\r\nnode "E:\\TEST\\foreign.js" "${target}" %*\r\n`,
+    ],
+    [
+      '.ps1',
+      (target: string) => `& node "E:\\TEST\\foreign.js" "${target}" $args\n`,
+    ],
+    [
+      '',
+      (target: string) =>
+        `#!/bin/sh\nexec node "E:\\TEST\\foreign.js" "${target}" "$@"\n`,
+    ],
+    [
+      '.cmd',
+      (target: string) =>
+        `@ECHO off\r\nnode "${target}" %* & node "E:\\TEST\\foreign.js"\r\n`,
+    ],
+    [
+      '.ps1',
+      (target: string) =>
+        `& node "${target}" $args; & node "E:\\TEST\\foreign.js"\n`,
+    ],
+    [
+      '',
+      (target: string) =>
+        `#!/bin/sh\nexec node "${target}" "$@"; node "E:\\TEST\\foreign.js"\n`,
+    ],
+    [
+      '.cmd',
+      (target: string) => `node "${target}" %*\r\nnode "${target}" %*\r\n`,
+    ],
+    [
+      '.ps1',
+      (target: string) =>
+        `& node "${target}" $args\n& node "${target}" $args\n`,
+    ],
+    [
+      '',
+      (target: string) =>
+        `#!/bin/sh\nexec node "${target}" "$@"\nexec node "${target}" "$@"\n`,
+    ],
+    ['.cmd', (target: string) => `"E:\\TEST\\foreign.exe" "${target}" %*\r\n`],
+    [
+      '.ps1',
+      (target: string) => `& "E:\\TEST\\foreign.exe" "${target}" $args\n`,
+    ],
+    [
+      '',
+      (target: string) =>
+        `#!/bin/sh\nexec "E:\\TEST\\foreign" "${target}" "$@"\n`,
+    ],
+  ] satisfies [string, (target: string) => string][])(
+    'rejects adversarial %s shim executable/script positions and extra invocations %#',
+    async (extension, render) => {
+      const h = cliFixture();
+      const target = win32.join(
+        h.group.index,
+        'node_modules',
+        'test-cli',
+        'bin',
+        'cli.js',
+      );
+      h.put(win32.join(Q.bin, `test-cli${extension}`), {
+        text: render(target),
+      });
+      const result = await readPnpmGlobalInventory(h.location, h.deps);
+      expect(result.binOwners).toContainEqual({
+        name: 'test-cli',
+        owner: null,
+      });
+      expect(result.packages[0]).toMatchObject({
+        status: 'invalid',
+        reason: 'BIN_CONFLICT',
+      });
+      expect(result.ownershipComplete).toBe(false);
+      expect(h.open.mock.calls.some(([path]) => path.startsWith('E:\\'))).toBe(
+        false,
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['group', 'package', 'package-map'] as const)(
+    'refuses YAML-only syntax in a %s JSON file (review F2)',
+    async (kind) => {
+      const h = pnpmInventoryFixture();
+      const path =
+        kind === 'group'
+          ? win32.join(h.group.installDir, 'package.json')
+          : kind === 'package'
+            ? win32.join(h.group.links[0].target, 'package.json')
+            : win32.join(h.group.modulesDir, '.package-map.json');
+      const text =
+        kind === 'group'
+          ? 'dependencies:\n  is-number: 7.0.0\n'
+          : kind === 'package'
+            ? 'name: is-number\nversion: 7.0.0\n'
+            : 'packages:\n  .:\n    url: ../\n    dependencies: {is-number: is-number@7.0.0}\n  is-number@7.0.0:\n    url: "' +
+              win32
+                .relative(h.group.modulesDir, h.group.links[0].target)
+                .replace(/\\/g, '/') +
+              '/"\n    dependencies: {is-number: is-number@7.0.0}\n';
+      h.put(path, { text });
+      await expectGlobalReason(
+        () => readPnpmGlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "{'dependencies': {'is-number': '7.0.0'}}",
+    '{"dependencies":{"is-number":"7.0.0",}}',
+    '{/* TEST comment */"dependencies":{"is-number":"7.0.0"}}',
+    '{"dependencies":{"is-number":"7.0.0","is-number":"7.0.0"}}',
+    '{"dependencies":{"is-number":"7.0.0","is-\\u006eumber":"7.0.0"}}',
+  ])(
+    'rejects non-JSON grammar and duplicate decoded keys %s (review F2)',
+    async (text) => {
+      const h = pnpmInventoryFixture();
+      h.put(win32.join(h.group.installDir, 'package.json'), { text });
+      await expectGlobalReason(
+        () => readPnpmGlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+    },
+  );
+
+  it.each([
+    'abc-1a1aa104925-e77952ba3460596d',
+    '10000-1a1aa104925-e77952ba3460596d',
+    '1-1-e77952ba3460596d',
+    'ffffffff-1fffffffffffff-e77952ba3460596d',
+  ])(
+    'accepts variable-width pnpm PID/time install name %s (review F3)',
+    async (name) => {
+      const h = pnpmInventoryFixture();
+      h.entries.clear();
+      h.put(Q.bin, { directory: true });
+      const group = h.addGroup({ 'is-number': '7.0.0' }, name);
+      const result = await readPnpmGlobalInventory(h.location, h.deps);
+      expect(result.packages).toEqual([
+        {
+          name: 'is-number',
+          version: '7.0.0',
+          bins: [],
+          status: 'manageable',
+          reason: null,
+        },
+      ]);
+      expect(result.ownershipComplete).toBe(true);
+      expect(result.pnpmInventory!.groups[0].installDir).toBe(group.installDir);
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['pnpm@11.21.0', 'pnpm@11.0.0'])(
+    'keeps compatible %s layout manageable after upgrading the running tool (review F4)',
+    async (manager) => {
+      const h = pnpmInventoryFixture();
+      h.put(win32.join(h.group.modulesDir, '.modules.yaml'), {
+        text: JSON.stringify({
+          layoutVersion: 5,
+          packageManager: manager,
+          nodeLinker: 'isolated',
+          storeDir: Q.store,
+          virtualStoreDir: win32.join(Q.store, 'links'),
+        }),
+      });
+      const result = await readPnpmGlobalInventory(h.location, h.deps);
+      expect(result.packages[0]).toMatchObject({
+        status: 'manageable',
+        reason: null,
+      });
+      expect(result.ownershipComplete).toBe(true);
+      expect(h.location.tool.version).toBe('11.22.0');
+      expect(result.pnpmInventory!.groups[0].modules.sha256).toMatch(
+        /^[a-f0-9]{64}$/,
+      );
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['pnpm@10.30.0', 5],
+    ['pnpm@12.0.0', 5],
+    ['npm@11.22.0', 5],
+    ['pnpm@11.invalid', 5],
+    ['pnpm@11.21.0', 6],
+    ['pnpm@11.21.0', null],
+  ] satisfies [string, number | null][])(
+    'refuses incompatible manager/layout %s/%s after upgrade (review F4)',
+    async (manager, layout) => {
+      const h = pnpmInventoryFixture();
+      h.put(win32.join(h.group.modulesDir, '.modules.yaml'), {
+        text: JSON.stringify({
+          layoutVersion: layout,
+          packageManager: manager,
+          nodeLinker: 'isolated',
+          storeDir: Q.store,
+          virtualStoreDir: win32.join(Q.store, 'links'),
+        }),
+      });
+      const result = await readPnpmGlobalInventory(h.location, h.deps);
+      expect(result.packages[0].status).not.toBe('manageable');
+      expect(result.ownershipComplete).toBe(false);
+      expect(
+        h.open.mock.calls.some(([path]) =>
+          path.startsWith(h.group.links[0].target),
+        ),
+      ).toBe(false);
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
 
   it('derives bins from the proven linked manifest and pins both group and global shims as inert data', async () => {
     const h = cliFixture();
