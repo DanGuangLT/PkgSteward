@@ -4,7 +4,8 @@ import { useEffect, useId, useState, type RefObject } from "react"
 import { AlertTriangleIcon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
-import { GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { GlobalActionLabel, GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { globalActionPending } from "@/lib/global-packages/global-session"
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -39,6 +40,8 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
   const error = globalConsentError(state.form, now)
   const expired = error === "PREVIEW_EXPIRED"
   const pending = state.phase === "starting"
+  const executing = globalActionPending(state, "mutation")
+  const previewing = globalActionPending(state, "preview")
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
@@ -83,8 +86,8 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
         <p>{t("dialog.expiresAt", { time: format.dateTime(new Date(preview.expiresAt), { timeStyle: "medium" }) })}</p>
         {expired ? <div role="alert" className="space-y-3 rounded-md border border-border p-4">
           <p>{t("errors.PREVIEW_EXPIRED")}</p>
-          <Button type="button" variant="secondary" disabled={blocked} className="h-auto min-h-10 whitespace-normal"
-            onClick={() => { void previewAgain(state.form.selection) }}>{t("previewAgain")}</Button>
+          <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 whitespace-normal"
+            onClick={() => { void previewAgain(state.form.selection) }}><GlobalActionLabel pending={previewing}>{t(previewing ? "loadingPreview" : "previewAgain")}</GlobalActionLabel></Button>
         </div> : null}
         <div className="flex min-w-0 items-start gap-3">
           <Checkbox id={`${id}-risk`} checked={state.form.acknowledged} disabled={blocked || expired}
@@ -104,7 +107,7 @@ export function GlobalPackagePreview({ controller, blocked, returnFocusRef, fall
       <AlertDialogFooter>
         <AlertDialogCancel disabled={pending}>{t("cancel")}</AlertDialogCancel>
         <Button type="button" variant="destructive" disabled={blocked || error !== null}
-          className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}>{t(pending ? "dialog.sending" : preview.action === "remove" ? "dialog.confirmRemove" : "dialog.confirmChange")}</Button>
+          aria-busy={executing} className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}><GlobalActionLabel pending={executing}>{t(executing ? "loadingExecute" : preview.action === "remove" ? "dialog.confirmRemove" : "dialog.confirmChange")}</GlobalActionLabel></Button>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

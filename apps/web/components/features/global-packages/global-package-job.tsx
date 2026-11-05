@@ -1,13 +1,17 @@
 "use client"
 
-import { AlertTriangleIcon, CircleIcon } from "lucide-react"
-import { useState } from "react"
+import { AlertTriangleIcon, CircleIcon, LoaderCircleIcon } from "lucide-react"
+import { useState, type ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 import type messages from "@/messages/vi.json"
+
+export function GlobalActionLabel({ pending, children }: { pending: boolean; children: ReactNode }) {
+  return <>{pending ? <LoaderCircleIcon aria-hidden="true" className="size-4 shrink-0 animate-spin" /> : null}{children}</>
+}
 
 export function GlobalCodeMessage({ code, kind = "errors" }: { code: string; kind?: "errors" | "warnings" | "risk" }) {
   const t = useTranslations("globalPackages")
@@ -35,6 +39,9 @@ export function GlobalPackageJob({ controller }: { controller: GlobalController 
   const canCancel = state.phase !== "lost" && !state.startUnknown && state.jobId !== null
     && (cleanup || (!stopping && (job?.status === "running" || (!job && state.phase === "tracking"))))
   const Icon = ["idle", "starting", "running", "stopping", "completed"].includes(status) ? CircleIcon : AlertTriangleIcon
+  const activeKind = state.activity?.kind
+  const loadingLabel = (state.phase === "starting" || state.phase === "tracking") && activeKind
+    ? t(activeKind === "versions" ? "loadingVersions" : activeKind === "preview" ? "loadingPreview" : activeKind === "mutation" ? "loadingExecute" : "loadingInventory") : null
 
   return <section className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6" aria-label={t("job.title")}>
     <h2 className="text-heading-lg">{t("job.title")}</h2>
@@ -43,14 +50,20 @@ export function GlobalPackageJob({ controller }: { controller: GlobalController 
       {job ? <span className="text-body-sm">{t(`job.kind.${job.kind}`)} · {t(`job.phase.${job.phase}`)}</span> : null}
     </div>
     <p aria-live="polite" aria-atomic="true" className="sr-only">{statusLabel}</p>
+    <div role="status" aria-live="polite" aria-atomic="true" className="flex items-center gap-2 text-body-sm">
+      {loadingLabel ? <GlobalActionLabel pending>{loadingLabel}</GlobalActionLabel> : null}
+    </div>
     <p className="text-body-sm text-muted-foreground">{t("job.continues")}</p>
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
       {canCancel ? <Button type="button" variant="secondary" className="h-auto min-h-10 whitespace-normal"
+        aria-busy={state.cancelPending}
         disabled={state.cancelPending || state.cancelUnknown || state.refreshing || (!cleanup && cancelledJob === state.jobId)}
-        onClick={() => { setCancelledJob(state.jobId); void cancel() }}>{t(cleanup ? "job.retryCleanup" : "job.cancel")}</Button> : null}
+        onClick={() => { setCancelledJob(state.jobId); void cancel() }}><GlobalActionLabel pending={state.cancelPending}>{t(state.cancelPending ? "loadingCancel" : cleanup ? "job.retryCleanup" : "job.cancel")}</GlobalActionLabel></Button> : null}
       <Button type="button" variant="secondary" className="h-auto min-h-10 whitespace-normal"
-        disabled={state.refreshing || state.cancelPending || state.phase === "starting"}
-        onClick={() => { void refresh() }}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</Button>
+        aria-busy={state.refreshing}
+        disabled={state.refreshing || state.cancelPending || state.phase === "starting"
+          || (state.phase === "tracking" && !state.startUnknown && !state.cancelUnknown && !state.pollError)}
+        onClick={() => { void refresh() }}><GlobalActionLabel pending={state.refreshing}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</GlobalActionLabel></Button>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={retryPoll}>{t("job.retryPoll")}</Button> : null}
     </div>

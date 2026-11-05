@@ -2,13 +2,14 @@ import { ApiError } from "../api/response.ts"
 import { isRunActive } from "../npm-runner/runner-policy.ts"
 import { initialRunnerLogs, mergeRunnerLogs, needsLogDrain } from "../npm-runner/runner-log-view.ts"
 import { globalError } from "./global-types.ts"
+import { newestGlobalVersions } from "./global-version-options.ts"
 import {
   initialGlobalPreviewForm, changeGlobalSelection, displayGlobalPreview, setGlobalConsent,
   clearGlobalPreview, globalConsentError, buildGlobalExecuteInput,
 } from "./global-preview-form.ts"
 import type {
   GlobalActivityRequest, GlobalError, GlobalExecuteRequest, GlobalJob, GlobalJobStart, GlobalLogPage,
-  GlobalJobKind, GlobalPreviewRequest, GlobalSnapshot, GlobalVersionsRequest,
+  GlobalJobKind, GlobalPreviewRequest, GlobalSnapshot, GlobalVersions, GlobalVersionsRequest,
 } from "@/lib/global-packages/global-types"
 import type { GlobalConsent, GlobalPreviewForm, GlobalSelection } from "@/lib/global-packages/global-preview-form"
 import type { RunnerClock, RunnerVisibility } from "@/lib/npm-runner/runner-session"
@@ -35,6 +36,9 @@ export interface GlobalState {
   previewId: string | null
   jobId: string | null
   job: GlobalJob | null
+  activity: Pick<GlobalJob, "kind" | "manager" | "package" | "action"> | null
+  versions: GlobalVersions | null
+  mutationResult: GlobalJob | null
   logs: RunnerLogs
   form: GlobalPreviewForm
   error: GlobalError | null
@@ -71,8 +75,19 @@ const settling = (job: GlobalJob): boolean => job.status === "running" || job.st
 
 export function initialGlobalState(snapshot: GlobalSnapshot | null = null): GlobalState {
   return { phase: "idle", generation: 0, snapshot, snapshotError: null, requestId: null, previewId: null,
-    jobId: null, job: null, logs: initialRunnerLogs(), form: initialGlobalPreviewForm(), error: null,
+    jobId: null, job: null, activity: null, versions: null, mutationResult: null,
+    logs: initialRunnerLogs(), form: initialGlobalPreviewForm(), error: null,
     pollError: null, startUnknown: false, cancelUnknown: false, cancelPending: false, refreshing: false }
+}
+export function globalMutationSucceeded(job: GlobalJob): boolean {
+  return job.kind === "mutation" && job.status === "completed" && job.phase === "done" && job.mutationSpawned
+    && job.exitCode === 0 && job.auditWritten && job.terminationVerified && !job.failureCode && !job.gateHeld && !job.refreshRequired
+}
+export function globalActionPending(state: GlobalState, kind: GlobalJobKind, selection?: Pick<GlobalSelection, "manager" | "package"> & { action?: GlobalSelection["action"] }): boolean {
+  const activity = state.activity
+  return activity?.kind === kind && (state.phase === "starting" || state.phase === "tracking" || (kind === "inventory" && state.refreshing))
+    && (!selection || (activity.manager === selection.manager && activity.package === selection.package
+      && (kind !== "preview" || selection.action === undefined || activity.action === selection.action)))
 }
 export function createGlobalSession({ api, clock, visibility, onChange, onMutated, uuid = () => crypto.randomUUID() }: GlobalSessionOptions): GlobalSession {
   let state = initialGlobalState()
@@ -91,6 +106,9 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   let displayedPreviewJob: string | null = null
   let notifiedMutation: string | null = null
   let refreshedJob: string | null = null
+  let mutationRequestId: string | null = null
+  let autoInventoryJob: string | null = null
+  let pendingInventory = false
 
   function publish(next: GlobalState) {
     if (disposed) return
@@ -147,10 +165,14 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const changedMutation = job.mutationSpawned && (!state.job || state.job.jobId !== job.jobId || !state.job.mutationSpawned
       || state.job.gateHeld !== job.gateHeld || state.job.refreshRequired !== job.refreshRequired)
     const snapshot = changedMutation && state.snapshot ? { ...state.snapshot, stale: true } : state.snapshot
-    publish({ ...state, job, previewId: job.previewId, form, snapshot, cancelPending: false, cancelUnknown: false, error: null, pollError: null })
-    if (disposed || generation !== state.generation) return
     const terminal = !settling(job)
-    if (terminal && (job.kind === "inventory" || job.mutationSpawned)) {
+    publish({ ...state, job, previewId: job.previewId, form, snapshot,
+      versions: terminal && job.status === "completed" && job.versions
+        ? { ...job.versions, versions: newestGlobalVersions(job.versions.versions) } : state.versions,
+      mutationResult: terminal && job.kind === "mutation" ? job : state.mutationResult,
+      cancelPending: false, cancelUnknown: false, error: null, pollError: null })
+    if (disposed || generation !== state.generation) return
+    if (terminal && job.kind === "inventory") {
       const key = `${job.jobId}:${job.gateHeld}:${job.refreshRequired}`
       if (refreshedJob !== key) {
         refreshedJob = key
@@ -161,6 +183,10 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     if (terminal && job.mutationSpawned && notifiedMutation !== job.jobId) {
       notifiedMutation = job.jobId
       onMutated(job)
+    }
+    if (terminal && job.requestId === mutationRequestId && globalMutationSucceeded(job) && autoInventoryJob !== job.jobId) {
+      autoInventoryJob = job.jobId
+      pendingInventory = true
     }
   }
   function canPoll(): boolean {
@@ -205,6 +231,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       }
     }
     if (pollRequest === controller) pollRequest = null
+    maybeRefreshInventory()
     if (canPoll()) {
       if (controller.signal.aborted || generation !== state.generation) void poll()
       else {
@@ -237,6 +264,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       if (snapshotRequest === controller) snapshotRequest = null
       if (active(controller, generation)) publish({ ...state, refreshing: latestRequest !== null })
       if (!disposed && pendingSnapshot && visibility.isVisible()) void refreshSnapshot()
+      maybeRefreshInventory()
     }
   }
   function track(job: GlobalJob) {
@@ -244,6 +272,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const generation = state.jobId !== null && !sameJob ? invalidate() : state.generation
     requestKind = job.kind
     publish({ ...state, generation, phase: "tracking", jobId: job.jobId, requestId: job.requestId, previewId: job.previewId,
+      activity: { kind: job.kind, manager: job.manager, package: job.package, action: job.action },
       logs: sameJob ? state.logs : initialRunnerLogs(job.jobId), error: null, pollError: null,
       startUnknown: false, cancelPending: false, cancelUnknown: false, refreshing: generation === state.generation ? state.refreshing : false,
       form: job.kind === "mutation" ? clearGlobalPreview(state.form) : state.form })
@@ -288,6 +317,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
         void poll()
       }
       if (!disposed && pendingRecovery && visibility.isVisible()) void recoverLatest()
+      maybeRefreshInventory()
     }
   }
   function blocked(): boolean {
@@ -295,9 +325,14 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       || state.phase !== "idle" || (state.job !== null && isRunActive(state.job))
       || state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING"
   }
+  function maybeRefreshInventory() {
+    if (!pendingInventory || pollRequest || blocked() || !visibility.isVisible()) return
+    pendingInventory = false
+    void inventory()
+  }
   async function begin(
     kind: GlobalJobKind,
-    input: GlobalActivityRequest & { previewId?: string },
+    input: GlobalActivityRequest & { previewId?: string; manager?: GlobalJob["manager"]; package?: string; action?: GlobalJob["action"] },
     send: (signal: AbortSignal) => Promise<GlobalJobStart>,
   ): Promise<void> {
     const generation = invalidate()
@@ -305,6 +340,8 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     if (kind === "preview") previewSelectionVersion = selectionVersion
     publish({ ...state, phase: "starting", generation, requestId: input.requestId, previewId: input.previewId ?? null,
       jobId: null, job: null, logs: initialRunnerLogs(), startUnknown: false, cancelUnknown: false,
+      activity: { kind, manager: input.manager ?? null, package: input.package ?? null, action: input.action ?? null },
+      mutationResult: kind === "mutation" ? null : state.mutationResult,
       cancelPending: false, error: null, pollError: null, refreshing: false })
     if (disposed || generation !== state.generation) return
     const controller = new AbortController()
@@ -329,6 +366,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     } finally {
       if (commandRequest === controller) { commandRequest = null; commandKind = null }
       if (active(controller, generation)) void poll()
+      maybeRefreshInventory()
     }
   }
   function select(selection: GlobalSelection) {
@@ -360,7 +398,9 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const error = globalConsentError(state.form, now)
     if (error) { publish({ ...state, error: { code: error, statusCode: 400 } }); return }
     const input = buildGlobalExecuteInput(state.form, uuid(), now)
-    await begin("mutation", input, signal => api.execute(input, signal))
+    mutationRequestId = input.requestId
+    const selection = state.form.selection
+    await begin("mutation", { ...input, manager: selection.manager, package: selection.package, action: selection.action }, signal => api.execute(input, signal))
   }
   async function cancel(): Promise<void> {
     if (disposed || state.cancelPending || !state.jobId || commandKind === "cancel"
@@ -391,6 +431,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       if (active(controller, generation)) {
         if (resumeSnapshot) { pendingSnapshot = true; void refreshSnapshot() }
         void poll()
+        maybeRefreshInventory()
       }
     }
   }
@@ -431,6 +472,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       void recoverLatest()
       void refreshSnapshot()
       void poll()
+      maybeRefreshInventory()
     }
   })
   function dispose() {

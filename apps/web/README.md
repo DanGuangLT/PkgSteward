@@ -253,8 +253,9 @@ without a sandbox, and can affect the whole machine. Other programs using the pa
 cancelled or timed-out change can leave the package partly changed. Processes can escape tracking; after a
 backend crash, inspect and end leftover processes in Windows Task Manager. There is no rollback.
 
-- **Remove or change:** Remove starts a preview. Change opens a target field accepting an exact version or
-  dist-tag; **Load versions** explicitly fetches choices from `https://registry.npmjs.org`, and **Preview** resolves the chosen
+- **Remove or change:** Remove starts a preview. Change immediately loads a selectable list of versions and
+  dist-tags from `https://registry.npmjs.org`, newest versions first with the installed version marked.
+  Typing an exact version or tag is an optional alternative; **Load versions** reloads the list. **Preview** resolves the chosen
   target to an exact version. Ranges, URLs, paths and command flags are unavailable. Custom/mirror registries,
   matching scoped registries or unsupported tool/plugin configuration disable change; remove can remain available.
   Public npm registry login tokens do not by themselves disable change. Package managers, Node/app files and
@@ -266,7 +267,8 @@ backend crash, inspect and end leftover processes in Windows Task Manager. There
   Cancel has initial focus. Previews expire after five minutes; changing manager/package/action/target clears
   earlier consent. Expiry or a `409` conflict requires another preview; execution is never automatic.
 - **Track and stop:** the activity panel shows status, phase, exit code, signal, stop reason, warnings and plain-text
-  output. Cancel requests process termination. **Retry cleanup** retries pending termination/finalization while
+  output. The active control shows a spinner and action-specific loading text, announced to screen readers;
+  competing actions are disabled. Cancel requests process termination. **Retry cleanup** retries pending termination/finalization while
   the lock remains held, without running the mutation again. Only one global activity runs at a time across
   both managers; mutations share the lock with file deletions and project commands. Leaving or hiding the page
   does not cancel backend work. Empty `NPM_COMMAND_TIMEOUT_MS` means no time limit.
@@ -275,7 +277,10 @@ backend crash, inspect and end leftover processes in Windows Task Manager. There
   The page blocks new actions during unresolved tracking and never automatically retries execute or cancel.
   Backend restart loses retained jobs and output; intent/result records remain in the audit log.
 - **Refresh after changes:** any spawned mutation invalidates inventory and previews for both managers, even on
-  failure, cancellation or timeout. Stale/refresh-required messages remain visible when refresh cannot finish;
+  failure, cancellation or timeout. A visible outcome remains after execution, including a translated failure reason.
+  Verified success automatically starts one inventory refresh after finalization and log drain. Failure retains
+  the displayed rows; if the mutation command never started, the outcome states that this operation changed nothing.
+  A spawned command may have left partial changes. Stale/refresh-required messages remain visible when refresh cannot finish;
   use Refresh before relying on the package list again. This feature does not refresh project scan entries,
   package analyses or disk sizes. Check possible lifecycle side effects separately and explicitly rescan,
   recheck or remeasure when needed.
