@@ -35,9 +35,11 @@ const listLicenses = (dir) => {
   return JSON.parse(out);
 };
 
-const cell = (value) => String(value ?? '').replace(/\|/g, '\\|').trim();
-// Keep the author's name only: drop "<email>" and "(url)" parts.
-const authorName = (author) => cell(String(author ?? '').replace(/<[^>]*>|\([^)]*\)/g, '')) || '—';
+// Escape "\" too, so a value ending in "\" cannot escape the next "|".
+const cell = (value) => String(value ?? '').replace(/[\\|]/g, '\\$&').trim();
+// Keep the author's name only: drop "<email>" and "(url)" parts, then any stray "<" or ">".
+const authorName = (author) =>
+  cell(String(author ?? '').replace(/<[^>]*>|\([^)]*\)/g, '').replace(/[<>]/g, '')) || '—';
 const homepage = (pkg) => pkg.homepage || `https://www.npmjs.com/package/${pkg.name}`;
 const byName = (a, b) => a.name.localeCompare(b.name, 'en');
 
