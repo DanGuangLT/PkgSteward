@@ -231,13 +231,22 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 
 ## Global packages
 
-Open `/global-packages` to manage installed global packages with **npm 11**. The pnpm tab explains that pnpm global packages cannot be
-managed in this version yet. Yarn is not supported;
+Open `/global-packages` to manage installed global packages with **npm 11 or pnpm 11**. Other pnpm majors
+are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
-and read the installed inventory. The npm tab shows tool version, global root, bin directory, package
+and read the installed inventory. pnpm discovery and listing read configuration and filesystem metadata statically;
+no pnpm command runs until execute. Each manager tab shows tool version, global root, bin directory, package
 versions and bins, with an as-of time and stale indicator. Empty, unavailable, protected, linked and invalid
 states remain distinct; protected and linked packages have no mutation controls.
+
+If pnpm reports `PNPM_GLOBAL_NOT_CONFIGURED`, run `pnpm setup` in a terminal, ensure its global bin directory
+is on PATH, open a new terminal, then restart PkgSteward. The app does not run setup or edit PATH.
+Packages installed together in one `pnpm add -g` are read-only (`GLOBAL_GROUP_UNSUPPORTED`); manage them in a
+terminal because a change or removal could affect the whole group. Configuration that can load code or move
+the layout also makes pnpm read-only (`CONFIG_UNSUPPORTED`), including pnpmfile/hooks, `lockfileDir`,
+layout/workspace directories, shell/Node execution options and override/extension maps. Inherited `PNPM_*`
+switches are stripped before commands run; only validated location and safety settings are supplied.
 
 **Only change global packages you trust.** Lifecycle and transitive code runs with your user privileges,
 without a sandbox, and can affect the whole machine. Other programs using the package may break. A failed,
@@ -245,11 +254,11 @@ cancelled or timed-out change can leave the package partly changed. Processes ca
 backend crash, inspect and end leftover processes in Windows Task Manager. There is no rollback.
 
 - **Remove or change:** Remove starts a preview. Change opens a target field accepting an exact version or
-  dist-tag; **Load versions** explicitly fetches public-registry choices, and **Preview** resolves the chosen
+  dist-tag; **Load versions** explicitly fetches choices from `https://registry.npmjs.org`, and **Preview** resolves the chosen
   target to an exact version. Ranges, URLs, paths and command flags are unavailable. Custom/mirror registries,
   matching scoped registries or unsupported tool/plugin configuration disable change; remove can remain available.
   Public npm registry login tokens do not by themselves disable change. Package managers, Node/app files and
-  protected command bins cannot be changed here.
+  protected command bins cannot be changed here, including `@pnpm/exe` and the pnpm tool itself.
 - **Review and confirm:** the dialog shows manager/version, package, location, current → exact target (or removal),
   declared bin additions/removals/replacements, high risk, and lifecycle/consumer/partial-change/crash warnings.
   Tick the machine-wide risk acknowledgement and type the exact displayed text:
