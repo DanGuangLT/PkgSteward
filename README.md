@@ -32,7 +32,7 @@ versions) safely.
 
 - Windows 11
 - Node.js 24 (see [`.nvmrc`](.nvmrc))
-- pnpm 11
+- pnpm 11 (recommended), npm or Yarn 1
 
 ## Getting started
 
@@ -41,9 +41,16 @@ versions) safely.
 ```bash
 git clone https://github.com/LienThuan04/PkgSteward.git
 cd PkgSteward
-cd apps/api && pnpm install && cd ../..
-cd apps/web && pnpm install && cd ../..
+
+# Run one of these at the repository root; it installs both apps/api and apps/web for each package manager you use (run only one of the following three commands):
+pnpm install
+npm install
+yarn install
 ```
+
+The root install runs the same package manager inside `apps/api` and `apps/web`. Only pnpm reads the
+committed `pnpm-lock.yaml` files, which pin the tested versions. npm and Yarn resolve the newest versions
+allowed by each `package.json`, and the lockfiles they create are not committed.
 
 ### 2. Configure
 
@@ -81,15 +88,16 @@ update the backend's `LIST_ORIGIN_CORS` to match the origin used in the browser 
 
 ### 3. Run
 
-Double-click a script in the repository root, or run it from a terminal:
+Start each app in its own terminal, with the package manager you installed with (`pnpm dev`, `npm run dev` or
+`yarn dev`):
 
-| Script | What it does |
-|---|---|
-| `start-dev.bat` | Starts the backend and the frontend in development mode (watch / hot reload) |
-| `start-prod.bat` | Builds both apps, then starts them in production mode (`MODE=production`, Swagger off) |
+```bash
+cd apps/api && pnpm dev
+cd apps/web && pnpm dev
+```
 
-Each app opens in its own window; press `Ctrl+C` or close the window to stop it. If `node_modules` is missing, the
-scripts install dependencies first. The commands they run are set at the top of each file.
+For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run `build` and `start:prod` in
+`apps/api`, and `build` and `start` in `apps/web`. Press `Ctrl+C` to stop an app.
 
 | | URL |
 |---|---|
@@ -97,7 +105,7 @@ scripts install dependencies first. The commands they run are set at the top of 
 | API | http://localhost:24681/api/v1 |
 | Swagger (development only) | http://localhost:24681/swagger |
 
-To run an app on its own, use the scripts below inside its folder.
+Each app's scripts are listed below; run them inside its folder.
 
 ## Scripts
 
@@ -118,11 +126,12 @@ To run an app on its own, use the scripts below inside its folder.
 ```
 apps/api/          Backend API (NestJS 11)
 apps/web/          Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
-start-dev.bat      Run both apps in development mode
-start-prod.bat     Build and run both apps in production mode
+scripts/           Repository scripts (root install, third-party notices)
+package.json       Root install only: installs both apps
 ```
 
-The two apps are independent pnpm projects, each with its own lockfile. There is no root `package.json`.
+The two apps are independent pnpm projects, each with its own lockfile. The root `package.json` has no
+dependencies; its only job is to install both apps.
 
 ## Contributing
 
