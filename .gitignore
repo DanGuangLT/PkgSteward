@@ -35,3 +35,11 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Lockfiles from a root install with npm, pnpm or Yarn (scripts/install-apps.mjs).
+# Each app's pnpm-lock.yaml is the only tracked lockfile.
+/package-lock.json
+/pnpm-lock.yaml
+/yarn.lock
+/apps/*/package-lock.json
+/apps/*/yarn.lock
