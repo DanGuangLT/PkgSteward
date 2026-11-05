@@ -103,6 +103,16 @@ const reasonOf = (error: unknown): GlobalReasonCode => {
     'INTERNAL_SERVER_ERROR'
   );
 };
+// Failed static pnpm discovery/inventory must not disable npm. Stop/termination
+// signals are control flow; the caller also checks the activity signal first.
+const isolatablePnpmError = (error: unknown): boolean =>
+  !['CANCELLED', 'TIMED_OUT', 'SHUTDOWN', 'TERMINATION_UNCONFIRMED'].includes(
+    reasonOf(error),
+  ) &&
+  !(
+    error instanceof Error &&
+    ['AbortError', 'TimeoutError'].includes(error.name)
+  );
 const auditState = (job: IGlobalJob): string =>
   JSON.stringify({
     status: job.status,
@@ -727,14 +737,12 @@ export class GlobalPackagesService
     } catch (error) {
       activity.checkpoint();
       if (
+        !(request.manager === 'npm' && isolatablePnpmError(error)) &&
         ![
           'TOOL_NOT_FOUND',
           'TOOL_VERSION_MISMATCH',
           'TOOL_LAYOUT_UNSUPPORTED',
           'MANAGER_DISABLED',
-          ...(request.manager === 'npm'
-            ? ['PNPM_GLOBAL_NOT_CONFIGURED', 'CONFIG_UNSUPPORTED']
-            : []),
         ].includes(reasonOf(error))
       )
         throw error;
@@ -862,6 +870,7 @@ export class GlobalPackagesService
         activity.checkpoint();
         const reason = reasonOf(error);
         if (
+          !(manager === 'pnpm' && isolatablePnpmError(error)) &&
           ![
             'TOOL_NOT_FOUND',
             'TOOL_VERSION_MISMATCH',
@@ -897,12 +906,11 @@ export class GlobalPackagesService
       } catch (error) {
         activity.checkpoint();
         // Location overlap was checked above and must never be swallowed here.
-        if (manager !== 'pnpm' || reasonOf(error) !== 'INVENTORY_FAILED')
-          throw error;
+        if (manager !== 'pnpm' || !isolatablePnpmError(error)) throw error;
         managers.push({
           manager,
           available: false,
-          reason: 'INVENTORY_FAILED',
+          reason: reasonOf(error),
           version: null,
           globalRoot: null,
           binDir: null,

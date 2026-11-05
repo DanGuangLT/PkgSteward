@@ -46,7 +46,7 @@ const dynamic = (value: string): boolean =>
     (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
   );
 const normalizedKey = (key: string): string =>
-  key.replace(/[-_]/g, '').toLowerCase();
+  key.replace(/\[\]$/, '').replace(/[-_]/g, '').toLowerCase();
 const pathValue = (value: unknown, preserveStoreSyntax = false): string => {
   if (typeof value !== 'string' || !isGlobalAbsolutePath(value))
     return refuse('CONFIG_UNSUPPORTED');
@@ -215,6 +215,7 @@ function inspectRoutingMap(
 }
 
 const executableKeys = new Set([
+  'tokenhelper',
   'pnpmfile',
   'globalpnpmfile',
   'onloadscript',
@@ -269,6 +270,83 @@ const yamlSafetyKeys: Readonly<Record<string, string>> = {
   allowbuilds: 'allowBuilds',
 };
 
+// pnpm 11.22.0:169192-169203 copies arbitrary camelCase workspace options.
+// 321888-321923 loads config plugins/default hooks before command dispatch.
+// Refuse selectors, even when a particular source/verb currently ignores them:
+// they must never become an unpinned read/execute destination after a merge.
+const unprovenSelectors = new Set([
+  'ignorepnpmfile',
+  'plugins',
+  'finders',
+  // 168098-168226: path/layout schema;168887-168895: derived Node lookup paths.
+  'lockfiledir',
+  'modulesdir',
+  'virtualstoredir',
+  'globalvirtualstoredir',
+  'virtualstoredirmaxlength',
+  'enableglobalvirtualstore',
+  'nodelinker',
+  'onlybuiltdependenciesfile',
+  'patchesdir',
+  'patcheddependencies',
+  // 169287-169342: location/context keys;255392-255411: workspace env lookup.
+  'dir',
+  'cwd',
+  'bin',
+  'globalpkgdir',
+  'rootprojectmanifestdir',
+  'workspacepackages',
+  'workspacepackagepatterns',
+  'packages',
+  // 168887-168895,273967-273975: executable/search-path/environment inputs.
+  'extrabinpaths',
+  'extranodepaths',
+  'extraenv',
+  'globalpath',
+  'npmpath',
+  'extendnodepath',
+  'prefersymlinkedexecutables',
+  'nodeexperimentalpackagemap',
+  'nodepackagemaptype',
+  'scriptshell',
+  'shellemulator',
+  'shell',
+  'shellargs',
+  'nodeexecpath',
+  'nodeversion',
+  'usenodeversion',
+  'executionenv',
+  'runtime',
+  'runtimeonfail',
+  'runpacquet',
+  'fetchers',
+  'resolvers',
+  // 167031-167061: dependency maps can introduce local-path replacements.
+  'overrides',
+  'packageextensions',
+  'catalog',
+  'catalogs',
+  // 212249-212250,213356-213379: alternate install/resolve delegation.
+  'pnprserver',
+]);
+const inertNonSelectors = new Set([
+  'lockfile',
+  'frozenlockfile',
+  'preferfrozenlockfile',
+  'lockfileonly',
+  'lockfileincludetarballurl',
+]);
+const unprovenSelector = (key: string): boolean =>
+  // Scope names and auth URLs are data, not option namespaces. Scoped token
+  // helpers are handled explicitly before this test.
+  !/[/@:]/.test(key) &&
+  !pathSettings.has(key as PathSetting) &&
+  !inertNonSelectors.has(key) &&
+  (unprovenSelectors.has(key) ||
+    /(?:dir|dirs|directory|directories|path|paths|file|files|destination)$|hook|plugin|shell|workspace|runtime/.test(
+      key,
+    ));
+
 function inspectSetting(
   source: IParsedSource,
   key: string,
@@ -276,7 +354,11 @@ function inspectSetting(
 ): void {
   const lower = key.toLowerCase();
   const normalized = normalizedKey(key);
-  if (normalized.endsWith(':tokenhelper') || executableKeys.has(normalized)) {
+  if (
+    normalized.endsWith(':tokenhelper') ||
+    executableKeys.has(normalized) ||
+    unprovenSelector(normalized)
+  ) {
     source.executable = true;
     source.policy.changeUnsupported = true;
     return;
@@ -412,6 +494,39 @@ function parseYaml(text: string): Record<string, unknown> {
   return result;
 }
 
+// pnpm 11.22.0:167331-167365,167413-167452: INI quotes, escapes,
+// comments, [] suffixes and section names are decoded before key lookup.
+function iniKey(raw: string): string {
+  const key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    const singleQuoted = key.startsWith("'");
+    const candidate = singleQuoted ? key.slice(1, -1) : key;
+    try {
+      const decoded: unknown = JSON.parse(candidate);
+      if (typeof decoded === 'string') return decoded;
+    } catch {
+      if (singleQuoted) return candidate;
+    }
+    return refuse('CONFIG_UNSUPPORTED');
+  }
+  let result = '';
+  for (let index = 0; index < key.length; index++) {
+    const char = key[index];
+    if (char === ';' || char === '#') break;
+    if (
+      char === '\\' &&
+      index + 1 < key.length &&
+      '\\;#'.includes(key[index + 1])
+    )
+      result += key[++index];
+    else result += char;
+  }
+  return result.trim();
+}
+
 function parseSource(text: string, format?: 'yaml' | 'ini'): IParsedSource {
   if (Buffer.byteLength(text, 'utf8') > GLOBAL_CONFIG_FILE_LIMIT)
     return refuse('LIMIT_EXCEEDED');
@@ -442,12 +557,23 @@ function parseSource(text: string, format?: 'yaml' | 'ini'): IParsedSource {
     return result;
   }
   for (const line of lines) {
+    if (line.startsWith('[') && line.endsWith(']')) {
+      const section = iniKey(line.slice(1, -1)).split('.')[0];
+      inspectSetting(result, section, '');
+      result.policy.unknownRouting = true;
+      continue;
+    }
     const split = line.indexOf('=');
     if (split <= 0) {
       result.policy.unknownRouting = true;
       continue;
     }
-    const key = line.slice(0, split).trim();
+    const key = iniKey(line.slice(0, split));
+    if (
+      key.endsWith('[]') &&
+      pathSettings.has(normalizedKey(key) as PathSetting)
+    )
+      return refuse('CONFIG_UNSUPPORTED');
     const value = line.slice(split + 1).trim();
     if (key.toLowerCase() === '_auth') {
       result.policy.publicAuthPresent = true;
@@ -595,6 +721,7 @@ async function readSource(
       const bytes = Buffer.concat(chunks, size);
       const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       const parsed = parseSource(text, format);
+      if (parsed.executable) return refuse('CONFIG_UNSUPPORTED');
       state.identities.push({
         file: identity,
         sha256: createHash('sha256').update(bytes).digest('hex'),

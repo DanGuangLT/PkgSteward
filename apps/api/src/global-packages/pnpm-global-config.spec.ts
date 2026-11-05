@@ -61,6 +61,162 @@ function setup(
 }
 
 describe('pnpm 11 static config and source facts', () => {
+  it.each(['workspace', 'config', 'environment'] as const)(
+    'refuses lockfileDir hook-root redirection from %s before either mutation',
+    async (source) => {
+      // pnpm 11.22.0:168774-168785,321912-321923,322424: workspace
+      // lockfileDir becomes the default hook root before add/remove dispatch.
+      const h = setup(
+        source === 'environment'
+          ? {
+              pnpm_config_lockfile_dir: 'E:\\TEST\\foreign',
+            }
+          : {},
+      );
+      if (source !== 'environment')
+        h.put(
+          source === 'workspace'
+            ? win32.join(Q.root, 'pnpm-workspace.yaml')
+            : Q.yaml,
+          {
+            text:
+              source === 'workspace'
+                ? "lockfileDir: 'E:\\TEST\\foreign'"
+                : `${fixture('config.yaml')}\nlockfileDir: 'E:\\TEST\\foreign'`,
+          },
+        );
+      await expectGlobalReason(
+        () => readPnpmGlobalConfig(h.deps),
+        'CONFIG_UNSUPPORTED',
+      );
+      expect(
+        h.open.mock.calls.some(([path]) => path.startsWith('E:\\TEST')),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    'pnpmfile[]=E:\\TEST\\hook.cjs',
+    'global-pnpmfile[]=E:\\TEST\\hook.cjs',
+    'lockfile-dir[]=E:\\TEST\\foreign',
+    '"pnpmfile"=E:\\TEST\\hook.cjs',
+    "'global-pnpmfile'=E:\\TEST\\hook.cjs",
+    '"pnpm\\u0066ile"=E:\\TEST\\hook.cjs',
+    '\'"pnpm\\u0066ile"\'=E:\\TEST\\hook.cjs',
+    'pnpmfile # ignored suffix=E:\\TEST\\hook.cjs',
+    '[lockfile-dir]\npath=E:\\TEST\\foreign',
+  ])(
+    'refuses INI selector spelling before pnpm can decode it: %s',
+    async (text) => {
+      const h = setup();
+      h.put(Q.auth, { text });
+      await expectGlobalReason(
+        () => readPnpmGlobalConfig(h.deps),
+        'CONFIG_UNSUPPORTED',
+      );
+    },
+  );
+
+  const unprovenSelectors = [
+    // Hook consumers:321888-321923; key transfer:169192-169203.
+    'pnpmfile',
+    'globalPnpmfile',
+    'ignorePnpmfile',
+    'hooks',
+    'configDependencies',
+    'tokenHelper',
+    'include',
+    'includes',
+    'plugins',
+    'finders',
+    // Paths/layout:168098-168226,168887-168895; context:169287-169342.
+    'lockfileDir',
+    'modulesDir',
+    'virtualStoreDir',
+    'globalVirtualStoreDir',
+    'virtualStoreDirMaxLength',
+    'enableGlobalVirtualStore',
+    'nodeLinker',
+    'onlyBuiltDependenciesFile',
+    'patchesDir',
+    'patchedDependencies',
+    'packDestination',
+    'dir',
+    'bin',
+    'globalPkgDir',
+    'rootProjectManifestDir',
+    'workspaceDir',
+    'workspaceRoot',
+    'workspacePackages',
+    'workspacePackagePatterns',
+    'packages',
+    'extraBinPaths',
+    'extraNodePaths',
+    'extraEnv',
+    'globalPath',
+    'npmPath',
+    'extendNodePath',
+    'preferSymlinkedExecutables',
+    'nodeExperimentalPackageMap',
+    'nodePackageMapType',
+    'scriptShell',
+    'shellEmulator',
+    'shell',
+    'shellArgs',
+    'nodeOptions',
+    'nodeExecPath',
+    'nodeVersion',
+    'useNodeVersion',
+    'executionEnv',
+    'runtime',
+    'runtimeOnFail',
+    'managePackageManagerVersions',
+    // These maps may carry file:/link:/workspace: replacements (167031-167061).
+    'overrides',
+    'packageExtensions',
+    'catalog',
+    'catalogs',
+    'pnprServer',
+    // Unknown future selector shapes are never evidence of inertness.
+    'futureDir',
+    'futureHook',
+    'futurePlugin',
+  ] as const;
+  it('does not mistake scoped registry/auth URLs containing workspace or plugin for selectors', async () => {
+    const h = setup();
+    h.put(Q.auth, {
+      text: '@workspace:registry=https://private.invalid/\n//private.invalid/plugins/:_authToken=TEST-not-a-token',
+    });
+    const config = await readPnpmGlobalConfig(h.deps);
+    expect(config.policy.scopedRegistries).toContain('@workspace');
+    expect(config.policy.changeUnsupported).toBe(false);
+    expect(JSON.stringify(config)).not.toContain('TEST-not-a-token');
+  });
+  it.each(['workspace', 'config', 'environment'] as const)(
+    'refuses unproven executable/layout selectors from %s for change and remove',
+    async (source) => {
+      for (const key of unprovenSelectors) {
+        const envKey = `pnpm_config_${key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`;
+        const h = setup(
+          source === 'environment' ? { [envKey]: 'D:\\TEST\\foreign' } : {},
+        );
+        if (source !== 'environment')
+          h.put(
+            source === 'workspace'
+              ? win32.join(Q.root, 'pnpm-workspace.yaml')
+              : Q.yaml,
+            {
+              text: `${source === 'config' ? fixture('config.yaml') : ''}\n${key}: 'D:\\TEST\\foreign'`,
+            },
+          );
+        await expectGlobalReason(
+          () => readPnpmGlobalConfig(h.deps),
+          'CONFIG_UNSUPPORTED',
+        );
+      }
+    },
+  );
+
   it('pins consumed YAML safety when env deny is ignored and group allows a build (review F4)', async () => {
     // pnpm-11.22.0.mjs:166500-166503,168242-168245: no allow-builds env schema.
     // 168774-168785: global group YAML replaces global YAML settings.

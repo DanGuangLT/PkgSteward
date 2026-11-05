@@ -54,6 +54,85 @@ const common = (manager: GlobalManager): string[] =>
     : ['--dir', P.cwd, '--pm-on-fail=warn'];
 
 describe('global command descriptors (argv require RT0)', () => {
+  it.each([
+    'PNPM_AUTO_APPROVE_BUILDS_FOR_TESTS',
+    'pnpm_auto_approve_builds_for_tests',
+    'PnPm_AuTo_ApPrOvE_BuIlDs_FoR_TeStS',
+  ])(
+    'prevents %s from approving all builds in the non-TTY consumer',
+    async (key) => {
+      // SOURCE-DERIVED consumer, pnpm 11.22.0:214230-214250,214257.
+      // Model Windows environment casing, then its pre-approve-builds TTY gate.
+      const approve = jest
+        .fn<Promise<void>, [{ all: boolean | undefined }]>()
+        .mockResolvedValue(undefined);
+      const consume = async (
+        environment: NodeJS.ProcessEnv,
+        isTTY: boolean,
+      ): Promise<void> => {
+        const windowsEnv: NodeJS.ProcessEnv = {};
+        for (const [name, value] of Object.entries(environment))
+          windowsEnv[name.toUpperCase()] = value;
+        const autoApproveForTests =
+          windowsEnv.PNPM_AUTO_APPROVE_BUILDS_FOR_TESTS === '1';
+        if (!autoApproveForTests && !isTTY) return;
+        await approve({ all: autoApproveForTests ? true : undefined });
+      };
+      const environment = { PATH: Q.bin, [key]: '1' };
+      await consume(environment, false);
+      expect(approve).toHaveBeenCalledWith({ all: true });
+      approve.mockClear();
+      const command = buildGlobalCommand(input('pnpm', { environment }));
+      await consume(command.env, false);
+      expect(approve).not.toHaveBeenCalled();
+      expect(
+        Object.keys(command.env).map((name) => name.toUpperCase()),
+      ).not.toContain('PNPM_AUTO_APPROVE_BUILDS_FOR_TESTS');
+    },
+  );
+
+  it.each(['change', 'remove'] as const)(
+    'strips pnpm/test/debug process overrides before %s',
+    (action) => {
+      const dangerous = [
+        'PNPM_AUTO_APPROVE_BUILDS_FOR_TESTS',
+        'PNPM_INTERNAL_DEV_PREINSTALL_ALREADY_RAN',
+        'TEST_GRACEFUL_FS_GLOBAL_PATCH',
+        '_ISEXE_TEST_PLATFORM_',
+        '__MINIMATCH_TESTING_PLATFORM__',
+        '__IS_WSL_TEST__',
+        'TABTAB_DEBUG',
+        'DEBUG',
+        'DEBUG_CLI',
+        'DEBUG_NOPT',
+        'NOPT_DEBUG',
+        'TINYGLOBBY_DEBUG',
+        'NODE_DEBUG',
+        'NODE_DEBUG_NATIVE',
+        'PNP_DEBUG_LEVEL',
+        'NM_DEBUG_LEVEL',
+        'NODE_TLS_REJECT_UNAUTHORIZED',
+        'NODE_PATH',
+      ];
+      const environment: NodeJS.ProcessEnv = {};
+      for (const key of dangerous) environment[key.toLowerCase()] = '1';
+      const command = buildGlobalCommand(
+        input('pnpm', {
+          action,
+          exactVersion: action === 'remove' ? null : '2.0.0',
+          environment: { ...environment, PATH: Q.bin },
+        }),
+      );
+      const keys = Object.keys(command.env).map((key) => key.toUpperCase());
+      for (const key of dangerous) expect(keys).not.toContain(key);
+      expect(command.env).toMatchObject({
+        PNPM_HOME: Q.home,
+        pnpm_config_npmrc_auth_file: Q.auth,
+        CI: '1',
+      });
+    },
+  );
+
   it.each(['npm', 'pnpm'] as const)(
     'pins the entire %s change vector',
     (manager) => {

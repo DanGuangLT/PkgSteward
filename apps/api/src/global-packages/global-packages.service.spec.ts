@@ -5,6 +5,7 @@ import * as locationAdapter from '@/global-packages/global-location';
 import * as inventoryAdapter from '@/global-packages/global-inventory';
 import { GlobalRegistry } from '@/global-packages/global-registry';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
+import { readPnpmGlobalConfig } from '@/global-packages/pnpm-global-config';
 import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
 import type {
   IGlobalProbeResult,
@@ -305,6 +306,214 @@ afterEach(() => {
 });
 
 describe('pnpm 11 service integration', () => {
+  it('isolates a real 1048577-byte pnpm config in npm inventory, preview and execute', async () => {
+    const f = setupPnpmService();
+    f.fs.put(Q.yaml, { text: 'x'.repeat(1_048_577) });
+    f.discover.mockImplementation((manager, deps) =>
+      manager === 'npm'
+        ? Promise.resolve({ ...testLocation(), ...testFacts().location })
+        : readPnpmGlobalConfig({
+            fs: f.runtime.fs,
+            environment: {
+              ...f.runtime.environment,
+              USERPROFILE: Q.profile,
+              XDG_CONFIG_HOME: 'D:\\TEST\\xdg',
+            },
+            signal: deps.signal,
+            tool: f.location.tool,
+            cwd: f.location.cwd,
+            checkDirectory: (path) =>
+              locationAdapter.assertGlobalDirectory(
+                path,
+                f.runtime.fs,
+                deps.signal,
+                true,
+              ),
+          }).then(() => f.location),
+    );
+    const inventory = await f.service.inventory({ requestId: f.uuid() });
+    expect((await finishPnpmJob(f.service, inventory.jobId)).status).toBe(
+      'completed',
+    );
+    expect(f.service.getSnapshot()!.managers).toEqual([
+      expect.objectContaining({ manager: 'npm', available: true }),
+      expect.objectContaining({
+        manager: 'pnpm',
+        available: false,
+        reason: 'LIMIT_EXCEEDED',
+      }),
+    ]);
+    const start = await f.service.preview(
+      f.request({ manager: 'npm', package: 'test-tool' }),
+    );
+    const job = await finishPnpmJob(f.service, start.jobId);
+    expect(job.status).toBe('completed');
+    f.inventory.mockImplementation(() =>
+      Promise.resolve(
+        f.child.launch.mock.calls.length ? emptyInventory() : testInventory(),
+      ),
+    );
+    const mutation = await f.service.execute(f.consent(job.preview!));
+    await flushJobs();
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(f.child.launch.mock.calls[0][0].args).toContain('uninstall');
+    f.child.exit();
+    expect(await finishPnpmJob(f.service, mutation.jobId)).toMatchObject({
+      status: 'completed',
+      gateHeld: false,
+    });
+  });
+
+  it.each([
+    'LIMIT_EXCEEDED',
+    'INVENTORY_FAILED',
+    'LOCATION_AMBIGUOUS',
+    'INTERNAL_SERVER_ERROR',
+  ] as const)(
+    'isolates pnpm %s from both discovery and inventory without hiding npm',
+    async (reason) => {
+      const f = setupPnpmService();
+      f.unavailable.set('pnpm', reason);
+      const discovery = await f.service.inventory({ requestId: f.uuid() });
+      expect((await finishPnpmJob(f.service, discovery.jobId)).status).toBe(
+        'completed',
+      );
+      expect(f.service.getSnapshot()!.managers[1]).toMatchObject({
+        available: false,
+        reason,
+      });
+      f.unavailable.clear();
+      f.inventory.mockImplementation((location) =>
+        location.manager === 'pnpm'
+          ? Promise.reject(
+              new AppException(409, 'TEST pnpm inventory failed', 'CONFLICT', {
+                reason,
+              }),
+            )
+          : Promise.resolve(testInventory()),
+      );
+      const inventory = await f.service.inventory({ requestId: f.uuid() });
+      expect((await finishPnpmJob(f.service, inventory.jobId)).status).toBe(
+        'completed',
+      );
+      expect(f.service.getSnapshot()!.managers[0].available).toBe(true);
+      expect(f.service.getSnapshot()!.managers[1]).toMatchObject({
+        available: false,
+        reason,
+      });
+      f.unavailable.set('pnpm', reason);
+      const preview = await f.service.preview(
+        f.request({ manager: 'npm', package: 'test-tool' }),
+      );
+      expect((await finishPnpmJob(f.service, preview.jobId)).status).toBe(
+        'completed',
+      );
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('isolates an untyped pnpm IO error with no error text in the snapshot', async () => {
+    const f = setupPnpmService();
+    f.discover.mockImplementation((manager) =>
+      manager === 'pnpm'
+        ? Promise.reject(new Error('TEST sensitive config bytes'))
+        : Promise.resolve({ ...testLocation(), ...testFacts().location }),
+    );
+    const start = await f.service.inventory({ requestId: f.uuid() });
+    expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
+      'completed',
+    );
+    expect(f.service.getSnapshot()!.managers[1]).toMatchObject({
+      reason: 'INTERNAL_SERVER_ERROR',
+    });
+    expect(JSON.stringify(f.service.getSnapshot())).not.toContain('sensitive');
+  });
+
+  it.each([
+    'inventory-discovery',
+    'inventory-read',
+    'secondary-discovery',
+  ] as const)(
+    'preserves cancellation when a late config failure occurs at %s',
+    async (where) => {
+      const f = setupPnpmService();
+      const pending = deferred<IGlobalResolvedLocation>();
+      const reading = deferred<IGlobalInventoryResult>();
+      if (where === 'inventory-read')
+        f.inventory.mockImplementation((location) =>
+          location.manager === 'pnpm'
+            ? reading.promise
+            : Promise.resolve(testInventory()),
+        );
+      else
+        f.discover.mockImplementation((manager) =>
+          manager === 'pnpm'
+            ? pending.promise
+            : Promise.resolve({ ...testLocation(), ...testFacts().location }),
+        );
+      const start =
+        where === 'secondary-discovery'
+          ? await f.service.preview(
+              f.request({ manager: 'npm', package: 'test-tool' }),
+            )
+          : await f.service.inventory({ requestId: f.uuid() });
+      await flushJobs();
+      await f.service.cancel(start.jobId);
+      const error = new AppException(409, 'TEST late cap', 'CONFLICT', {
+        reason: 'LIMIT_EXCEEDED',
+      });
+      if (where === 'inventory-read') reading.reject(error);
+      else pending.reject(error);
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'cancelled',
+        failureCode: 'CANCELLED',
+      });
+      expect(f.service.getSnapshot()).toBeNull();
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['discovery', 'inventory'] as const)(
+    'does not swallow pnpm termination uncertainty at %s',
+    async (where) => {
+      const f = setupPnpmService();
+      if (where === 'discovery')
+        f.unavailable.set('pnpm', 'TERMINATION_UNCONFIRMED');
+      else
+        f.inventory.mockImplementation((location) =>
+          location.manager === 'pnpm'
+            ? Promise.reject(
+                new AppException(409, 'TEST uncertain stop', 'CONFLICT', {
+                  reason: 'TERMINATION_UNCONFIRMED',
+                }),
+              )
+            : Promise.resolve(testInventory()),
+        );
+      const start = await f.service.inventory({ requestId: f.uuid() });
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'termination_failed',
+        failureCode: 'TERMINATION_UNCONFIRMED',
+      });
+      expect(f.service.getSnapshot()).toBeNull();
+    },
+  );
+
+  it('rejects secondary pnpm overlap that appears after a ready npm preview', async () => {
+    const f = setupPnpmService();
+    const start = await f.service.preview(
+      f.request({ manager: 'npm', package: 'test-tool' }),
+    );
+    const ready = await finishPnpmJob(f.service, start.jobId);
+    expect(ready.status).toBe('completed');
+    f.location.binDir = testLocation().binDir;
+    const execute = await f.service.execute(f.consent(ready.preview!));
+    expect(await finishPnpmJob(f.service, execute.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'PREVIEW_CHANGED',
+    });
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
   it('lists ready pnpm and npm independently, without pnpm list or mutation', async () => {
     const f = setupPnpmService();
     const start = await f.service.inventory({ requestId: f.uuid() });

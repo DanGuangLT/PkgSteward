@@ -21,6 +21,28 @@ import { buildRunnerEnvironment } from '@/npm-runner/runner-environment';
 import type { IPnpmGlobalConfig } from '@/global-packages/interfaces/pnpm-global.types';
 
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org';
+// pnpm 11.22.0:214230-214250,272082: auto-approval ignores non-TTY consent.
+// 31685/304141,52491/297086,55739,36066: test platform/fs overrides.
+// 254775-254789: TABTAB_DEBUG opens an arbitrary append destination.
+// 20914,255492,205067,206407: parser/loader debug;290154: TLS verification.
+const UNSAFE_CHILD_ENVIRONMENT = new Set([
+  '_ISEXE_TEST_PLATFORM_',
+  '__MINIMATCH_TESTING_PLATFORM__',
+  '__IS_WSL_TEST__',
+  'TEST_GRACEFUL_FS_GLOBAL_PATCH',
+  'TABTAB_DEBUG',
+  'DEBUG',
+  'DEBUG_CLI',
+  'DEBUG_NOPT',
+  'NOPT_DEBUG',
+  'TINYGLOBBY_DEBUG',
+  'NODE_DEBUG',
+  'NODE_DEBUG_NATIVE',
+  'PNP_DEBUG_LEVEL',
+  'NM_DEBUG_LEVEL',
+  'NODE_TLS_REJECT_UNAUTHORIZED',
+  'NODE_PATH',
+]);
 const fail = (reason: GlobalReasonCode): never => {
   throw new AppException(
     reason === 'INVALID_PACKAGE_SPEC' ? 400 : 409,
@@ -91,9 +113,10 @@ function environmentFor(
   const clean: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(snapshot)) {
     if (
-      /^(?:pnpm_config_|PNPM_HOME$|NODE_AUTH_TOKEN$|COREPACK_NPM_TOKEN$|YARN_)/i.test(
-        key,
-      )
+      // Remove every inherited PNPM_* input, including mixed-case test/internal
+      // switches. Only validated home/config selectors are restored below.
+      /^(?:PNPM_|NODE_AUTH_TOKEN$|COREPACK_NPM_TOKEN$|YARN_)/i.test(key) ||
+      UNSAFE_CHILD_ENVIRONMENT.has(key.toUpperCase())
     )
       continue;
     clean[key] = value;
