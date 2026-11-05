@@ -28,8 +28,8 @@ cp apps/api/.env.example apps/api/.env
 only pnpm keeps each app's `pnpm-lock.yaml` in sync with what CI installs.
 
 Run `pnpm dev` in `apps/api/` (API on `http://localhost:24681/api/v1`) and in `apps/web/`
-(UI on `http://localhost:24680`), or run `start-dev.bat` from the repository root to start both on Windows. The two
-apps are independent pnpm projects with their own lockfiles.
+(UI on `http://localhost:24680`), each in its own terminal. The two apps are independent pnpm projects with their own
+lockfiles.
 
 pnpm 11 only runs dependency build scripts that are listed in each app's `pnpm-workspace.yaml` (`allowBuilds`).
 If you add a dependency that needs a build script, add it there.

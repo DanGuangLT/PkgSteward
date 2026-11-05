@@ -22,7 +22,7 @@ một cách an toàn.
 
 - Windows 11
 - Node.js 24 (xem [`.nvmrc`](.nvmrc))
-- pnpm 11 (khuyên dùng), npm hoặc Yarn 1 để cài đặt; `start-dev.bat` và `start-prod.bat` cần pnpm
+- pnpm 11 (khuyên dùng), npm hoặc Yarn 1
 
 ## Bắt đầu
 
@@ -78,15 +78,16 @@ Giá trị chỉ có khoảng trắng tính là rỗng; giá trị sai sẽ dừ
 
 ### 3. Chạy
 
-Nhấp đúp vào một script ở thư mục gốc của repo, hoặc chạy nó trong terminal:
+Chạy mỗi ứng dụng trong một terminal riêng, bằng trình quản lý gói bạn đã dùng để cài (`pnpm dev`, `npm run dev`
+hoặc `yarn dev`):
 
-| Script | Việc |
-|---|---|
-| `start-dev.bat` | Chạy backend và frontend ở chế độ development (watch / hot reload) |
-| `start-prod.bat` | Build cả hai ứng dụng rồi chạy ở chế độ production (`MODE=production`, tắt Swagger) |
+```bash
+cd apps/api && pnpm dev
+cd apps/web && pnpm dev
+```
 
-Mỗi ứng dụng mở trong một cửa sổ riêng; nhấn `Ctrl+C` hoặc đóng cửa sổ để dừng. Nếu chưa có `node_modules`, script
-tự cài dependencies trước. Lệnh mà script chạy được khai báo ở đầu mỗi file.
+Muốn chạy production: đặt `MODE=production` trong `apps/api/.env` (tắt Swagger), rồi chạy `build` và `start:prod`
+trong `apps/api`, `build` và `start` trong `apps/web`. Nhấn `Ctrl+C` để dừng một ứng dụng.
 
 | | URL |
 |---|---|
@@ -94,7 +95,7 @@ tự cài dependencies trước. Lệnh mà script chạy được khai báo ở
 | API | http://localhost:24681/api/v1 |
 | Swagger (chỉ development) | http://localhost:24681/swagger |
 
-Muốn chạy riêng một ứng dụng, dùng các lệnh bên dưới trong thư mục của nó.
+Các lệnh của từng ứng dụng nằm ở bảng bên dưới; chạy chúng trong thư mục của ứng dụng đó.
 
 ## Lệnh
 
@@ -115,11 +116,12 @@ Muốn chạy riêng một ứng dụng, dùng các lệnh bên dưới trong th
 ```
 apps/api/          API backend (NestJS 11)
 apps/web/          Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
-start-dev.bat      Chạy cả hai ứng dụng ở chế độ development
-start-prod.bat     Build và chạy cả hai ứng dụng ở chế độ production
+scripts/           Script của repo (cài đặt từ thư mục gốc, danh sách thư viện bên thứ ba)
+package.json       Chỉ dùng để cài: cài cả hai ứng dụng
 ```
 
-Hai ứng dụng là hai dự án pnpm độc lập, mỗi bên có lockfile riêng. Không có `package.json` ở thư mục gốc.
+Hai ứng dụng là hai dự án pnpm độc lập, mỗi bên có lockfile riêng. `package.json` ở thư mục gốc không có
+dependency nào; nó chỉ dùng để cài cả hai ứng dụng.
 
 ## Đóng góp
 
