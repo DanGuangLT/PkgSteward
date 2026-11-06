@@ -786,7 +786,7 @@
     },
     "dangerous": {
       "title": "Dangerous actions: Preview → Confirm",
-      "description": "Deleting files, changing global versions or switching Node.js always takes two steps. The UI never calls execute before the user has seen the preview.",
+      "description": "Deleting files or changing global versions always takes two steps. The UI never calls execute before the user has seen the preview.",
       "steps": {
         "preview": "Call the <code>preview</code> API to get the exact list of affected items.",
         "dialog": "Show a confirmation dialog listing every item. Cancel uses secondary; the confirm button uses destructive.",
