@@ -11,7 +11,7 @@
 
 PkgSteward chạy hoàn toàn trên máy của bạn: một API NestJS và giao diện web Next.js. Mục tiêu là trả lời các câu hỏi
 như *"máy mình có những dự án nào, chúng phụ thuộc gì, gói nào đã cũ, `node_modules` chiếm bao nhiêu dung lượng?"*
-và làm các việc thường gặp (cài/cập nhật package, xoá `node_modules`, đổi phiên bản package manager hoặc Node.js)
+và làm các việc thường gặp (cài/cập nhật package, xoá `node_modules`, đổi phiên bản package manager)
 một cách an toàn.
 
 - **Chạy local, một người dùng:** không tài khoản, không xác thực, không database. Dữ liệu được đọc trực tiếp từ

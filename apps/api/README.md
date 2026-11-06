@@ -10,7 +10,7 @@ machine. NestJS 11 + TypeScript.
 - Local and single-user: **no authentication / authorization and no database** (removed when the original
   base-auth scaffold was cleaned up). Data is the state of the filesystem at the time of each request.
 - API: `http://localhost:24681/api/v1`. Swagger (when `MODE=development`): `http://localhost:24681/swagger`.
-- Safety rules: dangerous operations (deleting files, changing global versions, switching Node.js) use a
+- Safety rules: dangerous operations (deleting files, changing global versions) use a
   `preview` → `execute` pair; every path coming from the client must be inside `SCAN_ROOT_PATHS`.
 
 ## Requirements

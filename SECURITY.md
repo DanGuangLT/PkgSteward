@@ -41,7 +41,7 @@ PkgSteward is a **local, single-user tool**. The API has **no authentication by 
 only on `localhost`. With that in mind, these are especially relevant:
 
 - Reading, deleting or modifying files **outside `SCAN_ROOT_PATHS`** (path traversal, symlink or junction escapes)
-- **Command injection** through package names, script names, versions or paths passed to npm / pnpm / Yarn / nvm
+- **Command injection** through package names, script names, versions or paths passed to npm / pnpm / Yarn
 - Bypassing the **preview → confirm** step of a destructive or machine-wide operation
 - A web page in the user's browser being able to trigger actions on the local API (CORS / CSRF against `localhost`)
 - Leaking secrets from scanned projects (for example `.env` contents) through API responses or logs
