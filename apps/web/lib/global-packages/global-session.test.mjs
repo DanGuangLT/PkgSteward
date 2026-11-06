@@ -645,6 +645,129 @@ test("pending execute can recover provisional latest and cancel preflight; late 
   assert.equal(h.all("execute").length, 1)
 })
 
+test("stopPreview cancels a tracking preview once and fences a completed cancel reply", async t => {
+  const h = harness(t)
+  await h.init()
+  const started = h.session.preview(selection)
+  h.last("preview").resolve({ jobId: id, requestId, previewId, status: "running" }); await started; await flush()
+  const form = h.session.getSnapshot().form
+  assert.equal(h.session.stopPreview(), true)
+  assert.equal(h.all("cancel").length, 1)
+  assert.equal(h.last("cancel").args[0], id)
+  assert.equal(h.session.getSnapshot().form, form)
+  const pending = h.session.getSnapshot(), count = h.requests.length
+  assert.equal(h.session.stopPreview(), false)
+  assert.equal(h.session.getSnapshot(), pending)
+  assert.equal(h.requests.length, count)
+  h.last("cancel").resolve(terminal({ kind: "preview", ...selection, previewId, preview })); await flush()
+  await h.cycle(terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.deepEqual(h.session.getSnapshot().form.selection, selection)
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.all("cancel").length, 1)
+})
+
+test("stopPreview fences a completed preview from a later poll after the cancel reply", async t => {
+  const h = harness(t)
+  h.session.select(selection)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  h.last("cancel").resolve(job({ kind: "preview", ...selection, previewId, status: "stopping" })); await flush()
+  // Release the aborted poll before the next live poll can start.
+  await h.cycle(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.all("get").length, 2)
+  await h.cycle(terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.all("cancel").length, 1)
+})
+
+test("stopPreview during pending acceptance fences completion without queuing a cancel", async t => {
+  const h = harness(t)
+  await h.init()
+  const started = h.session.preview(selection)
+  const starting = h.session.getSnapshot()
+  assert.equal(starting.phase, "starting")
+  assert.equal(starting.jobId, null)
+  const count = h.requests.length
+  assert.equal(h.session.stopPreview(), true)
+  assert.equal(h.session.getSnapshot(), starting)
+  assert.equal(h.requests.length, count)
+  h.last("preview").resolve({ jobId: id, requestId, previewId, status: "running" }); await started; await flush()
+  await h.cycle(terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.deepEqual(h.session.getSnapshot().form.selection, selection)
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.all("cancel").length, 0)
+})
+
+for (const kind of ["idle", "inventory", "versions", "mutation", "displayed", "lost", "disposed"]) {
+  test(`stopPreview leaves ${kind} unchanged and sends no requests`, async t => {
+    const h = harness(t)
+    if (kind === "mutation") await h.mutate()
+    else if (kind === "displayed") {
+      h.session.select(selection)
+      await h.init(terminal({ kind: "preview", ...selection, previewId, preview, endCursor: 1 }))
+      assert.equal(h.session.getSnapshot().phase, "tracking")
+      assert.deepEqual(h.session.getSnapshot().form.preview, preview)
+    } else if (kind === "lost" || kind === "disposed") {
+      h.session.select(selection)
+      await h.init(job({ kind: "preview", ...selection, previewId }))
+      if (kind === "disposed") h.session.dispose()
+      else {
+        h.last("get").reject(new ApiError(404, "TEST", "NOT_FOUND"))
+        h.last("logs").resolve(page()); await flush()
+        assert.equal(h.session.getSnapshot().phase, "lost")
+      }
+    } else await h.init(kind === "idle" ? null : job({ kind }))
+    const before = h.session.getSnapshot(), count = h.requests.length, changes = h.changes.length
+    assert.equal(h.session.stopPreview(), false)
+    assert.equal(h.session.getSnapshot(), before)
+    assert.equal(h.requests.length, count)
+    assert.equal(h.changes.length, changes)
+  })
+}
+
+test("stopPreview permits a fresh preview of the same selection after settling", async t => {
+  const h = harness(t)
+  h.session.select(selection)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  h.last("cancel").resolve(terminal({ kind: "preview", ...selection, previewId, status: "cancelled" })); await flush()
+  await h.cycle(terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  const next = h.session.preview(selection)
+  h.last("preview").resolve({ jobId: "TEST-next-preview", requestId, previewId: "TEST-next-preview-id", status: "running" })
+  await next; await flush()
+  const displayed = { ...preview, previewId: "TEST-next-preview-id" }
+  await h.cycle(terminal({ jobId: "TEST-next-preview", kind: "preview", ...selection,
+    previewId: displayed.previewId, preview: displayed }), page([], { jobId: "TEST-next-preview" }))
+  assert.deepEqual(h.session.getSnapshot().form.preview, displayed)
+  assert.equal(h.all("cancel").length, 1)
+  assert.equal(h.all("execute").length, 0)
+})
+
+test("stopPreview fence survives a server latest that seeds the completed preview", async t => {
+  const h = harness(t)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  await h.session.refresh(snapshot, terminal({ kind: "preview", ...selection, previewId, preview })); await flush()
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.equal(h.all("cancel").length, 1)
+})
+
+test("a second Escape after a stopping reply sends no second cancel", async t => {
+  const h = harness(t)
+  h.session.select(selection)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  h.last("cancel").resolve(job({ kind: "preview", ...selection, previewId, status: "stopping" })); await flush()
+  assert.equal(h.session.getSnapshot().cancelPending, false)
+  assert.equal(h.session.stopPreview(), false)
+  assert.equal(h.all("cancel").length, 1)
+})
+
 test("selection edits fence late ready previews; dispose fences pending start/latest/snapshot/cancel", async t => {
   const h = harness(t)
   await h.init()

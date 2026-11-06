@@ -42,11 +42,12 @@ export function useGlobalPackages(snapshot: GlobalSnapshot | null, latest: Globa
   const inventory = useCallback(() => session.current?.inventory() ?? Promise.resolve(), [])
   const loadVersions = useCallback((input: Pick<GlobalVersionsRequest, "manager" | "package">) => session.current?.loadVersions(input) ?? Promise.resolve(), [])
   const preview = useCallback((selection: GlobalSelection) => session.current?.preview(selection) ?? Promise.resolve(), [])
+  const stopPreview = useCallback(() => session.current?.stopPreview() ?? false, [])
   const execute = useCallback(() => session.current?.execute() ?? Promise.resolve(), [])
   const select = useCallback((selection: GlobalSelection) => session.current?.select(selection), [])
   const consent = useCallback((input: Partial<GlobalConsent>) => session.current?.consent(input), [])
   const cancel = useCallback(() => session.current?.cancel() ?? Promise.resolve(), [])
   const retryPoll = useCallback(() => session.current?.retryPoll(), [])
   const refresh = useCallback(() => session.current?.refresh() ?? Promise.resolve(), [])
-  return { state, inventory, loadVersions, preview, execute, select, consent, cancel, retryPoll, refresh }
+  return { state, inventory, loadVersions, preview, stopPreview, execute, select, consent, cancel, retryPoll, refresh }
 }
