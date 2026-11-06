@@ -21,7 +21,6 @@ body:
         - Disk usage
         - Global packages
         - Package manager versions
-        - Node.js versions (nvm-windows)
         - UI / theme / i18n
         - Documentation / tooling
         - Other

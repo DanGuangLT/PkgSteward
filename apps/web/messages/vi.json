@@ -796,7 +796,7 @@
     },
     "dangerous": {
       "title": "Thao tác nguy hiểm: Preview → Confirm",
-      "description": "Xoá file, đổi phiên bản global hay đổi Node.js đều phải qua hai bước. Giao diện không bao giờ gọi execute khi người dùng chưa xem preview.",
+      "description": "Xoá file hay đổi phiên bản global đều phải qua hai bước. Giao diện không bao giờ gọi execute khi người dùng chưa xem preview.",
       "steps": {
         "preview": "Gọi API <code>preview</code> để lấy đúng danh sách mục sẽ bị ảnh hưởng.",
         "dialog": "Hiện hộp xác nhận liệt kê từng mục. Nút Huỷ dùng secondary, nút xác nhận dùng destructive.",
