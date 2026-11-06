@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { RefreshCwIcon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 
@@ -26,9 +26,10 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
   const t = useTranslations("globalPackages")
   const format = useFormatter()
   const controller = useGlobalPackages(snapshot, latest, retainInventory)
-  const { state } = controller
+  const { state, stopPreview } = controller
   const [tab, setTab] = useState<string>(snapshot?.managers[0]?.manager ?? "npm")
   const returnFocusRef = useRef<HTMLElement | null>(null)
+  const restoreAfterStop = useRef(false)
   const inventoryHeadingRef = useRef<HTMLHeadingElement | null>(null)
   const jobHeadingRef = useRef<HTMLHeadingElement | null>(null)
   // The dialog can unmount before rendering the accepted job (including a fast response).
@@ -36,10 +37,34 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
   useLayoutEffect(() => { closeStateRef.current = state }, [state])
   const managers = state.snapshot?.managers ?? []
   const refreshingInventory = globalActionPending(state, "inventory")
+  const previewPending = globalActionPending(state, "preview")
   const activeTab = managers.some(item => item.manager === tab) ? tab : managers[0]?.manager
   const blocked = state.phase !== "idle" || state.startUnknown || state.cancelUnknown || state.cancelPending
     || state.refreshing || (state.job !== null && isRunActive(state.job))
     || state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING"
+
+  useEffect(() => {
+    if (!previewPending) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat) return
+      if (stopPreview()) {
+        event.preventDefault()
+        restoreAfterStop.current = true
+      }
+    }
+    // Bubble after Radix layers so an Escape they handled keeps its own behavior.
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [previewPending, stopPreview])
+
+  useEffect(() => {
+    if (blocked || !restoreAfterStop.current) return
+    restoreAfterStop.current = false
+    if (document.activeElement && document.activeElement !== document.body) return
+    const target = returnFocusRef.current?.isConnected && !returnFocusRef.current.matches(":disabled")
+      ? returnFocusRef.current : inventoryHeadingRef.current
+    target?.focus({ preventScroll: true })
+  }, [blocked])
 
   function preview(selection: GlobalSelection, trigger: HTMLButtonElement) {
     returnFocusRef.current = trigger

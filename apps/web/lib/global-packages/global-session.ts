@@ -60,6 +60,7 @@ export interface GlobalSession {
   inventory(): Promise<void>
   loadVersions(input: Pick<GlobalVersionsRequest, "manager" | "package">): Promise<void>
   preview(selection: GlobalSelection): Promise<void>
+  stopPreview(): boolean
   execute(): Promise<void>
   select(selection: GlobalSelection): void
   consent(input: Partial<GlobalConsent>): void
@@ -402,6 +403,13 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const selection = state.form.selection
     await begin("mutation", { ...input, manager: selection.manager, package: selection.package, action: selection.action }, signal => api.execute(input, signal))
   }
+  function stopPreview(): boolean {
+    if (disposed || state.activity?.kind !== "preview" || (state.phase !== "starting" && state.phase !== "tracking")
+      || state.form.preview !== null || state.cancelPending || commandKind === "cancel") return false
+    selectionVersion++
+    if (state.jobId) void cancel()
+    return true
+  }
   async function cancel(): Promise<void> {
     if (disposed || state.cancelPending || !state.jobId || commandKind === "cancel"
       || (state.job ? !isRunActive(state.job) : state.phase !== "tracking")) return
@@ -481,7 +489,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     invalidate()
     unsubscribe()
   }
-  return { inventory, loadVersions, preview, execute, select,
+  return { inventory, loadVersions, preview, stopPreview, execute, select,
     consent: input => { if (!disposed) publish({ ...state, form: setGlobalConsent(state.form, input) }) },
     cancel, retryPoll, refresh, dispose, getSnapshot: () => state }
 }
