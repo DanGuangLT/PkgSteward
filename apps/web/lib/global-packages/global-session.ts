@@ -105,6 +105,8 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   let selectionVersion = 0
   let previewSelectionVersion = 0
   let displayedPreviewJob: string | null = null
+  // A preview request stopped by Escape is never displayed, even if it completes first or the server re-seeds it.
+  let stoppedPreviewRequest: string | null = null
   let notifiedMutation: string | null = null
   let refreshedJob: string | null = null
   let mutationRequestId: string | null = null
@@ -158,7 +160,8 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   function receiveJob(job: GlobalJob) {
     const generation = state.generation
     let form = state.form
-    if (job.kind === "preview" && job.status === "completed" && job.preview && displayedPreviewJob !== job.jobId) {
+    if (job.kind === "preview" && job.status === "completed" && job.preview && displayedPreviewJob !== job.jobId
+      && job.requestId !== stoppedPreviewRequest) {
       if (job.preview.previewId !== job.previewId) invalidResponse()
       displayedPreviewJob = job.jobId
       if (matchesSelection(job.preview)) form = displayGlobalPreview(form, job.preview)
@@ -338,6 +341,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   ): Promise<void> {
     const generation = invalidate()
     requestKind = kind
+    stoppedPreviewRequest = null
     if (kind === "preview") previewSelectionVersion = selectionVersion
     publish({ ...state, phase: "starting", generation, requestId: input.requestId, previewId: input.previewId ?? null,
       jobId: null, job: null, logs: initialRunnerLogs(), startUnknown: false, cancelUnknown: false,
@@ -405,8 +409,9 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   }
   function stopPreview(): boolean {
     if (disposed || state.activity?.kind !== "preview" || (state.phase !== "starting" && state.phase !== "tracking")
-      || state.form.preview !== null || state.cancelPending || commandKind === "cancel") return false
-    selectionVersion++
+      || state.form.preview !== null || state.cancelPending || commandKind === "cancel"
+      || state.requestId === null || stoppedPreviewRequest === state.requestId) return false
+    stoppedPreviewRequest = state.requestId
     if (state.jobId) void cancel()
     return true
   }

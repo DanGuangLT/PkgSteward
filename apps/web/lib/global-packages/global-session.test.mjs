@@ -748,6 +748,26 @@ test("stopPreview permits a fresh preview of the same selection after settling",
   assert.equal(h.all("execute").length, 0)
 })
 
+test("stopPreview fence survives a server latest that seeds the completed preview", async t => {
+  const h = harness(t)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  await h.session.refresh(snapshot, terminal({ kind: "preview", ...selection, previewId, preview })); await flush()
+  assert.equal(h.session.getSnapshot().form.preview, null)
+  assert.equal(h.all("cancel").length, 1)
+})
+
+test("a second Escape after a stopping reply sends no second cancel", async t => {
+  const h = harness(t)
+  h.session.select(selection)
+  await h.init(job({ kind: "preview", ...selection, previewId }))
+  assert.equal(h.session.stopPreview(), true)
+  h.last("cancel").resolve(job({ kind: "preview", ...selection, previewId, status: "stopping" })); await flush()
+  assert.equal(h.session.getSnapshot().cancelPending, false)
+  assert.equal(h.session.stopPreview(), false)
+  assert.equal(h.all("cancel").length, 1)
+})
+
 test("selection edits fence late ready previews; dispose fences pending start/latest/snapshot/cancel", async t => {
   const h = harness(t)
   await h.init()
