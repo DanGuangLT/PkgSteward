@@ -22,6 +22,7 @@ import type { FileOpsSummary, FileOpsTarget, RiskCode } from "@/lib/api/types"
 import {
   canConfirm, confirmationKey, requiredAcknowledgements, requiresTypedText, type ConfirmationInput,
 } from "@/lib/file-ops/confirmation"
+import { restoreOrReveal } from "@/lib/ui/reveal-region"
 
 interface DeleteConfirmDialogProps {
   previewId: string
@@ -30,11 +31,13 @@ interface DeleteConfirmDialogProps {
   pending: boolean
   errorMessage: string | null
   returnFocusRef?: RefObject<HTMLElement | null>
+  // Vùng trạng thái nhận focus khi nút trả focus đã bị gỡ hoặc vô hiệu sau khi đóng dialog (vd. đã xác nhận).
+  revealRef?: RefObject<HTMLElement | null>
   onConfirm(confirmation: ConfirmationInput): void
   onCancel(): void
 }
 
-type ConfirmBodyProps = Omit<DeleteConfirmDialogProps, "onCancel" | "previewId" | "returnFocusRef">
+type ConfirmBodyProps = Omit<DeleteConfirmDialogProps, "onCancel" | "previewId" | "returnFocusRef" | "revealRef">
 
 function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: ConfirmBodyProps) {
   const t = useTranslations("fileOps")
@@ -150,7 +153,7 @@ function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Con
  * Mở liên tục theo `summary`: nút xác nhận không tự đóng dialog (khác AlertDialogAction) để
  * lỗi từ backend hiện ngay trong dialog. Radix focus sẵn nút Huỷ.
  */
-export function DeleteConfirmDialog({ previewId, returnFocusRef, onCancel, ...body }: DeleteConfirmDialogProps) {
+export function DeleteConfirmDialog({ previewId, returnFocusRef, revealRef, onCancel, ...body }: DeleteConfirmDialogProps) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const { summary, pending } = body
@@ -161,9 +164,10 @@ export function DeleteConfirmDialog({ previewId, returnFocusRef, onCancel, ...bo
       {/* Không có AlertDialogTrigger: tự trả focus, nếu không bàn phím rơi về đầu trang. */}
       <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto data-[size=default]:sm:max-w-2xl"
         onCloseAutoFocus={(event) => {
-          if (!returnFocusRef?.current) return
+          if (!returnFocusRef && !revealRef) return
           event.preventDefault()
-          returnFocusRef.current.focus()
+          restoreOrReveal(returnFocusRef?.current ?? null, revealRef?.current ?? null,
+            { reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches })
         }}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("dialog.title", { count, formattedCount: format.number(count) })}</AlertDialogTitle>

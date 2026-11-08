@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import type { RefObject } from "react"
+import { useRef, type RefObject } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DeleteConfirmDialog } from "@/components/features/file-ops/delete-confirm-dialog"
@@ -30,10 +30,11 @@ export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJ
   const stopping = state.phase === "operating" && (state.cancelPending || state.operation?.status === "stopping")
   const progress = preview?.progress
   const canStartOver = state.phase === "finished" || state.phase === "lost"
+  const statusRef = useRef<HTMLParagraphElement>(null)
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <p aria-live="polite" aria-atomic="true" className="text-body-sm">
+      <p ref={statusRef} tabIndex={-1} aria-live="polite" aria-atomic="true" className="scroll-mt-24 rounded-sm text-body-sm focus-ring">
         {t(fileOpsStatusKey(state))}
         {state.phase === "operating" && state.operation?.currentPath
           ? ` ${t("currentPath", { path: state.operation.currentPath })}` : null}
@@ -97,7 +98,7 @@ export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJ
 
       {summary && preview ? (
         <DeleteConfirmDialog previewId={preview.previewId} summary={summary} targets={preview.targets}
-          pending={state.phase === "executing"} errorMessage={errorMessage} returnFocusRef={returnFocusRef}
+          pending={state.phase === "executing"} errorMessage={errorMessage} returnFocusRef={returnFocusRef} revealRef={statusRef}
           onConfirm={(confirmation) => void controller.execute(confirmation)} onCancel={controller.closeSummary} />
       ) : null}
 
