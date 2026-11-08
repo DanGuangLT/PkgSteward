@@ -118,7 +118,8 @@ export function DiskUsagePanel({ initialPath, initialView }: { initialPath: stri
       ) : null}
 
       <section id={resultsId} aria-labelledby={headingId} className="min-w-0 space-y-6">
-        <h2 id={headingId} ref={heading} tabIndex={-1} className="text-heading-md focus-ring">{t("results")}</h2>
+        {/* scroll-mt-24: khi focus cuộn tới, tiêu đề không bị thanh điều hướng sticky 64px che. */}
+        <h2 id={headingId} ref={heading} tabIndex={-1} className="scroll-mt-24 text-heading-md focus-ring">{t("results")}</h2>
         {job ? (
           <>
             <div className="min-w-0 space-y-3 rounded-md bg-card p-4 text-card-foreground">
