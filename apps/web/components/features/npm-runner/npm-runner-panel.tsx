@@ -2,7 +2,7 @@
 
 import { AlertTriangleIcon, CheckIcon, CircleIcon } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import type { useNpmRunner } from "@/hooks/use-npm-runner"
 import { runnerDisplay } from "@/lib/npm-runner/runner-display"
 import type { RunnerSelection } from "@/lib/npm-runner/runner-policy"
+import { revealRegion } from "@/lib/ui/reveal-region"
 import type messages from "@/messages/vi.json"
 
 export function NpmRunnerPanel({ controller, contextError }: {
@@ -21,6 +22,7 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const t = useTranslations("npmRunner")
   const format = useFormatter()
   const [selection, setSelection] = useState<RunnerSelection>({ action: "install_all" })
+  const statusRef = useRef<HTMLDivElement>(null)
   const { state } = controller
   const display = runnerDisplay(state, selection, contextError)
   const job = state.job
@@ -36,10 +38,14 @@ export function NpmRunnerPanel({ controller, contextError }: {
   return <section className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6" aria-label={t("title")}>
     <h2 className="text-heading-lg">{t("title")}</h2>
     <NpmRunnerForm context={state.context} selection={selection} onChange={setSelection} blockedReason={display.blockedReason}
-      onRun={() => { void controller.start(selection) }}>
+      onRun={() => {
+        // Nút Chạy bị vô hiệu khi lệnh chạy: đưa focus xuống trạng thái để bàn phím không rơi về đầu trang.
+        revealRegion(statusRef.current, { reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches })
+        void controller.start(selection)
+      }}>
       <p className="text-body-sm text-muted-foreground">{t("outcome.continues")}</p>
     </NpmRunnerForm>
-    <div className="flex flex-wrap items-center gap-3">
+    <div ref={statusRef} tabIndex={-1} className="flex scroll-mt-24 flex-wrap items-center gap-3 rounded-sm focus-ring">
       <Badge variant={display.status === "success" ? "success" : "secondary"} className="h-auto min-h-6 max-w-full whitespace-normal">
         <Icon aria-hidden="true" />{t(`status.${display.status}`)}
       </Badge>
