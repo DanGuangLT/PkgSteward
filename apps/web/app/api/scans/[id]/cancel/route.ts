@@ -1,5 +1,5 @@
 import { toApiErrorResponse } from "@/lib/api/response"
-import { cancelScan } from "@/lib/api/scans"
+import { cancelScan } from "@/lib/api/scans/scans"
 
 export async function POST(
   request: Request,

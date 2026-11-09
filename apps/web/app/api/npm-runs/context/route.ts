@@ -1,4 +1,4 @@
-import { getRunnerContext } from "@/lib/api/npm-runs"
+import { getRunnerContext } from "@/lib/api/npm-runs/npm-runs"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 import { ApiError } from "@/lib/api/response"
 

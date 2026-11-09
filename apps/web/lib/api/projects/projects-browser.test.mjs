@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { stripTypeScriptTypes } from "node:module"
 import { getBrowserProject, startBrowserProjectAnalysis, pollBrowserProjectAnalysis, cancelBrowserProjectAnalysis } from "./projects-browser.ts"
-import { ApiError } from "./response.ts"
+import { ApiError } from "../response.ts"
 
 // Dữ liệu TEST không phải yêu cầu nghiệp vụ.
 const path = "D:\\TEST\\Tiếng Việt #&+%?"
@@ -68,17 +68,17 @@ test("all browser methods preserve errors/details and use shared transport/parse
 // for Node's framework-free runner. HTTP stays mocked; no Next server is started.
 const asModule = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`
 async function loadRoute(relative) {
-  let client = await readFile(new URL("./client.ts", import.meta.url), "utf8")
+  let client = await readFile(new URL("../client.ts", import.meta.url), "utf8")
   client = client.replace('import "server-only"', "")
-    .replace('"./request.ts"', JSON.stringify(new URL("./request.ts", import.meta.url).href))
-    .replace('"./response.ts"', JSON.stringify(new URL("./response.ts", import.meta.url).href))
+    .replace('"./request.ts"', JSON.stringify(new URL("../request.ts", import.meta.url).href))
+    .replace('"./response.ts"', JSON.stringify(new URL("../response.ts", import.meta.url).href))
   let projects = await readFile(new URL("./projects.ts", import.meta.url), "utf8")
   projects = projects.replace('import "server-only"', "")
     .replace('"@/lib/api/client"', JSON.stringify(asModule(client)))
-    .replace('"@/lib/api/projects-paths"', JSON.stringify(new URL("./projects-paths.ts", import.meta.url).href))
-  let route = await readFile(new URL(`../../app/api/projects/${relative}route.ts`, import.meta.url), "utf8")
-  route = route.replace('"@/lib/api/projects"', JSON.stringify(asModule(projects)))
-    .replace('"@/lib/api/response"', JSON.stringify(new URL("./response.ts", import.meta.url).href))
+    .replace("\"@/lib/api/projects/projects-paths\"", JSON.stringify(new URL("./projects-paths.ts", import.meta.url).href))
+  let route = await readFile(new URL(`../../../app/api/projects/${relative}route.ts`, import.meta.url), "utf8")
+  route = route.replace("\"@/lib/api/projects/projects\"", JSON.stringify(asModule(projects)))
+    .replace('"@/lib/api/response"', JSON.stringify(new URL("../response.ts", import.meta.url).href))
   return import(asModule(route))
 }
 

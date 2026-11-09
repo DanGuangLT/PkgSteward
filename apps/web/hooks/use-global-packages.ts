@@ -5,7 +5,7 @@ import {
   getBrowserGlobalSnapshot, startBrowserGlobalInventory, startBrowserGlobalVersions,
   startBrowserGlobalPreview, executeBrowserGlobalPackage, getBrowserLatestGlobalJob,
   pollBrowserGlobalJob, getBrowserGlobalLogs, cancelBrowserGlobalJob,
-} from "@/lib/api/global-packages-browser"
+} from "@/lib/api/global-packages/global-packages-browser"
 import { createGlobalSession, initialGlobalState } from "@/lib/global-packages/global-session"
 import type { GlobalSession, GlobalState } from "@/lib/global-packages/global-session"
 import type { GlobalJob, GlobalSnapshot, GlobalVersionsRequest } from "@/lib/global-packages/global-types"

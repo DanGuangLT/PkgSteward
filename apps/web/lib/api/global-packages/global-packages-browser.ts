@@ -1,6 +1,6 @@
 import { globalPackagesPaths } from "./global-packages-paths.ts"
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import type {
   GlobalActivityRequest, GlobalExecuteRequest, GlobalJob, GlobalJobStart, GlobalLogPage,
   GlobalPreviewRequest, GlobalSnapshot, GlobalVersionsRequest,

@@ -1,7 +1,7 @@
 import "server-only"
 
 import { apiFetchEnvelope } from "@/lib/api/client"
-import { diskUsagePaths } from "@/lib/api/disk-usage-paths"
+import { diskUsagePaths } from "@/lib/api/disk-usage/disk-usage-paths"
 import type { ApiResponse, DiskUsageJob, DiskUsageStart, StartDiskUsage } from "@/lib/api/types"
 
 export function startDiskUsage(input: StartDiskUsage): Promise<ApiResponse<DiskUsageStart>> {

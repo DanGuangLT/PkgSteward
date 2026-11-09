@@ -2,7 +2,7 @@ import "server-only"
 
 import { apiFetch, apiFetchEnvelope } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/response"
-import { scanPaths } from "@/lib/api/scan-paths"
+import { scanPaths } from "@/lib/api/scans/scan-paths"
 import type { ApiResponse, ScanJob, ScanResult, ScanStart } from "@/lib/api/types"
 
 export function startScan(): Promise<ApiResponse<ScanStart>> {

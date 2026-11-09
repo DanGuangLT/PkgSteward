@@ -1,4 +1,4 @@
-import { getPmJob } from "@/lib/api/package-managers"
+import { getPmJob } from "@/lib/api/package-managers/package-managers"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 
 export const dynamic = "force-dynamic"

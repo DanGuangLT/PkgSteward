@@ -1,4 +1,4 @@
-import { startPmPreview } from "@/lib/api/package-managers"
+import { startPmPreview } from "@/lib/api/package-managers/package-managers"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { PmPreviewRequest } from "@/lib/package-managers/pm-types"
 

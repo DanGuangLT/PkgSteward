@@ -1,4 +1,4 @@
-import { getProjectDetail } from "@/lib/api/projects"
+import { getProjectDetail } from "@/lib/api/projects/projects"
 import { ApiError, toApiErrorResponse } from "@/lib/api/response"
 
 export const dynamic = "force-dynamic"

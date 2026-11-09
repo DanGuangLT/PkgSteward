@@ -1,7 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { startBrowserDiskUsage, pollBrowserDiskUsage, cancelBrowserDiskUsage } from "./disk-usage-browser.ts"
-import { ApiError, toApiErrorResponse } from "./response.ts"
+import { ApiError, toApiErrorResponse } from "../response.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 const id = "TEST/job\\đo #&+%?"

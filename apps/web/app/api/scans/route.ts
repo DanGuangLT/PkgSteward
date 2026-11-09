@@ -1,5 +1,5 @@
 import { toApiErrorResponse } from "@/lib/api/response"
-import { startScan } from "@/lib/api/scans"
+import { startScan } from "@/lib/api/scans/scans"
 
 export async function POST(request: Request): Promise<Response> {
   try {

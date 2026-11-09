@@ -1,6 +1,6 @@
 import { packageManagersPaths } from "./package-managers-paths.ts"
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import type {
   PmContext, PmExecuteRequest, PmJob, PmJobStart, PmPreviewRequest, PmVersionsRequest,
 } from "@/lib/package-managers/pm-types"

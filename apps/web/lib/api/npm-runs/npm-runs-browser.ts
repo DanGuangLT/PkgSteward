@@ -1,6 +1,6 @@
 import { npmRunsPaths } from "./npm-runs-paths.ts"
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import type { RunnerContext, RunRequest, RunStart, RunJob, RunLogPage } from "@/lib/api/types"
 
 export async function getBrowserRunnerContext(path: string, signal?: AbortSignal): Promise<RunnerContext> {

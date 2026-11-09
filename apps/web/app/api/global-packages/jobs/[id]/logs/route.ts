@@ -1,4 +1,4 @@
-import { getGlobalLogs } from "@/lib/api/global-packages"
+import { getGlobalLogs } from "@/lib/api/global-packages/global-packages"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 import { ApiError } from "@/lib/api/response"
 

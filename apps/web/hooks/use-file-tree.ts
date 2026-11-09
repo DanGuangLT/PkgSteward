@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { getBrowserFileTree } from "@/lib/api/file-ops-browser"
+import { getBrowserFileTree } from "@/lib/api/file-ops/file-ops-browser"
 import { ApiError } from "@/lib/api/response"
 import type { FileTreeEntry } from "@/lib/api/types"
 

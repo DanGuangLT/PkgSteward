@@ -4,8 +4,8 @@ import {
   cancelBrowserOperation, cancelBrowserPreview, executeBrowserDelete, getBrowserActiveOperation, getBrowserFileTree,
   pollBrowserOperation, pollBrowserPreview, startBrowserCleanupPreview, startBrowserDeletePreview, summarizeBrowserPreview,
 } from "./file-ops-browser.ts"
-import { API_TIMEOUT_MS } from "./request.ts"
-import { ApiError } from "./response.ts"
+import { API_TIMEOUT_MS } from "../request.ts"
+import { ApiError } from "../response.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 const id = "TEST/mã #&+%?"

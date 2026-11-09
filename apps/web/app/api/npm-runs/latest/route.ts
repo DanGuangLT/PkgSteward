@@ -1,4 +1,4 @@
-import { getLatestNpmRun } from "@/lib/api/npm-runs"
+import { getLatestNpmRun } from "@/lib/api/npm-runs/npm-runs"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 
 export const dynamic = "force-dynamic"

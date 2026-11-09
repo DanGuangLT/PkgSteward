@@ -1,6 +1,6 @@
 import { projectsPaths } from "./projects-paths.ts"
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import type { ProjectAnalysisJob, ProjectAnalysisStart, ProjectDetail, StartProjectAnalysis } from "@/lib/api/types"
 
 export async function getBrowserProject(path: string, signal?: AbortSignal): Promise<ProjectDetail> {

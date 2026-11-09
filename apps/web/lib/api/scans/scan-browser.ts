@@ -1,5 +1,5 @@
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import { scanPaths } from "./scan-paths.ts"
 import type { ScanJob, ScanStart } from "@/lib/api/types"
 

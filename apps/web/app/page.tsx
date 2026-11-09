@@ -3,7 +3,7 @@ import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/container"
 import { ProjectList, type InitialProjects } from "@/components/features/project-list/project-list"
 import { ApiError } from "@/lib/api/response"
-import { getLatestScan } from "@/lib/api/scans"
+import { getLatestScan } from "@/lib/api/scans/scans"
 
 async function getInitialProjects(): Promise<InitialProjects> {
   try {

@@ -1,7 +1,7 @@
 import "server-only"
 
 import { apiFetchEnvelope } from "@/lib/api/client"
-import { npmRunsPaths } from "@/lib/api/npm-runs-paths"
+import { npmRunsPaths } from "@/lib/api/npm-runs/npm-runs-paths"
 import type { ApiResponse, RunnerContext, RunRequest, RunStart, RunJob, RunLogPage } from "@/lib/api/types"
 
 export function getRunnerContext(path: string, signal?: AbortSignal): Promise<ApiResponse<RunnerContext>> {

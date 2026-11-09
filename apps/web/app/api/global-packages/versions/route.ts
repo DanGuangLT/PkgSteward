@@ -1,4 +1,4 @@
-import { startGlobalVersions } from "@/lib/api/global-packages"
+import { startGlobalVersions } from "@/lib/api/global-packages/global-packages"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { GlobalVersionsRequest } from "@/lib/global-packages/global-types"
 

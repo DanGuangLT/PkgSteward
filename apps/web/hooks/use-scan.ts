@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 
-import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "@/lib/api/scan-browser"
+import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "@/lib/api/scans/scan-browser"
 import { ApiError } from "@/lib/api/response"
 import type { ScanJob } from "@/lib/api/types"
 import { pollFailureAction, shouldPoll, terminalAction } from "@/lib/scans/scan-policy"

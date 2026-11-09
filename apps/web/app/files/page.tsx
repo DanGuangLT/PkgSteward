@@ -6,7 +6,7 @@ import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { ApiError } from "@/lib/api/response"
-import { getLatestScan } from "@/lib/api/scans"
+import { getLatestScan } from "@/lib/api/scans/scans"
 
 async function findProject(path: string) {
   try {

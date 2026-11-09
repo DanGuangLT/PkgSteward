@@ -1,4 +1,4 @@
-import { getGlobalJob } from "@/lib/api/global-packages"
+import { getGlobalJob } from "@/lib/api/global-packages/global-packages"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 
 export const dynamic = "force-dynamic"

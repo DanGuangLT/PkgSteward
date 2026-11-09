@@ -7,36 +7,38 @@ import { stripTypeScriptTypes } from "node:module"
 const asModule = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`
 const local = file => JSON.stringify(new URL(file, import.meta.url).href)
 async function loadRoute(relative) {
-  let client = await readFile(new URL("./client.ts", import.meta.url), "utf8")
-  client = client.replace('import "server-only"', "").replace('"./request.ts"', local("./request.ts")).replace('"./response.ts"', local("./response.ts"))
-  let bridge = await readFile(new URL("./global-packages.ts", import.meta.url), "utf8")
+  let client = await readFile(new URL("../client.ts", import.meta.url), "utf8")
+  client = client.replace('import "server-only"', "").replace('"./request.ts"', local("../request.ts")).replace('"./response.ts"', local("../response.ts"))
+  let bridge = await readFile(new URL("./package-managers.ts", import.meta.url), "utf8")
   assert.ok(bridge.includes('import "server-only"'))
-  bridge = bridge.replace('import "server-only"', "").replace('"./client.ts"', JSON.stringify(asModule(client)))
-    .replace('"./global-packages-paths.ts"', local("./global-packages-paths.ts"))
-  let route = await readFile(new URL(`../../app/api/global-packages/${relative}route.ts`, import.meta.url), "utf8")
-  route = route.replace('"@/lib/api/global-packages"', JSON.stringify(asModule(bridge)))
-    .replace('"@/lib/api/route-response"', local("./route-response.ts"))
-    .replace('"@/lib/api/response"', local("./response.ts"))
+  bridge = bridge.replace('import "server-only"', "").replace("\"../client.ts\"", JSON.stringify(asModule(client)))
+    .replace('"./package-managers-paths.ts"', local("./package-managers-paths.ts"))
+  let route = await readFile(new URL(`../../../app/api/package-managers/${relative}route.ts`, import.meta.url), "utf8")
+  route = route.replace("\"@/lib/api/package-managers/package-managers\"", JSON.stringify(asModule(bridge)))
+    .replace('"@/lib/api/route-response"', local("../route-response.ts"))
+    .replace('"@/lib/api/response"', local("../response.ts"))
   return import(asModule(route))
 }
 const id = "00000000-0000-4000-8000-000000000001"
+const projectPath = "D:\\TEST\\Việt #&+\\app"
 const requests = [
-  ["", "GET"], ["inventory/", "POST", { requestId: id }],
-  ["versions/", "POST", { requestId: id, manager: "pnpm", package: "@test/tool" }],
-  ["preview/", "POST", { requestId: id, manager: "pnpm", package: "@test/tool", action: "change", targetVersion: "latest" }],
-  ["execute/", "POST", { previewId: id, requestId: id, confirm: true, acknowledgedRisks: ["MACHINE_WIDE"], confirmText: "TEST exact" }],
-  ["jobs/latest/", "GET"], ["jobs/[id]/", "GET"], ["jobs/[id]/logs/", "GET"], ["jobs/[id]/cancel/", "POST"],
+  ["project/", "GET"],
+  ["versions/", "POST", { requestId: id, path: projectPath, manager: "pnpm" }],
+  ["project/preview/", "POST", { requestId: id, path: projectPath, manager: "pnpm", targetVersion: "latest" }],
+  ["project/execute/", "POST", { previewId: id, requestId: id, confirm: true, acknowledgedRisks: [] }],
+  ["jobs/latest/", "GET"], ["jobs/[id]/", "GET"], ["jobs/[id]/cancel/", "POST"],
 ]
 const params = { params: Promise.resolve({ id }) }
 const tail = path => path.replace("[id]", id).replace(/\/$/, "")
-const request = (path, method, body, query = "") => new Request(`http://localhost/api/global-packages/${tail(path)}${query}`, {
+const request = (path, method, body, query = "") => new Request(`http://localhost/api/package-managers/${tail(path)}${query}`, {
   method, ...(body !== undefined ? { body: typeof body === "string" ? body : JSON.stringify(body) } : {}),
 })
+const projectQuery = `?${new URLSearchParams({ path: projectPath })}`
 
-test("nine real handlers preserve status/envelope/details/no-store and await Next16 params", async t => {
+test("seven real handlers preserve status/envelope/details/no-store and await Next16 params", async t => {
   for (const [path, method, body] of requests) {
     const route = await loadRoute(path)
-    const query = path.includes("logs") ? "?cursor=23" : ""
+    const query = path === "project/" ? projectQuery : ""
     const invoke = () => route[method](request(path, method, body, query), params)
     const statusCode = method === "POST" && !path.endsWith("cancel/") ? 202 : 200
     const envelope = { statusCode, message: "TEST", code: "SUCCESS", data: { jobId: id }, timestamp: "TEST-time" }
@@ -46,12 +48,12 @@ test("nine real handlers preserve status/envelope/details/no-store and await Nex
     assert.equal(result.status, statusCode)
     assert.equal(result.headers.get("Cache-Control"), "no-store")
     assert.deepEqual(await result.json(), envelope)
-    assert.equal(new URL(captured.url).pathname, `/api/v1/global-packages${path ? `/${tail(path)}` : ""}`)
+    assert.equal(new URL(captured.url).pathname, `/api/v1/package-managers/${tail(path)}`)
+    if (path === "project/") assert.equal(new URL(captured.url).searchParams.get("path"), projectPath)
     assert.equal(captured.init.method, method)
     assert.equal(captured.init.cache, "no-store")
     assert.equal(captured.init.body, body ? JSON.stringify(body) : undefined)
     if (method === "POST") assert.equal(captured.init.signal, undefined)
-    if (path.includes("logs")) assert.equal(new URL(captured.url).searchParams.get("cursor"), "23")
     for (const status of [400, 403, 404, 409, 429, 503]) {
       const details = { reason: "PREVIEW_CHANGED" }
       t.mock.method(globalThis, "fetch", async () => Response.json({ statusCode: status, message: "TEST", code: "CONFLICT", details }, { status }))
@@ -67,25 +69,21 @@ test("nine real handlers preserve status/envelope/details/no-store and await Nex
   }
 })
 
-test("invalid JSON/cursor fail at bridge with no BE call; omitted cursor defaults to zero", async t => {
-  for (const [path, method, body] of requests.filter(([, , body]) => body)) {
+test("invalid JSON and project query fail at bridge with no BE call", async t => {
+  for (const [path, method] of requests.filter(([, , body]) => body)) {
     const route = await loadRoute(path)
     t.mock.method(globalThis, "fetch", async () => assert.fail("invalid JSON must never reach BE"))
     const response = await route[method](request(path, method, "{"), params)
     assert.equal(response.status, 400)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
     assert.equal((await response.json()).code, "VALIDATION_ERROR")
-    assert.ok(body)
   }
-  const route = await loadRoute("jobs/[id]/logs/")
-  for (const query of ["cursor=-1", "cursor=01", "cursor=1e2", "cursor=1.5", "cursor=", "cursor=1&cursor=2", "cursor=9007199254740992", "extra=1"]) {
-    t.mock.method(globalThis, "fetch", async () => assert.fail("invalid cursor must never reach BE"))
-    const response = await route.GET(request("jobs/[id]/logs/", "GET", undefined, `?${query}`), params)
+  const route = await loadRoute("project/")
+  for (const query of ["", "?path=", "?path=a&path=b", `${projectQuery}&extra=1`, "?other=1"]) {
+    t.mock.method(globalThis, "fetch", async () => assert.fail("invalid query must never reach BE"))
+    const response = await route.GET(request("project/", "GET", undefined, query))
     assert.equal(response.status, 400)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
+    assert.equal((await response.json()).code, "VALIDATION_ERROR")
   }
-  let cursor
-  t.mock.method(globalThis, "fetch", async url => { cursor = new URL(url).searchParams.get("cursor"); return Response.json({ statusCode: 200, message: "TEST", data: {} }) })
-  assert.equal((await route.GET(request("jobs/[id]/logs/", "GET"), params)).status, 200)
-  assert.equal(cursor, "0")
 })

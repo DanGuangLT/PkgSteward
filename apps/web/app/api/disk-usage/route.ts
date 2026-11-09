@@ -1,4 +1,4 @@
-import { startDiskUsage } from "@/lib/api/disk-usage"
+import { startDiskUsage } from "@/lib/api/disk-usage/disk-usage"
 import { ApiError, toApiErrorResponse } from "@/lib/api/response"
 import type { StartDiskUsage } from "@/lib/api/types"
 

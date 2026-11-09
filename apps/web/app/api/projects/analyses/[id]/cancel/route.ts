@@ -1,4 +1,4 @@
-import { cancelProjectAnalysis } from "@/lib/api/projects"
+import { cancelProjectAnalysis } from "@/lib/api/projects/projects"
 import { toApiErrorResponse } from "@/lib/api/response"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }): Promise<Response> {

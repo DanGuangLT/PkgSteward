@@ -1,4 +1,4 @@
-import { cancelDiskUsage } from "@/lib/api/disk-usage"
+import { cancelDiskUsage } from "@/lib/api/disk-usage/disk-usage"
 import { toApiErrorResponse } from "@/lib/api/response"
 
 export async function POST(

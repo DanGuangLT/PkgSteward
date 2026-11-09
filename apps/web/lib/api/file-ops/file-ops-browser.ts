@@ -1,6 +1,6 @@
 import { fileOpsPaths } from "./file-ops-paths.ts"
-import { requestApi } from "./request.ts"
-import { unwrapApiData } from "./response.ts"
+import { requestApi } from "../request.ts"
+import { unwrapApiData } from "../response.ts"
 import type {
   CleanupPreviewInput, FileOpsExecuteInput, FileOpsOperation, FileOpsOperationStart,
   FileOpsPreview, FileOpsPreviewStart, FileOpsSummary, FileTreeLevel,

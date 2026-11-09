@@ -8,15 +8,15 @@ import { stripTypeScriptTypes } from "node:module"
 const asModule = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`
 const local = file => JSON.stringify(new URL(file, import.meta.url).href)
 async function loadRoute(relative) {
-  let client = await readFile(new URL("./client.ts", import.meta.url), "utf8")
-  client = client.replace('import "server-only"', "").replace('"./request.ts"', local("./request.ts")).replace('"./response.ts"', local("./response.ts"))
+  let client = await readFile(new URL("../client.ts", import.meta.url), "utf8")
+  client = client.replace('import "server-only"', "").replace('"./request.ts"', local("../request.ts")).replace('"./response.ts"', local("../response.ts"))
   let bridge = await readFile(new URL("./npm-runs.ts", import.meta.url), "utf8")
   assert.ok(bridge.includes('import "server-only"'))
-  bridge = bridge.replace('import "server-only"', "").replace('"@/lib/api/client"', JSON.stringify(asModule(client))).replace('"@/lib/api/npm-runs-paths"', local("./npm-runs-paths.ts"))
-  let route = await readFile(new URL(`../../app/api/npm-runs/${relative}route.ts`, import.meta.url), "utf8")
-  route = route.replace('"@/lib/api/npm-runs"', JSON.stringify(asModule(bridge)))
-    .replace('"@/lib/api/route-response"', local("./route-response.ts"))
-    .replace('"@/lib/api/response"', local("./response.ts"))
+  bridge = bridge.replace('import "server-only"', "").replace('"@/lib/api/client"', JSON.stringify(asModule(client))).replace("\"@/lib/api/npm-runs/npm-runs-paths\"", local("./npm-runs-paths.ts"))
+  let route = await readFile(new URL(`../../../app/api/npm-runs/${relative}route.ts`, import.meta.url), "utf8")
+  route = route.replace("\"@/lib/api/npm-runs/npm-runs\"", JSON.stringify(asModule(bridge)))
+    .replace('"@/lib/api/route-response"', local("../route-response.ts"))
+    .replace('"@/lib/api/response"', local("../response.ts"))
   return import(asModule(route))
 }
 const path = "D:\\TEST\\Thư mục #&+"

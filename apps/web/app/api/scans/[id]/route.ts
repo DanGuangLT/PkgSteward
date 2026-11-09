@@ -1,5 +1,5 @@
 import { toApiErrorResponse } from "@/lib/api/response"
-import { getScan } from "@/lib/api/scans"
+import { getScan } from "@/lib/api/scans/scans"
 
 export const dynamic = "force-dynamic"
 

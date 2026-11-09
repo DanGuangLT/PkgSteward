@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 import {
   cancelBrowserPmJob, executeBrowserPmPin, getBrowserLatestPmJob, getBrowserPmContext,
   pollBrowserPmJob, startBrowserPmPreview, startBrowserPmVersions,
-} from "@/lib/api/package-managers-browser"
+} from "@/lib/api/package-managers/package-managers-browser"
 import type { PmSelection } from "@/lib/package-managers/pm-preview-form"
 import { createPmSession, initialPmState } from "@/lib/package-managers/pm-session"
 import type { PmSession } from "@/lib/package-managers/pm-session"

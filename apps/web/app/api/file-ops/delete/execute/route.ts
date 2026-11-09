@@ -1,4 +1,4 @@
-import { executeDelete } from "@/lib/api/file-ops"
+import { executeDelete } from "@/lib/api/file-ops/file-ops"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { FileOpsExecuteInput } from "@/lib/api/types"
 

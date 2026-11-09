@@ -1,6 +1,6 @@
 import "server-only"
 
-import { apiFetchEnvelope } from "./client.ts"
+import { apiFetchEnvelope } from "../client.ts"
 import { packageManagersPaths } from "./package-managers-paths.ts"
 import type { ApiResponse } from "@/lib/api/types"
 import type {

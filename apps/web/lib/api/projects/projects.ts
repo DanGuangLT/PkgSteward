@@ -1,7 +1,7 @@
 import "server-only"
 
 import { apiFetchEnvelope } from "@/lib/api/client"
-import { projectsPaths } from "@/lib/api/projects-paths"
+import { projectsPaths } from "@/lib/api/projects/projects-paths"
 import type { ApiResponse, ProjectAnalysisJob, ProjectAnalysisStart, ProjectDetail, StartProjectAnalysis } from "@/lib/api/types"
 
 export function getProjectDetail(path: string): Promise<ApiResponse<ProjectDetail>> {

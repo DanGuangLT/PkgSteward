@@ -2,7 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { API_TIMEOUT_MS, requestApi } from "./request.ts"
 import { ApiError } from "./response.ts"
-import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "./scan-browser.ts"
+import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "./scans/scan-browser.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 const envelope = (data, statusCode = 200) => ({ statusCode, message: "OK", data })

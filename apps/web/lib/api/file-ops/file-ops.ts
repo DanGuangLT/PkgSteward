@@ -1,7 +1,7 @@
 import "server-only"
 
 import { apiFetchEnvelope } from "@/lib/api/client"
-import { fileOpsPaths } from "@/lib/api/file-ops-paths"
+import { fileOpsPaths } from "@/lib/api/file-ops/file-ops-paths"
 import type {
   ApiResponse, CleanupPreviewInput, FileOpsExecuteInput, FileOpsOperation, FileOpsOperationStart,
   FileOpsPreview, FileOpsPreviewStart, FileOpsSummary, FileTreeLevel,
