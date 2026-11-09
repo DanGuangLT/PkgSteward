@@ -1,7 +1,26 @@
 import 'reflect-metadata';
 import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
-import { tool } from '@/npm-runner/__fixtures__/runner-test.fixture';
-import type { RunAction } from '@/npm-runner/interfaces/npm-runner.types';
+import {
+  fsFixture,
+  key,
+  root,
+  tool,
+} from '@/npm-runner/__fixtures__/runner-test.fixture';
+import type {
+  IRunnerCommand,
+  RunAction,
+} from '@/npm-runner/interfaces/npm-runner.types';
+import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
+import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
+import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
+import type {
+  IRunProcess,
+  IRunProcessCallbacks,
+  IRunProcessExit,
+} from '@/npm-runner/execution/runner-process';
+
+jest.mock('execa', () => ({ execa: jest.fn() }));
 
 describe('runner child environment (A8)', () => {
   const appKeys = [
@@ -137,5 +156,143 @@ describe('runner child environment (A8)', () => {
       PATH: 'C:\\Windows',
       APP_SETTING: 'TEST',
     });
+  });
+  it.each(RUN_ACTIONS)(
+    'keeps npm 11/12 environments identical without script/config overrides: %s',
+    (action) => {
+      const snapshot = Object.freeze({
+        Path: '.;C:\\Windows\\System32;relative;%APPDATA%\\npm',
+        nPm_CoNfIg_AlLoW_ScRiPtS: 'true',
+        NPM_CONFIG_IGNORE_SCRIPTS: 'false',
+        npm_config_strict_npmrc: 'false',
+        npm_config_force: 'true',
+        NpM_ToKeN: 'TEST-secret',
+        NoDe_OpTiOnS: '--require TEST',
+        sCaN_rOoT_pAtHs: 'TEST-private-path',
+        COREPACK_ENABLE_NETWORK: '1',
+        CI: 'TEST-custom',
+        TEST_APP: 'TEST-inherited',
+      });
+      const env = buildRunnerEnvironment(
+        snapshot,
+        tool('npm', '12.2.2'),
+        'npm',
+        action,
+      );
+      expect(env).toEqual(
+        buildRunnerEnvironment(snapshot, tool('npm', '11.17.0'), 'npm', action),
+      );
+      expect(env).toMatchObject({
+        PATH: 'C:\\Windows\\System32',
+        COREPACK_ENABLE_NETWORK: '0',
+        COREPACK_ENABLE_AUTO_PIN: '0',
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+        CI: action === 'script' ? 'TEST-custom' : '1',
+        TEST_APP: 'TEST-inherited',
+      });
+      expect(
+        Object.keys(env).some((name) =>
+          /^(?:npm_|pnpm_config_|node_options$|scan_root_paths$)/i.test(name),
+        ),
+      ).toBe(false);
+      expect(
+        buildRunnerEnvironment({}, tool('npm', '12.2.2'), 'npm', action).CI,
+      ).toBe(action === 'script' ? undefined : '1');
+    },
+  );
+});
+
+// TEST strict-config failure; không phải yêu cầu nghiệp vụ.
+describe('npm 12 config failure remains a normal failed runner job', () => {
+  it('fails once without repairing or retrying strict npmrc', async () => {
+    const f = fsFixture();
+    const installed = f.installTool('npm', '12.2.2');
+    installed.identities = installed.identities.map((identity) => ({
+      path: identity.path,
+      stat: f.stats.get(key(identity.path))!,
+    }));
+    f.resolveTool.mockResolvedValue(installed);
+    const config = `${root}\\.npmrc`;
+    const text = 'strict-npmrc=true\nTEST-unknown-config=true\n';
+    f.put(config, text);
+    const outcome: IRunProcessExit = {
+      exitCode: 1,
+      signal: null,
+      failureCode: 'COMMAND_FAILED',
+      termination: 'verified',
+      outputTruncated: false,
+    };
+    const runtime = {
+      input: f.deps,
+      env: {},
+      // The service refuses to start without the Windows process adapter.
+      processes: {
+        capture: jest.fn(() => Promise.resolve({ status: 'unknown' as const })),
+        descendants: jest.fn(() =>
+          Promise.resolve({ status: 'unknown' as const }),
+        ),
+        stopTree: jest.fn(() => Promise.resolve('attempted' as const)),
+        verifyGone: jest.fn(() => Promise.resolve('verified' as const)),
+      },
+      timeoutMs: undefined,
+      gate: new MutationGateService(),
+      readers: {
+        hasRunningScan: () => false,
+        hasRunningMeasurement: () => false,
+        hasRunningPreview: () => false,
+        hasRunningAnalysis: () => false,
+      },
+      audit: {
+        writeIntent: jest.fn(() => Promise.resolve()),
+        writeResult: jest.fn(() => Promise.resolve()),
+      },
+      invalidation: {
+        refreshProject: jest.fn(() => Promise.resolve()),
+        clearDiskUsage: jest.fn(),
+        staleAnalysis: jest.fn(),
+      },
+      launch: jest.fn(
+        (
+          _command: IRunnerCommand,
+          _env: NodeJS.ProcessEnv,
+          callbacks: IRunProcessCallbacks,
+        ): IRunProcess => {
+          callbacks.onOutput('stderr', Buffer.from('TEST strict-npmrc error'));
+          return {
+            pid: 123,
+            settled: Promise.resolve(outcome),
+            stop: jest.fn(() => Promise.resolve('verified' as const)),
+          };
+        },
+      ),
+      now: () => new Date('2026-11-10T00:00:00Z'),
+      uuid: () => '00000000-0000-4000-8000-000000000010',
+      setTimer: (callback: () => void, milliseconds: number) =>
+        setTimeout(callback, milliseconds),
+      clearTimer: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
+    } satisfies INpmRunnerRuntime;
+    const service = new NpmRunnerService(runtime);
+    const context = await service.context(root);
+    expect(context.available).toBe(true);
+    await service.start({
+      path: root,
+      inputHash: context.inputHash,
+      requestId: '00000000-0000-4000-8000-000000000020',
+      action: 'install_all',
+    });
+    for (let turn = 0; turn < 1000; turn++) {
+      if (service.latest()?.phase === 'done') break;
+      await Promise.resolve();
+    }
+    expect(service.latest()).toMatchObject({
+      phase: 'done',
+      status: 'failed',
+      version: '12.2.2',
+      exitCode: 1,
+      failureCode: 'COMMAND_FAILED',
+      gateHeld: false,
+    });
+    expect(runtime.launch).toHaveBeenCalledTimes(1);
+    expect(f.files.get(key(config))?.toString()).toBe(text);
   });
 });
