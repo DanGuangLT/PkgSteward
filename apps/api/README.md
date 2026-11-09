@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Backend of **PkgSteward**: a local tool to scan, analyze and manage the Node.js / npm projects on a Windows
-machine. NestJS 11 + TypeScript.
+machine. NestJS 12 + TypeScript.
 
 - Local and single-user: **no authentication / authorization and no database** (removed when the original
   base-auth scaffold was cleaned up). Data is the state of the filesystem at the time of each request.

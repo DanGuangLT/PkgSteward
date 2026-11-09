@@ -114,7 +114,7 @@ Các lệnh của từng ứng dụng nằm ở bảng bên dưới; chạy chú
 ## Cấu trúc thư mục
 
 ```
-apps/api/          API backend (NestJS 11)
+apps/api/          API backend (NestJS 12)
 apps/web/          Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 scripts/           Script của repo (cài đặt từ thư mục gốc, danh sách thư viện bên thứ ba)
 package.json       Chỉ dùng để cài: cài cả hai ứng dụng
