@@ -22,9 +22,15 @@ import type {
   IProjectFs,
   ProjectScanSnapshot,
 } from '@/projects/interfaces/projects.types';
-import { analyzeProject, PROJECT_ANALYZER } from '@/projects/project-analysis';
-import { createProjectFs } from '@/projects/project-fs';
-import { ProjectRegistry, PROJECT_REGISTRY } from '@/projects/project-registry';
+import {
+  analyzeProject,
+  PROJECT_ANALYZER,
+} from '@/projects/analysis/project-analysis';
+import { createProjectFs } from '@/projects/input/project-fs';
+import {
+  ProjectRegistry,
+  PROJECT_REGISTRY,
+} from '@/projects/registry/project-registry';
 import { ProjectsController } from '@/projects/projects.controller';
 import {
   PROJECT_FS,

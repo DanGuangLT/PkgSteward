@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server"
 
 import { GlobalPackagesPanel } from "@/components/features/global-packages/global-packages-panel"
 import { Container } from "@/components/layout/container"
-import { getGlobalSnapshot, getLatestGlobalJob } from "@/lib/api/global-packages"
+import { getGlobalSnapshot, getLatestGlobalJob } from "@/lib/api/global-packages/global-packages"
 import { unwrapApiData } from "@/lib/api/response"
 
 export default async function GlobalPackagesPage() {

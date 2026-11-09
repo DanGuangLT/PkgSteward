@@ -1,4 +1,4 @@
-import { getDiskUsage } from "@/lib/api/disk-usage"
+import { getDiskUsage } from "@/lib/api/disk-usage/disk-usage"
 import { toApiErrorResponse } from "@/lib/api/response"
 
 export const dynamic = "force-dynamic"

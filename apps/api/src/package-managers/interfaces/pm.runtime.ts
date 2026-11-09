@@ -14,7 +14,7 @@ import type {
 } from '@/npm-runner/interfaces/npm-runner.types';
 import type { IProjectFileStat } from '@/projects/interfaces/projects.types';
 import type { IRegistryPackageMetadata } from '@/projects/interfaces/projects.runtime';
-import type { IPmPinEdit } from '@/package-managers/pm-manifest';
+import type { IPmPinEdit } from '@/package-managers/pinning/pm-manifest';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
 
 export const PM_FS = Symbol('PM_FS');

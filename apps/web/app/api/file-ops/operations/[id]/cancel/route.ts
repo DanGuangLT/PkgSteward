@@ -1,4 +1,4 @@
-import { cancelOperation } from "@/lib/api/file-ops"
+import { cancelOperation } from "@/lib/api/file-ops/file-ops"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 
 export async function POST(

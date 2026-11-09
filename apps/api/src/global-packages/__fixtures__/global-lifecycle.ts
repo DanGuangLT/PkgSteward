@@ -11,16 +11,16 @@ import type {
   IGlobalPreview,
   IGlobalPreviewRequest,
 } from '@/global-packages/interfaces/global-packages.types';
-import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
+import type { IGlobalInventoryResult } from '@/global-packages/discovery/global-inventory';
 import type {
   IRunProcess,
   IRunProcessCallbacks,
   IRunProcessExit,
-} from '@/npm-runner/runner-process';
+} from '@/npm-runner/execution/runner-process';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
-import { runnerIdentity } from '@/npm-runner/runner-tool';
-import { getGlobalRisk } from '@/global-packages/global-policy';
-import { snapshotGlobalPreviewFacts } from '@/global-packages/global-preview';
+import { runnerIdentity } from '@/npm-runner/toolchain/runner-tool';
+import { getGlobalRisk } from '@/global-packages/policy/global-policy';
+import { snapshotGlobalPreviewFacts } from '@/global-packages/policy/global-preview';
 import {
   memoryFs,
   TEST_PATHS,

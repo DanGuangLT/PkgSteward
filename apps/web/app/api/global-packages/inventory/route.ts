@@ -1,4 +1,4 @@
-import { startGlobalInventory } from "@/lib/api/global-packages"
+import { startGlobalInventory } from "@/lib/api/global-packages/global-packages"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { GlobalActivityRequest } from "@/lib/global-packages/global-types"
 

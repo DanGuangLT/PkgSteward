@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { cancelBrowserProjectAnalysis, pollBrowserProjectAnalysis, startBrowserProjectAnalysis } from "@/lib/api/projects-browser"
+import { cancelBrowserProjectAnalysis, pollBrowserProjectAnalysis, startBrowserProjectAnalysis } from "@/lib/api/projects/projects-browser"
 import type { ProjectDetail } from "@/lib/api/types"
 import { initialAnalysisState } from "@/lib/projects/project-analysis-policy"
 import { createProjectAnalysisSession } from "@/lib/projects/project-analysis-session"

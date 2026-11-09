@@ -18,7 +18,7 @@ import type {
 import type {
   IRunProcess,
   IRunProcessCallbacks,
-} from '@/npm-runner/runner-process';
+} from '@/npm-runner/execution/runner-process';
 
 export const GLOBAL_ENVIRONMENT_KEYS = [
   'npm_config_prefix',

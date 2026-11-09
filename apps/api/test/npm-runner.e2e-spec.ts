@@ -31,7 +31,7 @@ import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import { FileOpsService } from '@/file-ops/file-ops.service';
 import { ProjectsService } from '@/projects/projects.service';
 import { ScannerService } from '@/scanner/scanner.service';
-import { ScannerCache } from '@/scanner/scanner-cache';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
 import { NPM_RUNNER_RUNTIME } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type {
@@ -49,8 +49,8 @@ import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 import type {
   IRunProcessCallbacks,
   IRunProcessExit,
-} from '@/npm-runner/runner-process';
-import { resolveRunnerTool } from '@/npm-runner/runner-tool';
+} from '@/npm-runner/execution/runner-process';
+import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import {
   fsFixture,
   nodeFile,

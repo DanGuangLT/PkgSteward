@@ -1,4 +1,4 @@
-import { getPmContext } from "@/lib/api/package-managers"
+import { getPmContext } from "@/lib/api/package-managers/package-managers"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 import { ApiError } from "@/lib/api/response"
 

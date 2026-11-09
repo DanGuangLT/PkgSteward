@@ -1,10 +1,10 @@
 import { Global, Module } from '@nestjs/common';
-import { createDriveDetector } from '@/platform/drive-detector.factory';
+import { createDriveDetector } from '@/platform/drives/drive-detector.factory';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
 import { RECYCLE_BIN } from '@/platform/interfaces/recycle-bin.interface';
 import { PROCESS_SNAPSHOT } from '@/platform/interfaces/process-snapshot.interface';
-import { createRecycleBin } from '@/platform/recycle-bin.factory';
-import { createProcessSnapshot } from '@/platform/process-snapshot.factory';
+import { createRecycleBin } from '@/platform/recycle/recycle-bin.factory';
+import { createProcessSnapshot } from '@/platform/processes/process-snapshot.factory';
 
 @Global()
 @Module({

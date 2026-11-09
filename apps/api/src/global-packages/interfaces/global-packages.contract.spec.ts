@@ -22,8 +22,8 @@ import {
   assessGlobalRegistryPolicy,
   GLOBAL_CONFIG_FILE_LIMIT,
   parseGlobalNpmrc,
-} from '@/global-packages/global-config';
-import { normalizeGlobalBins } from '@/global-packages/global-policy';
+} from '@/global-packages/config/global-config';
+import { normalizeGlobalBins } from '@/global-packages/policy/global-policy';
 import { assessRisk } from '@/core/risk/risk';
 import {
   pnpmConfigFacts,

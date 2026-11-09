@@ -18,28 +18,28 @@ import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import type { PathChecker } from '@/core/path-guard/interfaces/path-guard.types';
 import { validateConfirmation } from '@/core/risk/confirmation';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
-import { DISK_FS } from '@/disk-usage/disk-usage-walker';
+import { DISK_FS } from '@/disk-usage/traversal/disk-usage-walker';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { IDiskFs } from '@/disk-usage/interfaces/disk-usage.types';
-import { discoverCleanupCandidates } from '@/file-ops/cleanup-discovery';
-import { deleteTarget } from '@/file-ops/file-deleter';
+import { discoverCleanupCandidates } from '@/file-ops/discovery/cleanup-discovery';
+import { deleteTarget } from '@/file-ops/deletion/file-deleter';
 import {
   assessTargets,
   type IAssessDeps,
   type IAssessedTarget,
-} from '@/file-ops/file-ops-assessment';
+} from '@/file-ops/assessment/file-ops-assessment';
 import {
   measureTarget,
   type ITargetMeasurement,
-} from '@/file-ops/file-ops-measure';
+} from '@/file-ops/tree/file-ops-measure';
 import {
   assessSelectionRisk,
   changedRiskPaths,
   selectionConfirmText,
-} from '@/file-ops/file-ops-risk';
-import { errorCode } from '@/file-ops/file-ops-targets';
-import { readTreeLevel } from '@/file-ops/file-tree';
-import { GitProbe } from '@/file-ops/git-probe';
+} from '@/file-ops/assessment/file-ops-risk';
+import { errorCode } from '@/file-ops/assessment/file-ops-targets';
+import { readTreeLevel } from '@/file-ops/tree/file-tree';
+import { GitProbe } from '@/file-ops/git/git-probe';
 import type { IFileOpsService } from '@/file-ops/interfaces/file-ops.service.interface';
 import { FILE_OPS_FS } from '@/file-ops/interfaces/file-ops.types';
 import type {
@@ -61,12 +61,12 @@ import type {
   ITargetSize,
   JobStatus,
 } from '@/file-ops/interfaces/file-ops.types';
-import { OperationStore } from '@/file-ops/operation-store';
+import { OperationStore } from '@/file-ops/stores/operation-store';
 import {
   PreviewStore,
   type IPreviewFacts,
   type IPreviewRecord,
-} from '@/file-ops/preview-store';
+} from '@/file-ops/stores/preview-store';
 import { PROCESS_SNAPSHOT } from '@/platform/interfaces/process-snapshot.interface';
 import type { IProcessSnapshot } from '@/platform/interfaces/process-snapshot.interface';
 import { RECYCLE_BIN } from '@/platform/interfaces/recycle-bin.interface';

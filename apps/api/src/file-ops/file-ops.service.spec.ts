@@ -16,14 +16,14 @@ import type {
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
 import type { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { IDiskFs } from '@/disk-usage/interfaces/disk-usage.types';
-import * as discovery from '@/file-ops/cleanup-discovery';
-import * as deleter from '@/file-ops/file-deleter';
-import * as assessment from '@/file-ops/file-ops-assessment';
-import * as measurement from '@/file-ops/file-ops-measure';
-import type { ITargetMeasurement } from '@/file-ops/file-ops-measure';
+import * as discovery from '@/file-ops/discovery/cleanup-discovery';
+import * as deleter from '@/file-ops/deletion/file-deleter';
+import * as assessment from '@/file-ops/assessment/file-ops-assessment';
+import * as measurement from '@/file-ops/tree/file-ops-measure';
+import type { ITargetMeasurement } from '@/file-ops/tree/file-ops-measure';
 import { FileOpsService } from '@/file-ops/file-ops.service';
-import * as tree from '@/file-ops/file-tree';
-import type { GitProbe } from '@/file-ops/git-probe';
+import * as tree from '@/file-ops/tree/file-tree';
+import type { GitProbe } from '@/file-ops/git/git-probe';
 import type {
   DeleteOutcome,
   IExecuteInput,
@@ -33,8 +33,8 @@ import type {
   IGitProbe,
   ITargetSize,
 } from '@/file-ops/interfaces/file-ops.types';
-import { OperationStore } from '@/file-ops/operation-store';
-import { PreviewStore } from '@/file-ops/preview-store';
+import { OperationStore } from '@/file-ops/stores/operation-store';
+import { PreviewStore } from '@/file-ops/stores/preview-store';
 import type { IProcessSnapshot } from '@/platform/interfaces/process-snapshot.interface';
 import type { IRecycleBin } from '@/platform/interfaces/recycle-bin.interface';
 import type { IScanResult } from '@/scanner/interfaces/scanner.types';

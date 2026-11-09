@@ -1,4 +1,4 @@
-import { executeGlobalPackage } from "@/lib/api/global-packages"
+import { executeGlobalPackage } from "@/lib/api/global-packages/global-packages"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { GlobalExecuteRequest } from "@/lib/global-packages/global-types"
 

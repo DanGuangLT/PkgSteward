@@ -1,4 +1,4 @@
-import { startProjectAnalysis } from "@/lib/api/projects"
+import { startProjectAnalysis } from "@/lib/api/projects/projects"
 import { ApiError, toApiErrorResponse } from "@/lib/api/response"
 import type { StartProjectAnalysis } from "@/lib/api/types"
 

@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { execa } from 'execa';
 import { NotFoundException } from '@/common/exceptions/app.exception';
-import { readProjectInput } from '@/projects/project-input';
-import { buildProjectInventory } from '@/projects/project-inventory';
+import { readProjectInput } from '@/projects/input/project-input';
+import { buildProjectInventory } from '@/projects/analysis/project-inventory';
 import { ProjectsService } from '@/projects/projects.service';
 import type {
   IProjectAnalysisDeps,
@@ -19,8 +19,10 @@ import type {
 } from '@/projects/interfaces/projects.types';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
-jest.mock('@/projects/project-input', () => ({ readProjectInput: jest.fn() }));
-jest.mock('@/projects/project-inventory', () => ({
+jest.mock('@/projects/input/project-input', () => ({
+  readProjectInput: jest.fn(),
+}));
+jest.mock('@/projects/analysis/project-inventory', () => ({
   buildProjectInventory: jest.fn(),
 }));
 

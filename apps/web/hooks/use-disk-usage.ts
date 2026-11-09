@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { cancelBrowserDiskUsage, pollBrowserDiskUsage, startBrowserDiskUsage } from "@/lib/api/disk-usage-browser"
+import { cancelBrowserDiskUsage, pollBrowserDiskUsage, startBrowserDiskUsage } from "@/lib/api/disk-usage/disk-usage-browser"
 import { ApiError } from "@/lib/api/response"
 import type { StartDiskUsage } from "@/lib/api/types"
 import {

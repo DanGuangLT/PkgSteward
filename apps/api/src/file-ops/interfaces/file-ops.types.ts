@@ -3,7 +3,7 @@ import type {
   IConfirmationInput,
   IRisk,
 } from '@/core/risk/interfaces/risk.types';
-import type { IFileDeleterDeps } from '@/file-ops/file-deleter';
+import type { IFileDeleterDeps } from '@/file-ops/deletion/file-deleter';
 import type { RecycleFailureCode } from '@/platform/interfaces/recycle-bin.interface';
 import type { IScanFs } from '@/scanner/interfaces/scanner.types';
 

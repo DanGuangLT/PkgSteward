@@ -1,4 +1,4 @@
-import { summarizePreview } from "@/lib/api/file-ops"
+import { summarizePreview } from "@/lib/api/file-ops/file-ops"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 
 export async function POST(

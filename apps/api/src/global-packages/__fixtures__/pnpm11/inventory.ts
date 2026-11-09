@@ -1,6 +1,6 @@
 import { win32 } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { IGlobalInventoryDeps } from '@/global-packages/global-inventory';
+import type { IGlobalInventoryDeps } from '@/global-packages/discovery/global-inventory';
 import type { IGlobalPreviewFacts } from '@/global-packages/interfaces/global-packages.runtime';
 import type { IPnpmGlobalGroupFacts } from '@/global-packages/interfaces/pnpm-global.types';
 import {

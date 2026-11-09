@@ -26,7 +26,7 @@ import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
-import { ScannerCache } from '@/scanner/scanner-cache';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
 import { ScannerService } from '@/scanner/scanner.service';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import { FileOpsService } from '@/file-ops/file-ops.service';

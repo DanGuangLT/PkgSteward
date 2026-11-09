@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DiskUsageCache } from '@/disk-usage/disk-usage-cache';
+import { DiskUsageCache } from '@/disk-usage/cache/disk-usage-cache';
 import { DiskUsageController } from '@/disk-usage/disk-usage.controller';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import {
@@ -7,7 +7,7 @@ import {
   DISK_FS,
   DISK_WALKER,
   walkDiskUsage,
-} from '@/disk-usage/disk-usage-walker';
+} from '@/disk-usage/traversal/disk-usage-walker';
 
 @Module({
   controllers: [DiskUsageController],

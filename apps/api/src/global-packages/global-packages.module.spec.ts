@@ -11,7 +11,7 @@ import {
 } from '@/global-packages/global-packages.module';
 import type { IGlobalRuntimeBindings } from '@/global-packages/global-packages.module';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
-import { discoverGlobalLocation } from '@/global-packages/global-location';
+import { discoverGlobalLocation } from '@/global-packages/discovery/global-location';
 import type { IGlobalProbeOptions } from '@/global-packages/interfaces/global-packages.runtime';
 import {
   TEST_PATHS,
@@ -22,7 +22,7 @@ import {
   testProcess,
   testRuntime,
 } from '@/global-packages/__fixtures__/global-lifecycle';
-import type { launchRun } from '@/npm-runner/runner-process';
+import type { launchRun } from '@/npm-runner/execution/runner-process';
 import type { RunnerStopOutcome } from '@/platform/windows/windows-runner-process';
 
 function bindings() {

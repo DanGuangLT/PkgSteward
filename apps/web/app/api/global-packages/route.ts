@@ -1,4 +1,4 @@
-import { getGlobalSnapshot } from "@/lib/api/global-packages"
+import { getGlobalSnapshot } from "@/lib/api/global-packages/global-packages"
 import { respondWithEnvelope } from "@/lib/api/route-response"
 
 export const dynamic = "force-dynamic"

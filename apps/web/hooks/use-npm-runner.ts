@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { cancelBrowserNpmRun, getBrowserLatestNpmRun, getBrowserNpmRunLogs, getBrowserRunnerContext, pollBrowserNpmRun, startBrowserNpmRun } from "@/lib/api/npm-runs-browser"
+import { cancelBrowserNpmRun, getBrowserLatestNpmRun, getBrowserNpmRunLogs, getBrowserRunnerContext, pollBrowserNpmRun, startBrowserNpmRun } from "@/lib/api/npm-runs/npm-runs-browser"
 import type { RunJob, RunnerContext } from "@/lib/api/types"
 import { initialRunnerState } from "@/lib/npm-runner/runner-policy"
 import type { RunnerSelection, RunnerState } from "@/lib/npm-runner/runner-policy"

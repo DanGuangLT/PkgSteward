@@ -1,4 +1,4 @@
-import { startCleanupPreview } from "@/lib/api/file-ops"
+import { startCleanupPreview } from "@/lib/api/file-ops/file-ops"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { CleanupPreviewInput } from "@/lib/api/types"
 

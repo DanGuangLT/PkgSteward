@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { lstat, realpath } from 'fs/promises';
 import { homedir } from 'os';
 import { toPathPlatform } from '@/common/utils/path.util';
-import { parseScanRootPaths } from '@/config/scan-roots';
+import { parseScanRootPaths } from '@/config/environment/scan-roots';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { buildDenylist } from '@/core/path-guard/denylist';
 import type { IPathGuardService } from '@/core/path-guard/interfaces/path-guard.service.interface';

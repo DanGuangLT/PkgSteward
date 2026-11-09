@@ -11,11 +11,11 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createDiskFs } from '@/disk-usage/disk-usage-walker';
-import { deleteTarget } from '@/file-ops/file-deleter';
-import { createFileOpsFs } from '@/file-ops/file-ops-fs';
-import { measureTarget } from '@/file-ops/file-ops-measure';
-import { createRecycleBin } from '@/platform/recycle-bin.factory';
+import { createDiskFs } from '@/disk-usage/traversal/disk-usage-walker';
+import { deleteTarget } from '@/file-ops/deletion/file-deleter';
+import { createFileOpsFs } from '@/file-ops/deletion/file-ops-fs';
+import { measureTarget } from '@/file-ops/tree/file-ops-measure';
+import { createRecycleBin } from '@/platform/recycle/recycle-bin.factory';
 
 const baseDir = process.env.PKGSTEWARD_REAL_FS_TEST_DIR;
 const destructive = process.env.PKGSTEWARD_DESTRUCTIVE_FS_TEST === '1';

@@ -1,4 +1,4 @@
-import { startGlobalPreview } from "@/lib/api/global-packages"
+import { startGlobalPreview } from "@/lib/api/global-packages/global-packages"
 import { readJsonBody, respondWithEnvelope } from "@/lib/api/route-response"
 import type { GlobalPreviewRequest } from "@/lib/global-packages/global-types"
 

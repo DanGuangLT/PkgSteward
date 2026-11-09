@@ -21,9 +21,9 @@ import type {
   ProjectAnalysisCode,
   ProjectScanSnapshot,
 } from '@/projects/interfaces/projects.types';
-import { readProjectInput } from '@/projects/project-input';
-import { buildProjectInventory } from '@/projects/project-inventory';
-import { compareProjectText } from '@/projects/project-lock-common';
+import { readProjectInput } from '@/projects/input/project-input';
+import { buildProjectInventory } from '@/projects/analysis/project-inventory';
+import { compareProjectText } from '@/projects/locks/project-lock-common';
 
 export const PROJECT_FS = Symbol('PROJECT_FS');
 export const PROJECT_RUNTIME = Symbol('PROJECT_RUNTIME');

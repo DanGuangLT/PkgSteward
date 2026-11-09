@@ -1,7 +1,7 @@
 import {
   cancelBrowserOperation, cancelBrowserPreview, executeBrowserDelete, getBrowserActiveOperation,
   pollBrowserOperation, pollBrowserPreview, startBrowserCleanupPreview, startBrowserDeletePreview, summarizeBrowserPreview,
-} from "../api/file-ops-browser.ts"
+} from "../api/file-ops/file-ops-browser.ts"
 import { ApiError } from "../api/response.ts"
 import type { CleanupPreviewInput, FileOpsPreviewStart } from "@/lib/api/types"
 import { buildExecuteInput, type ConfirmationInput } from "./confirmation.ts"

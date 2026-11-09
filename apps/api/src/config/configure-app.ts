@@ -7,7 +7,7 @@ import {
 } from '@/common/middleware/host-origin.middleware';
 import { setupAppConfig } from '@/config/app-setup.config';
 import { setupCors } from '@/config/cors.config';
-import SwaggerConfig from '@/config/swagger.config';
+import SwaggerConfig from '@/config/swagger/swagger.config';
 import { validationConfig } from '@/config/validation.config';
 
 // Mặc định 100 KB của Express không đủ cho lô 1.000 path của FileOps.

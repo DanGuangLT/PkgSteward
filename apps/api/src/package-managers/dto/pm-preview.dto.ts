@@ -6,7 +6,7 @@ import type {
   IPmPreviewRequest,
   PmWritableManager,
 } from '@/package-managers/interfaces/pm.types';
-import { isPmTargetVersion } from '@/package-managers/pm-policy';
+import { isPmTargetVersion } from '@/package-managers/pinning/pm-policy';
 
 export class PmPreviewDto extends PmVersionsDto implements IPmPreviewRequest {
   @ApiProperty({ enum: [...PM_WRITABLE_MANAGERS] })
