@@ -161,6 +161,8 @@ export interface IRunnerTool {
 export interface IRunnerToolSnapshot {
   platform: PathPlatform;
   execPath: string;
+  // Internal test override; production resolves against process.versions.node.
+  nodeVersion?: string;
   env: Readonly<NodeJS.ProcessEnv>;
   projectPaths: readonly string[];
   signal: AbortSignal;

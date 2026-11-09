@@ -33,7 +33,10 @@ export const fileStat = (
   isDirectory: () => false,
   ...overrides,
 });
-export const tool = (manager: RunnerManager = 'npm'): IRunnerTool => {
+export const tool = (
+  manager: RunnerManager = 'npm',
+  version = manager === 'npm' ? '11.17.0' : '11.22.0',
+): IRunnerTool => {
   const packageDir =
     manager === 'npm' ? npmDir : path.join(pnpmPrefix, 'node_modules', 'pnpm');
   const entry = path.join(
@@ -43,7 +46,7 @@ export const tool = (manager: RunnerManager = 'npm'): IRunnerTool => {
   );
   return {
     manager,
-    version: manager === 'npm' ? '11.17.0' : '11.22.0',
+    version,
     file: nodeFile,
     entry,
     packageDir,
@@ -155,13 +158,24 @@ export const fsFixture = () => {
     projectPaths: [root],
     signal: controller.signal,
   };
-  const installTool = (manager: RunnerManager) => {
-    const installed = tool(manager);
-    put(installed.file, 'TEST executable bytes, never executed');
-    put(
-      path.join(installed.packageDir, 'package.json'),
-      readFileSync(join(__dirname, 'tools', `${manager}-package.json`), 'utf8'),
+  const installTool = (manager: RunnerManager, version?: string) => {
+    const installed = tool(manager, version);
+    const fixture =
+      manager === 'npm' && installed.version.startsWith('12.')
+        ? 'npm12'
+        : manager;
+    let metadata = readFileSync(
+      join(__dirname, 'tools', `${fixture}-package.json`),
+      'utf8',
     );
+    if (version !== undefined) {
+      const parsed: unknown = JSON.parse(metadata);
+      if (typeof parsed !== 'object' || parsed === null)
+        throw new Error('TEST tool fixture must be an object');
+      metadata = JSON.stringify({ ...parsed, version: installed.version });
+    }
+    put(installed.file, 'TEST executable bytes, never executed');
+    put(path.join(installed.packageDir, 'package.json'), metadata);
     put(installed.entry!, '// TEST distribution entry; never executed');
     return installed;
   };
