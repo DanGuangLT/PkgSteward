@@ -183,6 +183,15 @@ function fixture() {
     resolveRunnerTool(manager, input.snapshot, input.fs);
   const result: IStoredScanResult = {
     ...input.scan,
+    // Cache entries never hold measured sizes (IScanProjectMetadata).
+    projects: input.scan.projects.map((project) => ({
+      ...project,
+      nodeModules: {
+        ...project.nodeModules,
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      },
+    })),
     status: 'completed',
     partial: false,
     roots: ['D:\\TEST'],
@@ -462,7 +471,7 @@ describe('NpmRunner contention (real shared services, mocked IO)', () => {
       .overrideProvider(AuditLogService)
       .useValue({ append: f.audit })
       .overrideProvider(ScannerCache)
-      .useValue({ load: f.load, save: f.save })
+      .useValue({ load: f.load, save: f.save, flush: () => Promise.resolve() })
       .overrideProvider(SCAN_WALKER)
       .useValue(f.scanWalker)
       .overrideProvider(DISK_WALKER)
