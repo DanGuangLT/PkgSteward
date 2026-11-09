@@ -1,7 +1,7 @@
 import { ApiError } from "../api/response.ts"
-import type { PmExecuteRequest, PmManager, PmPreview } from "@/lib/package-managers/pm-types"
+import type { PmExecuteRequest, PmPreview, PmWritableManager } from "@/lib/package-managers/pm-types"
 
-export interface PmSelection { manager: PmManager; targetVersion: string }
+export interface PmSelection { manager: PmWritableManager; targetVersion: string }
 export interface PmPreviewForm { selection: PmSelection | null; preview: PmPreview | null; acknowledged: string[] }
 export type PmConsentError = "NO_PREVIEW" | "PREVIEW_EXPIRED" | "RISK_NOT_ACKNOWLEDGED" | "UNSUPPORTED_CONFIRMATION"
 

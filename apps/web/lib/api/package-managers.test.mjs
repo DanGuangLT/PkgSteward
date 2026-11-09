@@ -70,7 +70,7 @@ test("seven real handlers preserve status/envelope/details/no-store and await Ne
 })
 
 test("invalid JSON and project query fail at bridge with no BE call", async t => {
-  for (const [path, method, body] of requests.filter(([, , body]) => body)) {
+  for (const [path, method] of requests.filter(([, , body]) => body)) {
     const route = await loadRoute(path)
     t.mock.method(globalThis, "fetch", async () => assert.fail("invalid JSON must never reach BE"))
     const response = await route[method](request(path, method, "{"), params)
