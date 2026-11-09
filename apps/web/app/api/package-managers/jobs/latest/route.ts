@@ -1,0 +1,8 @@
+import { getLatestPmJob } from "@/lib/api/package-managers"
+import { respondWithEnvelope } from "@/lib/api/route-response"
+
+export const dynamic = "force-dynamic"
+
+export async function GET(request: Request): Promise<Response> {
+  return respondWithEnvelope(request, () => getLatestPmJob(request.signal))
+}

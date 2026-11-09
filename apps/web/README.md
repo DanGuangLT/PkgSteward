@@ -304,6 +304,28 @@ pauses when hidden and resumes when visible. Logs are bounded plain text, with d
 filtering cannot hide every secret a script prints. For exact API bodies/status codes, protected names,
 registry rules, fixed command arguments and limits, see [Global packages API](../api/README.md#global-packages-api).
 
+## Project package manager pin
+
+The project detail page has a **Project package manager version** panel. It shows the project's declared
+`packageManager` value, the npm/pnpm versions installed on this machine (Yarn is shown as unsupported), and when
+they were read. This is a **project** setting: it changes one field in that project's `package.json` and never
+changes the npm/pnpm installed on the machine.
+
+1. Choose `npm` or `pnpm`, then **Load versions**. The list comes from the public npm registry and shows only
+   stable, non-deprecated versions with the same major as the installed tool.
+2. Pick a version and **Preview change**. Escape stops a preview that is still loading.
+3. The confirmation dialog shows the project, the single `package.json` edit (current value → new value), the
+   installed tool PkgSteward keeps using, notes (an old pin hash is dropped; the pin does not switch the tool
+   PkgSteward runs) and the remaining risks. A medium-risk preview (project active in the last 7 days) needs each
+   reason ticked. Cancel is focused first.
+4. **Write pin to package.json** writes only that field. Nothing is downloaded or installed and Corepack is not used;
+   terminals follow the pin only if you use Corepack or pnpm's own version management.
+
+Pins that are not `<name>@<exact version>`, workspace members, projects with `devEngines`, and lockfiles that do not
+match the chosen manager cannot be changed here. A lost response is recovered from the latest job, never by sending
+the change again; if the result is unknown, open `package.json` to check it. Opening the page only reads; versions are
+fetched only when you ask. See [Package manager pin API](../api/README.md#package-manager-pin-api).
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:

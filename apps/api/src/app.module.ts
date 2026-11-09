@@ -18,6 +18,7 @@ import { FileOpsModule } from '@/file-ops/file-ops.module';
 import { ProjectsModule } from '@/projects/projects.module';
 import { NpmRunnerModule } from '@/npm-runner/npm-runner.module';
 import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
+import { PackageManagersModule } from '@/package-managers/package-managers.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
     ProjectsModule,
     NpmRunnerModule,
     GlobalPackagesModule,
+    PackageManagersModule,
   ],
   controllers: [AppController],
   providers: [

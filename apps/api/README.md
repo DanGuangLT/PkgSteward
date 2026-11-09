@@ -524,6 +524,55 @@ This controls launch configuration; it does not isolate lifecycle code.
   1 MiB / 4,096-chunk ring and 64 KiB / 256-chunk pages; older output is dropped and reported. Logs are plain
   text with filtering, but scripts can still print unrecognized secrets.
 
+## Package manager pin API
+
+Read and change the `packageManager` field of **one scanned project's** `package.json`. This is a declaration
+only: the app writes that one field, downloads nothing, runs no install and does not use Corepack. It never changes
+the npm/pnpm installed on the machine, and the command runner keeps using the installed tool. Terminals follow the
+pin only if you use Corepack or pnpm's own package manager version management.
+
+All routes below use `/api/v1/package-managers` and the standard response envelope, with `Cache-Control: no-store`.
+
+| Endpoint | Body and result |
+|---|---|
+| `GET /api/v1/package-managers/project?path=` | `200` with the current pin (raw, parsed or unsupported), installed npm/pnpm versions read statically (Yarn reported as unsupported), lockfile families, workspace kind, `devEnginesPresent`, a blocking `reason` and notices. No network, no child process, no write |
+| `POST /api/v1/package-managers/versions` | `{ requestId, path, manager }`; `202` with a job whose completed snapshot contains `versions` (exact, `supported`, `deprecated`, disabled `reason`) and `tags` |
+| `POST /api/v1/package-managers/project/preview` | `{ requestId, path, manager, targetVersion }`; `202` with a job whose ready snapshot contains `preview` |
+| `POST /api/v1/package-managers/project/execute` | `{ requestId, previewId, confirm: true, acknowledgedRisks }`; `202` after preflight with the accepted mutation job |
+| `GET /api/v1/package-managers/jobs/latest` | `200` with the latest retained job, or `data: null` |
+| `GET /api/v1/package-managers/jobs/:id` | `200` with status, phase, preview/version results and write flags |
+| `POST /api/v1/package-managers/jobs/:id/cancel` | No body; `200` with current status; cancels before the write or retries cleanup, never writes again |
+
+- **Scope:** `path` must be a project root in the latest scan and pass the path guard. `manager` is `npm` or `pnpm`
+  for changes; Yarn pins are shown read-only. A new pin is `<manager>@<exact>` for a **stable, non-deprecated
+  version with the same major as the installed tool** (npm 11 / pnpm 11); `targetVersion` may be an exact version
+  or a dist-tag resolved to one. An old pin hash is dropped (`PIN_HASH_REMOVED`) and never invented. Workspace
+  members (`WORKSPACE_LEAF`), unsupported current values (`PIN_UNSUPPORTED`), `devEngines` (`CONFIG_UNSUPPORTED`)
+  and lockfiles of another family (`LOCKFILE_MISMATCH`) are refused.
+- **Registry:** version lists come only from `https://registry.npmjs.org` for the package names `npm`, `pnpm`
+  and `yarn` (Classic). Requests carry no credentials or project data and do not follow redirects. Project or user
+  registry configuration is not consulted; the pin is a declaration that other tools later resolve with their own
+  configuration.
+- **Preview and execute:** a preview lists the single file edit (current → new), the installed runner version,
+  notices and residual risks, and expires after five minutes. Risk is `low`, or `medium` with `RECENTLY_ACTIVE`
+  when the project changed in the last seven days; medium needs every code in `acknowledgedRisks`. Execute
+  re-reads the scan, project files, identities, tools and the public target, and refuses changes with
+  `409 CONFLICT` (`PREVIEW_CHANGED`, `SCAN_CHANGED`, `PREVIEW_EXPIRED`, `PREVIEW_CONSUMED`, `REQUEST_MISMATCH`).
+  A retained identical request returns its job; do not automatically resend execute.
+- **Write:** the new bytes differ from the original only in the `packageManager` value or its insertion; BOM, line
+  endings, key order and indentation are kept. They are written to a sibling temporary file opened exclusively,
+  then every identity is rechecked and the file is renamed over `package.json` once, then read back. There is no
+  rollback. Job flags: `mutationStarted`, `mayHaveChanged`, `fileCommitted`, `cleanupRequired`. A locked file
+  reports `FILE_IN_USE` (unchanged when the original is proven intact); `ACCESS_DENIED`,
+  `MANIFEST_WRITE_FAILED`, `POSTCONDITION_FAILED` and `TEMP_CLEANUP_FAILED` are also possible.
+- **Residual risks:** another program editing the same `package.json` in the last moment before the rename can
+  be overwritten; swapping a parent folder for a junction at that moment is not fully prevented; a crash during
+  the write can leave a `package.json.<uuid>.pkgsteward-tmp` file next to it. Inspect and remove it manually.
+- **Shared state:** one package manager job at a time (`409 RUNNING`). Execute takes the same mutation lock as
+  file operations, the command runner and global packages, records an audit intent before writing and a result
+  after, then refreshes that project in the scan cache. `NPM_COMMAND_TIMEOUT_MS` empty means no deadline. Only
+  `jobs/latest` and `jobs/:id` polling bypass throttling.
+
 ## Documentation
 
 - Project overview and setup: [`README.md`](../../README.md)

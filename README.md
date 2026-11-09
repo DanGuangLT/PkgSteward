@@ -11,8 +11,8 @@ English · [Tiếng Việt](README.vi.md)
 
 PkgSteward runs entirely on your own machine: a NestJS API and a Next.js web UI. It is meant to answer questions like
 *"which projects do I have, what do they depend on, what is outdated, how much disk do their `node_modules` take?"*
-and to perform common chores (install/update packages, delete `node_modules`, switch package manager
-versions) safely.
+and to perform common chores (install/update packages, delete `node_modules`, pin a project's package
+manager version) safely.
 
 - **Local and single-user by design:** no accounts, no authentication, no database. Data is read from the
   filesystem at the time of each request.
