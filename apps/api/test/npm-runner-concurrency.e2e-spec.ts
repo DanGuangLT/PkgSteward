@@ -183,6 +183,15 @@ function fixture() {
     resolveRunnerTool(manager, input.snapshot, input.fs);
   const result: IStoredScanResult = {
     ...input.scan,
+    // Cache entries never hold measured sizes (IScanProjectMetadata).
+    projects: input.scan.projects.map((project) => ({
+      ...project,
+      nodeModules: {
+        ...project.nodeModules,
+        sizeBytes: null,
+        sizeMeasuredAt: null,
+      },
+    })),
     status: 'completed',
     partial: false,
     roots: ['D:\\TEST'],
