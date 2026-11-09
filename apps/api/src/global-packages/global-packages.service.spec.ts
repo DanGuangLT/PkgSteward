@@ -33,6 +33,7 @@ import {
 } from '@/global-packages/__fixtures__/global-lifecycle';
 import {
   expectGlobalReason,
+  TEST_NPM_VERSIONS,
   probeResult,
   testLocation,
 } from '@/global-packages/__fixtures__/global-adapters';
@@ -217,9 +218,18 @@ async function done(
   throw new Error('TEST job did not finish within mocked microtasks');
 }
 
-function setup(change = false) {
+function setupNpmService(change: boolean, version: string) {
   const fixture = testRuntime();
   const facts = testFacts(change);
+  facts.location.tool.version = version;
+  jest
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- jest.fn mock, never called with this
+    .mocked(fixture.runtime.resolveTool)
+    .mockImplementation((manager) =>
+      Promise.resolve(
+        manager === 'npm' ? facts.location.tool : testLocation(manager).tool,
+      ),
+    );
   let postInventory = emptyInventory();
   const location = jest
     .spyOn(locationAdapter, 'discoverGlobalLocation')
@@ -274,6 +284,7 @@ function setup(change = false) {
     const job = await done(service, accepted.jobId);
     expect(job.status).toBe('completed');
     expect(job.preview).not.toBeNull();
+    expect(job.preview!.managerVersion).toBe(version);
     return job.preview!;
   };
   const consent = (
@@ -1253,7 +1264,8 @@ describe('pnpm 11 service integration', () => {
   );
 });
 
-describe('M7 RAM reads and admission', () => {
+describe.each(TEST_NPM_VERSIONS)('M7 RAM reads (npm %s)', (v) => {
+  const setup = (change = false) => setupNpmService(change, v);
   it('returns null on a fresh instance; snapshot/latest GET never spawn or fetch', () => {
     const f = setup();
     expect(f.service.getSnapshot()).toBeNull();
@@ -1465,7 +1477,44 @@ describe('M7 RAM reads and admission', () => {
   );
 });
 
-describe('M7 execute reservation, replay and preview integrity', () => {
+describe.each(TEST_NPM_VERSIONS)('M7 execute/preview (npm %s)', (v) => {
+  const setup = (change = false) => setupNpmService(change, v);
+  it('refuses changed config bytes after preview', async () => {
+    const f = setup();
+    const preview = await f.ready();
+    f.fs.put(f.facts.location.userConfig, {
+      text: 'strict-npmrc=true\n',
+    });
+    const start = await f.service.execute(f.consent(preview));
+    expect(await done(f.service, start.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'PREVIEW_CHANGED',
+      mutationSpawned: false,
+      gateHeld: false,
+    });
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it.each(['npm', 'npx', 'node', 'pnpm'])(
+    'refuses a target claiming the protected %s bin',
+    async (name) => {
+      const f = setup(true);
+      f.target.mockResolvedValue({
+        ...testFacts(true).target!,
+        bins: [{ name, target: 'bin/tool.js' }],
+      });
+      const start = await f.service.preview(
+        testRequest({ action: 'change', targetVersion: 'latest' }),
+      );
+      expect(await done(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'PROTECTED_PACKAGE',
+        preview: null,
+      });
+      expect(f.child.launch).not.toHaveBeenCalled();
+    },
+  );
+
   it('takes gate and reserves one provisional job synchronously before preflight awaits', async () => {
     const f = setup();
     const preview = await f.ready();
@@ -1661,7 +1710,31 @@ describe('M7 execute reservation, replay and preview integrity', () => {
   });
 });
 
-describe('M7 audit, final check, postconditions and invalidation', () => {
+describe.each(TEST_NPM_VERSIONS)('M7 audit/postconditions (npm %s)', (v) => {
+  const setup = (change = false) => setupNpmService(change, v);
+  it('preserves strict config after command failure without retry', async () => {
+    const f = setup();
+    const path = f.facts.location.userConfig;
+    const text = 'strict-npmrc=true\n';
+    f.fs.put(path, { text });
+    const preview = await f.ready();
+    const start = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    f.child.exit({ exitCode: 1, failureCode: 'COMMAND_FAILED' });
+    expect(await done(f.service, start.jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'COMMAND_FAILED',
+      mutationSpawned: true,
+      gateHeld: false,
+    });
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(f.child.launch.mock.calls[0][0].args).not.toContain(
+      '--strict-npmrc=false',
+    );
+    const retained = f.fs.entries.get(win32.resolve(path).toLowerCase());
+    expect(retained?.text).toBe(text);
+  });
+
   it('writes bounded intent/result records with jobId, server targets and high risk', async () => {
     const f = setup();
     const preview = await f.ready();
@@ -1924,7 +1997,8 @@ describe('M7 audit, final check, postconditions and invalidation', () => {
   });
 });
 
-describe('M7 cancellation and shutdown', () => {
+describe.each(TEST_NPM_VERSIONS)('M7 cancellation/shutdown (npm %s)', (v) => {
+  const setup = (change = false) => setupNpmService(change, v);
   it('retains probe uncertainty when an adapter masks it with an abort; cleanup never reprobes', async () => {
     const f = setup();
     const preview = await f.ready();

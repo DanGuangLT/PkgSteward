@@ -1,11 +1,13 @@
 import 'reflect-metadata';
-import { win32 } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, win32 } from 'node:path';
 import {
   parseGlobalInventory,
   readGlobalInventory,
 } from '@/global-packages/discovery/global-inventory';
 import {
   expectGlobalReason,
+  TEST_NPM_VERSIONS,
   memoryFs,
   probeResult,
   TEST_PATHS as P,
@@ -14,6 +16,16 @@ import {
 } from '@/global-packages/__fixtures__/global-adapters';
 import type { GlobalManager } from '@/global-packages/interfaces/global-packages.types';
 import { pnpmInventoryFixture } from '@/global-packages/__fixtures__/pnpm11/inventory';
+
+const npm12Fixture = (kind: 'populated' | 'empty'): unknown =>
+  JSON.parse(
+    readFileSync(
+      join(__dirname, `../__fixtures__/npm12/list-${kind}.json`),
+      'utf8',
+    ),
+  ) as unknown;
+const npm12Populated = npm12Fixture('populated');
+const npm12Empty = npm12Fixture('empty');
 
 const list = (manager: GlobalManager, dependencies: unknown): unknown =>
   manager === 'npm' ? { dependencies } : [{ path: P.global, dependencies }];
@@ -153,9 +165,9 @@ describe('strict bounded global list parsers', () => {
   });
 });
 
-describe('manifest/identity/ownership cross-check', () => {
+describe.each(TEST_NPM_VERSIONS)('inventory cross-check (npm %s)', (v) => {
   function setup(manager: GlobalManager = 'npm') {
-    const location = testLocation(manager);
+    const location = testLocation(manager, manager === 'npm' ? v : undefined);
     const memory = memoryFs();
     memory.put(location.globalRoot, { directory: true });
     memory.put(location.binDir, { directory: true });
@@ -187,6 +199,74 @@ describe('manifest/identity/ownership cross-check', () => {
     };
     return { ...memory, deps, location, spawn, root, manifest };
   }
+  it('cross-checks the synthetic object against its manifest', async () => {
+    const h = setup();
+    h.spawn.mockResolvedValue(probeResult(npm12Populated));
+    const result = await readGlobalInventory(h.location, h.deps);
+    expect(result.packages).toEqual([
+      {
+        name: '@test/tool',
+        version: '1.2.3',
+        bins: [{ name: 'test-tool', target: 'bin/cli.js' }],
+        status: 'manageable',
+        reason: null,
+      },
+    ]);
+    expect(h.open).toHaveBeenCalledWith(h.manifest);
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+  });
+  it('accepts the synthetic empty root without packages', async () => {
+    const h = setup();
+    h.spawn.mockResolvedValue(probeResult(npm12Empty));
+    const result = await readGlobalInventory(h.location, h.deps);
+    expect(result.packages).toEqual([]);
+    expect(result.facts).toEqual([]);
+    expect(result.ownershipComplete).toBe(true);
+    expect(h.open).not.toHaveBeenCalled();
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    probeResult([npm12Populated]),
+    probeResult({ dependencies: [] }),
+    probeResult({ problems: ['TEST partial inventory'] }),
+    probeResult({ error: { code: 'TEST_FAILURE' } }),
+    probeResult(npm12Empty, { exitCode: 1 }),
+    probeResult(null, { stdout: Buffer.from('{') }),
+    probeResult(null, {
+      stdout: Buffer.from(
+        '{"dependencies":{"test-tool":{"version":"1.0.0"},"test-tool":{"version":"2.0.0"}}}',
+      ),
+    }),
+  ])('rejects invalid lists without fallback or manifest reads', async (r) => {
+    const h = setup();
+    h.spawn.mockResolvedValue(r);
+    await expectGlobalReason(
+      () => readGlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+    expect(h.open).not.toHaveBeenCalled();
+  });
+  it.each([
+    [
+      probeResult({}, { terminationVerified: false }),
+      'TERMINATION_UNCONFIRMED',
+    ],
+    [probeResult({}, { overflowed: true }), 'INVENTORY_FAILED'],
+    [
+      probeResult({}, { stdout: Buffer.alloc(8 * 1024 * 1024 + 1) }),
+      'INVENTORY_FAILED',
+    ],
+  ] as const)('rejects uncertain/oversized lists', async (r, reason) => {
+    const h = setup();
+    h.spawn.mockResolvedValue(r);
+    await expectGlobalReason(
+      () => readGlobalInventory(h.location, h.deps),
+      reason,
+    );
+    expect(h.spawn).toHaveBeenCalledTimes(1);
+    expect(h.open).not.toHaveBeenCalled();
+  });
   it.each(['npm'] as const)(
     'cross-checks %s list against bounded handle-read manifests',
     async (manager) => {
@@ -341,13 +421,13 @@ describe('manifest/identity/ownership cross-check', () => {
       (await readGlobalInventory(location, deps)).packages[0].bins,
     ).toEqual([]);
   });
-  it('marks a protected current bin as protected', async () => {
+  it.each(['npm', 'npx'])('protects the current %s bin', async (bin) => {
     const { deps, location, put, manifest } = setup();
     put(manifest, {
       text: JSON.stringify({
         name: '@test/tool',
         version: '1.2.3',
-        bin: { npm: 'bin/cli.js' },
+        bin: { [bin]: 'bin/cli.js' },
       }),
     });
     expect(
