@@ -32,32 +32,32 @@ import {
   AppException,
   NotFoundException,
 } from '@/common/exceptions/app.exception';
-import { GlobalJob } from '@/global-packages/global-job';
+import { GlobalJob } from '@/global-packages/execution/global-job';
 import {
   assertGlobalPreviewUnchanged,
   createGlobalPreview,
   GlobalPreviewStore,
   snapshotGlobalPreviewFacts,
   validateGlobalConfirmation,
-} from '@/global-packages/global-preview';
+} from '@/global-packages/policy/global-preview';
 import {
   assertGlobalDirectory,
   assertGlobalLocationsDistinct,
   discoverGlobalLocation,
-} from '@/global-packages/global-location';
-import { readGlobalInventory } from '@/global-packages/global-inventory';
-import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
-import { assessPnpmGlobalRegistryPolicy } from '@/global-packages/pnpm-global-config';
-import { GlobalRegistry } from '@/global-packages/global-registry';
+} from '@/global-packages/discovery/global-location';
+import { readGlobalInventory } from '@/global-packages/discovery/global-inventory';
+import type { IGlobalInventoryResult } from '@/global-packages/discovery/global-inventory';
+import { assessPnpmGlobalRegistryPolicy } from '@/global-packages/config/pnpm-global-config';
+import { GlobalRegistry } from '@/global-packages/registry/global-registry';
 import {
   assessGlobalRegistryPolicy,
   assertGlobalConfigUnchanged,
   GLOBAL_CONFIG_FILE_LIMIT,
   GLOBAL_CONFIG_TOTAL_LIMIT,
-} from '@/global-packages/global-config';
-import { assertGlobalPackageMutable } from '@/global-packages/global-policy';
-import { buildGlobalCommand } from '@/global-packages/global-command';
-import { readRunnerFile } from '@/npm-runner/runner-tool';
+} from '@/global-packages/config/global-config';
+import { assertGlobalPackageMutable } from '@/global-packages/policy/global-policy';
+import { buildGlobalCommand } from '@/global-packages/execution/global-command';
+import { readRunnerFile } from '@/npm-runner/toolchain/runner-tool';
 import { createHash } from 'node:crypto';
 import { win32 } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';

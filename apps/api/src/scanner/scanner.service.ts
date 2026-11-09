@@ -17,8 +17,8 @@ import {
   toComparable,
   toPathPlatform,
 } from '@/common/utils/path.util';
-import { parseScanRootPaths } from '@/config/scan-roots';
-import type { ScanRoots } from '@/config/scan-roots';
+import { parseScanRootPaths } from '@/config/environment/scan-roots';
+import type { ScanRoots } from '@/config/environment/scan-roots';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
@@ -35,9 +35,9 @@ import type {
   ScanStatus,
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
-import { SCAN_WALKER } from '@/scanner/scan-walker';
-import { inspectScanDirectory } from '@/scanner/project-metadata';
-import { makeScanCacheKey, ScannerCache } from '@/scanner/scanner-cache';
+import { SCAN_WALKER } from '@/scanner/discovery/scan-walker';
+import { inspectScanDirectory } from '@/scanner/discovery/project-metadata';
+import { makeScanCacheKey, ScannerCache } from '@/scanner/cache/scanner-cache';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
 interface IActiveScan {

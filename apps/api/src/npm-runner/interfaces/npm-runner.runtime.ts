@@ -6,7 +6,7 @@ import type {
 import type {
   IRunProcess,
   IRunProcessCallbacks,
-} from '@/npm-runner/runner-process';
+} from '@/npm-runner/execution/runner-process';
 import type { IWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 
 export const NPM_RUNNER_RUNTIME = Symbol('NPM_RUNNER_RUNTIME');

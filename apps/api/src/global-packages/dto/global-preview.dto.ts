@@ -7,7 +7,7 @@ import type {
   GlobalAction,
   IGlobalPreviewRequest,
 } from '@/global-packages/interfaces/global-packages.types';
-import { isGlobalTargetVersion } from '@/global-packages/global-policy';
+import { isGlobalTargetVersion } from '@/global-packages/policy/global-policy';
 
 export class GlobalPreviewDto
   extends GlobalVersionsDto

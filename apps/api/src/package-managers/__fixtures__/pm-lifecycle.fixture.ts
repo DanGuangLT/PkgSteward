@@ -4,8 +4,8 @@ import {
   readPmProject,
   commitPmPin,
   cleanupPmTemp,
-} from '@/package-managers/pm-project';
-import { PmRegistry } from '@/package-managers/pm-registry';
+} from '@/package-managers/discovery/pm-project';
+import { PmRegistry } from '@/package-managers/discovery/pm-registry';
 import type { IPmRuntime } from '@/package-managers/interfaces/pm.runtime';
 
 // TEST only; không phải yêu cầu nghiệp vụ. All project IO and registry are mocked.

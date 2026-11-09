@@ -12,7 +12,7 @@ import {
   toComparable,
 } from '@/common/utils/path.util';
 import type { PathPlatform } from '@/common/utils/path.util';
-import type { ScanRoots } from '@/config/scan-roots';
+import type { ScanRoots } from '@/config/environment/scan-roots';
 import {
   findDenyMatch,
   isInsideProtectedTree,

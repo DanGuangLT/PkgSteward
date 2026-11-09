@@ -17,13 +17,16 @@ import { FileOpsModule } from '@/file-ops/file-ops.module';
 import { FileOpsService } from '@/file-ops/file-ops.service';
 import { ProjectsModule } from '@/projects/projects.module';
 import { ProjectsService } from '@/projects/projects.service';
-import { ProjectRegistry } from '@/projects/project-registry';
+import { ProjectRegistry } from '@/projects/registry/project-registry';
 import { PM_FS, PM_RUNTIME } from '@/package-managers/interfaces/pm.runtime';
 import type {
   IPmFs,
   IPmRuntime,
 } from '@/package-managers/interfaces/pm.runtime';
-import { createPmFs, createPmRuntime } from '@/package-managers/pm-runtime';
+import {
+  createPmFs,
+  createPmRuntime,
+} from '@/package-managers/execution/pm-runtime';
 import { PackageManagersService } from '@/package-managers/package-managers.service';
 import { PackageManagersController } from '@/package-managers/package-managers.controller';
 

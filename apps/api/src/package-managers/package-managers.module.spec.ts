@@ -14,15 +14,15 @@ import { ProjectsService } from '@/projects/projects.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { ConfigService } from '@nestjs/config';
-import { ProjectRegistry } from '@/projects/project-registry';
+import { ProjectRegistry } from '@/projects/registry/project-registry';
 import type { IPmFs } from '@/package-managers/interfaces/pm.runtime';
 import type { IProjectRegistry } from '@/projects/interfaces/projects.runtime';
 
 // Expected RED: module absent; lazy bindings, same gate, static registry, no process module.
 describe('M9 module bindings', () => {
   it.each([
-    'pm-preview.ts',
-    'pm-job.ts',
+    'pinning/pm-preview.ts',
+    'execution/pm-job.ts',
     'package-managers.service.ts',
     'package-managers.controller.ts',
     'package-managers.module.ts',

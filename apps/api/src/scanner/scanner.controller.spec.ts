@@ -11,8 +11,8 @@ import { POLLING_ENDPOINT_KEY } from '@/common/decorators/throttle.decorator';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
-import { SCAN_WALKER } from '@/scanner/scan-walker';
-import { ScannerCache } from '@/scanner/scanner-cache';
+import { SCAN_WALKER } from '@/scanner/discovery/scan-walker';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
 import type { IScanResult } from '@/scanner/interfaces/scanner.types';
 import { ScanIdParamDto } from '@/scanner/dto/scan-id-param.dto';
 import {

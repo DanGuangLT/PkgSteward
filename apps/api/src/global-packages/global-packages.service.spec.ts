@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 import { win32 } from 'node:path';
 import { AppException } from '@/common/exceptions/app.exception';
-import * as locationAdapter from '@/global-packages/global-location';
-import * as inventoryAdapter from '@/global-packages/global-inventory';
-import { GlobalRegistry } from '@/global-packages/global-registry';
+import * as locationAdapter from '@/global-packages/discovery/global-location';
+import * as inventoryAdapter from '@/global-packages/discovery/global-inventory';
+import { GlobalRegistry } from '@/global-packages/registry/global-registry';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
-import { readPnpmGlobalConfig } from '@/global-packages/pnpm-global-config';
-import type { IGlobalInventoryResult } from '@/global-packages/global-inventory';
+import { readPnpmGlobalConfig } from '@/global-packages/config/pnpm-global-config';
+import type { IGlobalInventoryResult } from '@/global-packages/discovery/global-inventory';
 import type {
   IGlobalProbeResult,
   IGlobalResolvedLocation,

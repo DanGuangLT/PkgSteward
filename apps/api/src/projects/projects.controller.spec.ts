@@ -40,8 +40,8 @@ import {
   ProjectOutdatedSectionEntity,
   ProjectScriptEntity,
 } from '@/projects/entities/project.entity';
-import { analyzeProject } from '@/projects/project-analysis';
-import { ProjectRegistry } from '@/projects/project-registry';
+import { analyzeProject } from '@/projects/analysis/project-analysis';
+import { ProjectRegistry } from '@/projects/registry/project-registry';
 import {
   createProjectRegistry,
   createProjectsRuntime,

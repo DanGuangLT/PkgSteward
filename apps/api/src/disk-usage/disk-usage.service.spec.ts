@@ -12,13 +12,13 @@ import * as pathUtil from '@/common/utils/path.util';
 import type { IGuardedPath } from '@/core/path-guard/interfaces/path-guard.types';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
-import { DiskUsageCache } from '@/disk-usage/disk-usage-cache';
+import { DiskUsageCache } from '@/disk-usage/cache/disk-usage-cache';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import {
   createDiskFs,
   DISK_FS,
   DISK_WALKER,
-} from '@/disk-usage/disk-usage-walker';
+} from '@/disk-usage/traversal/disk-usage-walker';
 import type {
   DiskWalker,
   IDiskFs,

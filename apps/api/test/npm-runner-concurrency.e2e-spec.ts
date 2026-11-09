@@ -21,8 +21,8 @@ import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { ScannerService } from '@/scanner/scanner.service';
-import { ScannerCache } from '@/scanner/scanner-cache';
-import { SCAN_WALKER } from '@/scanner/scan-walker';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
+import { SCAN_WALKER } from '@/scanner/discovery/scan-walker';
 import type {
   IScanCacheEntry,
   IStoredScanResult,
@@ -30,14 +30,14 @@ import type {
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
-import { DISK_FS, DISK_WALKER } from '@/disk-usage/disk-usage-walker';
+import { DISK_FS, DISK_WALKER } from '@/disk-usage/traversal/disk-usage-walker';
 import type {
   DiskWalker,
   IDiskFs,
   IDiskUsageJob,
 } from '@/disk-usage/interfaces/disk-usage.types';
 import { FileOpsService } from '@/file-ops/file-ops.service';
-import { GitProbe } from '@/file-ops/git-probe';
+import { GitProbe } from '@/file-ops/git/git-probe';
 import { FILE_OPS_FS } from '@/file-ops/interfaces/file-ops.types';
 import type {
   IExecuteInput,
@@ -63,8 +63,8 @@ import type {
 import type {
   IRunProcessCallbacks,
   IRunProcessExit,
-} from '@/npm-runner/runner-process';
-import { resolveRunnerTool } from '@/npm-runner/runner-tool';
+} from '@/npm-runner/execution/runner-process';
+import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import {
   fsFixture,
   key,

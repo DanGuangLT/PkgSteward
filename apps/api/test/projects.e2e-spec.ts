@@ -26,7 +26,7 @@ import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service'
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
-import { ScannerCache } from '@/scanner/scanner-cache';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
 import { ScannerService } from '@/scanner/scanner.service';
 import type {
   IAnalysisResult,

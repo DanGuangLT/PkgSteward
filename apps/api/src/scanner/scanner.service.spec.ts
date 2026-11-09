@@ -13,11 +13,11 @@ import {
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
-import { UnsupportedDriveDetector } from '@/platform/unsupported-drive-detector';
-import { ScannerCache, makeScanCacheKey } from '@/scanner/scanner-cache';
-import { parseScanRootPaths } from '@/config/scan-roots';
+import { UnsupportedDriveDetector } from '@/platform/drives/unsupported-drive-detector';
+import { ScannerCache, makeScanCacheKey } from '@/scanner/cache/scanner-cache';
+import { parseScanRootPaths } from '@/config/environment/scan-roots';
 import { ScannerService } from '@/scanner/scanner.service';
-import { SCAN_WALKER, walkScan } from '@/scanner/scan-walker';
+import { SCAN_WALKER, walkScan } from '@/scanner/discovery/scan-walker';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { ICompletedDiskSize } from '@/disk-usage/interfaces/disk-usage.types';

@@ -22,16 +22,19 @@ import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
 import {
   readRunnerInput,
   revalidateRunnerInput,
-} from '@/npm-runner/runner-input';
+} from '@/npm-runner/toolchain/runner-input';
 import {
   buildRunCommand,
   isRunnerScriptName,
-} from '@/npm-runner/runner-command';
-import { buildRunnerEnvironment } from '@/npm-runner/runner-environment';
-import { runnerFailure } from '@/npm-runner/runner-tool';
-import { createRunLogStore } from '@/npm-runner/runner-logs';
-import type { IRunLogStore } from '@/npm-runner/runner-logs';
-import type { IRunProcess, IRunProcessExit } from '@/npm-runner/runner-process';
+} from '@/npm-runner/execution/runner-command';
+import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
+import { runnerFailure } from '@/npm-runner/toolchain/runner-tool';
+import { createRunLogStore } from '@/npm-runner/execution/runner-logs';
+import type { IRunLogStore } from '@/npm-runner/execution/runner-logs';
+import type {
+  IRunProcess,
+  IRunProcessExit,
+} from '@/npm-runner/execution/runner-process';
 
 interface IActiveRun {
   job: IRunJob;

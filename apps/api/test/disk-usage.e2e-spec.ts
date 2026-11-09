@@ -14,7 +14,10 @@ import { loadAppConfig } from '@/config/config-loader';
 import { configureApp } from '@/config/configure-app';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
-import { DISK_WALKER, walkDiskUsage } from '@/disk-usage/disk-usage-walker';
+import {
+  DISK_WALKER,
+  walkDiskUsage,
+} from '@/disk-usage/traversal/disk-usage-walker';
 import type {
   DiskWalker,
   IDiskUsageJob,

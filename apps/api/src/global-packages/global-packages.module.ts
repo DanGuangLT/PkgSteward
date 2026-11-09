@@ -33,16 +33,16 @@ import {
   GLOBAL_PACKAGES_PROCESS,
   GLOBAL_PACKAGES_RUNTIME,
 } from '@/global-packages/interfaces/global-packages.runtime';
-import type { IGlobalDirectoryAccess } from '@/global-packages/global-location';
-import { createGlobalProbeSpawn } from '@/global-packages/global-location';
+import type { IGlobalDirectoryAccess } from '@/global-packages/discovery/global-location';
+import { createGlobalProbeSpawn } from '@/global-packages/discovery/global-location';
 import type {
   IRunnerFs,
   IRunnerTool,
 } from '@/npm-runner/interfaces/npm-runner.types';
-import { createRunnerFs } from '@/npm-runner/runner-input';
-import { resolveRunnerTool } from '@/npm-runner/runner-tool';
-import { launchRun } from '@/npm-runner/runner-process';
-import type { IRunProcess } from '@/npm-runner/runner-process';
+import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
+import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
+import { launchRun } from '@/npm-runner/execution/runner-process';
+import type { IRunProcess } from '@/npm-runner/execution/runner-process';
 import { GlobalPackagesController } from '@/global-packages/global-packages.controller';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
 

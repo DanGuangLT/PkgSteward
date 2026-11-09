@@ -34,10 +34,10 @@ import type {
   ScanWalker,
 } from '@/scanner/interfaces/scanner.types';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
-import { SCAN_WALKER } from '@/scanner/scan-walker';
+import { SCAN_WALKER } from '@/scanner/discovery/scan-walker';
 import { ScannerService } from '@/scanner/scanner.service';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
-import { DISK_WALKER } from '@/disk-usage/disk-usage-walker';
+import { DISK_WALKER } from '@/disk-usage/traversal/disk-usage-walker';
 import type { DiskWalker } from '@/disk-usage/interfaces/disk-usage.types';
 import { createTestAppPaths } from './create-test-app-paths';
 

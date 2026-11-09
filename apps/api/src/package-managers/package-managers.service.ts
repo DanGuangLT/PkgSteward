@@ -17,16 +17,16 @@ import type {
   IPmPreviewRequest,
   IPmVersionsRequest,
 } from '@/package-managers/interfaces/pm.types';
-import { PmJob, pmFailureReason } from '@/package-managers/pm-job';
-import { readPmProject } from '@/package-managers/pm-project';
-import { getPmRisk } from '@/package-managers/pm-policy';
+import { PmJob, pmFailureReason } from '@/package-managers/execution/pm-job';
+import { readPmProject } from '@/package-managers/discovery/pm-project';
+import { getPmRisk } from '@/package-managers/pinning/pm-policy';
 import {
   PmPreviewStore,
   assertPmPreviewUnchanged,
   createPmPreview,
   refusePm,
   validatePmConfirmation,
-} from '@/package-managers/pm-preview';
+} from '@/package-managers/pinning/pm-preview';
 
 interface IActivePm {
   activity: PmJob;

@@ -5,7 +5,10 @@ import {
   pathApi,
   toPathPlatform,
 } from '@/common/utils/path.util';
-import { SETTINGS_FILE_KEYS, validateEnv } from '@/config/env.validation';
+import {
+  SETTINGS_FILE_KEYS,
+  validateEnv,
+} from '@/config/environment/env.validation';
 import {
   findPackageRoot,
   findSourceCheckoutDir,

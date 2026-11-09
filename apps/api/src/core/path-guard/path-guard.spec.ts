@@ -4,7 +4,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@/common/exceptions/app.exception';
-import type { ScanRoots } from '@/config/scan-roots';
+import type { ScanRoots } from '@/config/environment/scan-roots';
 import { buildDenylist } from '@/core/path-guard/denylist';
 import { PathGuard } from '@/core/path-guard/path-guard';
 import { ConfigService } from '@nestjs/config';

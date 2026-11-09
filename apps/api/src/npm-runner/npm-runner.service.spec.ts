@@ -13,11 +13,11 @@ import type {
 import type {
   IRunProcessExit,
   IRunProcessCallbacks,
-} from '@/npm-runner/runner-process';
+} from '@/npm-runner/execution/runner-process';
 import {
   readRunnerInput,
   revalidateRunnerInput,
-} from '@/npm-runner/runner-input';
+} from '@/npm-runner/toolchain/runner-input';
 import {
   fsFixture,
   root,
@@ -25,7 +25,7 @@ import {
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 
-jest.mock('@/npm-runner/runner-input', () => ({
+jest.mock('@/npm-runner/toolchain/runner-input', () => ({
   readRunnerInput: jest.fn(),
   revalidateRunnerInput: jest.fn(),
 }));

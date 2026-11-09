@@ -33,10 +33,10 @@ import {
   NotFoundException,
   AppException,
 } from '@/common/exceptions/app.exception';
-import { parseScanRootPaths } from '@/config/scan-roots';
-import { createRunnerFs } from '@/npm-runner/runner-input';
-import { resolveRunnerTool } from '@/npm-runner/runner-tool';
-import { launchRun } from '@/npm-runner/runner-process';
+import { parseScanRootPaths } from '@/config/environment/scan-roots';
+import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
+import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
+import { launchRun } from '@/npm-runner/execution/runner-process';
 import { NpmRunnerController } from '@/npm-runner/npm-runner.controller';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 

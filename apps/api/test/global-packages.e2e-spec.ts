@@ -28,7 +28,7 @@ import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import { ScannerService } from '@/scanner/scanner.service';
-import { ScannerCache } from '@/scanner/scanner-cache';
+import { ScannerCache } from '@/scanner/cache/scanner-cache';
 import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
 import { GLOBAL_PACKAGES_RUNTIME } from '@/global-packages/interfaces/global-packages.runtime';

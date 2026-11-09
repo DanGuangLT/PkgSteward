@@ -6,7 +6,7 @@ import type {
   IGlobalActivityRequest,
   IGlobalVersionsRequest,
 } from '@/global-packages/interfaces/global-packages.types';
-import { isGlobalPackageName } from '@/global-packages/global-policy';
+import { isGlobalPackageName } from '@/global-packages/policy/global-policy';
 
 export class GlobalActivityDto implements IGlobalActivityRequest {
   @ApiProperty({ format: 'uuid' })

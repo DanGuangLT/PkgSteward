@@ -22,8 +22,8 @@ import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { loadAppConfig } from '@/config/config-loader';
 import { configureApp } from '@/config/configure-app';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
-import { createFileOpsFs } from '@/file-ops/file-ops-fs';
-import { GitProbe } from '@/file-ops/git-probe';
+import { createFileOpsFs } from '@/file-ops/deletion/file-ops-fs';
+import { GitProbe } from '@/file-ops/git/git-probe';
 import { FILE_OPS_FS } from '@/file-ops/interfaces/file-ops.types';
 import type {
   IFileOpsOperation,
