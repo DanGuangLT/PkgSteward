@@ -8,6 +8,7 @@ import type { ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
+import { ProjectManagerPanel } from "@/components/features/package-managers/project-manager-panel"
 import { ProjectAdvisories } from "@/components/features/project-detail/project-advisories"
 import { ProjectDependencies } from "@/components/features/project-detail/project-dependencies"
 import { ProjectScripts } from "@/components/features/project-detail/project-scripts"
@@ -70,12 +71,13 @@ export function ProjectDetailPanel({ detail, runner, runnerBusy = false }: { det
           <div><dt className="text-muted-foreground">{t("summary.version")}</dt><dd className="font-mono">{local.version ?? t("summary.unknown")}</dd></div>
           <div><dt className="text-muted-foreground">{t("summary.manager")}</dt><dd>{manager}</dd></div>
           <div><dt className="text-muted-foreground">{t("summary.packageManager")}</dt><dd className="font-mono">{local.packageManager ?? t("summary.unknown")}</dd></div>
-          <div><dt className="text-muted-foreground">{t("summary.installedManager")}</dt><dd>{t("summary.unknown")}</dd></div>
           <div><dt className="text-muted-foreground">{t("summary.lockfile")}</dt><dd className="font-mono">{local.lockfile ?? t("summary.unknown")}</dd></div>
           <div><dt className="text-muted-foreground">{t("summary.readAt")}</dt><dd><time dateTime={local.readAt}>{format.dateTime(new Date(local.readAt), { dateStyle: "medium", timeStyle: "short" })}</time></dd></div>
         </dl>
         {local.warnings.filter(code => code !== "REGISTRY_CONFIG_UNSUPPORTED").map(code => <ProjectErrorMessage key={code} code={code} />)}
       </section>
+
+      <ProjectManagerPanel path={local.requestPath} />
 
       {runner}
 
