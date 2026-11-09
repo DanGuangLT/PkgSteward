@@ -54,9 +54,9 @@ Sao chép `apps/api/.env.example` thành `apps/api/.env` rồi điền `SCAN_ROO
 | `LIST_ORIGIN_CORS` | `http://localhost:24680` | Origin của frontend được CORS cho phép |
 | `SCAN_ROOT_PATHS` | `*` | Các thư mục gốc (đường dẫn tuyệt đối, VD `D:\Projects`) để quét, phân cách bằng dấu phẩy, hoặc `*` (hay để trống) để quét mọi ổ đĩa cố định; `*` phải đứng một mình. Đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
-| `SCAN_TIMEOUT_MS` | `900000` | Giới hạn thời gian (ms) cho một lần quét (tối thiểu `1000`) |
+| `SCAN_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lần quét sau khoảng đó |
 | `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Thư mục dữ liệu runtime (log, cache, `settings.json`): đường dẫn tuyệt đối, hoặc tương đối tính từ thư mục gốc dự án. Mặc định là thư mục `PkgStewardLog` trong thư mục dự án |
-| `NPM_COMMAND_TIMEOUT_MS` | `360000` | Timeout khi chạy lệnh npm / pnpm / Yarn |
+| `NPM_COMMAND_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lệnh npm / pnpm / Yarn sau khoảng đó |
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
 
@@ -114,7 +114,7 @@ Các lệnh của từng ứng dụng nằm ở bảng bên dưới; chạy chú
 ## Cấu trúc thư mục
 
 ```
-apps/api/          API backend (NestJS 11)
+apps/api/          API backend (NestJS 12)
 apps/web/          Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 scripts/           Script của repo (cài đặt từ thư mục gốc, danh sách thư viện bên thứ ba)
 package.json       Chỉ dùng để cài: cài cả hai ứng dụng

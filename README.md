@@ -124,7 +124,7 @@ Each app's scripts are listed below; run them inside its folder.
 ## Project structure
 
 ```
-apps/api/          Backend API (NestJS 11)
+apps/api/          Backend API (NestJS 12)
 apps/web/          Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
 scripts/           Repository scripts (root install, third-party notices)
 package.json       Root install only: installs both apps
