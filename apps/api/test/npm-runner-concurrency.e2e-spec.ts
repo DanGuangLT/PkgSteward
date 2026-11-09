@@ -462,7 +462,7 @@ describe('NpmRunner contention (real shared services, mocked IO)', () => {
       .overrideProvider(AuditLogService)
       .useValue({ append: f.audit })
       .overrideProvider(ScannerCache)
-      .useValue({ load: f.load, save: f.save })
+      .useValue({ load: f.load, save: f.save, flush: () => Promise.resolve() })
       .overrideProvider(SCAN_WALKER)
       .useValue(f.scanWalker)
       .overrideProvider(DISK_WALKER)
