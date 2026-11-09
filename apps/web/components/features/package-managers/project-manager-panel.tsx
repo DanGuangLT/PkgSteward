@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { usePackageManagers } from "@/hooks/use-package-managers"
-import { pmJobSettling, pmMutationSucceeded } from "@/lib/package-managers/pm-session"
+import { pmCleanupPending, pmJobSettling, pmMutationSucceeded, pmReadFailure } from "@/lib/package-managers/pm-session"
 import type { PmState } from "@/lib/package-managers/pm-session"
 import type { PmJob, PmManager, PmWritableManager } from "@/lib/package-managers/pm-types"
 import { projectDetailHref } from "@/lib/projects/project-detail-list"
@@ -61,8 +61,10 @@ export function ProjectManagerPanel({ path }: { path: string }) {
   const catalog = state.versions?.manager === manager ? state.versions : null
   const options = catalog?.versions.filter(item => item.supported) ?? []
   const tagOf = new Map(Object.entries(catalog?.tags ?? {}).map(([tag, version]) => [version, tag]))
-  const busy = state.phase === "starting" || state.phase === "tracking" || state.startUnknown || state.cancelPending
-  const otherRunning = state.otherJob !== null && pmJobSettling(state.otherJob)
+  const cleanupPending = pmCleanupPending(state.job)
+  const busy = state.phase !== "idle" || state.startUnknown || state.cancelPending || cleanupPending
+  const otherRunning = state.otherJob !== null && (pmJobSettling(state.otherJob) || pmCleanupPending(state.otherJob))
+  const readFailure = pmReadFailure(state)
   const blocker = context?.reason ?? context?.pinReason ?? (context?.devEnginesPresent ? "CONFIG_UNSUPPORTED" : null)
   const blocked = busy || otherRunning || !context || blocker !== null
   const pendingKind = state.phase === "starting" || state.phase === "tracking" ? state.activity?.kind : undefined
@@ -162,6 +164,10 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
             onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={XIcon}>{t(state.cancelPending ? "cancelling" : "cancel")}</PmActionLabel></Button>
         ) : null}
+        {cleanupPending ? (
+          <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
+            onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>{t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}</PmActionLabel></Button>
+        ) : null}
         {state.pollError !== null && state.phase === "tracking" ? (
           <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
             onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button>
@@ -179,6 +185,9 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <p className="break-all font-mono">{state.otherJob.path}</p>
           <Link href={projectDetailHref(state.otherJob.path)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
         </div> : null}
+        {state.lostJobId ? <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("lostNotice")}</p> : null}
+        {readFailure ? <p role="alert"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={readFailure} /></p> : null}
+        {cleanupPending ? <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("cleanupPending")}</p> : null}
         {state.error && !state.form.preview ? <p role="alert"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={state.error.code} /></p> : null}
         {state.mutationResult ? <MutationResult job={state.mutationResult} /> : null}
       </div>

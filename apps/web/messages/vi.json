@@ -1038,6 +1038,10 @@
     "cancel": "Huỷ",
     "cancelling": "Đang huỷ…",
     "retryPoll": "Thử lại",
+    "retryCleanup": "Thử hoàn tất lại",
+    "retryingCleanup": "Đang hoàn tất…",
+    "cleanupPending": "Tác vụ ghi đã xong nhưng bước hoàn tất (dọn file tạm, nhật ký hoặc làm mới dữ liệu) chưa xong; các thao tác nguy hiểm khác đang bị khoá. Bấm Thử hoàn tất lại; ứng dụng không ghi lại file.",
+    "lostNotice": "Đã mất dấu tác vụ trước. Nếu đó là thao tác ghi, hãy mở package.json để kiểm tra trước khi thử lại.",
     "statusTitle": "Trạng thái",
     "status": {
       "idle": "Chưa chạy tác vụ nào.",

@@ -1028,6 +1028,10 @@
     "cancel": "Cancel",
     "cancelling": "Cancelling…",
     "retryPoll": "Retry",
+    "retryCleanup": "Retry finishing",
+    "retryingCleanup": "Finishing…",
+    "cleanupPending": "The write task ended but its finishing steps (temporary file, operation log or data refresh) are pending; other dangerous actions stay locked. Select Retry finishing; the app does not write the file again.",
+    "lostNotice": "The previous task can no longer be tracked. If it was a write, open package.json to check it before retrying.",
     "statusTitle": "Status",
     "status": {
       "idle": "No task has run yet.",

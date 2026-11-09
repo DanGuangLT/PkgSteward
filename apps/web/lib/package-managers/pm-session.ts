@@ -45,6 +45,8 @@ export interface PmState {
   pollError: string | null
   startUnknown: boolean
   cancelPending: boolean
+  // A job lost after a 404 whose outcome is unknown; cleared once recovered or a new action starts.
+  lostJobId: string | null
 }
 export interface PmSessionOptions {
   path: string
@@ -66,6 +68,14 @@ export function pmError(cause: unknown): PmError {
 }
 // The server reports status before audit/invalidation finish: only phase "done" is final.
 export const pmJobSettling = (job: PmJob): boolean => job.status === "running" || job.phase !== "done"
+// A settled job may still hold the shared gate until cleanup, audit or refresh finishes.
+export const pmCleanupPending = (job: PmJob | null): boolean =>
+  job !== null && !pmJobSettling(job) && (job.gateHeld || job.cleanupRequired || job.refreshRequired)
+export function pmReadFailure(state: PmState): string | null {
+  const job = state.job
+  if (!job || job.kind === "mutation" || pmJobSettling(job) || job.status === "completed") return null
+  return job.failureCode ?? (job.status === "cancelled" ? "CANCELLED" : job.status === "timed_out" ? "TIMED_OUT" : "UNKNOWN")
+}
 export function pmMutationSucceeded(job: PmJob): boolean {
   return job.kind === "mutation" && job.status === "completed" && job.phase === "done" && job.fileCommitted
     && job.auditWritten && !job.failureCode && !job.gateHeld && !job.refreshRequired && !job.cleanupRequired
@@ -75,7 +85,7 @@ const pathKey = (value: string): string => value.replace(/\//g, "\\").replace(/(
 export function initialPmState(): PmState {
   return { phase: "idle", generation: 0, context: null, contextError: null, contextLoading: false, requestId: null,
     previewId: null, jobId: null, job: null, activity: null, versions: null, mutationResult: null, otherJob: null,
-    form: initialPmPreviewForm(), error: null, pollError: null, startUnknown: false, cancelPending: false }
+    form: initialPmPreviewForm(), error: null, pollError: null, startUnknown: false, cancelPending: false, lostJobId: null }
 }
 
 export function createPmSession({ path, api, clock, visibility, onChange, onMutated, uuid = () => crypto.randomUUID() }: PmSessionOptions) {
@@ -152,7 +162,8 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
   }
   function canPoll(): boolean {
     return !disposed && visibility.isVisible() && state.phase === "tracking" && state.jobId !== null
-      && !state.cancelPending && !state.pollError && commandRequest === null && (!state.job || pmJobSettling(state.job))
+      && !state.cancelPending && !state.pollError && (commandRequest === null || (commandKind === "start" && state.job !== null))
+      && (!state.job || pmJobSettling(state.job))
   }
   async function poll(): Promise<void> {
     if (pollRequest || !canPoll() || !state.jobId) return
@@ -191,7 +202,7 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
     requestKind = job.kind
     publish({ ...state, generation, phase: "tracking", jobId: job.jobId, requestId: job.requestId, previewId: job.previewId,
       activity: { kind: job.kind, manager: job.manager }, error: null, pollError: null, startUnknown: false,
-      cancelPending: false, form: job.kind === "mutation" ? clearPmPreview(state.form) : state.form })
+      cancelPending: false, lostJobId: null, form: job.kind === "mutation" ? clearPmPreview(state.form) : state.form })
     receiveJob(job)
     void poll()
   }
@@ -209,7 +220,8 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
       }
       publish({ ...state, otherJob: null })
       // Only one job runs at a time: a running job that is not ours means our start was refused.
-      if (recoveringStart ? latest.requestId === state.requestId : pmJobSettling(latest) && state.phase === "idle") track(latest)
+      if (recoveringStart ? latest.requestId === state.requestId
+        : latest.jobId === state.lostJobId || ((pmJobSettling(latest) || pmCleanupPending(latest)) && state.phase === "idle")) track(latest)
     } catch (cause) {
       if (active(controller, generation) && !recoveringStart) publish({ ...state, error: pmError(cause) })
     } finally {
@@ -218,7 +230,8 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
   }
   function blocked(): boolean {
     return disposed || commandRequest !== null || state.startUnknown || state.cancelPending || state.phase !== "idle"
-      || (state.job !== null && pmJobSettling(state.job)) || (state.otherJob !== null && pmJobSettling(state.otherJob))
+      || (state.job !== null && (pmJobSettling(state.job) || pmCleanupPending(state.job)))
+      || (state.otherJob !== null && (pmJobSettling(state.otherJob) || pmCleanupPending(state.otherJob)))
   }
   async function begin(kind: PmJobKind, manager: PmManager, input: { requestId: string; previewId?: string },
     send: (signal: AbortSignal) => Promise<PmJobStart>): Promise<void> {
@@ -227,10 +240,20 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
     if (kind === "preview") previewSelectionVersion = selectionVersion
     publish({ ...state, phase: "starting", generation, requestId: input.requestId, previewId: input.previewId ?? null,
       jobId: null, job: null, activity: { kind, manager }, mutationResult: kind === "mutation" ? null : state.mutationResult,
-      error: null, pollError: null, startUnknown: false, cancelPending: false })
+      error: null, pollError: null, startUnknown: false, cancelPending: false, lostJobId: null })
     const controller = new AbortController()
     commandRequest = controller
     commandKind = "start"
+    // Execute answers only after preflight: find the admitted job through latest meanwhile, so it can be cancelled.
+    let discovery: number | null = null
+    const discover = () => {
+      discovery = clock.setTimeout(() => {
+        discovery = null
+        if (disposed || commandRequest !== controller || state.jobId) return
+        void recoverLatest(true).finally(() => { if (commandRequest === controller && !state.jobId) discover() })
+      }, 1000)
+    }
+    if (kind === "mutation") discover()
     try {
       const started = await send(controller.signal)
       if (!active(controller, generation) || commandRequest !== controller) return
@@ -252,6 +275,7 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
         }
       }
     } finally {
+      if (discovery !== null) clock.clearTimeout(discovery)
       if (commandRequest === controller) { commandRequest = null; commandKind = null }
       if (active(controller, generation)) {
         if (kind === "preview" && stoppedPreviewRequest === input.requestId && state.jobId) void cancel()
@@ -313,7 +337,7 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
   }
   async function cancel(): Promise<void> {
     if (disposed || state.cancelPending || !state.jobId || commandKind === "cancel"
-      || (state.job ? !pmJobSettling(state.job) : state.phase !== "tracking")) return
+      || (state.job ? !pmJobSettling(state.job) && !pmCleanupPending(state.job) : state.phase !== "tracking")) return
     const id = state.jobId
     const generation = invalidate()
     publish({ ...state, generation, phase: "tracking", cancelPending: true, error: null, pollError: null })
@@ -343,6 +367,12 @@ export function createPmSession({ path, api, clock, visibility, onChange, onMuta
   }
   async function refresh(): Promise<void> {
     if (disposed) return
+    if (state.phase === "lost") {
+      const lostJobId = state.jobId
+      const generation = invalidate()
+      publish({ ...state, generation, phase: "idle", jobId: null, job: null, requestId: null, previewId: null,
+        activity: null, error: null, pollError: null, cancelPending: false, lostJobId })
+    }
     await Promise.all([loadContext(), recoverLatest(state.startUnknown)])
   }
   const unsubscribe = visibility.subscribe(() => {

@@ -1,7 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ApiError } from "../api/response.ts"
-import { createPmSession, pmMutationSucceeded } from "./pm-session.ts"
+import { createPmSession, pmCleanupPending, pmMutationSucceeded, pmReadFailure } from "./pm-session.ts"
 
 // TEST data; not business requirements.
 const PATH = "D:\\TEST\\app"
@@ -242,6 +242,84 @@ test("cancel of a running mutation keeps the server outcome and its flags", asyn
   assert.equal(h.state().mutationResult.mayHaveChanged, true)
   assert.equal(h.mutated.length, 1)
   assert.equal(h.state().cancelPending, false)
+})
+
+test("a finished mutation that still holds the gate offers a cleanup-only retry through cancel", async () => {
+  const h = harness()
+  h.queue.get.push(done({ kind: "preview", previewId: "TEST-preview", preview: previewData() }))
+  await h.session.preview({ manager: "pnpm", targetVersion: "11.22.0" })
+  await flush(); await flush()
+  const held = done({ kind: "mutation", requestId: "TEST-2", previewId: "TEST-preview", fileCommitted: true, mayHaveChanged: true, gateHeld: true, cleanupRequired: true })
+  h.queue.get.push(held)
+  await h.session.execute()
+  await flush(); await flush()
+  assert.equal(pmCleanupPending(h.state().job), true)
+  h.api.cancel = async id => { h.calls.push(["cancel", id]); return { ...held, gateHeld: false, cleanupRequired: false, auditWritten: true } }
+  await h.session.cancel()
+  assert.ok(h.calls.some(([name]) => name === "cancel"))
+  assert.equal(pmCleanupPending(h.state().job), false)
+  assert.equal(pmMutationSucceeded(h.state().mutationResult), true)
+})
+
+test("failed read jobs keep a displayable failure code", async () => {
+  const h = harness()
+  h.queue.get.push(done({ status: "failed", failureCode: "REGISTRY_UNAVAILABLE" }))
+  await h.session.loadVersions("pnpm")
+  await flush(); await flush()
+  assert.equal(pmReadFailure(h.state()), "REGISTRY_UNAVAILABLE")
+  h.queue.get.push(done({ requestId: "TEST-2", status: "timed_out" }))
+  await h.session.loadVersions("pnpm")
+  await flush(); await flush()
+  assert.equal(pmReadFailure(h.state()), "TIMED_OUT")
+  h.queue.get.push(done({ requestId: "TEST-3", versions: { manager: "pnpm", versions: [], tags: {}, asOf: T, stale: false } }))
+  await h.session.loadVersions("pnpm")
+  await flush(); await flush()
+  assert.equal(pmReadFailure(h.state()), null)
+})
+
+test("while execute waits for preflight, the admitted job is found through latest and can be cancelled", async () => {
+  const h = harness()
+  h.queue.get.push(done({ kind: "preview", previewId: "TEST-preview", preview: previewData() }))
+  await h.session.preview({ manager: "pnpm", targetVersion: "11.22.0" })
+  await flush(); await flush()
+  h.api.execute = input => { h.calls.push(["execute", input]); return new Promise(() => {}) }
+  const pending = job({ kind: "mutation", requestId: "TEST-2", previewId: "TEST-preview", phase: "fetching" })
+  h.api.latest = async () => { h.calls.push(["latest"]); return pending }
+  void h.session.execute()
+  await flush()
+  assert.equal(h.state().jobId, null)
+  h.queue.get.push(pending)
+  await h.tick()
+  assert.equal(h.state().jobId, "TEST-job")
+  assert.equal(h.state().form.preview, null)
+  h.api.cancel = async id => { h.calls.push(["cancel", id]); return done({ kind: "mutation", requestId: "TEST-2", previewId: "TEST-preview", status: "cancelled", cancelRequested: true }) }
+  await h.session.cancel()
+  assert.ok(h.calls.some(([name]) => name === "cancel"))
+  assert.equal(h.state().mutationResult.status, "cancelled")
+  assert.equal(h.calls.filter(([name]) => name === "execute").length, 1)
+})
+
+test("refresh reconciles a lost job: a retained result is shown, otherwise actions unblock with the unknown notice", async () => {
+  const h = harness()
+  h.queue.get.push(() => { throw new ApiError(404, "TEST", "NOT_FOUND") })
+  await h.session.loadVersions("pnpm")
+  await flush(); await flush()
+  assert.equal(h.state().phase, "lost")
+  h.api.latest = async () => done({ versions: { manager: "pnpm", versions: [], tags: { latest: "11.22.0" }, asOf: T, stale: false } })
+  await h.session.refresh()
+  assert.equal(h.state().phase, "idle")
+  assert.equal(h.state().versions.tags.latest, "11.22.0")
+  const second = harness()
+  second.queue.get.push(() => { throw new ApiError(404, "TEST", "NOT_FOUND") })
+  await second.session.loadVersions("pnpm")
+  await flush(); await flush()
+  second.api.latest = async () => null
+  await second.session.refresh()
+  assert.equal(second.state().phase, "idle")
+  assert.equal(second.state().lostJobId, "TEST-job")
+  second.queue.get.push(done())
+  await second.session.loadVersions("pnpm")
+  assert.ok(second.calls.filter(([name]) => name === "versions").length === 2)
 })
 
 test("dispose clears timers and ignores late responses", async () => {
