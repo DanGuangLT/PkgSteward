@@ -106,15 +106,15 @@ export class PmRegistry implements IPmRegistry {
       known.add(version);
       await checkpoint();
     }
+    // Real packuments carry tag names a client cannot request (npm has `v6.14-next`):
+    // drop those instead of rejecting the catalog. Requestable tags must still resolve.
+    const requestable: [string, string][] = [];
     for (const [tag, version] of tags) {
-      if (
-        !TAG.test(tag) ||
-        /[\r\n]/.test(tag) ||
-        !canonical(version) ||
-        !known.has(version)
-      )
-        throw failure('REGISTRY_INVALID_RESPONSE');
       await checkpoint();
+      if (!TAG.test(tag)) continue;
+      if (!canonical(version) || !known.has(version))
+        throw failure('REGISTRY_INVALID_RESPONSE');
+      requestable.push([tag, version]);
     }
     const deprecatedSet = new Set<string>();
     for (const version of deprecated) {
@@ -131,7 +131,7 @@ export class PmRegistry implements IPmRegistry {
     const ordered = [...known].sort(semver.rcompare);
     const metadata: IRegistryPackageMetadata = {
       versions: ordered,
-      distTags: Object.fromEntries(tags),
+      distTags: Object.fromEntries(requestable),
       deprecatedVersions: [...deprecatedSet],
     };
     return {

@@ -120,12 +120,35 @@ describe('M9 public declaration catalog', () => {
     { versions: ['11.1.0', '11.1.0'], distTags: {} },
     { versions: ['11.1.0'], distTags: { latest: '11.2.0' } },
     { versions: ['11.1.0'], distTags: {}, deprecatedVersions: ['11.2.0'] },
-    { versions: ['11.1.0'], distTags: { 'bad\n': '11.1.0' } },
   ])('refuses malformed projected metadata %p', async (value) => {
     const f = setup();
     f.getPackageMetadata.mockResolvedValueOnce(
       value as IRegistryPackageMetadata,
     );
+    await expect(f.read()).rejects.toMatchObject({
+      details: { reason: 'REGISTRY_INVALID_RESPONSE' },
+    });
+  });
+  it('drops tags whose names cannot be requested (real npm has v6.14-next) and keeps the catalog', async () => {
+    const f = setup();
+    f.getPackageMetadata.mockResolvedValueOnce({
+      versions: ['11.1.0', '6.14.18'],
+      distTags: {
+        latest: '11.1.0',
+        'v6.14-next': '6.14.18',
+        'bad\n': '11.1.0',
+      },
+    });
+    const catalog = await f.read();
+    expect(catalog.tags).toEqual({ latest: '11.1.0' });
+    expect(catalog.metadata.distTags).toEqual({ latest: '11.1.0' });
+  });
+  it('still refuses a requestable tag that points outside the catalog', async () => {
+    const f = setup();
+    f.getPackageMetadata.mockResolvedValueOnce({
+      versions: ['11.1.0'],
+      distTags: { latest: '11.1.0', next: '11.9.0' },
+    });
     await expect(f.read()).rejects.toMatchObject({
       details: { reason: 'REGISTRY_INVALID_RESPONSE' },
     });
