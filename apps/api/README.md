@@ -160,8 +160,8 @@ are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles re
 
 Run one command in a project from the latest scan: install all dependencies, install one package, update all,
 update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 11, npm 12
-and pnpm 11**; npm 12 prereleases and other majors are refused. Previously verified with npm 11.17.0,
-pnpm 11.22.0 and Node 24.19.0; **npm 12 support is pending real-run verification**.
+and pnpm 11**; npm 12 prereleases and other majors are refused. Verified with npm 11.17.0,
+npm 12.2.2, pnpm 11.22.0 and Node 24.19.0.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
 With installed npm 12, a project containing any `npm-shrinkwrap.json` (even alongside `package-lock.json`)
@@ -394,8 +394,8 @@ List, remove or change an installed global package with **npm 11, npm 12 or pnpm
 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`); Yarn is not supported.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
-Previously verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0; **npm 12 support and its global script
-behavior are pending real-run verification**.
+Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0; how npm 12 handles install scripts of
+global packages has not been verified.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
 An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.
@@ -572,7 +572,7 @@ All routes below use `/api/v1/package-managers` and the standard response envelo
   a project with any `npm-shrinkwrap.json` is also refused (`CONFIG_UNSUPPORTED`), even alongside `package-lock.json`.
   An old npm 11 pin can be repaired to installed npm 12, and vice versa; the target must match the installed
   major and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
-  the same-major target's Node engines are not checked. npm 12 support is pending real-run verification.
+  the same-major target's Node engines are not checked.
 - **Registry:** version lists come only from `https://registry.npmjs.org` for the package names `npm`, `pnpm`
   and `yarn` (Classic). Requests carry no credentials or project data and do not follow redirects. Project or user
   registry configuration is not consulted; the pin is a declaration that other tools later resolve with their own
