@@ -351,6 +351,40 @@ describe('readNpmLock', () => {
     expect(result.direct.size).toBe(0);
   });
 
+  it('reads synthetic npm 12 v3 into a complete audit inventory', async () => {
+    const input = manifest();
+    input.packageManager = 'npm@12.2.2';
+    const result = await read(fixture('npm12/package-lock.json'), input);
+    expect(result).toMatchObject({
+      coverage: 'complete',
+      failureCode: null,
+      warningCodes: [],
+    });
+    expect(result.direct).toEqual(new Map([['alpha', ['1.2.0']]]));
+    expect(result.packages).toEqual([
+      { name: '@scope/extra', version: '2.0.0', direct: false },
+      { name: 'alpha', version: '1.1.0', direct: true },
+      { name: 'alpha', version: '1.2.0', direct: true },
+    ]);
+  });
+  it.each([
+    ['{"lockfileVersion":1}', 'UNSUPPORTED_LOCKFILE'],
+    ['{"lockfileVersion":4}', 'UNSUPPORTED_LOCKFILE'],
+    ['{', 'INVALID_LOCKFILE'],
+    ['{"lockfileVersion":3,"packages":[]}', 'INVALID_LOCKFILE'],
+  ] as const)(
+    'retains schema failure %s with an explicit npm 12 pin',
+    async (text, code) => {
+      const input = manifest();
+      input.packageManager = 'npm@12.2.2';
+      expect(await read(text, input)).toMatchObject({
+        coverage: 'unavailable',
+        failureCode: code,
+        warningCodes: [code],
+        packages: [],
+      });
+    },
+  );
   it('marks v1 unsupported', async () => {
     expect(await read(fixture('unsupported/npm-v1.json'))).toMatchObject({
       coverage: 'unavailable',

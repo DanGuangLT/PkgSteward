@@ -13,6 +13,7 @@ import {
   pathApi,
   toComparable,
 } from '@/common/utils/path.util';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 import type {
   IManifestDependency,
   IManifestInput,
@@ -133,18 +134,23 @@ function selectLock(
   locks: ReadonlyMap<ProjectLockName, IInputFile | null>,
   warnings: Set<ProjectAnalysisCode>,
 ): { manager: ProjectManager; name: ProjectLockName | null } {
-  const npm = locks.get('npm-shrinkwrap.json')
-    ? 'npm-shrinkwrap.json'
-    : locks.get('package-lock.json')
-      ? 'package-lock.json'
-      : null;
+  const pin = manifest.packageManager?.match(
+    /^(npm|pnpm|yarn)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\+[0-9A-Za-z.-]+)?$/,
+  );
+  const packageLockOnly =
+    pin?.[1] === 'npm' &&
+    isSupportedRunnerVersion('npm', pin[2]) &&
+    semver.major(pin[2]) === 12;
+  const npm =
+    !packageLockOnly && locks.get('npm-shrinkwrap.json')
+      ? 'npm-shrinkwrap.json'
+      : locks.get('package-lock.json')
+        ? 'package-lock.json'
+        : null;
   const available = new Map<ProjectManager, ProjectLockName>();
   if (npm) available.set('npm', npm);
   if (locks.get('pnpm-lock.yaml')) available.set('pnpm', 'pnpm-lock.yaml');
   if (locks.get('yarn.lock')) available.set('yarn', 'yarn.lock');
-  const pin = manifest.packageManager?.match(
-    /^(npm|pnpm|yarn)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\+[0-9A-Za-z.-]+)?$/,
-  );
   if (pin && semver.valid(pin[2])) {
     const manager = pin[1] as 'npm' | 'pnpm' | 'yarn';
     const name = available.get(manager) ?? null;
@@ -344,9 +350,13 @@ export async function readProjectInput(
   hashField('package.json', manifestFile.bytes);
   for (const name of LOCK_NAMES) {
     const file = locks.get(name);
+    // Keep ignored npm 12 shrinkwrap bytes in the input-change fingerprint.
+    const hashContents =
+      selected.name === name ||
+      (selected.manager === 'npm' && name === 'npm-shrinkwrap.json');
     hashField(
       name,
-      file ? (selected.name === name ? file.bytes : Buffer.alloc(0)) : null,
+      file ? (hashContents ? file.bytes : Buffer.alloc(0)) : null,
     );
   }
   for (const name of CONFIG_NAMES)

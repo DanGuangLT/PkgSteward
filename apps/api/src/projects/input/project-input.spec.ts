@@ -643,6 +643,157 @@ describe('readProjectInput', () => {
       text: '{"TEST":"shrinkwrap"}',
     });
   });
+  describe('explicit npm 12 lock selection', () => {
+    const npm12 = () => {
+      const f = fixture();
+      f.put(
+        'package.json',
+        JSON.stringify({
+          name: 'TEST-npm12',
+          description: 'không phải yêu cầu nghiệp vụ',
+          packageManager: 'npm@12.2.2',
+          dependencies: { alpha: '^1.0.0' },
+        }),
+      );
+      return f;
+    };
+    it.each(['npm@12.0.0', 'npm@12.2.2', 'npm@12.2.2+sha512.TEST'])(
+      'selects package-lock with both npm locks for %s',
+      async (packageManager) => {
+        const f = npm12();
+        f.put('package.json', JSON.stringify({ packageManager }));
+        const text = fixtureText('npm12/package-lock.json');
+        f.put('package-lock.json', text);
+        f.put('npm-shrinkwrap.json', '{"TEST":"ignored shrinkwrap"}');
+        f.put('pnpm-lock.yaml', '# TEST');
+        f.put('yarn.lock', '# TEST');
+        const input = await f.read();
+        expect(input.manager).toBe('npm');
+        expect(input.lock).toEqual({ name: 'package-lock.json', text });
+        expect(input.warningCodes).toEqual([]);
+      },
+    );
+    it('reports NO_LOCKFILE for shrinkwrap alone', async () => {
+      const f = npm12();
+      f.put('npm-shrinkwrap.json', fixtureText('npm12/package-lock.json'));
+      const input = await f.read();
+      expect(input.manager).toBe('npm');
+      expect(input.lock).toBeNull();
+      expect(input.warningCodes).toEqual(['NO_LOCKFILE']);
+    });
+    it('keeps other lock families mismatched without package-lock', async () => {
+      const f = npm12();
+      f.put('npm-shrinkwrap.json', '{}');
+      f.put('pnpm-lock.yaml', '# TEST');
+      const input = await f.read();
+      expect(input.manager).toBe('npm');
+      expect(input.lock).toBeNull();
+      expect(input.warningCodes).toEqual(['LOCKFILE_MISMATCH']);
+    });
+    it.each([false, true])(
+      'hashes ignored shrinkwrap bytes/absence with package-lock present=%s',
+      async (withPackageLock) => {
+        const f = npm12();
+        if (withPackageLock)
+          f.put('package-lock.json', fixtureText('npm12/package-lock.json'));
+        const absent = await f.read();
+        f.put('npm-shrinkwrap.json', '{"TEST":"first"}');
+        const first = await f.read();
+        f.put('npm-shrinkwrap.json', '{"TEST":"other"}');
+        const changed = await f.read();
+        expect(first.inputHash).not.toBe(absent.inputHash);
+        expect(changed.inputHash).not.toBe(first.inputHash);
+        expect((await f.read()).inputHash).toBe(changed.inputHash);
+        expect(changed.lock).toEqual(absent.lock);
+        const file = key(path.join(f.root, 'npm-shrinkwrap.json'));
+        f.files.delete(file);
+        f.stats.delete(file);
+        expect((await f.read()).inputHash).toBe(absent.inputHash);
+      },
+    );
+    it.each(['linked', 'escaping', 'oversized', 'unreadable'] as const)(
+      'retains %s ignored shrinkwrap warnings and the selected package-lock',
+      async (failure) => {
+        const f = npm12();
+        f.put('package-lock.json', fixtureText('npm12/package-lock.json'));
+        f.put('npm-shrinkwrap.json', '{}');
+        const file = key(path.join(f.root, 'npm-shrinkwrap.json'));
+        if (failure === 'linked')
+          f.stats.set(file, stat(2, { isSymbolicLink: () => true }));
+        if (failure === 'escaping')
+          f.realpaths.set(file, 'D:\\TEST\\outside\\shrinkwrap');
+        if (failure === 'oversized')
+          f.stats.set(file, stat(32 * 1024 * 1024 + 1));
+        if (failure === 'unreadable') {
+          const original = f.lstat.getMockImplementation()!;
+          f.lstat.mockImplementation((value) =>
+            key(value) === file
+              ? Promise.reject(errno('EACCES'))
+              : original(value),
+          );
+        }
+        const input = await f.read();
+        expect(input.lock?.name).toBe('package-lock.json');
+        expect(input.warningCodes).toEqual([
+          failure === 'oversized' ? 'LIMIT_EXCEEDED' : 'UNREADABLE_INPUT',
+        ]);
+      },
+    );
+    it('rejects replacement during an ignored shrinkwrap read', async () => {
+      const f = npm12();
+      f.put('package-lock.json', fixtureText('npm12/package-lock.json'));
+      f.put('npm-shrinkwrap.json', '{}');
+      const original = f.readChunks.getMockImplementation()!;
+      f.readChunks.mockImplementation(async function* (file, signal) {
+        yield* original(file, signal);
+        if (path.basename(file) === 'npm-shrinkwrap.json')
+          f.stats.set(key(file), stat(2, { ino: 99 }));
+      });
+      await expect(f.read()).rejects.toMatchObject({
+        details: { reason: 'INPUT_CHANGED' },
+      });
+    });
+    it.each([
+      [null, 'ambiguous', null, ['LOCKFILE_MISMATCH']],
+      ['npm@11.17.0', 'npm', 'npm-shrinkwrap.json', []],
+      ['npm@13.0.0', 'npm', 'npm-shrinkwrap.json', []],
+      ['npm@12.2.2-pre.0', 'npm', 'npm-shrinkwrap.json', []],
+      [
+        'npm@12',
+        'ambiguous',
+        null,
+        ['LOCKFILE_MISMATCH', 'UNSUPPORTED_MANAGER'],
+      ],
+      ['pnpm@11.0.0', 'pnpm', 'pnpm-lock.yaml', []],
+      ['yarn@1.22.22', 'yarn', 'yarn.lock', []],
+    ] as const)(
+      'preserves mixed-lock selection for pin %s',
+      async (packageManager, manager, name, warnings) => {
+        const f = fixture();
+        f.put('package.json', JSON.stringify({ packageManager }));
+        f.put('npm-shrinkwrap.json', '{}');
+        f.put('package-lock.json', '{}');
+        f.put('pnpm-lock.yaml', '# TEST');
+        f.put('yarn.lock', '# TEST');
+        const input = await f.read();
+        expect(input.manager).toBe(manager);
+        expect(input.lock?.name ?? null).toBe(name);
+        expect(input.warningCodes).toEqual(warnings);
+      },
+    );
+    it.each([null, 'npm@11.17.0'])(
+      'preserves selected-only lock hashing for pin %s',
+      async (packageManager) => {
+        const f = fixture();
+        f.put('package.json', JSON.stringify({ packageManager }));
+        f.put('npm-shrinkwrap.json', '{}');
+        f.put('package-lock.json', '{"TEST":"first"}');
+        const first = await f.read();
+        f.put('package-lock.json', '{"TEST":"other"}');
+        expect((await f.read()).inputHash).toBe(first.inputHash);
+      },
+    );
+  });
   it('never changes managers to accommodate an inconsistent pin and lock', async () => {
     const f = fixture();
     f.put('package.json', '{"packageManager":"npm@11.0.0"}');
