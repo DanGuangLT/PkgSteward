@@ -118,7 +118,10 @@ from the latest scan return `409 CONFLICT` with reason `PROJECT_NOT_SCANNED`.
   configuration are used. A bounded project-level config text check for registry/authentication keys disables
   online checks with `REGISTRY_CONFIG_UNSUPPORTED`, including when those keys occur in comments. Local detail
   remains available. Offline/registry failures retain local information and any positive findings.
-- **Lock support:** npm lock v2/v3 (shrinkwrap takes precedence), pnpm lock v9, and Yarn Classic v1. Yarn Berry
+- **Lock support:** npm lock v2/v3, pnpm lock v9, and Yarn Classic v1. For npm, shrinkwrap takes precedence,
+  except that an explicit valid `npm@12.x` pin selects `package-lock.json` only (shrinkwrap alone returns
+  `NO_LOCKFILE`). Analysis reads the stored lock: without an explicit npm 12 pin it cannot promise which lock an
+  active npm 12 would choose. Yarn Berry
   and other schemas have unavailable audit coverage (`UNSUPPORTED_LOCKFILE`). Missing or mismatched local locks
   likewise prevent a complete audit; manifest-based wanted/latest checks may still work. No parent lock search,
   package resolver, dependency graph or installed-tree traversal is performed.
@@ -156,10 +159,16 @@ are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles re
 ## Command runner API
 
 Run one command in a project from the latest scan: install all dependencies, install one package, update all,
-update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 11 and pnpm 11**,
-verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0. Yarn projects return `UNSUPPORTED_MANAGER`; pnpm without
-a resolvable global installation returns `TOOL_NOT_FOUND`. Corepack-only or unknown installation layouts are
-refused; the app never downloads or switches tools. A workspace root allows all actions; a workspace member
+update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 11, npm 12
+and pnpm 11**; npm 12 prereleases and other majors are refused. Previously verified with npm 11.17.0,
+pnpm 11.22.0 and Node 24.19.0; **npm 12 support is pending real-run verification**.
+Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
+metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
+With installed npm 12, a project containing any `npm-shrinkwrap.json` (even alongside `package-lock.json`)
+refuses every action with `CONFIG_UNSUPPORTED`; nothing is converted, deleted or renamed. Yarn projects return
+`UNSUPPORTED_MANAGER`; pnpm without a resolvable global installation returns `TOOL_NOT_FOUND`. Corepack-only or
+unknown installation layouts are refused; the app never downloads or switches tools. A workspace root allows all
+actions; a workspace member
 allows scripts only (`WORKSPACE_LEAF`). A `packageManager` pin must match the installed major
 (`TOOL_VERSION_MISMATCH` otherwise); other version differences warn with `PACKAGE_MANAGER_PIN_DIFFERS`.
 
@@ -169,6 +178,13 @@ files outside the project. Logs may reveal secrets. There is no rollback: a stop
 partial changes. Stop may miss processes that escape the tracked tree, including descendants whose intermediate
 parent exits before discovery. Replacing the project folder through a junction swap at the exact moment of
 launch is not fully prevented. Run starts without a preview/confirmation step.
+
+With npm 12, dependency lifecycle scripts may be skipped even when the command exits zero unless the root
+project's `allowScripts` permits them. Root and explicitly run scripts still execute; root `preinstall` runs
+before dependencies are installed. Inspect `allowScripts` yourself: the app does not approve scripts, rebuild
+packages or recover missing build artifacts. Arguments and environment are unchanged; the app adds no
+ignore-scripts, allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail the job without
+an automatic retry.
 
 | Endpoint | Result |
 |---|---|
@@ -374,8 +390,12 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Global packages API
 
-List, remove or change an installed global package with **npm 11 or pnpm 11** on Windows. Other pnpm majors
-are refused (`TOOL_VERSION_MISMATCH`); Yarn is not supported.
+List, remove or change an installed global package with **npm 11, npm 12 or pnpm 11** on Windows. npm 12
+prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`); Yarn is not supported.
+Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
+metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
+Previously verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0; **npm 12 support and its global script
+behavior are pending real-run verification**.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
 An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.
@@ -545,10 +565,14 @@ All routes below use `/api/v1/package-managers` and the standard response envelo
 
 - **Scope:** `path` must be a project root in the latest scan and pass the path guard. `manager` is `npm` or `pnpm`
   for changes; Yarn pins are shown read-only. A new pin is `<manager>@<exact>` for a **stable, non-deprecated
-  version with the same major as the installed tool** (npm 11 / pnpm 11); `targetVersion` may be an exact version
-  or a dist-tag resolved to one. An old pin hash is dropped (`PIN_HASH_REMOVED`) and never invented. Workspace
-  members (`WORKSPACE_LEAF`), unsupported current values (`PIN_UNSUPPORTED`), `devEngines` (`CONFIG_UNSUPPORTED`)
-  and lockfiles of another family (`LOCKFILE_MISMATCH`) are refused.
+  version with the same major as the installed tool** (npm 11 / npm 12 / pnpm 11); `targetVersion` may be an exact
+  version or a dist-tag resolved to one. An old pin hash is dropped (`PIN_HASH_REMOVED`) and never invented.
+  Workspace members (`WORKSPACE_LEAF`), unsupported current values (`PIN_UNSUPPORTED`), `devEngines`
+  (`CONFIG_UNSUPPORTED`) and lockfiles of another family (`LOCKFILE_MISMATCH`) are refused. With installed npm 12,
+  a project with any `npm-shrinkwrap.json` is also refused (`CONFIG_UNSUPPORTED`), even alongside `package-lock.json`.
+  An old npm 11 pin can be repaired to installed npm 12, and vice versa; the target must match the installed
+  major and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
+  the same-major target's Node engines are not checked. npm 12 support is pending real-run verification.
 - **Registry:** version lists come only from `https://registry.npmjs.org` for the package names `npm`, `pnpm`
   and `yarn` (Classic). Requests carry no credentials or project data and do not follow redirects. Project or user
   registry configuration is not consulted; the pin is a declaration that other tools later resolve with their own
