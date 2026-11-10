@@ -32,7 +32,7 @@
       "packageNameHint": "Package name only, such as @scope/name. No version or command flags."
     },
     "trust": {
-      "projectCode": "Only run projects you trust. Commands may execute project and lifecycle code with your user permissions. npm 12 may skip dependency scripts even when the command succeeds, unless the root allowScripts permits them; root and explicitly run scripts still execute, and root preinstall runs before dependencies are installed. Inspect allowScripts yourself; the app does not approve scripts, rebuild packages or recover missing build artifacts. npm 12 support is pending real-run verification.",
+      "projectCode": "Only run projects you trust. Commands may execute project and lifecycle code with your user permissions. npm 12 may skip dependency scripts even when the command succeeds, unless the root allowScripts permits them; root and explicitly run scripts still execute, and root preinstall runs before dependencies are installed. Inspect allowScripts yourself; the app does not approve scripts, rebuild packages or recover missing build artifacts.",
       "config": "Configuration in .npmrc, pnpmfile and plugins may execute code or affect tool behavior. Strict npm configuration may make the command fail; the app adds no ignore-scripts, allow-scripts or strict-npmrc overrides and does not retry automatically.",
       "network": "Commands may use the network, shared stores and access or change files outside the project.",
       "logs": "Logs may reveal secrets; filtering cannot guarantee removal of every secret.",
@@ -881,7 +881,7 @@
       "description": "Review the exact operation and its machine-wide effects before confirming.",
       "change": "Current version → result",
       "warnings": "Read before continuing",
-      "lifecycle": "Package lifecycle scripts can run across the machine with your user privileges. They are not isolated. npm 12 script handling for globals may differ; npm 12 support and global script behavior are pending real-run verification.",
+      "lifecycle": "Package lifecycle scripts can run across the machine with your user privileges. They are not isolated. npm 12 may handle install scripts of global packages differently; this has not been verified.",
       "consumers": "Other programs and terminals using this package will be affected. All consumers cannot be detected.",
       "partial": "Failure, cancellation or timeout can leave a partial change.",
       "crash": "After a backend crash, check Task Manager for remaining processes before taking another action.",

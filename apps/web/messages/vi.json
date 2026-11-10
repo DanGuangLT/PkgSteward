@@ -32,7 +32,7 @@
       "packageNameHint": "Chỉ nhập tên package, ví dụ @scope/name. Không kèm phiên bản hay cờ lệnh."
     },
     "trust": {
-      "projectCode": "Chỉ chạy dự án bạn tin cậy. Lệnh có thể chạy mã dự án và lifecycle với quyền của bạn. npm 12 có thể bỏ qua script của dependency dù lệnh thành công nếu allowScripts ở gốc chưa cho phép; script ở gốc và script được chạy tường minh vẫn thực thi, còn preinstall ở gốc chạy trước khi cài dependency. Hãy tự kiểm tra allowScripts; ứng dụng không phê duyệt script, rebuild package hay khôi phục sản phẩm build bị thiếu. Hỗ trợ npm 12 đang chờ kiểm chứng bằng lần chạy thực tế.",
+      "projectCode": "Chỉ chạy dự án bạn tin cậy. Lệnh có thể chạy mã dự án và lifecycle với quyền của bạn. npm 12 có thể bỏ qua script của dependency dù lệnh thành công nếu allowScripts ở gốc chưa cho phép; script ở gốc và script được chạy tường minh vẫn thực thi, còn preinstall ở gốc chạy trước khi cài dependency. Hãy tự kiểm tra allowScripts; ứng dụng không phê duyệt script, rebuild package hay khôi phục sản phẩm build bị thiếu.",
       "config": "Cấu hình .npmrc, pnpmfile và plugin có thể thực thi mã hoặc ảnh hưởng hành vi công cụ. Cấu hình npm nghiêm ngặt có thể khiến lệnh thất bại; ứng dụng không thêm tùy chọn ghi đè ignore-scripts, allow-scripts hay strict-npmrc và không tự thử lại.",
       "network": "Lệnh có thể dùng mạng, kho dùng chung và truy cập hoặc thay đổi tệp ngoài dự án.",
       "logs": "Log có thể chứa thông tin bí mật; việc lọc không bảo đảm loại bỏ mọi bí mật.",
@@ -891,7 +891,7 @@
       "description": "Kiểm tra thao tác chính xác và ảnh hưởng trên toàn máy trước khi xác nhận.",
       "change": "Phiên bản hiện tại → kết quả",
       "warnings": "Đọc trước khi tiếp tục",
-      "lifecycle": "Script vòng đời của gói có thể chạy trên toàn máy với quyền của bạn. Các script không được cô lập. Cách npm 12 xử lý script cho gói global có thể khác; hỗ trợ npm 12 và hành vi script global đang chờ kiểm chứng bằng lần chạy thực tế.",
+      "lifecycle": "Script vòng đời của gói có thể chạy trên toàn máy với quyền của bạn. Các script không được cô lập. npm 12 có thể xử lý script cài đặt của gói global theo cách khác; điều này chưa được kiểm chứng.",
       "consumers": "Các chương trình và terminal khác đang dùng gói này sẽ bị ảnh hưởng. Không thể phát hiện hết nơi đang sử dụng.",
       "partial": "Lỗi, hủy hoặc hết thời gian có thể để lại thay đổi dở dang.",
       "crash": "Sau khi backend gặp sự cố, kiểm tra Task Manager để tìm tiến trình còn chạy trước khi thao tác tiếp.",

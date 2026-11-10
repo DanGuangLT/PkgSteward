@@ -142,8 +142,7 @@ or recover missing build artifacts. Arguments and environment are unchanged; the
 allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail the job without an automatic retry.
 
 - **Tools and inputs:** npm 11, npm 12 and pnpm 11; npm 12 prereleases and other majors are refused.
-  Previously verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0; npm 12 support is pending real-run
-  verification.
+  Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0.
   Installed npm 12 needs valid `engines.node` metadata satisfied by the backend's Node: missing/malformed metadata
   returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`. With installed
   npm 12, any `npm-shrinkwrap.json` (even alongside `package-lock.json`) refuses every action with
@@ -246,8 +245,8 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 Open `/global-packages` to manage installed global packages with **npm 11, npm 12 or pnpm 11**. npm 12 prereleases
 and other majors are refused (`TOOL_VERSION_MISMATCH`). Installed npm 12 needs valid `engines.node` metadata
 satisfied by the backend's Node: missing/malformed metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid
-Node returns `TOOL_VERSION_MISMATCH`. Previously verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0;
-**npm 12 support and its global script behavior are pending real-run verification**. Yarn is not supported;
+Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0;
+how npm 12 handles install scripts of global packages has not been verified. Yarn is not supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
 and read the installed inventory. pnpm discovery and listing read configuration and filesystem metadata statically;
@@ -338,7 +337,7 @@ changes the npm/pnpm installed on the machine.
 
 An old npm 11 pin can be repaired to installed npm 12, and vice versa; targets must match the installed major
 and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
-the same-major target's Node engines are not checked. npm 12 support is pending real-run verification.
+the same-major target's Node engines are not checked.
 
 Pins that are not `<name>@<exact version>`, workspace members, projects with `devEngines`, projects with
 `npm-shrinkwrap.json` while npm 12 is installed (even alongside `package-lock.json`), and lockfiles that do not
