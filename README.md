@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/logo.svg" alt="PkgSteward logo" width="120" height="120"></p>
+
 # PkgSteward
 
 **A local web app to scan, analyze and manage the Node.js / npm projects on your Windows machine.**

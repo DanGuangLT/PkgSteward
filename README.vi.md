@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/logo.svg" alt="Logo PkgSteward" width="120" height="120"></p>
+
 # PkgSteward
 
 **Ứng dụng web chạy local để quét, phân tích và quản lý các dự án Node.js / npm trên máy Windows của bạn.**
