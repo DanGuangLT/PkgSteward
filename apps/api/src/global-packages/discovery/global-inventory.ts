@@ -232,8 +232,9 @@ function shimTargetsPackage(
       (match) => match[1],
     );
     const matches = quoted.filter((argument) => {
+      // npm 12 sh shims (cmd-shim 9) launch "$basedir_win/...": same directory as $basedir.
       const expanded = argument.replace(
-        /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir)/i,
+        /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir_win|\$basedir)/i,
         binDir,
       );
       if (/[$%`]/.test(expanded) || !isGlobalAbsolutePath(expanded))

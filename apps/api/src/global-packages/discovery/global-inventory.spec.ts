@@ -16,6 +16,10 @@ import {
 } from '@/global-packages/__fixtures__/global-adapters';
 import type { GlobalManager } from '@/global-packages/interfaces/global-packages.types';
 import { pnpmInventoryFixture } from '@/global-packages/__fixtures__/pnpm11/inventory';
+import {
+  npm11Sh,
+  npm12Shims,
+} from '@/global-packages/__fixtures__/npm12/shims';
 
 const npm12Fixture = (kind: 'populated' | 'empty'): unknown =>
   JSON.parse(
@@ -468,6 +472,68 @@ describe.each(TEST_NPM_VERSIONS)('inventory cross-check (npm %s)', (v) => {
     });
     const result = await readGlobalInventory(location, deps);
     expect(result.binOwners).toContainEqual({ name: 'unowned', owner: null });
+  });
+  const shimTarget = 'node_modules/@test/tool/bin/cli.js';
+  const withShims = async (shims: Record<string, string>) => {
+    const { deps, location, readdir, put } = setup();
+    readdir.mockResolvedValue(Object.keys(shims));
+    for (const [name, text] of Object.entries(shims))
+      put(win32.join(location.binDir, name), { text });
+    return readGlobalInventory(location, deps);
+  };
+  it('proves ownership of real npm 12.2.2 sh/cmd/ps1 shims', async () => {
+    const shims = npm12Shims(shimTarget);
+    const result = await withShims({
+      'test-tool': shims[''],
+      'test-tool.cmd': shims['.cmd'],
+      'test-tool.ps1': shims['.ps1'],
+    });
+    expect(result.packages[0]).toMatchObject({
+      status: 'manageable',
+      reason: null,
+    });
+    expect(result.ownershipComplete).toBe(true);
+    expect(result.binOwners).toContainEqual({
+      name: 'test-tool',
+      owner: '@test/tool',
+    });
+  });
+  it('keeps proving npm 11 sh shims', async () => {
+    const result = await withShims({ 'test-tool': npm11Sh(shimTarget) });
+    expect(result.packages[0].status).toBe('manageable');
+    expect(result.ownershipComplete).toBe(true);
+  });
+  it.each([
+    [
+      'a longer variable name',
+      '"$basedir_winx/node_modules/@test/tool/bin/cli.js"',
+    ],
+    [
+      'a braced variable',
+      '"${basedir_win}/node_modules/@test/tool/bin/cli.js"',
+    ],
+    ['an unquoted target', '$basedir_win/node_modules/@test/tool/bin/cli.js'],
+    [
+      'remaining interpolation',
+      '"$basedir_win/$PKG/node_modules/@test/tool/bin/cli.js"',
+    ],
+    [
+      'a second target',
+      '"$basedir_win/node_modules/@test/tool/bin/cli.js" "$basedir_win/node_modules/@test/tool/bin/cli.js"',
+    ],
+    ['another package target', '"$basedir_win/node_modules/other/bin/cli.js"'],
+  ])('refuses an npm 12 sh shim with %s', async (_case, argument) => {
+    const result = await withShims({
+      'test-tool': npm12Shims(shimTarget)[''].replace(
+        `"$basedir_win/${shimTarget}"`,
+        argument,
+      ),
+    });
+    expect(result.packages[0]).toMatchObject({
+      status: 'invalid',
+      reason: 'BIN_CONFLICT',
+    });
+    expect(result.ownershipComplete).toBe(false);
   });
   it('checks cancellation before list or manifest I/O', async () => {
     const { deps, location, spawn, open } = setup();
