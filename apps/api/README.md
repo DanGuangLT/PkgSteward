@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/LienThuan04/PkgSteward/main/.github/assets/logo.png" alt="PkgSteward logo" width="120" height="120"></p>
+
 # @pkgsteward/api
 
 **Backend for PkgSteward - local manager for Node.js projects and their npm / pnpm / Yarn packages**
