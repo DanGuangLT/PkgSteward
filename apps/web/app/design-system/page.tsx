@@ -5,6 +5,7 @@ import { Container } from "@/components/layout/container"
 import { Button } from "@/components/ui/button"
 
 import { ActionsSection } from "@/app/design-system/_components/actions-section"
+import { BrandSection } from "@/app/design-system/_components/brand-section"
 import { ColorSection } from "@/app/design-system/_components/color-section"
 import { DangerousSection } from "@/app/design-system/_components/dangerous-section"
 import { DataSection } from "@/app/design-system/_components/data-section"
@@ -21,6 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 // Thứ tự ở đây = thứ tự section trên trang và trong mục lục. `id` trùng với
 // id của section và với namespace con `designSystem.<id>` (có key `title`).
 const SECTIONS = [
+  { id: "brand", Section: BrandSection },
   { id: "colors", Section: ColorSection },
   { id: "typography", Section: TypographySection },
   { id: "shape", Section: ShapeSection },

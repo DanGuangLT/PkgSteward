@@ -605,6 +605,18 @@
     "title": "Design system",
     "description": "Token và component dùng chung của giao diện. Mọi mẫu trên trang đọc thẳng từ theme đang chọn: đổi chế độ Sáng/Tối hoặc ngôn ngữ ở thanh trên là thấy ngay.",
     "tocLabel": "Mục lục",
+    "brand": {
+      "title": "Thương hiệu",
+      "description": "Logo PkgSteward là chữ P có phần bụng là hộp package. Nền dùng màu primary, nét dùng primary-foreground, nên logo đổi màu theo preset.",
+      "logo": {
+        "title": "Logo",
+        "description": "Cùng hình với icon ứng dụng trên tab trình duyệt. Thanh điều hướng dùng cỡ 32px."
+      },
+      "lockup": {
+        "title": "Logo kèm tên",
+        "description": "Logo đứng trước tên ứng dụng, cách 8px. Tên là chữ đỏ, đậm, cỡ lớn: chữ đỏ cỡ nhỏ hơn không đủ tương phản ở chế độ tối."
+      }
+    },
     "colors": {
       "title": "Màu sắc",
       "description": "Các cặp nền/chữ của preset đang dùng, hiện song song ở hai chế độ. Component chỉ dùng tên token, không dùng mã màu.",
