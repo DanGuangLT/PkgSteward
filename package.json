@@ -1,10 +1,13 @@
 {
   "name": "pkgsteward",
   "private": true,
-  "description": "Repository root: install both apps with one command (npm install, pnpm install or yarn install).",
+  "description": "Repository root: install, run and build both apps with one command (npm, pnpm or yarn).",
   "license": "MIT",
   "scripts": {
-    "postinstall": "node scripts/install-apps.mjs"
+    "postinstall": "node scripts/install-apps.mjs",
+    "dev": "node scripts/run-apps.mjs dev",
+    "build": "node scripts/run-apps.mjs build",
+    "start": "node scripts/run-apps.mjs start"
   },
   "engines": {
     "node": ">=24"
