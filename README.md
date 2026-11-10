@@ -106,6 +106,9 @@ pnpm build      # or: npm run build / yarn build (builds apps/api, then apps/web
 pnpm start      # or: npm start / yarn start (runs start:prod in apps/api and start in apps/web)
 ```
 
+`start` opens the web UI in your default browser once both apps are ready (one tab per run; `dev` never opens one).
+Set `PKGSTEWARD_NO_BROWSER=1` to skip it.
+
 You can still run an app on its own inside its folder, for example `cd apps/api && pnpm dev`.
 
 | | URL |
