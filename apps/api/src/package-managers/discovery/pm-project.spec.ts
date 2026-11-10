@@ -29,6 +29,69 @@ const setup = () => {
 };
 
 describe('M9 guarded static project input', () => {
+  it.each([undefined, 'npm@12.2.1', 'npm@11.17.0'])(
+    'exposes installed npm 12 without a synthetic npm 11 target: %p',
+    async (pin) => {
+      const f = setup();
+      f.resolveTool.mockImplementation((manager) =>
+        Promise.resolve(
+          tool(manager, manager === 'npm' ? '12.2.2' : undefined),
+        ),
+      );
+      f.put(
+        f.manifest,
+        JSON.stringify({ name: 'TEST-pin', packageManager: pin }),
+      );
+      const facts = await f.read();
+      expect(facts.context.installed[0]).toMatchObject({
+        version: '12.2.2',
+        status: 'available',
+        reason: null,
+      });
+      expect(facts.context.reason).toBe(
+        pin === 'npm@11.17.0' ? 'TOOL_VERSION_MISMATCH' : null,
+      );
+      expect(facts.tools.npm?.version).toBe('12.2.2');
+      expect(f.openExclusive).not.toHaveBeenCalled();
+    },
+  );
+  it.each([false, true])(
+    'npm 12 shrinkwrap blocks old-pin repair with package-lock=%s',
+    async (both) => {
+      const f = setup();
+      f.resolveTool.mockImplementation((manager) =>
+        Promise.resolve(
+          tool(manager, manager === 'npm' ? '12.2.2' : undefined),
+        ),
+      );
+      f.put(path.join(root, 'npm-shrinkwrap.json'), '{}');
+      if (both) f.put(path.join(root, 'package-lock.json'), '{}');
+      const facts = await f.read();
+      expect(facts.context.reason).toBe('CONFIG_UNSUPPORTED');
+      const result = await commitPmPin(
+        facts,
+        planPinEdit(facts.bytes, 'npm@12.2.2'),
+        f.controller.signal,
+        { ...f.deps, beforeRename: () => Promise.resolve() },
+      );
+      expect(result.fileCommitted).toBe(false);
+      expect(result.failureCode).toBe('CONFIG_UNSUPPORTED');
+      expect(f.rename).not.toHaveBeenCalled();
+    },
+  );
+  it('refuses cross-major npm 12 edits at the commit boundary', async () => {
+    const f = setup();
+    const facts = await f.read();
+    const result = await commitPmPin(
+      facts,
+      planPinEdit(facts.bytes, 'npm@12.2.2'),
+      f.controller.signal,
+      { ...f.deps, beforeRename: () => Promise.resolve() },
+    );
+    expect(result.failureCode).toBe('TARGET_VERSION_UNSUPPORTED');
+    expect(f.openExclusive).not.toHaveBeenCalled();
+    expect(f.rename).not.toHaveBeenCalled();
+  });
   it('settles both parallel static tool reads before propagating cancellation', async () => {
     const f = setup();
     let started!: () => void;

@@ -1,5 +1,6 @@
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { pmIoFixture } from '@/package-managers/__fixtures__/pm-io.fixture';
+import { tool } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import {
   readPmProject,
   commitPmPin,
@@ -24,16 +25,24 @@ export async function flushPmJobs() {
   for (let i = 0; i < 5; i++)
     await new Promise<void>((resolve) => setImmediate(resolve));
 }
-export function pmLifecycleFixture() {
+export function pmLifecycleFixture(npmVersion = '11.17.0') {
   const io = pmIoFixture();
+  io.resolveTool.mockImplementation((manager) =>
+    Promise.resolve(tool(manager, manager === 'npm' ? npmVersion : undefined)),
+  );
+  const npm12 = npmVersion.startsWith('12.');
+  if (npm12)
+    io.put(io.manifest, '{"name":"TEST-pin","packageManager":"npm@12.2.1"}');
   const gate = new MutationGateService();
   let serial = 100;
   let mono = 0;
   const now = () => new Date('2026-11-09T00:00:00.000Z');
   const getPackageMetadata = jest.fn(() =>
     Promise.resolve({
-      versions: ['11.16.0', '11.17.0', '11.18.0'],
-      distTags: { latest: '11.17.0' },
+      versions: npm12
+        ? ['11.17.0', '12.2.1', '12.2.2']
+        : ['11.16.0', '11.17.0', '11.18.0'],
+      distTags: { latest: npm12 ? '12.2.2' : '11.17.0' },
       deprecatedVersions: [] as string[],
     }),
   );

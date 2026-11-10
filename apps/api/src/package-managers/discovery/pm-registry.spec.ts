@@ -28,6 +28,53 @@ const setup = () => {
   };
 };
 describe('M9 public declaration catalog', () => {
+  it.each([
+    ['npm', '12.2.2', 'latest', '12.2.2'],
+    ['npm', '11.17.0', 'next-11', '11.21.2'],
+    ['npm', '11.17.0', 'latest', null],
+    ['npm', '12.2.2', 'next-11', null],
+    ['pnpm', '11.22.0', 'latest', null],
+  ] as const)(
+    'projects %s %s eligibility and resolves only its supported %s tag',
+    async (manager, installed, tag, target) => {
+      const f = setup();
+      f.getPackageMetadata.mockResolvedValue({
+        versions: ['12.2.2', '11.21.2'],
+        distTags: {
+          latest: '12.2.2',
+          'next-11': '11.21.2',
+          'v6.14-next': '6.14.18',
+        },
+        deprecatedVersions: [],
+      });
+      const catalog = await f.registry.readCatalog(
+        manager,
+        installed,
+        f.controller.signal,
+      );
+      expect(catalog.tags).toEqual({ latest: '12.2.2', 'next-11': '11.21.2' });
+      expect(catalog.versions.filter((item) => item.supported)).toEqual([
+        {
+          version: installed.startsWith('12.') ? '12.2.2' : '11.21.2',
+          deprecated: false,
+          supported: true,
+          reason: null,
+        },
+      ]);
+      if (target)
+        expect(
+          f.registry.resolveTarget(catalog, tag, installed).targetVersion,
+        ).toBe(target);
+      else
+        expect(() =>
+          f.registry.resolveTarget(catalog, tag, installed),
+        ).toThrow(
+          expect.objectContaining({
+            details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
+          }),
+        );
+    },
+  );
   it('inherits fixed public origin, omitted credentials and redirect refusal without config probes', async () => {
     const fetcher = jest.fn((url: string, options: RequestInit) => {
       void url;

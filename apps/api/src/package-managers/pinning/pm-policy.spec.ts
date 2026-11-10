@@ -101,6 +101,41 @@ describe('current declaration parsing', () => {
 });
 
 describe('public target policy', () => {
+  it.each([
+    ['npm', '11.17.0', '11.21.2', null],
+    ['npm', '12.2.2', '12.2.1', null],
+    ['npm', '11.17.0', '12.2.2', 'TARGET_VERSION_UNSUPPORTED'],
+    ['npm', '12.2.2', '11.21.2', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '11.22.0', '11.28.9', null],
+    ['pnpm', '11.22.0', '12.18.0', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '12.18.0', '12.18.0', 'TOOL_VERSION_MISMATCH'],
+  ] as const)(
+    'keeps %s installed %s and target %s in the same supported major',
+    (manager, installed, target, reason) => {
+      expect(getPmTargetReason(manager, installed, target, false)).toBe(reason);
+    },
+  );
+  it.each([
+    '10.9.0',
+    '13.0.0',
+    '12.2.2-beta.1',
+    'v12.2.2',
+    '12.2.2+build',
+    '012.2.2',
+    '12.2.2\n',
+  ])('refuses unsupported/noncanonical npm 12 inputs %p', (version) => {
+    expect(getPmTargetReason('npm', version, '12.2.2', false)).toBe(
+      'TOOL_VERSION_MISMATCH',
+    );
+    expect(getPmTargetReason('npm', '12.2.2', version, false)).toBe(
+      'TARGET_VERSION_UNSUPPORTED',
+    );
+  });
+  it('refuses deprecated npm 12 targets', () => {
+    expect(getPmTargetReason('npm', '12.2.2', '12.2.1', true)).toBe(
+      'TARGET_VERSION_UNSUPPORTED',
+    );
+  });
   it.each(['11.22.0', '11.22.0-beta.1', 'latest', 'next-11'])(
     'accepts bounded request syntax %s',
     (value) => expect(isPmTargetVersion(value)).toBe(true),
@@ -179,6 +214,51 @@ describe('public target policy', () => {
 });
 
 describe('project pin eligibility', () => {
+  it.each([
+    ['11.17.0', '12.2.1', '11.21.2'],
+    ['12.2.2', '11.17.0', '12.2.1'],
+  ])(
+    'repairs installed %s from old %s to %s only',
+    (installed, old, target) => {
+      const repair = input({
+        manager: 'npm',
+        installed: { ...tool, manager: 'npm', version: installed },
+        pin: parsePmPin(`npm@${old}`),
+        targetVersion: target,
+        lockManagers: ['npm'],
+        inputReason: 'TOOL_VERSION_MISMATCH',
+      });
+      expect(assessPmPinChange(repair)).toMatchObject({
+        eligible: true,
+        targetPin: `npm@${target}`,
+      });
+      expect(
+        assessPmPinChange({ ...repair, inputReason: 'CONFIG_UNSUPPORTED' })
+          .reason,
+      ).toBe('CONFIG_UNSUPPORTED');
+      expect(
+        assessPmPinChange({ ...repair, lockManagers: ['npm', 'pnpm'] }).reason,
+      ).toBe('LOCKFILE_MISMATCH');
+      expect(
+        assessPmPinChange({
+          ...repair,
+          workspace: { kind: 'leaf', root: 'D:\\TEST' },
+        }).reason,
+      ).toBe('WORKSPACE_LEAF');
+      expect(
+        assessPmPinChange({ ...repair, devEnginesPresent: true }).reason,
+      ).toBe('CONFIG_UNSUPPORTED');
+      expect(
+        assessPmPinChange({ ...repair, targetVersion: old }).reason,
+      ).toBe('TARGET_VERSION_UNSUPPORTED');
+      expect(
+        assessPmPinChange({
+          ...repair,
+          pin: parsePmPin(`npm@${target}`),
+        }).reason,
+      ).toBe('TOOL_VERSION_MISMATCH');
+    },
+  );
   it('allows no-pin insertion with an installed supported manager', () => {
     expect(
       assessPmPinChange(

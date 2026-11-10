@@ -247,7 +247,7 @@ async function readPmProjectInput(
           const reason =
             tool.manager !== manager
               ? 'TOOL_LAYOUT_UNSUPPORTED'
-              : getPmTargetReason(manager, tool.version, '11.0.0', false);
+              : getPmTargetReason(manager, tool.version, tool.version, false);
           if (reason)
             return {
               manager,

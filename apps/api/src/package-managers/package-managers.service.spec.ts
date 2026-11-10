@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import { win32 as path } from 'node:path';
 import { PackageManagersService } from '@/package-managers/package-managers.service';
 import {
   deferred,
@@ -16,8 +17,8 @@ jest.mock('execa', () => ({
 }));
 // Expected RED: service absent; gate races, preflight refusal, replay, invalidation/audit/stop/shutdown.
 describe('M9 service PC admission and finalization', () => {
-  const setup = () => {
-    const f = pmLifecycleFixture();
+  const setup = (npmVersion = '11.17.0') => {
+    const f = pmLifecycleFixture(npmVersion);
     return { ...f, service: new PackageManagersService(f.runtime) };
   };
   type Fixture = ReturnType<typeof setup>;
@@ -41,6 +42,101 @@ describe('M9 service PC admission and finalization', () => {
   afterEach(() => {
     expect(execa).not.toHaveBeenCalled();
     jest.clearAllMocks();
+  });
+  it.each(['npm@12.2.1', 'npm@11.17.0'])(
+    'npm 12 PC edits only the pin, audits and replays once from %s',
+    async (oldPin) => {
+      const f = setup('12.2.2');
+      f.put(
+        f.manifest,
+        JSON.stringify({ name: 'TEST-pin', packageManager: oldPin }),
+      );
+      const lock = path.join(root, 'package-lock.json');
+      const modules = path.join(root, 'node_modules', 'TEST', 'package.json');
+      f.put(lock, '{"lockfileVersion":3}');
+      f.put(modules, '{"name":"TEST"}');
+      const before = new Map(f.files);
+      const input = await ready(f);
+      const start = await f.service.execute(input);
+      await f.service.waitForPreflight(start.jobId);
+      await flushPmJobs();
+      expect(f.service.getLatest()).toMatchObject({
+        status: 'completed',
+        fileCommitted: true,
+        auditWritten: true,
+        gateHeld: false,
+      });
+      expect(f.files.get(key(f.manifest))?.toString()).toBe(
+        before.get(key(f.manifest))!.toString().replace(oldPin, 'npm@12.2.2'),
+      );
+      expect([...f.files.keys()].sort()).toEqual([...before.keys()].sort());
+      for (const [file, bytes] of before)
+        if (file !== key(f.manifest)) expect(f.files.get(file)).toEqual(bytes);
+      expect(f.audit.write.mock.calls.map((call) => call[1])).toEqual([
+        'intent',
+        'result',
+      ]);
+      expect(f.audit.write.mock.calls[1][2]).toMatchObject({
+        observedPin: 'npm@12.2.2',
+      });
+      expect(f.invalidate).toHaveBeenCalledTimes(1);
+      expect((await f.service.execute(input)).jobId).toBe(start.jobId);
+      expect(f.rename).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(['tag', 'deprecated', 'identity', 'config', 'shrinkwrap'] as const)(
+    'npm 12 rechecks %s before writing and never repairs through blockers',
+    async (change) => {
+      const f = setup('12.2.2');
+      const input = await ready(f);
+      if (change === 'tag')
+        f.getPackageMetadata.mockResolvedValue({
+          versions: ['12.2.1', '12.2.2', '12.2.3'],
+          distTags: { latest: '12.2.3' },
+          deprecatedVersions: [],
+        });
+      if (change === 'deprecated')
+        f.getPackageMetadata.mockResolvedValue({
+          versions: ['12.2.1', '12.2.2'],
+          distTags: { latest: '12.2.2' },
+          deprecatedVersions: ['12.2.2'],
+        });
+      if (change === 'identity') {
+        const stat = f.stats.get(key(f.manifest))!;
+        f.stats.set(key(f.manifest), { ...stat, ino: stat.ino + 1000 });
+      }
+      if (change === 'config')
+        f.put(path.join(root, '.npmrc'), 'ignore-scripts=true');
+      if (change === 'shrinkwrap')
+        f.put(path.join(root, 'npm-shrinkwrap.json'), '{}');
+      const start = await f.service.execute(input);
+      await expect(
+        f.service.waitForPreflight(start.jobId),
+      ).rejects.toMatchObject({ details: { reason: 'PREVIEW_CHANGED' } });
+      await flushPmJobs();
+      expect(f.commit).not.toHaveBeenCalled();
+      expect(f.rename).not.toHaveBeenCalled();
+    },
+  );
+  it('npm 12 rechecks TTL and consent before a pin write', async () => {
+    const f = setup('12.2.2');
+    const head = path.join(root, '.git', 'HEAD');
+    f.put(head, 'TEST inert activity');
+    f.stats.set(key(head), {
+      ...f.stats.get(key(head))!,
+      mtimeMs: f.runtime.now().getTime(),
+    });
+    const input = await ready(f);
+    expect(input.acknowledgedRisks).toEqual(['RECENTLY_ACTIVE']);
+    await expect(
+      f.service.execute({ ...input, acknowledgedRisks: [] }),
+    ).rejects.toThrow();
+    expect(f.commit).not.toHaveBeenCalled();
+    f.advance(300_000);
+    await expect(f.service.execute(input)).rejects.toMatchObject({
+      details: { reason: 'PREVIEW_EXPIRED' },
+    });
+    expect(f.rename).not.toHaveBeenCalled();
   });
   it('GET stays static; catalog metadata never escapes, cancel reads has no audit', async () => {
     const f = setup();
