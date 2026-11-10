@@ -201,13 +201,38 @@
     "search": {
       "label": "Tìm dự án",
       "placeholder": "Tìm theo tên hoặc đường dẫn",
-      "clear": "Xoá bộ lọc",
+      "clearAll": "Xoá tìm kiếm và bộ lọc",
       "results": "Đang hiển thị {formattedCount} dự án"
     },
     "sort": {
       "label": "Sắp xếp theo",
       "activity": "Hoạt động gần nhất",
       "name": "Tên A–Z"
+    },
+    "filters": {
+      "label": "Bộ lọc",
+      "optionCount": "{label} ({count})",
+      "reset": "Xoá bộ lọc",
+      "manager": {
+        "label": "Trình quản lý gói",
+        "all": "Tất cả"
+      },
+      "nodeModules": {
+        "label": "node_modules",
+        "all": "Tất cả",
+        "present": "Có node_modules",
+        "missing": "Chưa có node_modules"
+      },
+      "activity": {
+        "label": "Hoạt động gần nhất",
+        "all": "Mọi thời gian",
+        "within7d": "Trong 7 ngày qua",
+        "within30d": "Trong 30 ngày qua",
+        "within90d": "Trong 90 ngày qua",
+        "olderThan90d": "Không hoạt động hơn 90 ngày",
+        "olderThan180d": "Không hoạt động hơn 180 ngày",
+        "olderThan365d": "Không hoạt động hơn 1 năm"
+      }
     },
     "columns": {
       "project": "Dự án / đường dẫn",

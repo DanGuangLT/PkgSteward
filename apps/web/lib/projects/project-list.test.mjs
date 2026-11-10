@@ -1,6 +1,12 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { projectDisplayName, selectProjects } from "./project-list.ts"
+import {
+  countProjectFilters,
+  DEFAULT_PROJECT_FILTERS,
+  matchesProjectFilters,
+  projectDisplayName,
+  selectProjects,
+} from "./project-list.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 function project(overrides = {}) {
@@ -10,7 +16,7 @@ function project(overrides = {}) {
     packageManager: null,
     hasLockfile: false,
     lastActivityAt: "2026-10-20T00:00:00.000Z",
-    nodeModules: { exists: false, path: "D:\\TEST\\project\\node_modules", sizeBytes: null },
+    nodeModules: { exists: false, path: "D:\\TEST\\project\\node_modules", sizeBytes: null, sizeMeasuredAt: null },
     ...overrides,
   }
 }
@@ -94,4 +100,129 @@ test("selection returns a new array without mutating input or project objects", 
     assert.deepEqual(result, [a, z])
     assert.deepEqual(projects, [z, a])
   }
+})
+
+const NOW = Date.parse("2026-11-10T00:00:00.000Z")
+const DAY_MS = 86_400_000
+const ALL_FILTERS = { manager: "all", nodeModules: "all", activity: "all" }
+
+function activeProject(age, overrides = {}) {
+  return project({ lastActivityAt: new Date(NOW - age).toISOString(), ...overrides })
+}
+
+test("default filters keep projects with unknown manager, missing modules and invalid activity", () => {
+  const unknown = project({ lastActivityAt: "TEST-invalid-date" })
+  assert.equal(matchesProjectFilters(unknown, DEFAULT_PROJECT_FILTERS, NOW), true)
+  assert.deepEqual(selectProjects([unknown], "", "activity", "en"), [unknown])
+})
+
+for (const [manager, expected] of [
+  ["all", ["npm", "pnpm", "yarn", null]],
+  ["npm", ["npm"]],
+  ["pnpm", ["pnpm"]],
+  ["yarn", ["yarn"]],
+  ["unknown", [null]],
+]) {
+  test(`manager filter ${manager} selects the matching package managers`, () => {
+    const projects = ["npm", "pnpm", "yarn", null].map((packageManager, index) => project({
+      path: `/TEST/${index}`, packageManager,
+    }))
+    const filters = { ...ALL_FILTERS, manager }
+    assert.deepEqual(
+      selectProjects(projects, "", "name", "en", filters, NOW).map((item) => item.packageManager),
+      expected
+    )
+    assert.deepEqual(projects.filter((item) => matchesProjectFilters(item, filters, NOW)).map((item) => item.packageManager), expected)
+  })
+}
+
+for (const [nodeModules, expected] of [["all", [false, true]], ["present", [true]], ["missing", [false]]]) {
+  test(`node_modules filter ${nodeModules} selects by existence`, () => {
+    const projects = [false, true].map((exists, index) => project({
+      path: `/TEST/${index}`,
+      nodeModules: { ...project().nodeModules, exists },
+    }))
+    assert.deepEqual(selectProjects(projects, "", "name", "en", { ...ALL_FILTERS, nodeModules }, NOW)
+      .map((item) => item.nodeModules.exists), expected)
+  })
+}
+
+for (const [activity, days] of [["within7d", 7], ["within30d", 30], ["within90d", 90]]) {
+  test(`${activity} includes exactly ${days} days but excludes one millisecond older`, () => {
+    const boundary = activeProject(days * DAY_MS, { path: "/TEST/boundary" })
+    const older = activeProject(days * DAY_MS + 1, { path: "/TEST/older" })
+    assert.deepEqual(selectProjects([older, boundary], "", "activity", "en", { ...ALL_FILTERS, activity }, NOW), [boundary])
+  })
+}
+
+for (const [activity, days] of [["olderThan90d", 90], ["olderThan180d", 180], ["olderThan365d", 365]]) {
+  test(`${activity} excludes exactly ${days} days but includes one millisecond older`, () => {
+    const boundary = activeProject(days * DAY_MS, { path: "/TEST/boundary" })
+    const older = activeProject(days * DAY_MS + 1, { path: "/TEST/older" })
+    assert.deepEqual(selectProjects([boundary, older], "", "activity", "en", { ...ALL_FILTERS, activity }, NOW), [older])
+  })
+}
+
+test("future activity matches every within range and no older-than range", () => {
+  const future = activeProject(-DAY_MS)
+  for (const activity of ["within7d", "within30d", "within90d"]) {
+    assert.equal(matchesProjectFilters(future, { ...ALL_FILTERS, activity }, NOW), true)
+  }
+  for (const activity of ["olderThan90d", "olderThan180d", "olderThan365d"]) {
+    assert.equal(matchesProjectFilters(future, { ...ALL_FILTERS, activity }, NOW), false)
+  }
+})
+
+test("invalid activity matches all only", () => {
+  const invalid = project({ lastActivityAt: "TEST-invalid-date" })
+  assert.equal(matchesProjectFilters(invalid, ALL_FILTERS, NOW), true)
+  for (const activity of ["within7d", "within30d", "within90d", "olderThan90d", "olderThan180d", "olderThan365d"]) {
+    assert.deepEqual(selectProjects([invalid], "", "activity", "en", { ...ALL_FILTERS, activity }, NOW), [])
+  }
+})
+
+test("all filters AND the search apply before the existing name or activity sort", () => {
+  const filters = { manager: "npm", nodeModules: "present", activity: "within7d" }
+  const recent = activeProject(DAY_MS, {
+    path: "/TEST/recent", name: "TEST-Widget-Z", packageManager: "npm",
+    nodeModules: { ...project().nodeModules, exists: true },
+  })
+  const earlier = { ...recent, path: "/TEST/earlier", name: "TEST-Widget-A", lastActivityAt: activeProject(2 * DAY_MS).lastActivityAt }
+  const projects = Object.freeze([
+    Object.freeze(earlier), Object.freeze(recent),
+    { ...recent, path: "/TEST/manager", packageManager: "pnpm" },
+    { ...recent, path: "/TEST/modules", nodeModules: project().nodeModules },
+    { ...recent, path: "/TEST/old", lastActivityAt: activeProject(8 * DAY_MS).lastActivityAt },
+    { ...recent, path: "/TEST/search", name: "TEST-unrelated" },
+  ])
+  assert.deepEqual(selectProjects(projects, " WIDGET ", "name", "en", filters, NOW), [earlier, recent])
+  assert.deepEqual(selectProjects(projects, " WIDGET ", "activity", "en", filters, NOW), [recent, earlier])
+  assert.deepEqual(selectProjects(projects, "/TEST/recent", "name", "en", filters, NOW), [recent])
+})
+
+test("option counts use the whole snapshot independently and include overlapping activity ranges", () => {
+  const projects = [
+    activeProject(0, { packageManager: "npm", nodeModules: { ...project().nodeModules, exists: true } }),
+    activeProject(7 * DAY_MS, { packageManager: "pnpm" }),
+    activeProject(30 * DAY_MS, { packageManager: "npm" }),
+    activeProject(90 * DAY_MS, { packageManager: "yarn" }),
+    activeProject(180 * DAY_MS, { packageManager: "yarn" }),
+    activeProject(365 * DAY_MS, { nodeModules: { ...project().nodeModules, exists: true } }),
+    activeProject(365 * DAY_MS + 1),
+    activeProject(-DAY_MS, { packageManager: "npm" }),
+    project({ lastActivityAt: "TEST-invalid-date" }),
+  ]
+  assert.deepEqual(countProjectFilters(projects, NOW), {
+    manager: { all: 9, npm: 3, pnpm: 1, yarn: 2, unknown: 3 },
+    nodeModules: { all: 9, present: 2, missing: 7 },
+    activity: { all: 9, within7d: 3, within30d: 4, within90d: 5, olderThan90d: 3, olderThan180d: 2, olderThan365d: 1 },
+  })
+})
+
+test("empty snapshots have zero counts for every option", () => {
+  assert.deepEqual(countProjectFilters([], NOW), {
+    manager: { all: 0, npm: 0, pnpm: 0, yarn: 0, unknown: 0 },
+    nodeModules: { all: 0, present: 0, missing: 0 },
+    activity: { all: 0, within7d: 0, within30d: 0, within90d: 0, olderThan90d: 0, olderThan180d: 0, olderThan365d: 0 },
+  })
 })

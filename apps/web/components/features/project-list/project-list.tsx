@@ -26,7 +26,16 @@ import {
 } from "@/components/ui/select"
 import type { ScanResult } from "@/lib/api/types"
 import { useScan } from "@/hooks/use-scan"
-import { selectProjects, type ProjectSort } from "@/lib/projects/project-list"
+import {
+  countProjectFilters,
+  DEFAULT_PROJECT_FILTERS,
+  PROJECT_ACTIVITY_FILTERS,
+  PROJECT_MANAGER_FILTERS,
+  PROJECT_NODE_MODULES_FILTERS,
+  selectProjects,
+  type ProjectFilters,
+  type ProjectSort,
+} from "@/lib/projects/project-list"
 
 export type ProjectSnapshot = Pick<ScanResult, "scanId" | "finishedAt" | "partial" | "skippedCount" | "projects">
   & { orphanCount: number }
@@ -59,6 +68,35 @@ function ProjectEmpty({ title, description, children }: {
   )
 }
 
+// 1 bộ lọc dạng dropdown: chỉ nhận giá trị nằm trong `options`.
+function FilterSelect<Option extends string>({ label, value, options, onChange, optionLabel }: {
+  label: string
+  value: Option
+  options: readonly Option[]
+  onChange: (value: Option) => void
+  optionLabel: (value: Option) => string
+}) {
+  const id = useId()
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={(next) => {
+        const option = options.find((candidate) => candidate === next)
+        if (option) onChange(option)
+      }}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>{optionLabel(option)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 export function ProjectList({ initial, referenceTime }: ProjectListProps) {
   const t = useTranslations("projects")
   const format = useFormatter()
@@ -67,10 +105,15 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
   const sortId = useId()
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<ProjectSort>("activity")
+  const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_PROJECT_FILTERS)
   const scanController = useScan()
 
   const snapshot = initial.kind === "ready" ? initial.snapshot : null
-  const projects = snapshot ? selectProjects(snapshot.projects, query, sort, locale) : []
+  const now = Date.parse(referenceTime)
+  const projects = snapshot ? selectProjects(snapshot.projects, query, sort, locale, filters, now) : []
+  const counts = countProjectFilters(snapshot?.projects ?? [], now)
+  const hasActiveFilters = Object.values(filters).some((value) => value !== "all")
+  const optionCount = (label: string, count: number) => t("filters.optionCount", { label, count: format.number(count) })
   const errorMessage = initial.kind === "error"
     ? initial.code === "BACKEND_UNAVAILABLE" ? t("errors.backendUnavailable")
       : initial.code === "RATE_LIMITED" ? t("errors.rateLimited")
@@ -155,12 +198,46 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
               </Select>
             </div>
           </div>
+          <fieldset className="min-w-0 space-y-4" aria-label={t("filters.label")}>
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
+              <FilterSelect
+                label={t("filters.manager.label")}
+                value={filters.manager}
+                options={PROJECT_MANAGER_FILTERS}
+                onChange={(manager) => setFilters((current) => ({ ...current, manager }))}
+                optionLabel={(value) => optionCount(
+                  value === "all" ? t("filters.manager.all") : value === "unknown" ? t("manager.unknown") : value,
+                  counts.manager[value]
+                )}
+              />
+              <FilterSelect
+                label={t("filters.nodeModules.label")}
+                value={filters.nodeModules}
+                options={PROJECT_NODE_MODULES_FILTERS}
+                onChange={(nodeModules) => setFilters((current) => ({ ...current, nodeModules }))}
+                optionLabel={(value) => optionCount(t(`filters.nodeModules.${value}`), counts.nodeModules[value])}
+              />
+              <FilterSelect
+                label={t("filters.activity.label")}
+                value={filters.activity}
+                options={PROJECT_ACTIVITY_FILTERS}
+                onChange={(activity) => setFilters((current) => ({ ...current, activity }))}
+                optionLabel={(value) => optionCount(t(`filters.activity.${value}`), counts.activity[value])}
+              />
+            </div>
+            {hasActiveFilters ? (
+              <Button variant="secondary" onClick={() => setFilters(DEFAULT_PROJECT_FILTERS)}>{t("filters.reset")}</Button>
+            ) : null}
+          </fieldset>
           <p role="status" className="text-body-sm text-muted-foreground">
             {t("search.results", { count: projects.length, formattedCount: format.number(projects.length) })}
           </p>
           {projects.length === 0 ? (
             <ProjectEmpty title={t("noMatch.title")} description={t("noMatch.description")}>
-              <Button variant="secondary" onClick={() => setQuery("")}>{t("search.clear")}</Button>
+              <Button variant="secondary" onClick={() => {
+                setQuery("")
+                setFilters(DEFAULT_PROJECT_FILTERS)
+              }}>{t("search.clearAll")}</Button>
             </ProjectEmpty>
           ) : (
             <ProjectItems projects={projects} referenceTime={referenceTime} />
