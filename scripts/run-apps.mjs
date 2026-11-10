@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Runs `dev`, `build` or `start` for apps/api and apps/web with the package manager that started the
 // root script (`npm run dev`, `pnpm dev`, `yarn dev`, ...). `dev` and `start` run both apps at once in
-// one terminal (output prefixed [api] / [web]); `build` builds them one after the other.
+// one terminal (output prefixed [api] / [web]); `build` builds them one after the other. `start` also
+// opens the web UI in the default browser once both apps are ready.
 import { spawn, spawnSync } from 'node:child_process';
 import { dirname, extname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -13,8 +15,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const tasks = {
   dev: { parallel: true, apps: [['api', 'dev'], ['web', 'dev']] },
   build: { parallel: false, apps: [['api', 'build'], ['web', 'build']] },
-  start: { parallel: true, apps: [['api', 'start:prod'], ['web', 'start']] },
+  start: { parallel: true, openBrowser: true, apps: [['api', 'start:prod'], ['web', 'start']] },
 };
+
+// Log line each app prints once it accepts requests (apps/api main.ts, Next.js).
+const readyLines = { api: /Application is running on:/, web: /\bReady in\b/ };
 
 const taskName = process.argv[2];
 const task = tasks[taskName];
@@ -37,7 +42,7 @@ const isScript = ['.js', '.cjs', '.mjs'].includes(extname(cli).toLowerCase());
 const command = isScript ? process.execPath : cli;
 const runArgs = (script) => (isScript ? [cli, 'run', script] : ['run', script]);
 
-if (task.parallel) runParallel(task.apps);
+if (task.parallel) runParallel(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER);
 else runSequential(task.apps);
 
 function runSequential(apps) {
@@ -52,7 +57,7 @@ function runSequential(apps) {
   }
 }
 
-function runParallel(apps) {
+function runParallel(apps, openBrowser) {
   // Output is piped for the prefix, so children would drop colors; keep them when the terminal has colors.
   const env = { ...process.env };
   if (process.stdout.isTTY && env.FORCE_COLOR === undefined && env.NO_COLOR === undefined) env.FORCE_COLOR = '1';
@@ -65,6 +70,20 @@ function runParallel(apps) {
     for (const child of running) stopTree(child);
   };
 
+  // Apps that have not printed their ready line yet; the browser opens once, when this becomes empty.
+  let waiting = openBrowser ? new Set(apps.map(([app]) => app)) : null;
+  let webUrl;
+  const watchLine = (app, line) => {
+    if (!waiting || stoppedByUser || exitCode !== undefined) return;
+    const text = stripVTControlCharacters(line);
+    if (app === 'web') webUrl ??= text.match(/\bLocal:\s+(\S+)/)?.[1];
+    if (readyLines[app]?.test(text)) waiting.delete(app);
+    if (waiting.size === 0) {
+      waiting = null;
+      openInBrowser(webUrl);
+    }
+  };
+
   for (const [app, script] of apps) {
     console.log(`[run-apps] ${manager} run ${script} in apps/${app}`);
     const child = spawn(command, runArgs(script), {
@@ -74,7 +93,7 @@ function runParallel(apps) {
       windowsHide: true,
     });
     running.add(child);
-    prefixLines(child.stdout, process.stdout, `[${app}]`);
+    prefixLines(child.stdout, process.stdout, `[${app}]`, (line) => watchLine(app, line));
     prefixLines(child.stderr, process.stderr, `[${app}]`);
 
     child.once('error', (error) => console.error(`[run-apps] apps/${app}: ${error.message}`));
@@ -98,8 +117,33 @@ function runParallel(apps) {
   }
 }
 
-function prefixLines(stream, target, label) {
-  createInterface({ input: stream, crlfDelay: Infinity }).on('line', (line) => target.write(`${label} ${line}\n`));
+function prefixLines(stream, target, label, onLine) {
+  createInterface({ input: stream, crlfDelay: Infinity }).on('line', (line) => {
+    target.write(`${label} ${line}\n`);
+    onLine?.(line);
+  });
+}
+
+// Opens only the loopback http URL that Next.js printed, without a shell.
+function openInBrowser(rawUrl) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    url = undefined;
+  }
+  if (url?.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+    console.log('[run-apps] Both apps are ready; open the web UI in your browser.');
+    return;
+  }
+  const [opener, args] =
+    process.platform === 'win32'
+      ? ['explorer.exe', [url.href]]
+      : [process.platform === 'darwin' ? 'open' : 'xdg-open', [url.href]];
+  console.log(`[run-apps] Opening ${url.href} in your browser (set PKGSTEWARD_NO_BROWSER=1 to skip this).`);
+  const child = spawn(opener, args, { detached: true, stdio: 'ignore', windowsHide: true });
+  child.once('error', () => console.log(`[run-apps] Could not open a browser; open ${url.href} yourself.`));
+  child.unref();
 }
 
 // On Windows the package manager wrapper starts the real server as a child process; kill the whole tree.
