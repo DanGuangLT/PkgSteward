@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangleIcon, CheckIcon, CircleIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CircleIcon, HardDriveIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
@@ -156,7 +156,12 @@ export function ProjectDetailPanel({ detail, runner, runnerBusy = false }: { det
           <p>{t("diskUsage.measuredAt")} <time dateTime={local.diskUsage.measuredAt}>{format.dateTime(new Date(local.diskUsage.measuredAt), { dateStyle: "medium", timeStyle: "short" })}</time></p>
         </> : <>
           <p>{t("diskUsage.unknown")}</p>
-          <Link href={diskUsageHref(diskPath, "packages")} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("diskUsage.view")}</Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link href={diskUsageHref(diskPath, "packages")} prefetch={false}>
+              <HardDriveIcon data-icon="inline-start" aria-hidden="true" />
+              {t("diskUsage.view")}
+            </Link>
+          </Button>
         </>}
       </section>
     </div>

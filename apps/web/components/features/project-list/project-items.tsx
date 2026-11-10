@@ -1,11 +1,12 @@
 "use client"
 
-import { AlertTriangleIcon, CheckIcon, MinusIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, FolderOpenIcon, HardDriveIcon, InfoIcon, MinusIcon } from "lucide-react"
 import Link from "next/link"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -46,7 +47,7 @@ function ProjectNodeModules({ project }: { project: ScannedProject }) {
   const format = useFormatter()
   const { exists, path, sizeBytes, sizeMeasuredAt } = project.nodeModules
   return (
-    <div className="min-w-0 space-y-2 text-body-sm">
+    <div className="flex min-w-0 flex-col items-start gap-2 text-body-sm">
       <span className="inline-flex items-center gap-1.5">
         {exists ? <CheckIcon aria-hidden="true" className="size-4 shrink-0" /> : <MinusIcon aria-hidden="true" className="size-4 shrink-0" />}
         {exists ? t("nodeModules.present") : t("nodeModules.missing")}
@@ -59,26 +60,36 @@ function ProjectNodeModules({ project }: { project: ScannedProject }) {
           {t("nodeModules.measuredAt")} <time dateTime={sizeMeasuredAt}>{format.dateTime(new Date(sizeMeasuredAt), { dateStyle: "medium", timeStyle: "short" })}</time>
         </p>
       ) : null}
-      {exists ? <Link href={diskUsageHref(path, "packages")} className="inline-block max-w-full rounded-sm text-ink-soft underline focus-ring [overflow-wrap:anywhere]">{t("nodeModules.viewSize")}</Link> : null}
+      {exists ? (
+        <Button asChild variant="secondary" size="sm">
+          <Link href={diskUsageHref(path, "packages")}>
+            <HardDriveIcon data-icon="inline-start" aria-hidden="true" />
+            {t("nodeModules.viewSize")}
+          </Link>
+        </Button>
+      ) : null}
     </div>
   )
 }
 
-function ProjectFilesLink({ project }: { project: ScannedProject }) {
+// Hành động của 1 dự án: hiện dạng nút (có icon) để người dùng nhận ra là bấm được.
+function ProjectActions({ project }: { project: ScannedProject }) {
   const t = useTranslations("projects")
   return (
-    <Link href={fileManagerHref(project.path)} className="inline-block max-w-full rounded-sm text-body-sm text-ink-soft underline focus-ring">
-      {t("actions.manageFiles")}
-    </Link>
-  )
-}
-
-function ProjectDetailsLink({ project }: { project: ScannedProject }) {
-  const t = useTranslations("projects")
-  return (
-    <Link href={projectDetailHref(project.path)} prefetch={false} className="inline-block max-w-full rounded-sm text-body-sm text-ink-soft underline focus-ring">
-      {t("viewDetails")}
-    </Link>
+    <div className="flex flex-wrap gap-2">
+      <Button asChild variant="secondary" size="sm">
+        <Link href={projectDetailHref(project.path)} prefetch={false}>
+          <InfoIcon data-icon="inline-start" aria-hidden="true" />
+          {t("viewDetails")}
+        </Link>
+      </Button>
+      <Button asChild variant="secondary" size="sm">
+        <Link href={fileManagerHref(project.path)}>
+          <FolderOpenIcon data-icon="inline-start" aria-hidden="true" />
+          {t("actions.manageFiles")}
+        </Link>
+      </Button>
+    </div>
   )
 }
 
@@ -110,8 +121,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                 <TableCell className="min-w-0 whitespace-normal">
                   <p className="font-semibold text-foreground [overflow-wrap:anywhere]">{projectDisplayName(project)}</p>
                   <p className="mt-1 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
-                  <p className="mt-2"><ProjectFilesLink project={project} /></p>
-                  <p className="mt-2"><ProjectDetailsLink project={project} /></p>
+                  <div className="mt-3"><ProjectActions project={project} /></div>
                 </TableCell>
                 <TableCell className="whitespace-normal"><ProjectManager project={project} /></TableCell>
                 <TableCell className="whitespace-normal"><ProjectLockfile project={project} /></TableCell>
@@ -132,8 +142,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
               <CardHeader className="min-w-0">
                 <CardTitle className="min-w-0 [overflow-wrap:anywhere]">{projectDisplayName(project)}</CardTitle>
                 <p className="min-w-0 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
-                <p><ProjectFilesLink project={project} /></p>
-                <p><ProjectDetailsLink project={project} /></p>
+                <ProjectActions project={project} />
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-4 text-body-sm">
