@@ -97,6 +97,11 @@ function runParallel(apps, openBrowser) {
     prefixLines(child.stderr, process.stderr, `[${app}]`);
 
     child.once('error', (error) => console.error(`[run-apps] apps/${app}: ${error.message}`));
+    // An app that exits right after its ready line must not get a browser tab: its output can still
+    // arrive between 'exit' and 'close'.
+    child.once('exit', () => {
+      waiting = null;
+    });
     child.once('close', (code) => {
       running.delete(child);
       if (exitCode === undefined) {
