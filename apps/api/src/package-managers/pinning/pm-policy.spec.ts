@@ -248,9 +248,9 @@ describe('project pin eligibility', () => {
       expect(
         assessPmPinChange({ ...repair, devEnginesPresent: true }).reason,
       ).toBe('CONFIG_UNSUPPORTED');
-      expect(
-        assessPmPinChange({ ...repair, targetVersion: old }).reason,
-      ).toBe('TARGET_VERSION_UNSUPPORTED');
+      expect(assessPmPinChange({ ...repair, targetVersion: old }).reason).toBe(
+        'TARGET_VERSION_UNSUPPORTED',
+      );
       expect(
         assessPmPinChange({
           ...repair,

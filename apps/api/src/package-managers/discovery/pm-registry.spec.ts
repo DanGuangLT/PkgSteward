@@ -66,9 +66,7 @@ describe('M9 public declaration catalog', () => {
           f.registry.resolveTarget(catalog, tag, installed).targetVersion,
         ).toBe(target);
       else
-        expect(() =>
-          f.registry.resolveTarget(catalog, tag, installed),
-        ).toThrow(
+        expect(() => f.registry.resolveTarget(catalog, tag, installed)).toThrow(
           expect.objectContaining({
             details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
           }),
