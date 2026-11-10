@@ -201,13 +201,38 @@
     "search": {
       "label": "Find projects",
       "placeholder": "Search by name or path",
-      "clear": "Clear filter",
+      "clearAll": "Clear search and filters",
       "results": "{count, plural, one {Showing {formattedCount} project} other {Showing {formattedCount} projects}}"
     },
     "sort": {
       "label": "Sort by",
       "activity": "Recent activity",
       "name": "Name A–Z"
+    },
+    "filters": {
+      "label": "Filters",
+      "optionCount": "{label} ({count})",
+      "reset": "Clear filters",
+      "manager": {
+        "label": "Package manager",
+        "all": "All"
+      },
+      "nodeModules": {
+        "label": "node_modules",
+        "all": "All",
+        "present": "Has node_modules",
+        "missing": "No node_modules"
+      },
+      "activity": {
+        "label": "Last activity",
+        "all": "Any time",
+        "within7d": "In the last 7 days",
+        "within30d": "In the last 30 days",
+        "within90d": "In the last 90 days",
+        "olderThan90d": "Inactive for over 90 days",
+        "olderThan180d": "Inactive for over 180 days",
+        "olderThan365d": "Inactive for over a year"
+      }
     },
     "columns": {
       "project": "Project / path",
