@@ -535,6 +535,26 @@ describe.each(TEST_NPM_VERSIONS)('inventory cross-check (npm %s)', (v) => {
     });
     expect(result.ownershipComplete).toBe(false);
   });
+  it.each(['.cmd', '.ps1'] as const)(
+    'refuses $basedir_win in an npm %s shim, where the variable is undefined',
+    async (extension) => {
+      const shims = npm12Shims(shimTarget);
+      const target =
+        extension === '.cmd'
+          ? '"%dp0%\\node_modules\\@test\\tool\\bin\\cli.js"'
+          : `"$basedir/${shimTarget}"`;
+      const text = shims[extension].replaceAll(
+        target,
+        `"$basedir_win/${shimTarget}"`,
+      );
+      expect(text).not.toContain(target);
+      const result = await withShims({ [`test-tool${extension}`]: text });
+      expect(result.packages[0]).toMatchObject({
+        status: 'invalid',
+        reason: 'BIN_CONFLICT',
+      });
+    },
+  );
   it('checks cancellation before list or manifest I/O', async () => {
     const { deps, location, spawn, open } = setup();
     const controller = new AbortController();
