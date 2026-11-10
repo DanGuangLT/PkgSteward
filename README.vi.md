@@ -96,6 +96,9 @@ pnpm build      # hoặc: npm run build / yarn build (build apps/api rồi đế
 pnpm start      # hoặc: npm start / yarn start (chạy start:prod trong apps/api và start trong apps/web)
 ```
 
+`start` tự mở giao diện web trong trình duyệt mặc định khi cả hai ứng dụng đã sẵn sàng (mỗi lần chạy mở một tab;
+`dev` không mở). Đặt `PKGSTEWARD_NO_BROWSER=1` để bỏ qua.
+
 Bạn vẫn có thể chạy riêng từng ứng dụng trong thư mục của nó, ví dụ `cd apps/api && pnpm dev`.
 
 | | URL |
