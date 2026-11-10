@@ -88,16 +88,23 @@ update the backend's `LIST_ORIGIN_CORS` to match the origin used in the browser 
 
 ### 3. Run
 
-Start each app in its own terminal, with the package manager you installed with (`pnpm dev`, `npm run dev` or
-`yarn dev`):
+Start both apps from the repository root, with the package manager you installed with:
 
 ```bash
-cd apps/api && pnpm dev
-cd apps/web && pnpm dev
+pnpm dev        # or: npm run dev / yarn dev
 ```
 
-For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run `build` and `start:prod` in
-`apps/api`, and `build` and `start` in `apps/web`. Press `Ctrl+C` to stop an app.
+Both apps run in one terminal; each output line starts with `[api]` or `[web]`. Press `Ctrl+C` to stop both.
+If one app stops (for example, because of an invalid `.env` value), the other one is stopped too.
+
+For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run at the repository root:
+
+```bash
+pnpm build      # or: npm run build / yarn build (builds apps/api, then apps/web)
+pnpm start      # or: npm start / yarn start (runs start:prod in apps/api and start in apps/web)
+```
+
+You can still run an app on its own inside its folder, for example `cd apps/api && pnpm dev`.
 
 | | URL |
 |---|---|
@@ -105,12 +112,16 @@ For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run
 | API | http://localhost:24681/api/v1 |
 | Swagger (development only) | http://localhost:24681/swagger |
 
-Each app's scripts are listed below; run them inside its folder.
+Root scripts run both apps; the other scripts below run inside the app's folder. With npm, use `npm run <script>`; with
+Yarn, `yarn <script>`.
 
 ## Scripts
 
 | App | Command | What it does |
 |---|---|---|
+| Root | `pnpm install` | Install both apps |
+| | `pnpm dev` | Start both apps in development mode |
+| | `pnpm build` / `pnpm start` | Build both apps / run both production builds |
 | Backend | `pnpm dev` | Start with watch mode |
 | | `pnpm build` / `pnpm start:prod` | Compile to `dist/` / run the compiled build |
 | | `pnpm lint` | ESLint (auto-fix) |
@@ -126,12 +137,12 @@ Each app's scripts are listed below; run them inside its folder.
 ```
 apps/api/          Backend API (NestJS 12)
 apps/web/          Web UI (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
-scripts/           Repository scripts (root install, third-party notices)
-package.json       Root install only: installs both apps
+scripts/           Repository scripts (root install and run, third-party notices)
+package.json       Root scripts: install, run and build both apps
 ```
 
 The two apps are independent pnpm projects, each with its own lockfile. The root `package.json` has no
-dependencies; its only job is to install both apps.
+dependencies; it only installs, runs and builds both apps with the package manager you call it with.
 
 ## Contributing
 
