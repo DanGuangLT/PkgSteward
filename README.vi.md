@@ -78,16 +78,23 @@ Giá trị chỉ có khoảng trắng tính là rỗng; giá trị sai sẽ dừ
 
 ### 3. Chạy
 
-Chạy mỗi ứng dụng trong một terminal riêng, bằng trình quản lý gói bạn đã dùng để cài (`pnpm dev`, `npm run dev`
-hoặc `yarn dev`):
+Chạy cả hai ứng dụng từ thư mục gốc, bằng trình quản lý gói bạn đã dùng để cài:
 
 ```bash
-cd apps/api && pnpm dev
-cd apps/web && pnpm dev
+pnpm dev        # hoặc: npm run dev / yarn dev
 ```
 
-Muốn chạy production: đặt `MODE=production` trong `apps/api/.env` (tắt Swagger), rồi chạy `build` và `start:prod`
-trong `apps/api`, `build` và `start` trong `apps/web`. Nhấn `Ctrl+C` để dừng một ứng dụng.
+Hai ứng dụng chạy chung một terminal; mỗi dòng log bắt đầu bằng `[api]` hoặc `[web]`. Nhấn `Ctrl+C` để dừng cả hai.
+Nếu một ứng dụng dừng (ví dụ vì giá trị trong `.env` không hợp lệ), ứng dụng còn lại cũng được dừng theo.
+
+Muốn chạy production: đặt `MODE=production` trong `apps/api/.env` (tắt Swagger), rồi chạy ở thư mục gốc:
+
+```bash
+pnpm build      # hoặc: npm run build / yarn build (build apps/api rồi đến apps/web)
+pnpm start      # hoặc: npm start / yarn start (chạy start:prod trong apps/api và start trong apps/web)
+```
+
+Bạn vẫn có thể chạy riêng từng ứng dụng trong thư mục của nó, ví dụ `cd apps/api && pnpm dev`.
 
 | | URL |
 |---|---|
@@ -95,12 +102,16 @@ trong `apps/api`, `build` và `start` trong `apps/web`. Nhấn `Ctrl+C` để d�
 | API | http://localhost:24681/api/v1 |
 | Swagger (chỉ development) | http://localhost:24681/swagger |
 
-Các lệnh của từng ứng dụng nằm ở bảng bên dưới; chạy chúng trong thư mục của ứng dụng đó.
+Lệnh ở thư mục gốc chạy cả hai ứng dụng; các lệnh còn lại trong bảng chạy trong thư mục của ứng dụng đó. Với npm, dùng
+`npm run <lệnh>`; với Yarn, dùng `yarn <lệnh>`.
 
 ## Lệnh
 
 | Ứng dụng | Lệnh | Việc |
 |---|---|---|
+| Thư mục gốc | `pnpm install` | Cài cả hai ứng dụng |
+| | `pnpm dev` | Chạy cả hai ứng dụng ở chế độ development |
+| | `pnpm build` / `pnpm start` | Build cả hai ứng dụng / chạy cả hai bản build production |
 | Backend | `pnpm dev` | Chạy ở chế độ watch |
 | | `pnpm build` / `pnpm start:prod` | Biên dịch ra `dist/` / chạy bản đã biên dịch |
 | | `pnpm lint` | ESLint (tự sửa) |
@@ -116,12 +127,12 @@ Các lệnh của từng ứng dụng nằm ở bảng bên dưới; chạy chú
 ```
 apps/api/          API backend (NestJS 12)
 apps/web/          Giao diện web (Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, next-intl)
-scripts/           Script của repo (cài đặt từ thư mục gốc, danh sách thư viện bên thứ ba)
-package.json       Chỉ dùng để cài: cài cả hai ứng dụng
+scripts/           Script của repo (cài và chạy từ thư mục gốc, danh sách thư viện bên thứ ba)
+package.json       Lệnh ở thư mục gốc: cài, chạy và build cả hai ứng dụng
 ```
 
 Hai ứng dụng là hai dự án pnpm độc lập, mỗi bên có lockfile riêng. `package.json` ở thư mục gốc không có
-dependency nào; nó chỉ dùng để cài cả hai ứng dụng.
+dependency nào; nó chỉ cài, chạy và build cả hai ứng dụng bằng đúng trình quản lý gói bạn gọi.
 
 ## Đóng góp
 

@@ -27,9 +27,9 @@ cp apps/api/.env.example apps/api/.env
 `pnpm install` at the repository root installs both apps. Use pnpm, not npm or Yarn, when you contribute:
 only pnpm keeps each app's `pnpm-lock.yaml` in sync with what CI installs.
 
-Run `pnpm dev` in `apps/api/` (API on `http://localhost:24681/api/v1`) and in `apps/web/`
-(UI on `http://localhost:24680`), each in its own terminal. The two apps are independent pnpm projects with their own
-lockfiles.
+Run `pnpm dev` at the repository root to start both apps in one terminal (API on `http://localhost:24681/api/v1`,
+UI on `http://localhost:24680`), or run `pnpm dev` in `apps/api/` and in `apps/web/`, each in its own terminal. The two
+apps are independent pnpm projects with their own lockfiles.
 
 pnpm 11 only runs dependency build scripts that are listed in each app's `pnpm-workspace.yaml` (`allowBuilds`).
 If you add a dependency that needs a build script, add it there.
