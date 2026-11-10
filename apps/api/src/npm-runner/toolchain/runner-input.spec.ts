@@ -14,9 +14,12 @@ import {
   tool,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type {
+  IRunRequest,
   IRunnerInput,
   IRunnerInputDeps,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import { PROJECT_LOCK_BYTES } from '@/projects/locks/project-lock-common';
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
 
 const fixtureText = (name: string) =>
@@ -388,6 +391,183 @@ describe('runner input: guarded current filesystem, scan and hash', () => {
       tool: null,
       reason: 'TOOL_NOT_FOUND',
     });
+  });
+});
+
+// TEST npm 12 scenarios; không phải yêu cầu nghiệp vụ.
+describe('runner npm 12 policy and shrinkwrap refusal', () => {
+  const setupNpm12 = () => {
+    const f = setup();
+    f.resolveTool.mockResolvedValue(tool('npm', '12.2.2'));
+    return f;
+  };
+  it.each([
+    [undefined, false],
+    ['npm@12.2.2', false],
+    ['npm@12.1.0', true],
+    ['npm@12.1.0+sha512.TEST', true],
+  ] as const)(
+    'accepts pin %p with warning=%s',
+    async (packageManager, warning) => {
+      const f = setupNpm12();
+      f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+      const input = await f.read();
+      expect(input).toMatchObject({
+        manager: 'npm',
+        reason: null,
+        tool: { version: '12.2.2' },
+      });
+      expect(input.warnings.includes('PACKAGE_MANAGER_PIN_DIFFERS')).toBe(
+        warning,
+      );
+    },
+  );
+  it.each([
+    ['11.17.0', 'npm@12.2.2'],
+    ['12.2.2', 'npm@11.17.0'],
+    ['12.2.2', 'npm@13.0.0'],
+  ])('refuses installed %s versus pin %s', async (version, packageManager) => {
+    const f = setup();
+    f.resolveTool.mockResolvedValue(tool('npm', version));
+    f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+    expect((await f.read()).reason).toBe('TOOL_VERSION_MISMATCH');
+  });
+  it.each([
+    ['npm', '13.0.0', 'npm@13.0.0'],
+    ['npm', '12.2.2-rc.1', 'npm@12.2.2-rc.1'],
+    ['pnpm', '12.0.0', 'pnpm@12.0.0'],
+  ] as const)(
+    'refuses forged installed %s %s even with matching pin %s',
+    async (manager, version, packageManager) => {
+      const f = setup();
+      f.resolveTool.mockResolvedValue(tool(manager, version));
+      f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+      expect((await f.read()).reason).toBe('TOOL_VERSION_MISMATCH');
+    },
+  );
+  describe.each([false, true])('package-lock present=%s', (packageLock) => {
+    it.each([undefined, 'npm@12.2.2', 'npm@11.17.0'])(
+      'vetoes shrinkwrap before repairable mismatch for pin %p and every action',
+      async (packageManager) => {
+        const f = setupNpm12();
+        f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+        f.put(path.join(root, 'npm-shrinkwrap.json'), '{}');
+        if (packageLock) f.put(path.join(root, 'package-lock.json'), '{}');
+        const input = await f.read();
+        expect(input.reason).toBe('CONFIG_UNSUPPORTED');
+        expect(input.tool?.version).toBe('12.2.2');
+        expect(input.lockFiles).toEqual(
+          packageLock
+            ? ['npm-shrinkwrap.json', 'package-lock.json']
+            : ['npm-shrinkwrap.json'],
+        );
+        expect(input.warnings).not.toContain('NO_LOCKFILE');
+        expect.assertions(4 + RUN_ACTIONS.length);
+        for (const action of RUN_ACTIONS) {
+          const request: IRunRequest = {
+            path: input.path,
+            action,
+            inputHash: input.inputHash,
+            requestId: '00000000-0000-4000-8000-000000000001',
+            ...(action === 'script'
+              ? { script: 'dev' }
+              : action.endsWith('_one')
+                ? { package: 'alpha' }
+                : {}),
+          };
+          try {
+            buildRunCommand(input, request);
+          } catch (error: unknown) {
+            expect(error).toMatchObject({
+              details: { reason: 'CONFIG_UNSUPPORTED' },
+            });
+          }
+        }
+      },
+    );
+    it('keeps npm 11 shrinkwrap execution eligible', async () => {
+      const f = setup();
+      f.put(path.join(root, 'npm-shrinkwrap.json'), '{}');
+      if (packageLock) f.put(path.join(root, 'package-lock.json'), '{}');
+      expect((await f.read()).reason).toBeNull();
+    });
+  });
+  it.each(['create', 'remove', 'replace'] as const)(
+    'detects shrinkwrap %s as INPUT_CHANGED for npm 12',
+    async (change) => {
+      const f = setupNpm12();
+      const marker = path.join(root, 'npm-shrinkwrap.json');
+      if (change !== 'create') f.put(marker, '{}');
+      const previous = await f.read();
+      if (change === 'remove') f.remove(marker);
+      else {
+        f.put(marker, '{}');
+        if (change === 'replace') {
+          const before = f.stats.get(key(marker))!;
+          f.stats.set(key(marker), { ...before, ino: before.ino + 1 });
+        }
+      }
+      await expect(f.revalidate(previous)).rejects.toMatchObject({
+        details: { reason: 'INPUT_CHANGED' },
+      });
+    },
+  );
+  it('retains INPUT_CHANGED for a changed shrinkwrap handle', async () => {
+    const f = setupNpm12();
+    const marker = path.join(root, 'npm-shrinkwrap.json');
+    f.put(marker, '{}');
+    const before = f.stats.get(key(marker))!;
+    f.openedStats.set(key(marker), { ...before, ino: before.ino + 1 });
+    await expect(f.read()).rejects.toMatchObject({
+      details: { reason: 'INPUT_CHANGED' },
+    });
+    expect(f.events).not.toContain(`read:${key(marker)}`);
+  });
+  it.each(['unreadable', 'link', 'oversize', 'outside'] as const)(
+    'fails closed before resolving npm 12 for %s shrinkwrap',
+    async (fault) => {
+      const f = setupNpm12();
+      const marker = path.join(root, 'npm-shrinkwrap.json');
+      f.put(marker, '{}');
+      const before = f.stats.get(key(marker))!;
+      if (fault === 'unreadable') {
+        const original = f.lstat.getMockImplementation()!;
+        f.lstat.mockImplementation((value) =>
+          key(value) === key(marker)
+            ? Promise.reject(
+                Object.assign(new Error('TEST denied'), { code: 'EACCES' }),
+              )
+            : original(value),
+        );
+      } else if (fault === 'link')
+        f.stats.set(key(marker), { ...before, isSymbolicLink: () => true });
+      else if (fault === 'oversize')
+        f.stats.set(key(marker), { ...before, size: PROJECT_LOCK_BYTES + 1 });
+      else f.realpaths.set(key(marker), 'E:\\OUTSIDE\\npm-shrinkwrap.json');
+      expect((await f.read()).reason).toBe('CONFIG_UNSUPPORTED');
+      expect(f.resolveTool).not.toHaveBeenCalled();
+      expect(f.events).not.toContain(`read:${key(marker)}`);
+    },
+  );
+  it('keeps npm 12 cwd guarded and recognizes workspace leaves', async () => {
+    const f = setupNpm12();
+    f.put('D:\\TEST\\package.json', manifest({ workspaces: ['project'] }));
+    const input = await f.read();
+    expect(input.reason).toBeNull();
+    expect(input.workspace).toEqual({ kind: 'leaf', root: 'D:\\TEST' });
+    expect(input.path).toBe(root);
+    f.realpaths.set(key(root), 'E:\\OUTSIDE');
+    await expect(f.revalidate(input)).rejects.toMatchObject({
+      details: { reason: 'INPUT_CHANGED' },
+    });
+  });
+  it('retains cancellation immediately after npm 12 resolution', async () => {
+    const f = setupNpm12();
+    f.resolveTool.mockImplementation(() => {
+      f.controller.abort();
+      return Promise.resolve(tool('npm', '12.2.2'));
+    });
+    await expect(f.read()).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

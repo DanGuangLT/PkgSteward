@@ -43,6 +43,7 @@ import {
   sameRunnerIdentity,
 } from '@/npm-runner/toolchain/runner-tool';
 import type { IRunnerTextFile } from '@/npm-runner/toolchain/runner-tool';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 
 const SMALL_BYTES = 1024 * 1024;
 const LOCKS: readonly ProjectLockName[] = [
@@ -540,10 +541,18 @@ export async function readRunnerInput(
       signal.throwIfAborted();
       if (
         selectedTool.manager !== manager ||
-        !semver.valid(selectedTool.version) ||
-        semver.major(selectedTool.version) !== 11 ||
-        (pinVersion &&
-          semver.major(pinVersion) !== semver.major(selectedTool.version))
+        !isSupportedRunnerVersion(manager, selectedTool.version)
+      )
+        reason = 'TOOL_VERSION_MISMATCH';
+      else if (
+        manager === 'npm' &&
+        semver.major(selectedTool.version) === 12 &&
+        lockFiles.includes('npm-shrinkwrap.json')
+      )
+        reason = 'CONFIG_UNSUPPORTED';
+      else if (
+        pinVersion &&
+        semver.major(pinVersion) !== semver.major(selectedTool.version)
       )
         reason = 'TOOL_VERSION_MISMATCH';
       else if (pinVersion && pinVersion !== selectedTool.version)

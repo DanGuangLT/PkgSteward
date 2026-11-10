@@ -1,0 +1,9 @@
+{
+  "name": "TEST-npm12-prefix",
+  "description": "TEST không phải yêu cầu nghiệp vụ. Synthetic npm 12 object; runtime comparison pending.",
+  "dependencies": {
+    "@test/tool": {
+      "version": "1.2.3"
+    }
+  }
+}

@@ -171,7 +171,7 @@ export function planPinEdit(bytes: Uint8Array, targetPin: string): IPmPinEdit {
   if (
     !next ||
     next.hash !== null ||
-    getPmTargetReason(next.manager, '11.0.0', next.version, false) !== null
+    getPmTargetReason(next.manager, next.version, next.version, false) !== null
   )
     return refuse('TARGET_VERSION_UNSUPPORTED');
   const { text, bomBytes } = decode(bytes);

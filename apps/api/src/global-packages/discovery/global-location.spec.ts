@@ -9,6 +9,7 @@ import {
 import type { IGlobalLocationDeps } from '@/global-packages/discovery/global-location';
 import {
   expectGlobalReason,
+  TEST_NPM_VERSIONS,
   memoryFs,
   probeResult,
   TEST_PATHS as P,
@@ -154,7 +155,7 @@ describe('bounded cancellable probe boundary', () => {
   });
 });
 
-describe('verified installed-tool location discovery', () => {
+describe.each(TEST_NPM_VERSIONS)('verified location (npm %s)', (v) => {
   const controller = () => new AbortController();
   function setup() {
     const memory = memoryFs();
@@ -220,7 +221,9 @@ describe('verified installed-tool location discovery', () => {
       .mockImplementation((manager) => {
         if (manager !== 'npm' && manager !== 'pnpm')
           throw new Error('TEST unsupported manager');
-        return Promise.resolve(testTool(manager));
+        return Promise.resolve(
+          testTool(manager, manager === 'npm' ? v : undefined),
+        );
       });
     jest
       .spyOn(runnerTools, 'revalidateRunnerTool')
@@ -403,7 +406,7 @@ describe('verified installed-tool location discovery', () => {
       );
       expect(location).toMatchObject({
         manager,
-        tool: testTool(manager),
+        tool: testTool(manager, v),
         cwd: P.cwd,
         globalRoot: win32.join(P.prefix, 'node_modules'),
         binDir: P.prefix,
@@ -418,6 +421,11 @@ describe('verified installed-tool location discovery', () => {
         expect(args[0]).toBe(testTool(manager).entry);
         expect(args).not.toContain('--version');
         expect(options.cwd).toBe(P.cwd);
+        expect(options).toMatchObject({
+          shell: false,
+          extendEnv: false,
+          stdin: 'ignore',
+        });
       }
     },
   );

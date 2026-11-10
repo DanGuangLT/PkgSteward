@@ -31,11 +31,247 @@ describe('installed runner tool resolver (static data only)', () => {
       );
     return { ...f, resolve };
   };
-  it.each(['npm', 'pnpm'] as const)(
-    'resolves %s through a linked nvm Node directory and launches canonical paths',
-    async (manager) => {
+  const setupNpm12 = () => {
+    const f = setup();
+    const installed = f.installTool('npm', '12.2.2');
+    f.snapshot.nodeVersion = '24.19.0';
+    return { ...f, installed };
+  };
+  it('resolves sibling npm 12 statically with canonical Node, JS entry and identities', async () => {
+    const f = setupNpm12();
+    const result = await f.resolve();
+    expect(result).toMatchObject({
+      manager: 'npm',
+      version: '12.2.2',
+      file: nodeFile,
+      entry: f.installed.entry,
+      packageDir: npmDir,
+    });
+    expect(result.identities.map((identity) => key(identity.path))).toEqual([
+      key(nodeFile),
+      key(path.join(npmDir, 'package.json')),
+      key(f.installed.entry!),
+      key(npmDir),
+    ]);
+    await expect(
+      revalidateRunnerTool(result, f.fs, f.controller.signal),
+    ).resolves.toBeUndefined();
+  });
+  it.each(['24.15.0', '24.19.0', '22.22.2', '26.0.0'])(
+    'accepts npm 12 with compatible backend Node %s',
+    async (nodeVersion) => {
+      const f = setupNpm12();
+      f.snapshot.nodeVersion = nodeVersion;
+      expect((await f.resolve()).version).toBe('12.2.2');
+    },
+  );
+  it.each(['24.14.9', '22.22.1', '25.0.0', 'invalid', '', '24.15.0-rc.1'])(
+    'refuses npm 12 with incompatible/invalid backend Node %p',
+    async (nodeVersion) => {
+      const f = setupNpm12();
+      f.snapshot.nodeVersion = nodeVersion;
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_VERSION_MISMATCH' },
+      });
+    },
+  );
+  it.each([
+    undefined,
+    null,
+    {},
+    { node: '' },
+    { node: '   ' },
+    { node: 24 },
+    { node: 'invalid range' },
+  ])('refuses missing/malformed npm 12 engines %p', async (engines) => {
+    const f = setupNpm12();
+    f.put(
+      path.join(npmDir, 'package.json'),
+      JSON.stringify({
+        name: 'npm',
+        version: '12.2.2',
+        bin: { npm: 'bin/npm-cli.js' },
+        engines,
+      }),
+    );
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+  });
+  it('reads the actual engine range and defaults to the backend process Node', async () => {
+    const f = setupNpm12();
+    delete f.snapshot.nodeVersion;
+    f.snapshot.env = {
+      PATH: pnpmPrefix,
+      NODE_VERSION: '0.0.1',
+      npm_config_node_version: '0.0.1',
+    };
+    const manifest = (node: string) =>
+      JSON.stringify({
+        name: 'npm',
+        version: '12.2.2',
+        bin: { npm: 'bin/npm-cli.js' },
+        engines: { node },
+      });
+    f.put(path.join(npmDir, 'package.json'), manifest(process.versions.node));
+    expect((await f.resolve()).version).toBe('12.2.2');
+    f.put(path.join(npmDir, 'package.json'), manifest('0.0.1'));
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_VERSION_MISMATCH' },
+    });
+  });
+  it('ignores an npm 12 PATH/prefix overlay in favor of sibling npm 11', async () => {
+    const f = setup();
+    f.installTool('npm');
+    const overlay = path.join(pnpmPrefix, 'node_modules', 'npm');
+    f.put(
+      path.join(overlay, 'package.json'),
+      JSON.stringify({
+        name: 'npm',
+        version: '12.2.2',
+        bin: { npm: 'bin/npm-cli.js' },
+        engines: { node: '*' },
+      }),
+    );
+    f.put(
+      path.join(overlay, 'bin', 'npm-cli.js'),
+      '// TEST overlay, never executed',
+    );
+    f.snapshot.env = { PATH: pnpmPrefix, npm_config_prefix: pnpmPrefix };
+    expect((await f.resolve()).version).toBe('11.17.0');
+    f.remove(path.join(npmDir, 'package.json'));
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_NOT_FOUND' },
+    });
+    expect(f.events).not.toContain(
+      `open:${key(path.join(overlay, 'package.json'))}`,
+    );
+  });
+  it.each(['12.0.0-pre.1', '13.0.0'])(
+    'refuses sibling npm %s without trying an overlay',
+    async (version) => {
+      const f = setupNpm12();
+      f.installTool('npm', version);
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_VERSION_MISMATCH' },
+      });
+    },
+  );
+  it('keeps pnpm 12 unsupported', async () => {
+    const f = setup('pnpm');
+    f.installTool('pnpm', '12.0.0');
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_VERSION_MISMATCH' },
+    });
+  });
+  it.each([
+    ['npm', '11.0.0-pre.1'],
+    ['pnpm', '11.0.0-pre.1'],
+    ['npm', '11.17.0+TEST'],
+    ['pnpm', '11.22.0+TEST'],
+    ['npm', 'v11.17.0'],
+    ['pnpm', 'v11.22.0'],
+  ] as const)(
+    'retains %s %s normalization without requiring Node engines',
+    async (manager, version) => {
       const f = setup(manager);
-      const installed = f.installTool(manager);
+      f.installTool(manager, version);
+      f.snapshot.nodeVersion = 'invalid';
+      expect((await f.resolve()).version).toBe(version);
+    },
+  );
+  it.each(['metadata', 'entry'] as const)(
+    'detects npm 12 %s replacement during resolution',
+    async (part) => {
+      const f = setupNpm12();
+      const target =
+        part === 'metadata'
+          ? path.join(npmDir, 'package.json')
+          : f.installed.entry!;
+      let observations = 0;
+      f.onEvent((event) => {
+        if (event !== `lstat:${key(target)}` || ++observations !== 2) return;
+        const before = f.stats.get(key(target))!;
+        f.stats.set(key(target), { ...before, ino: before.ino + 1 });
+      });
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'INPUT_CHANGED' },
+      });
+    },
+  );
+  it('revalidates every npm 12 identity before use', async () => {
+    const f = setupNpm12();
+    const selected = await f.resolve();
+    for (const identity of selected.identities) {
+      const before = f.stats.get(key(identity.path))!;
+      f.stats.set(key(identity.path), { ...before, ino: before.ino + 1 });
+      await expect(
+        revalidateRunnerTool(selected, f.fs, f.controller.signal),
+      ).rejects.toMatchObject({ details: { reason: 'INPUT_CHANGED' } });
+      f.stats.set(key(identity.path), before);
+    }
+  });
+  it.each(['../../escape.js', 'C:\\TEST\\evil.js', 'bin/npm.cmd'])(
+    'retains npm 12 bin containment for %p',
+    async (bin) => {
+      const f = setupNpm12();
+      f.put(
+        path.join(npmDir, 'package.json'),
+        JSON.stringify({
+          name: 'npm',
+          version: '12.2.2',
+          bin: { npm: bin },
+          engines: { node: '*' },
+        }),
+      );
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+    },
+  );
+  it.each(['package', 'entry', 'node'] as const)(
+    'refuses npm 12 %s junctions into a scanned project',
+    async (part) => {
+      const f = setupNpm12();
+      const source =
+        part === 'package'
+          ? npmDir
+          : part === 'entry'
+            ? f.installed.entry!
+            : nodeFile;
+      const target =
+        part === 'node'
+          ? path.join(root, 'node.exe')
+          : part === 'entry'
+            ? path.join(root, 'evil.js')
+            : root;
+      f.put(target, 'TEST untrusted bytes');
+      f.realpaths.set(key(source), target);
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+    },
+  );
+  it('refuses npm 12 when the backend Node is selected from a .bin directory', async () => {
+    const f = setupNpm12();
+    const untrusted = 'E:\\TEST\\node_modules\\.bin\\node.exe';
+    f.put(untrusted, 'TEST untrusted Node, never executed');
+    f.snapshot.execPath = untrusted;
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+    expect(f.open).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['npm', '11.17.0'],
+    ['pnpm', '11.22.0'],
+    ['npm', '12.2.2'],
+  ] as const)(
+    'resolves %s %s through a linked nvm Node directory and launches canonical paths',
+    async (manager, version) => {
+      const f = setup(manager);
+      const installed = f.installTool(manager, version);
+      f.snapshot.nodeVersion = '24.19.0';
       const canonicalNodeDir =
         'C:\\Users\\TEST\\AppData\\Roaming\\nvm\\v24.19.0';
       const canonicalNode = path.join(canonicalNodeDir, 'node.exe');
@@ -53,16 +289,9 @@ describe('installed runner tool resolver (static data only)', () => {
       );
       f.put(
         path.join(packageDir, 'package.json'),
-        readFileSync(
-          join(
-            __dirname,
-            '..',
-            '__fixtures__',
-            'tools',
-            `${manager}-package.json`,
-          ),
-          'utf8',
-        ),
+        f.files
+          .get(key(path.join(installed.packageDir, 'package.json')))!
+          .toString('utf8'),
       );
       f.put(entry, '// TEST canonical distribution entry');
       const result = await f.resolve();
@@ -142,24 +371,28 @@ describe('installed runner tool resolver (static data only)', () => {
       expect(result.file).not.toMatch(/\.(?:cmd|bat|ps1|mjs|js)$/i);
     },
   );
-  it('ignores hostile cwd shims, Node binaries, shebangs and PATH .bin', async () => {
-    const f = setup();
-    f.installTool('npm');
-    for (const name of ['npm.exe', 'npm.cmd', 'npm.ps1', 'node.exe', 'npm'])
-      f.put(
-        path.join(root, name),
-        '#!/usr/bin/env node\nthrow new Error("TEST hostile")',
-      );
-    f.snapshot.env = {
-      PATH: `;.;relative;${root};${root}\\node_modules\\.bin;${pnpmPrefix}`,
-    };
-    expect((await f.resolve()).file).toBe(nodeFile);
-    expect(
-      f.events
-        .filter((event) => event.startsWith('open:'))
-        .some((event) => event.includes(key(root))),
-    ).toBe(false);
-  });
+  it.each(['11.17.0', '12.2.2'])(
+    'ignores hostile cwd shims, Node binaries, shebangs and PATH .bin for npm %s',
+    async (version) => {
+      const f = setup();
+      f.installTool('npm', version);
+      f.snapshot.nodeVersion = '24.19.0';
+      for (const name of ['npm.exe', 'npm.cmd', 'npm.ps1', 'node.exe', 'npm'])
+        f.put(
+          path.join(root, name),
+          '#!/usr/bin/env node\nthrow new Error("TEST hostile")',
+        );
+      f.snapshot.env = {
+        PATH: `;.;relative;${root};${root}\\node_modules\\.bin;${pnpmPrefix}`,
+      };
+      expect((await f.resolve()).file).toBe(nodeFile);
+      expect(
+        f.events
+          .filter((event) => event.startsWith('open:'))
+          .some((event) => event.includes(key(root))),
+      ).toBe(false);
+    },
+  );
   it('uses static pnpm bin metadata rather than executing the PATH shim', async () => {
     const f = setup('pnpm');
     f.installTool('pnpm');
@@ -332,23 +565,27 @@ describe('installed runner tool resolver (static data only)', () => {
     });
     expect(f.events).not.toContain(`read:${key(installed.entry!)}`);
   });
-  it('refuses a bin symlink or realpath escaping its distribution even outside scanned roots', async () => {
-    const f = setup();
-    const installed = f.installTool('npm');
-    f.realpaths.set(key(installed.entry!), 'E:\\Tools\\other.mjs');
-    await expect(f.resolve()).rejects.toMatchObject({
-      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
-    });
-    f.realpaths.clear();
-    const before = f.stats.get(key(installed.entry!))!;
-    f.stats.set(key(installed.entry!), {
-      ...before,
-      isSymbolicLink: () => true,
-    });
-    await expect(f.resolve()).rejects.toMatchObject({
-      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
-    });
-  });
+  it.each(['11.17.0', '12.2.2'])(
+    'refuses npm %s bin symlinks or realpaths escaping its distribution outside scanned roots',
+    async (version) => {
+      const f = setup();
+      const installed = f.installTool('npm', version);
+      f.snapshot.nodeVersion = '24.19.0';
+      f.realpaths.set(key(installed.entry!), 'E:\\Tools\\other.mjs');
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+      f.realpaths.clear();
+      const before = f.stats.get(key(installed.entry!))!;
+      f.stats.set(key(installed.entry!), {
+        ...before,
+        isSymbolicLink: () => true,
+      });
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+    },
+  );
   it('refuses a Node executable selected from a project-controlled path', async () => {
     const f = setup();
     f.installTool('npm');

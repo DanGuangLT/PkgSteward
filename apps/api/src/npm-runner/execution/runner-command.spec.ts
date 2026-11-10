@@ -63,11 +63,16 @@ const rows: [RunAction, Partial<IRunRequest>, string[], string[]][] = [
 ];
 
 describe('runner command grammar and fixed argv', () => {
-  describe.each(['npm', 'pnpm'] as const)('%s 11', (manager) => {
+  describe.each([
+    ['npm', '11.17.0'],
+    ['npm', '12.2.2'],
+    ['pnpm', '11.22.0'],
+  ] as const)('%s %s', (manager, version) => {
     it.each(rows)(
       '%s pins every argument and the absolute Node entry',
       (action, extra, npm, pnpm) => {
         const context = runnerInput(manager);
+        context.tool = tool(manager, version);
         const prefix =
           manager === 'npm'
             ? [
@@ -100,6 +105,7 @@ describe('runner command grammar and fixed argv', () => {
       'treats script collision %s as data',
       (script) => {
         const context = runnerInput(manager);
+        context.tool = tool(manager, version);
         context.scripts[script] = 'echo TEST';
         const command = buildRunCommand(context, request('script', { script }));
         expect(command.args.slice(manager === 'npm' ? -3 : -2)).toEqual(
@@ -289,6 +295,47 @@ describe('runner command grammar and fixed argv', () => {
     expect(() => buildRunCommand(context, request('install_all'))).toThrow();
     context.tool = { ...tool(), version: '10.0.0' };
     expect(() => buildRunCommand(context, request('install_all'))).toThrow();
+  });
+  it.each([
+    ['npm', '13.0.0'],
+    ['npm', '12.2.2-rc.1'],
+    ['npm', 'invalid'],
+    ['pnpm', '12.0.0'],
+  ] as const)('refuses a forged %s %s context', (manager, version) => {
+    const context = runnerInput(manager);
+    context.tool = tool(manager, version);
+    expect.assertions(rows.length);
+    for (const [action, extra] of rows) {
+      try {
+        buildRunCommand(context, request(action, extra));
+      } catch (error: unknown) {
+        expect(error).toMatchObject({
+          details: { reason: 'TOOL_VERSION_MISMATCH' },
+        });
+      }
+    }
+  });
+  it('keeps npm 12 workspace mutation and script boundaries', () => {
+    expect.assertions(rows.length * 2);
+    const context = runnerInput();
+    context.tool = tool('npm', '12.2.2');
+    context.workspace = { kind: 'root', root: context.path };
+    for (const [action, extra] of rows)
+      expect(buildRunCommand(context, request(action, extra)).cwd).toBe(
+        context.path,
+      );
+    context.workspace = { kind: 'leaf', root: 'D:\\TEST' };
+    expect(
+      buildRunCommand(context, request('script', { script: 'dev' })).cwd,
+    ).toBe(context.path);
+    for (const [action, extra] of rows) {
+      if (action === 'script') continue;
+      try {
+        buildRunCommand(context, request(action, extra));
+      } catch (error: unknown) {
+        expect(error).toMatchObject({ details: { reason: 'WORKSPACE_LEAF' } });
+      }
+    }
   });
   it('refuses a different manager distribution rather than changing the requested adapter', () => {
     const context = runnerInput('pnpm');

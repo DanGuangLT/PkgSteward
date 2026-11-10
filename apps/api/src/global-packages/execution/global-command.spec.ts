@@ -9,6 +9,7 @@ import type {
 } from '@/global-packages/execution/global-command';
 import {
   expectGlobalReason,
+  TEST_NPM_VERSIONS,
   TEST_PATHS as P,
   testLocation,
   testTool,
@@ -24,8 +25,10 @@ import { consumePnpm11Environment } from '@/global-packages/__fixtures__/pnpm11/
 const input = (
   manager: GlobalManager,
   patch: Partial<IGlobalMutationInput> = {},
+  version?: string,
 ): IGlobalMutationInput => ({
-  location: manager === 'pnpm' ? pnpmLocation() : testLocation(manager),
+  location:
+    manager === 'pnpm' ? pnpmLocation() : testLocation(manager, version),
   environment: manager === 'pnpm' ? { PATH: Q.bin } : {},
   action: 'change',
   packageName: '@test/tool',
@@ -53,7 +56,11 @@ const common = (manager: GlobalManager): string[] =>
       ]
     : ['--dir', P.cwd, '--pm-on-fail=warn'];
 
-describe('global command descriptors (argv require RT0)', () => {
+describe.each(TEST_NPM_VERSIONS)('global argv (npm %s; RT pending)', (v) => {
+  const request = (
+    manager: GlobalManager,
+    patch: Partial<IGlobalMutationInput> = {},
+  ) => input(manager, patch, v);
   it.each([
     'PNPM_AUTO_APPROVE_BUILDS_FOR_TESTS',
     'pnpm_auto_approve_builds_for_tests',
@@ -82,7 +89,7 @@ describe('global command descriptors (argv require RT0)', () => {
       await consume(environment, false);
       expect(approve).toHaveBeenCalledWith({ all: true });
       approve.mockClear();
-      const command = buildGlobalCommand(input('pnpm', { environment }));
+      const command = buildGlobalCommand(request('pnpm', { environment }));
       await consume(command.env, false);
       expect(approve).not.toHaveBeenCalled();
       expect(
@@ -117,7 +124,7 @@ describe('global command descriptors (argv require RT0)', () => {
       const environment: NodeJS.ProcessEnv = {};
       for (const key of dangerous) environment[key.toLowerCase()] = '1';
       const command = buildGlobalCommand(
-        input('pnpm', {
+        request('pnpm', {
           action,
           exactVersion: action === 'remove' ? null : '2.0.0',
           environment: { ...environment, PATH: Q.bin },
@@ -155,7 +162,7 @@ describe('global command descriptors (argv require RT0)', () => {
               '--',
               '@test/tool@2.0.0',
             ];
-      const command = buildGlobalCommand(input(manager));
+      const command = buildGlobalCommand(request(manager));
       expect(command.file).toBe(P.node);
       expect(command.cwd).toBe(P.cwd);
       expect(command.args).toEqual([tool.entry, ...common(manager), ...tail]);
@@ -180,7 +187,7 @@ describe('global command descriptors (argv require RT0)', () => {
             ];
       expect(
         buildGlobalCommand(
-          input(manager, {
+          request(manager, {
             action: 'remove',
             exactVersion: null,
           }),
@@ -192,7 +199,7 @@ describe('global command descriptors (argv require RT0)', () => {
     'omits a forced public registry for %s custom-registry removal',
     (manager) => {
       const command = buildGlobalCommand(
-        input(manager, {
+        request(manager, {
           action: 'remove',
           exactVersion: null,
           publicRegistry: false,
@@ -207,7 +214,7 @@ describe('global command descriptors (argv require RT0)', () => {
     await expectGlobalReason(
       () =>
         buildGlobalCommand(
-          input('npm', {
+          request('npm', {
             publicRegistry: false,
           }),
         ),
@@ -220,7 +227,7 @@ describe('global command descriptors (argv require RT0)', () => {
       await expectGlobalReason(
         () =>
           buildGlobalCommand(
-            input('npm', {
+            request('npm', {
               exactVersion,
             }),
           ),
@@ -239,7 +246,7 @@ describe('global command descriptors (argv require RT0)', () => {
     await expectGlobalReason(
       () =>
         buildGlobalCommand(
-          input('pnpm', {
+          request('pnpm', {
             packageName,
           }),
         ),
@@ -250,7 +257,7 @@ describe('global command descriptors (argv require RT0)', () => {
     await expectGlobalReason(
       () =>
         buildGlobalCommand(
-          input('npm', {
+          request('npm', {
             action: 'remove',
           }),
         ),
@@ -268,13 +275,15 @@ describe('global command descriptors (argv require RT0)', () => {
         NODE_AUTH_TOKEN: 'TEST-not-a-token',
         npm_config_prefix: 'D:\\TEST\\wrong',
         npm_config_force: 'true',
+        NpM_CoNfIg_AlLoW_ScRiPtS: 'true',
+        npm_config_strict_npmrc: 'false',
         PNPM_CONFIG_GLOBAL_DIR: 'D:\\TEST\\wrong',
         pnpm_config_registry: 'https://private.invalid',
         CI: '0',
         COREPACK_ENABLE_NETWORK: '1',
         PKGSTEWARD_DATA_DIR: P.data,
       });
-      const command = buildGlobalCommand(input(manager, { environment }));
+      const command = buildGlobalCommand(request(manager, { environment }));
       expect(command.env).toMatchObject({
         PATH: manager === 'pnpm' ? Q.bin : 'D:\\TEST\\bin',
         CI: '1',
@@ -309,12 +318,16 @@ describe('global command descriptors (argv require RT0)', () => {
   it.each(['npm', 'pnpm'] as const)(
     'never adds unsafe convenience flags for %s',
     (manager) => {
-      const args = buildGlobalCommand(input(manager)).args;
+      const args = buildGlobalCommand(request(manager)).args;
       for (const flag of [
         '--global=false',
         '--force',
         '--yes',
         '--ignore-scripts',
+        '--allow-scripts',
+        '--strict-npmrc=false',
+        '--allow-git',
+        '--allow-remote',
       ])
         expect(args).not.toContain(flag);
       expect(args.filter((arg) => arg === '--')).toHaveLength(1);
@@ -323,22 +336,22 @@ describe('global command descriptors (argv require RT0)', () => {
     },
   );
   it('does not mutate a captured location or caller environment', () => {
-    const request = input('npm');
-    const before = JSON.stringify(request);
-    Object.freeze(request.environment);
-    Object.freeze(request.location);
-    buildGlobalCommand(Object.freeze(request));
-    expect(JSON.stringify(request)).toBe(before);
+    const value = request('npm');
+    const before = JSON.stringify(value);
+    Object.freeze(value.environment);
+    Object.freeze(value.location);
+    buildGlobalCommand(Object.freeze(value));
+    expect(JSON.stringify(value)).toBe(before);
   });
   it.each([null, 'D:\\TEST\\npm.cmd', 'D:\\TEST\\corepack.exe'])(
     'rejects an unverified JS launcher %p',
     async (entry) => {
-      const location = testLocation();
+      const location = testLocation('npm', v);
       location.tool = { ...location.tool, entry };
       await expectGlobalReason(
         () =>
           buildGlobalCommand(
-            input('npm', {
+            request('npm', {
               location,
             }),
           ),
@@ -348,7 +361,42 @@ describe('global command descriptors (argv require RT0)', () => {
   );
 });
 
-describe('read-only query vectors', () => {
+describe('global npm version gate', () => {
+  it.each(['10.9.0', '13.0.0', '12.0.0-pre.1', 'v12.2.2', 'invalid'])(
+    'rejects %s in queries and both mutations',
+    async (version) => {
+      const location = testLocation('npm', version);
+      await expectGlobalReason(
+        () =>
+          buildGlobalQuery({
+            manager: 'npm',
+            tool: location.tool,
+            cwd: P.cwd,
+            query: 'list',
+            environment: {},
+            captured: {},
+          }),
+        'TOOL_VERSION_MISMATCH',
+      );
+      for (const action of ['change', 'remove'] as const)
+        await expectGlobalReason(
+          () =>
+            buildGlobalCommand(
+              input('npm', {
+                location,
+                action,
+                exactVersion: action === 'change' ? '2.0.0' : null,
+              }),
+            ),
+          'TOOL_VERSION_MISMATCH',
+        );
+    },
+  );
+});
+
+describe.each(TEST_NPM_VERSIONS)('read-only query vectors (npm %s)', (v) => {
+  const queryTool = (manager: GlobalManager) =>
+    testTool(manager, manager === 'npm' ? v : undefined);
   it.each([
     'list',
     'global-dir',
@@ -364,7 +412,7 @@ describe('read-only query vectors', () => {
         () =>
           buildGlobalQuery({
             manager: 'pnpm',
-            tool: testTool('pnpm'),
+            tool: queryTool('pnpm'),
             cwd: P.cwd,
             environment: {},
             captured: {},
@@ -383,19 +431,32 @@ describe('read-only query vectors', () => {
   ] satisfies [GlobalManager, GlobalQuery, string[]][])(
     '%s %s is a fixed argv array',
     (manager, query, tail) => {
-      const tool = testTool(manager);
+      const tool = queryTool(manager);
       const command = buildGlobalQuery({
         manager,
         tool,
         query,
         cwd: P.cwd,
         environment: {},
-        captured: {},
+        captured: {
+          npm_config_prefix: P.prefix,
+          npm_config_userconfig: P.userconfig,
+          npm_config_globalconfig: P.globalconfig,
+          npm_config_cache: P.cache,
+        },
       });
       expect(command).toMatchObject({ file: P.node, cwd: P.cwd });
       expect(command.args).toEqual([
         tool.entry,
         '--update-notifier=false',
+        '--prefix',
+        P.prefix,
+        '--userconfig',
+        P.userconfig,
+        '--globalconfig',
+        P.globalconfig,
+        '--cache',
+        P.cache,
         ...tail,
       ]);
     },
@@ -405,7 +466,7 @@ describe('read-only query vectors', () => {
     (manager) => {
       const command = buildGlobalQuery({
         manager,
-        tool: testTool(manager),
+        tool: queryTool(manager),
         query: 'list',
         cwd: P.cwd,
         environment: {
@@ -439,7 +500,7 @@ describe('read-only query vectors', () => {
             ]
           : ['--dir', P.cwd, '--pm-on-fail=warn'];
       expect(command.args).toEqual([
-        testTool(manager).entry,
+        queryTool(manager).entry,
         ...flags,
         'list',
         '--global',
@@ -456,7 +517,7 @@ describe('read-only query vectors', () => {
       () =>
         buildGlobalQuery({
           manager: 'npm',
-          tool: testTool('npm'),
+          tool: queryTool('npm'),
           query: 'store',
           cwd: P.cwd,
           environment: {},
@@ -645,10 +706,18 @@ describe('pnpm 11 command boundary', () => {
     async (version) => {
       const location = pnpmLocation();
       location.tool = { ...location.tool, version };
-      await expectGlobalReason(
-        () => buildGlobalCommand(input('pnpm', { location })),
-        'TOOL_VERSION_MISMATCH',
-      );
+      for (const action of ['change', 'remove'] as const)
+        await expectGlobalReason(
+          () =>
+            buildGlobalCommand(
+              input('pnpm', {
+                location,
+                action,
+                exactVersion: action === 'change' ? '2.0.0' : null,
+              }),
+            ),
+          'TOOL_VERSION_MISMATCH',
+        );
       await expectGlobalReason(
         () =>
           buildGlobalQuery({

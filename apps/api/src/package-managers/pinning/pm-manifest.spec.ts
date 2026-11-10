@@ -9,32 +9,38 @@ const parse = (bytes: Buffer): Record<string, unknown> =>
   >;
 
 describe('format-preserving project pin plan', () => {
-  it.each(MANIFEST_EDITS)(
-    'changes exactly the expected bytes: $name',
-    ({ before, after }) => {
-      const original = Buffer.from(before);
-      const snapshot = Buffer.from(original);
-      const edit = planPinEdit(original, target);
-      expect(edit.bytes.equals(Buffer.from(after))).toBe(true);
-      expect(original.equals(snapshot)).toBe(true);
-      expect(
-        Buffer.concat([
-          original.subarray(0, edit.start),
-          edit.replacement,
-          original.subarray(edit.end),
-        ]).equals(edit.bytes),
-      ).toBe(true);
-      const old = parse(original);
-      const changed = parse(edit.bytes);
-      expect(changed.packageManager).toBe(target);
-      delete old.packageManager;
-      delete changed.packageManager;
-      expect(changed).toEqual(old);
-      expect(edit.summary).toMatchObject({
-        file: 'package.json',
-        field: 'packageManager',
-        after: target,
-      });
+  describe.each(['npm@11.17.0', 'npm@12.2.2'])(
+    'byte-preserving editor for %s',
+    (target) => {
+      it.each(MANIFEST_EDITS)(
+        'changes exactly the expected bytes: $name',
+        ({ before, after }) => {
+          const original = Buffer.from(before);
+          const snapshot = Buffer.from(original);
+          const edit = planPinEdit(original, target);
+          const expected = after.replaceAll('npm@11.17.0', target);
+          expect(edit.bytes.equals(Buffer.from(expected))).toBe(true);
+          expect(original.equals(snapshot)).toBe(true);
+          expect(
+            Buffer.concat([
+              original.subarray(0, edit.start),
+              edit.replacement,
+              original.subarray(edit.end),
+            ]).equals(edit.bytes),
+          ).toBe(true);
+          const old = parse(original);
+          const changed = parse(edit.bytes);
+          expect(changed.packageManager).toBe(target);
+          delete old.packageManager;
+          delete changed.packageManager;
+          expect(changed).toEqual(old);
+          expect(edit.summary).toMatchObject({
+            file: 'package.json',
+            field: 'packageManager',
+            after: target,
+          });
+        },
+      );
     },
   );
   it('never mistakes nested or textual packageManager for the root field', () => {
@@ -134,6 +140,12 @@ describe('format-preserving project pin plan', () => {
   it.each([
     'latest',
     'npm@10.9.0',
+    'npm@13.0.0',
+    'pnpm@12.18.0',
+    'npm@12.2.2-beta.1',
+    'npm@v12.2.2',
+    'npm@12.2.2+build',
+    `npm@12.2.2+sha256.${'a'.repeat(64)}`,
     'yarn@1.22.22',
     'npm@11.17.0-beta.1',
     'npm@11.17.0+build',

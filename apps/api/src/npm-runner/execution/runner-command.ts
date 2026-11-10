@@ -7,6 +7,7 @@ import type {
 import { AppException } from '@/common/exceptions/app.exception';
 import * as semver from 'semver';
 import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 
 export const isRunnerScriptName = (name: string): boolean =>
   name.trim() === name && /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(name);
@@ -68,7 +69,7 @@ export function buildRunCommand(
   if (context.reason) return fail(context.reason);
   if (!tool) return fail('TOOL_NOT_FOUND');
   if (tool.manager !== manager) return fail('UNSUPPORTED_MANAGER');
-  if (!semver.valid(tool.version) || semver.major(tool.version) !== 11)
+  if (!isSupportedRunnerVersion(manager, tool.version))
     return fail('TOOL_VERSION_MISMATCH');
   if (!RUN_ACTIONS.includes(input.action)) return fail('INVALID_PACKAGE_SPEC');
   if (context.workspace.kind === 'leaf' && input.action !== 'script')

@@ -1,4 +1,5 @@
 import * as semver from 'semver';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 import { AppException } from '@/common/exceptions/app.exception';
 import { assessRisk, isRecentlyActive } from '@/core/risk/risk';
 import type { IRisk } from '@/core/risk/interfaces/risk.types';
@@ -82,13 +83,14 @@ export function getPmTargetReason(
   if (installedVersion === null) return 'TOOL_NOT_FOUND';
   if (
     !canonicalVersion(installedVersion) ||
-    semver.major(installedVersion) !== 11 ||
+    !isSupportedRunnerVersion(manager, installedVersion) ||
     semver.prerelease(installedVersion) !== null
   )
     return 'TOOL_VERSION_MISMATCH';
   if (
     !canonicalVersion(targetVersion) ||
-    semver.major(targetVersion) !== 11 ||
+    !isSupportedRunnerVersion(manager, targetVersion) ||
+    semver.major(targetVersion) !== semver.major(installedVersion) ||
     semver.prerelease(targetVersion) !== null ||
     deprecated
   )
@@ -217,7 +219,7 @@ export function assessPmPinChange(input: IPmPinChangeInput): IPmPinDecision {
     old !== null &&
     old.manager === manager &&
     canonicalVersion(old.version) &&
-    semver.major(old.version) !== 11;
+    semver.major(old.version) !== semver.major(installed.version!);
   if (input.inputReason && !repairable) return blocked(input.inputReason);
   const families = new Set(input.lockManagers);
   if (families.size > 1 || [...families].some((family) => family !== manager))

@@ -135,7 +135,18 @@ shared stores and files outside the project; logs may reveal secrets despite fil
 and stopping or failure can leave partial changes. Stop may miss processes that escape the tracked tree.
 Replacing the project folder through a junction swap at the exact moment of launch is not fully prevented.
 
-- **Tools and inputs:** npm 11 and pnpm 11 only, verified with npm 11.17.0, pnpm 11.22.0 and Node 24.19.0.
+With npm 12, dependency lifecycle scripts may be skipped even when the command exits zero unless the root
+project's `allowScripts` permits them. Root and explicitly run scripts still execute; root `preinstall` runs before
+dependencies are installed. Inspect `allowScripts` yourself: the app does not approve scripts, rebuild packages
+or recover missing build artifacts. Arguments and environment are unchanged; the app adds no ignore-scripts,
+allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail the job without an automatic retry.
+
+- **Tools and inputs:** npm 11, npm 12 and pnpm 11; npm 12 prereleases and other majors are refused.
+  Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0.
+  Installed npm 12 needs valid `engines.node` metadata satisfied by the backend's Node: missing/malformed metadata
+  returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`. With installed
+  npm 12, any `npm-shrinkwrap.json` (even alongside `package-lock.json`) refuses every action with
+  `CONFIG_UNSUPPORTED`; nothing is converted, deleted or renamed.
   Yarn and unresolved/Corepack-only tools are unavailable; the app does not download or switch tools. The pin
   must match the installed major; other differences warn. Workspace roots allow all actions, members scripts
   only. Install one accepts a package name with an optional exact version or dist-tag; update/uninstall accept
@@ -231,8 +242,11 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 
 ## Global packages
 
-Open `/global-packages` to manage installed global packages with **npm 11 or pnpm 11**. Other pnpm majors
-are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported;
+Open `/global-packages` to manage installed global packages with **npm 11, npm 12 or pnpm 11**. npm 12 prereleases
+and other majors are refused (`TOOL_VERSION_MISMATCH`). Installed npm 12 needs valid `engines.node` metadata
+satisfied by the backend's Node: missing/malformed metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid
+Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0;
+how npm 12 handles install scripts of global packages has not been verified. Yarn is not supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
 and read the installed inventory. pnpm discovery and listing read configuration and filesystem metadata statically;
@@ -312,7 +326,7 @@ they were read. This is a **project** setting: it changes one field in that proj
 changes the npm/pnpm installed on the machine.
 
 1. Choose `npm` or `pnpm`, then **Load versions**. The list comes from the public npm registry and shows only
-   stable, non-deprecated versions with the same major as the installed tool.
+   stable, non-deprecated versions with the same major as the installed tool (npm 11, npm 12 or pnpm 11).
 2. Pick a version and **Preview change**. Escape stops a preview that is still loading.
 3. The confirmation dialog shows the project, the single `package.json` edit (current value → new value), the
    installed tool PkgSteward keeps using, notes (an old pin hash is dropped; the pin does not switch the tool
@@ -321,7 +335,12 @@ changes the npm/pnpm installed on the machine.
 4. **Write pin to package.json** writes only that field. Nothing is downloaded or installed and Corepack is not used;
    terminals follow the pin only if you use Corepack or pnpm's own version management.
 
-Pins that are not `<name>@<exact version>`, workspace members, projects with `devEngines`, and lockfiles that do not
+An old npm 11 pin can be repaired to installed npm 12, and vice versa; targets must match the installed major
+and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
+the same-major target's Node engines are not checked.
+
+Pins that are not `<name>@<exact version>`, workspace members, projects with `devEngines`, projects with
+`npm-shrinkwrap.json` while npm 12 is installed (even alongside `package-lock.json`), and lockfiles that do not
 match the chosen manager cannot be changed here. A lost response is recovered from the latest job, never by sending
 the change again; if the result is unknown, open `package.json` to check it. Opening the page only reads; versions are
 fetched only when you ask. See [Package manager pin API](../api/README.md#package-manager-pin-api).

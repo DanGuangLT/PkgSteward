@@ -12,6 +12,8 @@ import type {
 } from '@/npm-runner/interfaces/npm-runner.types';
 
 // TEST không phải yêu cầu nghiệp vụ. All paths and bytes are inert in-memory data.
+export const TEST_NPM_VERSIONS = ['11.17.0', '12.2.2'] as const;
+
 export const TEST_PATHS = {
   node: 'C:\\Program Files\\nodejs\\node.exe',
   npm: 'C:\\Program Files\\nodejs\\node_modules\\npm',
@@ -30,11 +32,14 @@ export const TEST_PATHS = {
   cwd: 'D:\\TEST\\data\\cache\\global-packages-cwd',
 } as const;
 
-export function testTool(manager: GlobalManager): IRunnerTool {
+export function testTool(
+  manager: GlobalManager,
+  version = manager === 'npm' ? '11.17.0' : '11.22.0',
+): IRunnerTool {
   const packageDir = TEST_PATHS[manager];
   return {
     manager,
-    version: manager === 'npm' ? '11.17.0' : '11.22.0',
+    version,
     file: TEST_PATHS.node,
     entry: win32.join(
       packageDir,
@@ -47,11 +52,12 @@ export function testTool(manager: GlobalManager): IRunnerTool {
 
 export function testLocation(
   manager: GlobalManager = 'npm',
+  version?: string,
 ): IGlobalResolvedLocation {
   const npm = manager === 'npm';
   return {
     manager,
-    tool: testTool(manager),
+    tool: testTool(manager, version),
     prefix: npm ? TEST_PATHS.prefix : null,
     globalDir: npm ? null : TEST_PATHS.global,
     globalRoot: win32.join(

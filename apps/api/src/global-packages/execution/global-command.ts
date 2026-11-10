@@ -18,6 +18,7 @@ import {
 } from '@/global-packages/policy/global-policy';
 import type { GlobalReasonCode } from '@/global-packages/interfaces/global-packages.types';
 import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 import type { IPnpmGlobalConfig } from '@/global-packages/interfaces/pnpm-global.types';
 
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org';
@@ -85,7 +86,7 @@ function assertLauncher(
   if (
     tool.manager !== manager ||
     !isGlobalExactVersion(tool.version) ||
-    semver.major(tool.version) !== 11
+    !isSupportedRunnerVersion(manager, tool.version)
   )
     return fail('TOOL_VERSION_MISMATCH');
   if (

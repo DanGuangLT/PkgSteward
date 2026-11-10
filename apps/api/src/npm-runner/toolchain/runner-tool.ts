@@ -22,6 +22,7 @@ import {
   jsonDepthWithinLimit,
 } from '@/projects/locks/project-lock-common';
 import * as semver from 'semver';
+import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
 
 export const runnerFailure = (reason: RunFailureCode): AppException =>
   new AppException(
@@ -281,8 +282,29 @@ export async function resolveRunnerTool(
       const bin: unknown = raw.bin[manager];
       if (typeof bin !== 'string')
         throw runnerFailure('TOOL_LAYOUT_UNSUPPORTED');
-      if (semver.major(raw.version) !== 11)
+      const major = semver.major(raw.version);
+      // Preserve the existing major 11 resolver's semver normalization.
+      const policyVersion =
+        major === 11 ? semver.valid(raw.version)! : raw.version;
+      if (!isSupportedRunnerVersion(manager, policyVersion))
         throw runnerFailure('TOOL_VERSION_MISMATCH');
+      if (manager === 'npm' && major === 12) {
+        const nodeRange: unknown = isProjectRecord(raw.engines)
+          ? raw.engines.node
+          : undefined;
+        if (
+          typeof nodeRange !== 'string' ||
+          nodeRange.trim().length === 0 ||
+          semver.validRange(nodeRange) === null
+        )
+          throw runnerFailure('TOOL_LAYOUT_UNSUPPORTED');
+        const nodeVersion = snapshot.nodeVersion ?? process.versions.node;
+        if (
+          !semver.valid(nodeVersion) ||
+          !semver.satisfies(nodeVersion, nodeRange)
+        )
+          throw runnerFailure('TOOL_VERSION_MISMATCH');
+      }
       const entryPath = api.resolve(packageDir, bin);
       if (
         api.isAbsolute(bin) ||

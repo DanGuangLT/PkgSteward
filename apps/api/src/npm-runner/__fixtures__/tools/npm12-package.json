@@ -1,0 +1,7 @@
+{
+  "name": "npm",
+  "version": "12.2.2",
+  "description": "TEST metadata; không phải yêu cầu nghiệp vụ; never imported or executed",
+  "engines": { "node": "^22.22.2 || ^24.15.0 || >=26.0.0" },
+  "bin": { "npm": "bin/npm-cli.js", "npx": "bin/npx-cli.js" }
+}
