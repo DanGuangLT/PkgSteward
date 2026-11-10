@@ -4,6 +4,7 @@ import { useState } from "react"
 import { MenuIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 
+import { Logo } from "@/components/layout/logo"
 import { NavLinks } from "@/components/layout/nav-links"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,7 +34,10 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left">
         <SheetHeader>
-          <SheetTitle className="text-heading-lg font-bold text-primary">{t("brand")}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2 text-heading-lg font-bold text-primary">
+            <Logo className="size-8 shrink-0" />
+            {t("brand")}
+          </SheetTitle>
         </SheetHeader>
         <nav aria-label={t("mainNavigation")} className="px-4">
           <NavLinks orientation="vertical" onNavigate={() => setOpen(false)} />
