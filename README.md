@@ -68,6 +68,13 @@ The root install runs the same package manager inside `apps/api` and `apps/web`.
 committed `pnpm-lock.yaml` files, which pin the tested versions. npm and Yarn resolve the newest versions
 allowed by each `package.json`, and the lockfiles they create are not committed.
 
+For a fresh install with Yarn Classic (`1.22.22`), use a current Node.js 24 release so newly resolved
+dependencies can satisfy their Node.js requirements. Run `yarn install` at the root, then `yarn build` and
+`yarn start`, or use `yarn dev` for development. Run frontend tests with `yarn --cwd apps/web test`.
+
+PkgSteward detects Yarn projects and reads Yarn Classic lockfiles for dependency analysis. The in-app command
+runner uses npm and pnpm, and `NPM_COMMAND_TIMEOUT_MS` applies to operations started by the app.
+
 ### 2. Configure
 
 Copy `apps/api/.env.example` to `apps/api/.env` and set `SCAN_ROOT_PATHS`. Main variables:
