@@ -58,6 +58,13 @@ Lệnh cài ở thư mục gốc chạy cùng trình quản lý gói đó bên t
 các file `pnpm-lock.yaml` có sẵn trong repo, nơi ghi đúng phiên bản đã kiểm thử. npm và Yarn sẽ lấy phiên
 bản mới nhất mà từng `package.json` cho phép, và lockfile do chúng tạo ra không được commit.
 
+Khi cài mới bằng Yarn Classic (`1.22.22`), dùng bản Node.js 24 mới để đáp ứng yêu cầu của các dependency
+được tải về. Chạy `yarn install` ở thư mục gốc, sau đó chạy `yarn build` và `yarn start`, hoặc dùng
+`yarn dev` khi phát triển. Chạy kiểm thử frontend bằng `yarn --cwd apps/web test`.
+
+PkgSteward nhận diện dự án Yarn và đọc lockfile Yarn Classic để phân tích dependency. Trình chạy lệnh
+trong ứng dụng dùng npm và pnpm, còn `NPM_COMMAND_TIMEOUT_MS` áp dụng cho thao tác do ứng dụng khởi chạy.
+
 ### 2. Cấu hình
 
 Sao chép `apps/api/.env.example` thành `apps/api/.env` rồi điền `SCAN_ROOT_PATHS`. Các biến chính:
