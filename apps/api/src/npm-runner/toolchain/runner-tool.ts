@@ -23,6 +23,7 @@ import {
 } from '@/projects/locks/project-lock-common';
 import * as semver from 'semver';
 import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
+import { readNpm10InstallCompat } from '@/npm-runner/toolchain/runner-npm10-compat';
 
 export const runnerFailure = (reason: RunFailureCode): AppException =>
   new AppException(
@@ -338,9 +339,16 @@ export async function resolveRunnerTool(
       };
       await revalidateRunnerTool(selected, fs, signal);
       signal.throwIfAborted();
+      if (manager === 'npm' && major === 10) {
+        const snapshot = await readNpm10InstallCompat(selected, fs, signal);
+        signal.throwIfAborted();
+        selected.npm10InstallCompat = snapshot.compat;
+        selected.npm10InstallCompatIdentities = snapshot.identities;
+      }
       return selected;
     } catch (error) {
       signal.throwIfAborted();
+      if (isProjectRecord(error) && error.name === 'AbortError') throw error;
       if (error instanceof AppException) {
         const details: unknown = isProjectRecord(error)
           ? error.details
@@ -364,7 +372,12 @@ export async function revalidateRunnerTool(
   signal: AbortSignal,
 ): Promise<void> {
   signal.throwIfAborted();
-  for (const identity of tool.identities) {
+  for (const identity of [
+    ...tool.identities,
+    ...(tool.npm10InstallCompat?.supported
+      ? (tool.npm10InstallCompatIdentities ?? [])
+      : []),
+  ]) {
     try {
       const stat = await fs.lstat(identity.path);
       signal.throwIfAborted();
@@ -375,8 +388,9 @@ export async function revalidateRunnerTool(
         toComparable(real, 'win32') !== toComparable(identity.path, 'win32')
       )
         throw runnerFailure('INPUT_CHANGED');
-    } catch {
+    } catch (error) {
       signal.throwIfAborted();
+      if (isProjectRecord(error) && error.name === 'AbortError') throw error;
       throw runnerFailure('INPUT_CHANGED');
     }
   }

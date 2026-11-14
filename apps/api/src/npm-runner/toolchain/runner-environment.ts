@@ -30,6 +30,7 @@ export function buildRunnerEnvironment(
       seen.has(upper) ||
       denied.has(upper) ||
       upper.startsWith('NPM_') ||
+      upper.startsWith('PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT') ||
       value === undefined
     )
       continue;
@@ -78,5 +79,24 @@ export function buildRunnerEnvironment(
     env[key] = value;
   }
   if (action !== 'script') env.CI = '1';
+  const compat = tool.npm10InstallCompat;
+  if (
+    manager === 'npm' &&
+    tool.manager === 'npm' &&
+    semver.parse(tool.version)?.major === 10 &&
+    action === 'install_all' &&
+    compat?.supported &&
+    compat.revision === 1 &&
+    tool.entry
+  ) {
+    env.PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT = JSON.stringify({
+      schema: 1,
+      entry: tool.entry,
+      version: tool.version,
+      sourceSha256: compat.sourceSha256,
+      loaderSha256: compat.loaderSha256,
+      preloadSha256: compat.preloadSha256,
+    });
+  }
   return env;
 }

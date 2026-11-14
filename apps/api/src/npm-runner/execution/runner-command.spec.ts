@@ -9,6 +9,7 @@ import {
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type {
   IRunRequest,
+  IRunnerNpm10InstallCompat,
   RunAction,
 } from '@/npm-runner/interfaces/npm-runner.types';
 
@@ -65,6 +66,7 @@ const rows: [RunAction, Partial<IRunRequest>, string[], string[]][] = [
 
 describe('runner command grammar and fixed argv', () => {
   describe.each([
+    ['npm', '10.9.9'],
     ['npm', '11.17.0'],
     ['npm', '12.2.2'],
     ['pnpm', '10.34.9'],
@@ -75,6 +77,19 @@ describe('runner command grammar and fixed argv', () => {
       (action, extra, npm, pnpm) => {
         const context = runnerInput(manager);
         context.tool = tool(manager, version);
+        context.path = 'D:\\TEST tiếng Việt\\project with spaces';
+        context.tool.entry = 'C:\\TEST công cụ\\bin\\cli.js';
+        const compat: IRunnerNpm10InstallCompat = {
+          revision: 1,
+          supported: true,
+          preload: 'C:\\TEST ứng dụng\\npm10-install-preload.js',
+          source: 'C:\\TEST SDK\\lib\\commands\\install.js',
+          loader: 'C:\\TEST SDK\\lib\\npm.js',
+          sourceSha256: 'a'.repeat(64),
+          loaderSha256: 'b'.repeat(64),
+          preloadSha256: 'c'.repeat(64),
+        };
+        context.tool.npm10InstallCompat = compat;
         const prefix =
           manager === 'npm'
             ? [
@@ -100,6 +115,11 @@ describe('runner command grammar and fixed argv', () => {
         expect(buildRunCommand(context, request(action, extra))).toEqual({
           file: context.tool?.file,
           args: [
+            ...(manager === 'npm' &&
+            version === '10.9.9' &&
+            action === 'install_all'
+              ? ['--require', compat.preload]
+              : []),
             context.tool?.entry,
             ...prefix,
             ...(manager === 'npm' ? npm : pnpm),
@@ -123,6 +143,31 @@ describe('runner command grammar and fixed argv', () => {
       },
     );
   });
+  it.each([
+    undefined,
+    { revision: 1, supported: false, fingerprint: 'TEST' },
+  ] as const)(
+    'refuses only npm10 install_all without supported compatibility: %p',
+    (compat) => {
+      const context = runnerInput();
+      context.tool = { ...tool('npm', '10.9.9'), npm10InstallCompat: compat };
+      let failure: unknown;
+      try {
+        buildRunCommand(context, request('install_all'));
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+      for (const [action, extra] of rows.filter(
+        ([action]) => action !== 'install_all',
+      ))
+        expect(buildRunCommand(context, request(action, extra)).args[0]).toBe(
+          context.tool.entry,
+        );
+    },
+  );
   it.each([9, 12, 0, NaN])('gives pnpm major %p no arguments', (major) => {
     expect(pnpmPrefixArgs(major, 'D:\\TEST\\project')).toBeNull();
   });

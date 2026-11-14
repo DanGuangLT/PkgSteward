@@ -11,8 +11,8 @@ import type {
   RunAction,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
-import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
-import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
+import type * as MutationGate from '@/core/mutation-gate/mutation-gate.service';
+import type * as RunnerService from '@/npm-runner/npm-runner.service';
 import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type {
   IRunProcess,
@@ -23,6 +23,80 @@ import type {
 jest.mock('execa', () => ({ execa: jest.fn() }));
 
 describe('runner child environment (A8)', () => {
+  describe.each([
+    ['npm', '10.9.9'],
+    ['npm', '11.17.0'],
+    ['npm', '12.2.2'],
+    ['pnpm', '10.34.9'],
+    ['pnpm', '11.22.0'],
+  ] as const)('compat environment %s %s', (manager, version) => {
+    it.each(RUN_ACTIONS)(
+      'strips inherited private keys and sets exact schema only for install_all: %s',
+      (action) => {
+        const selected = tool(manager, version);
+        selected.npm10InstallCompat = {
+          revision: 1,
+          supported: true,
+          preload: 'C:\\TEST ứng dụng\\preload.js',
+          source: 'C:\\TEST SDK\\lib\\commands\\install.js',
+          loader: 'C:\\TEST SDK\\lib\\npm.js',
+          sourceSha256: 'a'.repeat(64),
+          loaderSha256: 'b'.repeat(64),
+          preloadSha256: 'c'.repeat(64),
+        };
+        const snapshot = Object.freeze({
+          PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT: 'TEST forged',
+          pkgsteward_runner_npm10_install_compat: 'TEST forged lower',
+          PkGsTeWaRd_RuNnEr_NpM10_Install_Compat_EXTRA: 'TEST private',
+          NODE_PATH: 'C:\\TEST dependencies',
+          TEST_APP: 'TEST inherited',
+        });
+        const env = buildRunnerEnvironment(snapshot, selected, manager, action);
+        const privateKeys = Object.keys(env).filter((key) =>
+          key
+            .toUpperCase()
+            .startsWith('PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT'),
+        );
+        if (
+          manager === 'npm' &&
+          version === '10.9.9' &&
+          action === 'install_all'
+        ) {
+          expect(privateKeys).toEqual([
+            'PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT',
+          ]);
+          expect(
+            JSON.parse(env.PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT!),
+          ).toEqual({
+            schema: 1,
+            entry: selected.entry,
+            version,
+            sourceSha256: 'a'.repeat(64),
+            loaderSha256: 'b'.repeat(64),
+            preloadSha256: 'c'.repeat(64),
+          });
+        } else expect(privateKeys).toEqual([]);
+        expect(env.NODE_PATH).toBe('C:\\TEST dependencies');
+        expect(env.TEST_APP).toBe('TEST inherited');
+      },
+    );
+  });
+  it('does not emit a private descriptor for unsupported npm10 compatibility', () => {
+    const selected = tool('npm', '10.9.9');
+    selected.npm10InstallCompat = {
+      revision: 1,
+      supported: false,
+      fingerprint: 'TEST',
+    };
+    expect(
+      buildRunnerEnvironment(
+        { PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT: 'TEST' },
+        selected,
+        'npm',
+        'install_all',
+      ).PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT,
+    ).toBeUndefined();
+  });
   const appKeys = [
     'MODE',
     'HOST',
@@ -234,6 +308,12 @@ describe('runner child environment (A8)', () => {
 // TEST strict-config failure; không phải yêu cầu nghiệp vụ.
 describe('npm 12 config failure remains a normal failed runner job', () => {
   it('fails once without repairing or retrying strict npmrc', async () => {
+    const { MutationGateService } = jest.requireActual<typeof MutationGate>(
+      '@/core/mutation-gate/mutation-gate.service',
+    );
+    const { NpmRunnerService } = jest.requireActual<typeof RunnerService>(
+      '@/npm-runner/npm-runner.service',
+    );
     const f = fsFixture();
     const installed = f.installTool('npm', '12.2.2');
     installed.identities = installed.identities.map((identity) => ({

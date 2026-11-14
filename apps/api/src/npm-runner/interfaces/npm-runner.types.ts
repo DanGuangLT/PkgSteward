@@ -174,6 +174,8 @@ export interface IRunnerTool {
   packageDir: string;
   identities: IRunnerFileIdentity[];
   npm10InstallCompat?: IRunnerNpm10InstallCompat;
+  // Kept separate so an unsupported compatibility asset cannot invalidate the core tool.
+  npm10InstallCompatIdentities?: IRunnerFileIdentity[];
 }
 export interface IRunnerToolSnapshot {
   platform: PathPlatform;

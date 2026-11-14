@@ -190,5 +190,15 @@ export function buildRunCommand(
       break;
   }
   if (tool.entry) args.unshift(tool.entry);
+  if (
+    npm &&
+    semver.major(tool.version) === 10 &&
+    input.action === 'install_all'
+  ) {
+    const compat = tool.npm10InstallCompat;
+    if (!compat?.supported || compat.revision !== 1 || !tool.entry)
+      return fail('TOOL_LAYOUT_UNSUPPORTED');
+    args.unshift('--require', compat.preload);
+  }
   return { file: tool.file, args, cwd, manager, version: tool.version };
 }

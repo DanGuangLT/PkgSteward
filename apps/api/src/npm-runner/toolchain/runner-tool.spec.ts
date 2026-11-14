@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { join, win32 as path } from 'node:path';
+import { join, resolve, win32 as path } from 'node:path';
 import {
   resolveRunnerTool,
   revalidateRunnerTool,
 } from '@/npm-runner/toolchain/runner-tool';
+import { buildRunCommand } from '../execution/runner-command';
 import {
   fileStat,
   fsFixture,
@@ -12,12 +13,205 @@ import {
   npmDir,
   pnpmPrefix,
   root,
+  runnerInput,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type { ProjectManager } from '@/projects/interfaces/projects.types';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
 
 describe('installed runner tool resolver (static data only)', () => {
+  const npm10 = () => {
+    const f = fsFixture();
+    f.installTool('npm', '10.9.9');
+    const assets = {
+      preload: resolve(__dirname, '../execution/npm10-install-preload.js'),
+      source: path.join(npmDir, 'lib/commands/install.js'),
+      loader: path.join(npmDir, 'lib/npm.js'),
+    };
+    f.put(assets.preload, '// TEST standalone preload');
+    f.put(
+      assets.source,
+      `const isGlobalInstall = this.npm.global
+const where = isGlobalInstall ? globalTop : this.npm.prefix
+if (where === globalTop && !args.length) {}
+if (where === globalTop && !args.every(Boolean)) {}
+if (!args.length && !isGlobalInstall && !ignoreScripts) {}`,
+    );
+    f.put(
+      assets.loader,
+      `static cmd (c) {
+    const command = deref(c)
+    if (!command) {
+      throw Object.assign(new Error(\`Unknown command \${c}\`), {
+        code: 'EUNKNOWNCOMMAND',
+        command: c,
+      })
+    }
+    return require(\`./commands/\${command}.js\`)
+  }`,
+    );
+    return {
+      ...f,
+      assets,
+      resolve: () => resolveRunnerTool('npm', f.snapshot, f.fs),
+    };
+  };
+  it('captures supported npm10 assets and revalidates every added identity', async () => {
+    const f = npm10();
+    const selected = await f.resolve();
+    expect(selected.npm10InstallCompat).toMatchObject({
+      revision: 1,
+      supported: true,
+      ...f.assets,
+    });
+    expect(
+      selected.npm10InstallCompatIdentities?.map((identity) =>
+        key(identity.path),
+      ),
+    ).toEqual(expect.arrayContaining(Object.values(f.assets).map(key)));
+    for (const identity of selected.npm10InstallCompatIdentities ?? []) {
+      const before = f.stats.get(key(identity.path))!;
+      f.stats.set(key(identity.path), { ...before, ino: before.ino + 1 });
+      await expect(
+        revalidateRunnerTool(selected, f.fs, f.controller.signal),
+      ).rejects.toMatchObject({ details: { reason: 'INPUT_CHANGED' } });
+      f.stats.set(key(identity.path), before);
+    }
+  });
+  describe.each(['preload', 'source', 'loader'] as const)(
+    'npm10 %s',
+    (asset) => {
+      it.each(['missing', 'read-error', 'oversize', 'utf8', 'shape'] as const)(
+        'keeps %s compatibility failure separate from core tool validation',
+        async (fault) => {
+          const f = npm10();
+          const file = f.assets[asset];
+          const before = f.stats.get(key(file))!;
+          if (fault === 'missing') f.remove(file);
+          else if (fault === 'read-error') {
+            const open = f.open.getMockImplementation()!;
+            f.open.mockImplementation((value) =>
+              key(value) === key(file)
+                ? Promise.reject(
+                    Object.assign(new Error('TEST denied'), { code: 'EACCES' }),
+                  )
+                : open(value),
+            );
+          } else if (fault === 'oversize')
+            f.stats.set(key(file), { ...before, size: 1024 * 1024 + 1 });
+          else if (fault === 'utf8') {
+            f.stats.set(key(file), { ...before, size: 1 });
+            f.files.set(key(file), Buffer.from([0xff]));
+          } else if (asset === 'preload')
+            f.stats.set(key(file), { ...before, isFile: () => false });
+          else f.put(file, 'TEST unknown SDK shape');
+          const selected = await f.resolve();
+          expect(selected.npm10InstallCompat).toMatchObject({
+            revision: 1,
+            supported: false,
+          });
+          const context = runnerInput();
+          context.tool = selected;
+          for (const action of [
+            'install_all',
+            'install_one',
+            'update_all',
+            'update_one',
+            'uninstall_one',
+            'script',
+          ] as const) {
+            const request = {
+              path: root,
+              action,
+              inputHash: context.inputHash,
+              requestId: '00000000-0000-4000-8000-000000000001',
+              ...(action === 'script'
+                ? { script: 'dev' }
+                : action.endsWith('_one')
+                  ? { package: 'alpha' }
+                  : {}),
+            };
+            if (action === 'install_all') {
+              let failure: unknown;
+              try {
+                buildRunCommand(context, request);
+              } catch (error) {
+                failure = error;
+              }
+              expect(failure).toMatchObject({
+                details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+              });
+            } else {
+              const command = buildRunCommand(context, request);
+              expect(command.args[0]).toBe(selected.entry);
+              expect(command.args).not.toContain('--require');
+            }
+          }
+          await expect(
+            revalidateRunnerTool(selected, f.fs, f.controller.signal),
+          ).resolves.toBeUndefined();
+        },
+      );
+    },
+  );
+  it('propagates IO AbortError from compatibility discovery without an aborted signal', async () => {
+    const f = npm10();
+    const open = f.open.getMockImplementation()!;
+    f.open.mockImplementation((file) =>
+      key(file) === key(f.assets.preload)
+        ? Promise.reject(new DOMException('TEST cancelled', 'AbortError'))
+        : open(file),
+    );
+    await expect(f.resolve()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+  it('propagates IO AbortError when revalidating a supported compat identity', async () => {
+    const f = npm10();
+    const selected = await f.resolve();
+    const lstat = f.lstat.getMockImplementation()!;
+    f.lstat.mockImplementation((file) =>
+      key(file) === key(f.assets.preload)
+        ? Promise.reject(new DOMException('TEST cancelled', 'AbortError'))
+        : lstat(file),
+    );
+    await expect(
+      revalidateRunnerTool(selected, f.fs, f.controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+  it('snapshots npm10 compatibility failure without rejecting the installed tool', async () => {
+    const f = fsFixture();
+    f.installTool('npm', '10.9.9');
+    const selected = await resolveRunnerTool('npm', f.snapshot, f.fs);
+    const compat = selected.npm10InstallCompat;
+    expect(compat).toMatchObject({ revision: 1, supported: false });
+    if (!compat || compat.supported)
+      throw new Error('TEST unsupported expected');
+    expect(compat.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    await expect(
+      revalidateRunnerTool(selected, f.fs, f.controller.signal),
+    ).resolves.toBeUndefined();
+  });
+  it.each([
+    ['npm', '11.17.0'],
+    ['npm', '12.2.2'],
+    ['pnpm', '10.34.9'],
+    ['pnpm', '11.22.0'],
+  ] as const)(
+    'does not discover compatibility assets for %s %s',
+    async (manager, version) => {
+      const f = fsFixture();
+      f.installTool(manager, version);
+      f.snapshot.nodeVersion = '24.19.0';
+      const selected = await resolveRunnerTool(manager, f.snapshot, f.fs);
+      expect(selected.npm10InstallCompat).toBeUndefined();
+      expect(
+        f.events.some((event) =>
+          /npm10-install-preload|commands[\\/]install\.js|lib[\\/]npm\.js/.test(
+            event,
+          ),
+        ),
+      ).toBe(false);
+    },
+  );
   afterEach(() => {
     expect(
       jest.requireMock<{ execa: unknown }>('execa').execa,
