@@ -138,6 +138,7 @@ Lệnh ở thư mục gốc chạy cả hai ứng dụng; các lệnh còn lại
 | Frontend | `pnpm dev` | Chạy dev server Next.js |
 | | `pnpm build` / `pnpm start` | Build production / chạy bản build |
 | | `pnpm lint` | ESLint |
+| | `pnpm test` | Chạy kiểm thử đơn vị frontend bằng Node.js |
 | | `pnpm theme:check` | Kiểm tra độ tương phản WCAG AA của theme |
 | | `pnpm i18n:check` | So key của từng ngôn ngữ với ngôn ngữ mặc định (`vi`): thừa key báo lỗi, thiếu key chỉ cảnh báo |
 
