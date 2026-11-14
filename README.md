@@ -148,6 +148,7 @@ Yarn, `yarn <script>`.
 | Frontend | `pnpm dev` | Start the Next.js dev server |
 | | `pnpm build` / `pnpm start` | Production build / serve it |
 | | `pnpm lint` | ESLint |
+| | `pnpm test` | Frontend unit tests (Node.js test runner) |
 | | `pnpm theme:check` | Check WCAG AA contrast of the theme tokens |
 | | `pnpm i18n:check` | Compare each locale's keys with the default locale (`vi`): extra keys fail, missing keys only warn |
 
