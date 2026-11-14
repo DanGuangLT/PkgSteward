@@ -24,6 +24,21 @@ async function startTracking(h, target = conflict) {
   await started
 }
 
+test("missing details reset analysis and ignore a late response before details recover", async t => {
+  const h = harness(t)
+  h.session.refresh(detail())
+  await startTracking(h)
+  const poll = h.requests.at(-1)
+  h.session.refresh(null)
+  assert.equal(poll.args[1].aborted, true)
+  poll.resolve(job({ status: "completed", phase: "done" }))
+  await flush()
+  assert.equal(h.session.getSnapshot().detail, null)
+  assert.equal(h.session.getSnapshot().job, null)
+  h.session.refresh(detail({ inputHash: "TEST-recovered" }))
+  assert.equal(h.session.getSnapshot().detail.inputHash, "TEST-recovered")
+})
+
 test("session cannot follow another project's job into this detail view", async t => {
   const h = harness(t)
   h.session.refresh(detail())

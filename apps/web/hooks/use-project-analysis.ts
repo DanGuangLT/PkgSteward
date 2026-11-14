@@ -8,7 +8,7 @@ import { initialAnalysisState } from "@/lib/projects/project-analysis-policy"
 import { createProjectAnalysisSession } from "@/lib/projects/project-analysis-session"
 import type { ProjectAnalysisSession } from "@/lib/projects/project-analysis-session"
 
-export function useProjectAnalysis(detail: ProjectDetail) {
+export function useProjectAnalysis(detail: ProjectDetail | null) {
   const [state, setState] = useState(() => initialAnalysisState(detail))
   const session = useRef<ProjectAnalysisSession | null>(null)
 
