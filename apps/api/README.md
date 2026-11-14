@@ -59,7 +59,7 @@ Full list in `.env.example`.
 | `MAX_SCAN_DEPTH` | `0` | Maximum folder depth below each scan root (below each drive root for `*`); `0` means no limit |
 | `SCAN_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop a scan after that long |
 | `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Folder for runtime data (logs, cache, `settings.json`): an absolute path, or a path relative to the project folder. The default is a `PkgStewardLog` folder inside the project folder |
-| `NPM_COMMAND_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop an npm / pnpm / Yarn command after that long |
+| `NPM_COMMAND_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop an npm or pnpm command after that long |
 
 Use a flat JSON object in `settings.json` inside the runtime data folder. Supported keys use their environment variable names and accept string, number, or boolean values. Settings override environment variables, and explicit CLI options take precedence over both. Set `PKGSTEWARD_DATA_DIR` through the environment or CLI because PkgSteward resolves the data folder before reading the settings file.
 

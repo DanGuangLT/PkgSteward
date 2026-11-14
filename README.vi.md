@@ -72,7 +72,7 @@ Sao chép `apps/api/.env.example` thành `apps/api/.env` rồi điền `SCAN_ROO
 | `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
 | `SCAN_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lần quét sau khoảng đó |
 | `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Thư mục dữ liệu runtime (log, cache, `settings.json`): đường dẫn tuyệt đối, hoặc tương đối tính từ thư mục gốc dự án. Mặc định là thư mục `PkgStewardLog` trong thư mục dự án |
-| `NPM_COMMAND_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lệnh npm / pnpm / Yarn sau khoảng đó |
+| `NPM_COMMAND_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lệnh npm hoặc pnpm sau khoảng đó |
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.
 
