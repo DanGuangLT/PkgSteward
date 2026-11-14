@@ -130,7 +130,8 @@ export class EnvironmentVariables {
   @IsOptional()
   SCAN_TIMEOUT_MS?: number;
 
-  // D3: thư mục dữ liệu runtime; không đặt = %LOCALAPPDATA%\PkgSteward.
+  // D3: defaults to PkgStewardLog in a source checkout, or
+  // %LOCALAPPDATA%\PkgSteward for an installed app on Windows when available.
   @Transform(blankToUndefined)
   @IsString()
   @IsOptional()
