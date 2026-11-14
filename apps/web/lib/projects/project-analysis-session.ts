@@ -159,8 +159,14 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
     void poll()
   }
 
-  function refresh(detail: ProjectDetail) {
+  function refresh(detail: ProjectDetail | null) {
     if (disposed) return
+    if (!detail) {
+      if (!state.detail) return
+      const generation = invalidate()
+      publish({ ...initialAnalysisState(), generation })
+      return
+    }
     const switched = state.detail
       ? state.detail.path !== detail.path || state.detail.requestPath !== detail.requestPath
       : state.requestPath !== null && state.requestPath !== detail.requestPath
