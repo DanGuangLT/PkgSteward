@@ -121,7 +121,7 @@ pnpm start      # or: npm start / yarn start (runs start:prod in apps/api and st
 ```
 
 `start` opens the web UI in your default browser once both apps are ready (one tab per run; `dev` never opens one).
-Set `PKGSTEWARD_NO_BROWSER=1` to skip it.
+Set `PKGSTEWARD_NO_BROWSER=1` to skip it. In PowerShell, run `$env:PKGSTEWARD_NO_BROWSER = "1"` before `pnpm start`. The setting lasts for the current shell. Clear it with `Remove-Item Env:PKGSTEWARD_NO_BROWSER` to restore automatic browser launch.
 
 You can still run an app on its own inside its folder, for example `cd apps/api && pnpm dev`.
 

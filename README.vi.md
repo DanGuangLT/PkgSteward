@@ -111,7 +111,7 @@ pnpm start      # hoặc: npm start / yarn start (chạy start:prod trong apps/a
 ```
 
 `start` tự mở giao diện web trong trình duyệt mặc định khi cả hai ứng dụng đã sẵn sàng (mỗi lần chạy mở một tab;
-`dev` không mở). Đặt `PKGSTEWARD_NO_BROWSER=1` để bỏ qua.
+`dev` không mở). Đặt `PKGSTEWARD_NO_BROWSER=1` để bỏ qua. Trong PowerShell, chạy `$env:PKGSTEWARD_NO_BROWSER = "1"` trước `pnpm start`. Biến này có hiệu lực trong phiên PowerShell hiện tại. Chạy `Remove-Item Env:PKGSTEWARD_NO_BROWSER` để bật lại chế độ tự mở trình duyệt.
 
 Bạn vẫn có thể chạy riêng từng ứng dụng trong thư mục của nó, ví dụ `cd apps/api && pnpm dev`.
 
