@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import {
   initialGlobalPreviewForm, changeGlobalSelection, displayGlobalPreview,
   setGlobalConsent, globalConsentError, buildGlobalExecuteInput, clearGlobalPreview,
+  globalPreviewWarningCodes,
 } from "./global-preview-form.ts"
 
 // TEST data; not business requirements.
@@ -17,6 +18,16 @@ const preview = {
   confirmText: "CHANGE GLOBAL npm @test/tool TO 2.0.0",
 }
 const ready = () => setGlobalConsent(displayGlobalPreview(initialGlobalPreviewForm(selection), preview), { acknowledged: true, confirmText: preview.confirmText })
+
+test("preview suppresses warnings already covered by the visible dedicated sections", () => {
+  const warningCodes = ["GLOBAL_CODE_EXECUTION", "GLOBAL_CONSUMERS_UNKNOWN", "PNPM_SHARED_GLOBAL_PROJECT", "TEST_DISTINCT"]
+  const sharedPackages = [{ name: "TEST-neighbor", version: "1.0.0", linked: false }]
+  for (const action of ["change", "remove"]) {
+    assert.deepEqual(globalPreviewWarningCodes({ ...preview, action, warningCodes, sharedPackages }), ["TEST_DISTINCT"])
+  }
+  assert.deepEqual(globalPreviewWarningCodes({ ...preview, action: "repair", warningCodes }), warningCodes)
+  assert.deepEqual(globalPreviewWarningCodes({ ...preview, warningCodes }), ["PNPM_SHARED_GLOBAL_PROJECT", "TEST_DISTINCT"])
+})
 
 test("consent is absent initially and requires checkbox plus exact displayed server text", () => {
   const empty = initialGlobalPreviewForm(selection)

@@ -7,6 +7,14 @@ export interface GlobalConsent { acknowledged: boolean; confirmText: string }
 export interface GlobalPreviewForm extends GlobalConsent { selection: GlobalSelection; preview: GlobalPreview | null }
 export type GlobalConsentError = "NO_PREVIEW" | "PREVIEW_EXPIRED" | "RISK_NOT_ACKNOWLEDGED" | "CONFIRM_TEXT_MISMATCH"
 
+export function globalPreviewWarningCodes(preview: GlobalPreview): string[] {
+  return preview.warningCodes.filter(code => {
+    if (code === "PNPM_SHARED_GLOBAL_PROJECT") return !preview.sharedPackages?.length
+    if (code === "GLOBAL_CODE_EXECUTION" || code === "GLOBAL_CONSUMERS_UNKNOWN") return preview.action === "repair"
+    return true
+  })
+}
+
 export function initialGlobalPreviewForm(selection: GlobalSelection = { manager: "npm", package: "", action: "remove" }): GlobalPreviewForm {
   return { selection: { ...selection }, preview: null, acknowledged: false, confirmText: "" }
 }
