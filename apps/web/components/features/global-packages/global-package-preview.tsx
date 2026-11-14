@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { globalConsentError } from "@/lib/global-packages/global-preview-form"
+import { globalConsentError, globalPreviewWarningCodes } from "@/lib/global-packages/global-preview-form"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 
 const permanentWarnings = ["lifecycle", "consumers", "partial", "crash", "rollback"] as const
@@ -43,6 +43,7 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
   const previewing = globalActionPending(state, "preview")
   const npm = preview.npm
   const repair = preview.action === "repair"
+  const warningCodes = globalPreviewWarningCodes(preview)
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
@@ -82,7 +83,7 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
             <span className="font-mono">{pkg.name} {pkg.version}</span>{pkg.linked ? <> · {t("dialog.linkedPackage")}</> : null}
           </li>)}</ul>
         </section> : null}
-        {preview.warningCodes.length ? <ul className="space-y-2">{preview.warningCodes.filter(code => code !== "PNPM_SHARED_GLOBAL_PROJECT")
+        {warningCodes.length ? <ul className="space-y-2">{warningCodes
           .map(code => <li key={code}><GlobalCodeMessage kind="warnings" code={code} /></li>)}</ul> : null}
         {repair ? null : <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           <div className="min-w-0"><h3 className="font-semibold">{t("dialog.binsAdded")}</h3>
