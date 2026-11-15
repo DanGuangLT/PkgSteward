@@ -99,11 +99,19 @@ export async function readNpmLock(
   for (let index = 0; index < manifest.dependencies.length; index++) {
     if (index % 256 === 0) await yieldProjectBatch(signal);
     const dependency = manifest.dependencies[index];
-    const rawEntry = packages[`node_modules/${dependency.name}`];
-    const resolved = byLocation.get(`node_modules/${dependency.name}`);
+    const location = `node_modules/${dependency.name}`;
+    const rawEntry = packages[location];
+    const resolved = byLocation.get(location);
     const versions: string[] = [];
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
+      if (
+        declaration.group === 'peerDependencies' &&
+        manifest.optionalPeerNames?.has(dependency.name) &&
+        !Object.hasOwn(packages, location)
+      ) {
+        continue;
+      }
       const target = registryTarget(dependency.name, declaration.spec);
       if (
         target.registryName &&

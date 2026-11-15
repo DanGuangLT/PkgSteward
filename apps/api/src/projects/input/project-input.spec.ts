@@ -296,6 +296,23 @@ describe('readProjectInput', () => {
       details: { reason: 'UNREADABLE_INPUT' },
     });
   });
+  it('records only declared peers explicitly marked optional', async () => {
+    const f = fixture();
+    f.put(
+      'package.json',
+      JSON.stringify({
+        peerDependencies: { alpha: '^1', beta: '^2' },
+        peerDependenciesMeta: {
+          alpha: { optional: true },
+          beta: { optional: 'true' },
+          undeclared: { optional: true },
+        },
+      }),
+    );
+    expect((await f.read()).manifest.optionalPeerNames).toEqual(
+      new Set(['alpha']),
+    );
+  });
   it('preserves every duplicate dependency declaration and inert scripts; ignores plugin fields', async () => {
     const f = fixture();
     f.put('package.json', fixtureText('hostile/package.json.txt'));

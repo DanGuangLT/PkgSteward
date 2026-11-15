@@ -55,6 +55,7 @@ export interface IManifestInput {
   version: string | null;
   packageManager: string | null;
   dependencies: IManifestDependency[];
+  optionalPeerNames?: ReadonlySet<string>;
   scripts: IProjectScript[];
 }
 export interface IProjectDetail {
