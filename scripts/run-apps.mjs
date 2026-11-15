@@ -105,7 +105,7 @@ function runParallel(apps, openBrowser) {
     child.once('close', (code) => {
       running.delete(child);
       if (exitCode === undefined) {
-        exitCode = stoppedByUser ? 0 : (code ?? 1);
+        exitCode = stoppedByUser ? 0 : (code || 1);
         if (!stoppedByUser) console.error(`[run-apps] apps/${app} stopped (exit code ${code}); stopping the other app.`);
         stopAll();
       }
