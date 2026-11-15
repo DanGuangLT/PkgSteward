@@ -20,16 +20,16 @@ export function projectAuditIsClean(job: ProjectAnalysisJob | null): boolean {
 
 export function createProjectDependencyBadgeReader(job: ProjectAnalysisJob | null) {
   const outdated = new Set<string>()
-  const registryNames = new Map<string, string>()
   const vulnerable = new Set<string>()
+  const vulnerableAliases = new Set<string>()
+  for (const row of job?.audit.items ?? []) vulnerable.add(row.name)
   for (const row of job?.outdated.items ?? []) {
-    registryNames.set(row.name, row.registryName)
+    if (vulnerable.has(row.registryName)) vulnerableAliases.add(row.name)
     if (row.behindWanted === true || row.behindLatest === true) outdated.add(row.name)
   }
-  for (const row of job?.audit.items ?? []) vulnerable.add(row.name)
   return (name: string): { outdated: boolean; vulnerable: boolean } => ({
     outdated: outdated.has(name),
-    vulnerable: vulnerable.has(name) || vulnerable.has(registryNames.get(name) ?? name),
+    vulnerable: vulnerable.has(name) || vulnerableAliases.has(name),
   })
 }
 

@@ -70,6 +70,21 @@ test("badge reader indexes each snapshot once and does no per-name list traversa
   assert.equal(auditReads, 1)
 })
 
+test("any registry target of an alias can add a vulnerability badge", () => {
+  const targets = [
+    { name: "TEST-alias", registryName: "TEST-vulnerable", behindWanted: true },
+    { name: "TEST-alias", registryName: "TEST-healthy", behindWanted: false },
+  ]
+  for (const items of [targets, [...targets].reverse()]) {
+    const badges = createProjectDependencyBadgeReader({ ...job,
+      outdated: { ...section, items: [...items, { name: "TEST-other", registryName: "TEST-alias" }] },
+      audit: { ...section, items: [{ name: "TEST-vulnerable" }] },
+    })
+    assert.deepEqual(badges("TEST-alias"), { outdated: true, vulnerable: true })
+    assert.equal(badges("TEST-other").vulnerable, false)
+  }
+})
+
 test("severity sort is immutable and uses deterministic name/id ties", () => {
   const rows = [
     { id: "TEST-2", name: "TEST-a", severity: "high" }, { id: "TEST-unknown", name: "TEST-z", severity: "unknown" },
