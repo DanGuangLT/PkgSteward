@@ -7,6 +7,7 @@ import type {
 export interface IScannerService {
   hasRunningScan(): boolean;
   startScan(): IScanStart;
+  getActiveScan(): IScanJob | null;
   getScan(scanId: string): IScanJob;
   cancelScan(scanId: string): IScanJob;
   getLatest(): IScanResult;

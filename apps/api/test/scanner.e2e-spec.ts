@@ -208,6 +208,30 @@ describe('Scanner HTTP flow and cache (e2e)', () => {
       else signal.addEventListener('abort', finish, { once: true });
     });
 
+  it('returns only the active scan without starting one or caching the response', async () => {
+    const app = await openApp({ walker: heldWalker() });
+    const active = async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/scans/active')
+        .expect(200)
+        .expect('Cache-Control', 'no-store');
+      return (response.body as IApiResponse<IScanJob | null>).data;
+    };
+
+    expect(await active()).toBeNull();
+    const started = await start(app);
+    expect(await active()).toMatchObject({
+      scanId: started.scanId,
+      status: 'running',
+      progress: { visitedDirs: 0, foundProjects: 0, skippedCount: 0 },
+    });
+    await request(app.getHttpServer())
+      .post(`/api/v1/scans/${started.scanId}/cancel`)
+      .expect(200);
+    expect(await active()).toBeNull();
+    expect((await poll(app, started.scanId)).status).toBe('cancelled');
+  });
+
   it('scans real monorepo projects and orphans, prunes excluded children and preserves metadata/nulls', async () => {
     const app = await openApp();
     await request(app.getHttpServer())

@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Controller, Get, Header, HttpCode, Param, Post } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -21,14 +21,16 @@ import {
 import type { IScannerController } from '@/scanner/interfaces/scanner.controller.interface';
 import { ScannerService } from '@/scanner/scanner.service';
 
-const envelope = (entity: Type, statusCode: number) => ({
+const envelope = (entity: Type, statusCode: number, nullable = false) => ({
   type: 'object' as const,
   required: ['statusCode', 'message', 'code', 'data', 'timestamp', 'path'],
   properties: {
     statusCode: { type: 'integer' as const, example: statusCode },
     message: { type: 'string' as const },
     code: { type: 'string' as const, example: 'SUCCESS' },
-    data: { $ref: getSchemaPath(entity) },
+    data: nullable
+      ? { allOf: [{ $ref: getSchemaPath(entity) }], nullable: true }
+      : { $ref: getSchemaPath(entity) },
     timestamp: { type: 'string' as const, format: 'date-time' },
     path: { type: 'string' as const },
   },
@@ -78,6 +80,18 @@ export class ScannerController implements IScannerController {
       statusCode: 200,
       message: 'Latest scan retrieved successfully',
       data: this.scanner.getLatest(),
+    };
+  }
+
+  @Get('active')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Get the running scan; data is null when idle' })
+  @ApiOkResponse({ schema: envelope(ScanJobEntity, 200, true) })
+  getActiveScan(): IApiResponse<ScanJobEntity | null> {
+    return {
+      statusCode: 200,
+      message: 'Active scan retrieved successfully',
+      data: this.scanner.getActiveScan(),
     };
   }
 

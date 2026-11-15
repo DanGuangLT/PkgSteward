@@ -8,6 +8,7 @@ import type {
 
 export interface IScannerController {
   startScan(): IApiResponse<IScanStart>;
+  getActiveScan(): IApiResponse<IScanJob | null>;
   getScan(params: ScanIdParamDto): IApiResponse<IScanJob>;
   cancelScan(params: ScanIdParamDto): IApiResponse<IScanJob>;
   getLatest(): IApiResponse<IScanResult>;
