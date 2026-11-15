@@ -37,11 +37,11 @@ export const configureApp = (app: INestApplication): IConfiguredApp => {
     limit: JSON_BODY_LIMIT,
   });
 
+  // The startup Swagger export reads the prefix and version immediately.
+  const { globalPrefix, version } = setupAppConfig(app);
+
   const swaggerEnabled = configService.get<string>('MODE') === 'development';
   if (swaggerEnabled) SwaggerConfig.setup(app);
-
-  // Setup versioning (mặc định v1) và global prefix (mặc định api)
-  const { globalPrefix, version } = setupAppConfig(app);
 
   // Custom Validation Pipe với format error chuẩn theo field
   validationConfig(app);
