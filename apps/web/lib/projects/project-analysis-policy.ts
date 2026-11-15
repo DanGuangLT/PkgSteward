@@ -24,8 +24,11 @@ export type ProjectAnalysisState = AnalysisContext & (
 )
 
 export function initialAnalysisState(detail: ProjectDetail | null = null): ProjectAnalysisState {
-  return { phase: "idle", detail, job: null, requestPath: detail?.requestPath ?? null,
+  const idle: ProjectAnalysisState = { phase: "idle", detail, job: null, requestPath: detail?.requestPath ?? null,
     generation: 0, error: null, startUnknown: false, cancelUnknown: false }
+  return detail?.activeAnalysisJobId
+    ? trackAnalysis(idle, detail.activeAnalysisJobId, detail.requestPath)
+    : idle
 }
 
 export function projectAnalysisError(operation: "start" | "poll" | "cancel", cause: unknown): ProjectAnalysisError {

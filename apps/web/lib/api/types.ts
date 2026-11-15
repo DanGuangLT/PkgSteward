@@ -364,6 +364,7 @@ export interface ProjectScript {
 export interface ProjectDetail {
   path: string
   requestPath: string
+  activeAnalysisJobId?: string
   name: string | null
   version: string | null
   manager: ProjectManager

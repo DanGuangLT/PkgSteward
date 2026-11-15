@@ -65,8 +65,8 @@ test("other 409 reasons remain translatable without advertising a different anal
   }
 })
 
-function harness(t) {
-  let now = 0, sequence = 0, visible = true
+function harness(t, { initialDetail, visible: initiallyVisible = true } = {}) {
+  let now = 0, sequence = 0, visible = initiallyVisible
   const timers = new Map(), listeners = new Set(), requests = [], changes = []
   const api = Object.fromEntries(["start", "get", "cancel"].map(method => [method, (...args) => {
     const pending = deferred()
@@ -78,7 +78,7 @@ function harness(t) {
     clearTimeout(id) { timers.delete(id) },
   }
   const visibility = { isVisible: () => visible, subscribe(callback) { listeners.add(callback); return () => listeners.delete(callback) } }
-  const session = createProjectAnalysisSession({ api, clock, visibility, onChange: state => changes.push(state) })
+  const session = createProjectAnalysisSession({ api, clock, visibility, initialDetail, onChange: state => changes.push(state) })
   t.after(() => session.dispose())
   return { session, requests, changes, timers, listeners,
     get: () => requests.filter(request => request.method === "get"),
@@ -90,6 +90,51 @@ function harness(t) {
     async visible(value) { visible = value; for (const callback of listeners) callback(); await flush() },
   }
 }
+
+test("opening a project with a running analysis polls its ID without starting again", async t => {
+  const initialDetail = detail({ activeAnalysisJobId: conflict.jobId })
+  const h = harness(t, { initialDetail })
+  assert.equal(h.session.getSnapshot().phase, "tracking")
+  assert.equal(h.session.getSnapshot().detail, initialDetail)
+  assert.deepEqual(h.requests.map(request => [request.method, request.args[0]]), [["get", conflict.jobId]])
+  h.get()[0].resolve(job({ status: "completed", phase: "done" }))
+  await flush()
+  await h.tick(3000)
+  assert.equal(h.session.getSnapshot().job.status, "completed")
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.requests.length, 1)
+})
+
+test("a hidden tab resumes only when visible and can cancel the same analysis", async t => {
+  const h = harness(t, { initialDetail: detail({ activeAnalysisJobId: conflict.jobId }), visible: false })
+  assert.equal(h.session.getSnapshot().phase, "tracking")
+  assert.equal(h.requests.length, 0)
+  await h.visible(true)
+  const pendingPoll = h.get()[0]
+  const cancellation = h.session.cancel()
+  assert.equal(pendingPoll.args[1].aborted, true)
+  assert.deepEqual(h.requests.map(request => [request.method, request.args[0]]), [
+    ["get", conflict.jobId], ["cancel", conflict.jobId],
+  ])
+  h.requests[1].resolve(job({ status: "cancelled" }))
+  await cancellation
+  pendingPoll.resolve(job())
+  await flush()
+  assert.equal(h.session.getSnapshot().job.status, "cancelled")
+})
+
+test("legacy project detail stays idle and an expired resumed job becomes lost", async t => {
+  const legacy = harness(t, { initialDetail: detail() })
+  assert.equal(legacy.session.getSnapshot().phase, "idle")
+  assert.equal(legacy.requests.length, 0)
+
+  const h = harness(t, { initialDetail: detail({ activeAnalysisJobId: conflict.jobId }) })
+  h.get()[0].reject(new ApiError(404, "TEST", "NOT_FOUND"))
+  await flush()
+  await h.tick(3000)
+  assert.equal(h.session.getSnapshot().phase, "lost")
+  assert.equal(h.requests.length, 1)
+})
 
 test("start POST once; one GET in flight; next GET is 1000ms after settle", async t => {
   const h = harness(t)

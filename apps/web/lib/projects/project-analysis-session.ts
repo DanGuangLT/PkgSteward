@@ -23,14 +23,15 @@ export interface ProjectAnalysisVisibility {
 }
 
 export interface ProjectAnalysisSessionOptions {
+  initialDetail?: ProjectDetail | null
   api: ProjectAnalysisApi
   clock: ProjectAnalysisClock
   visibility: ProjectAnalysisVisibility
   onChange(state: ProjectAnalysisState): void
 }
 
-export function createProjectAnalysisSession({ api, clock, visibility, onChange }: ProjectAnalysisSessionOptions) {
-  let state = initialAnalysisState()
+export function createProjectAnalysisSession({ api, clock, visibility, onChange, initialDetail }: ProjectAnalysisSessionOptions) {
+  let state = initialAnalysisState(initialDetail)
   let disposed = false
   let timer: number | null = null
   // Keep an aborted GET in the slot until it settles: hide/show and path switches
@@ -173,6 +174,7 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
     if (switched) {
       const generation = invalidate()
       publish({ ...initialAnalysisState(detail), generation })
+      void poll()
       return
     }
     if (state.phase === "starting" || state.phase === "tracking") return
@@ -190,6 +192,7 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange 
     unsubscribe()
   }
 
+  void poll()
   return { start, cancel, retryPoll, refresh, dispose, getSnapshot: () => state }
 }
 
