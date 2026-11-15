@@ -108,6 +108,20 @@ function parseManifest(text: string): IManifestInput {
       dependencies.set(name, dependency);
     }
   }
+  const optionalPeerNames = new Set<string>();
+  if (isProjectRecord(raw.peerDependenciesMeta)) {
+    for (const [name, metadata] of Object.entries(raw.peerDependenciesMeta)) {
+      if (
+        isProjectRecord(metadata) &&
+        metadata.optional === true &&
+        dependencies
+          .get(name)
+          ?.declarations.some(({ group }) => group === 'peerDependencies')
+      ) {
+        optionalPeerNames.add(name);
+      }
+    }
+  }
   const scripts: unknown = raw.scripts === undefined ? {} : raw.scripts;
   if (
     !isProjectRecord(scripts) ||
@@ -123,6 +137,7 @@ function parseManifest(text: string): IManifestInput {
     dependencies: [...dependencies.values()].sort((a, b) =>
       compareProjectText(a.name, b.name),
     ),
+    ...(optionalPeerNames.size ? { optionalPeerNames } : {}),
     scripts: Object.entries(scripts)
       .map(([name, command]) => ({ name, command: command as string }))
       .sort((a, b) => compareProjectText(a.name, b.name)),

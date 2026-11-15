@@ -126,6 +126,42 @@ describe('readNpmLock', () => {
     expect(result.direct.get('alpha') ?? []).toEqual([]);
     expect(result.coverage).toBe('partial');
   });
+  it('does not lower coverage for an absent optional peer', async () => {
+    const input = manifest();
+    input.dependencies[0].declarations = [
+      { group: 'peerDependencies', spec: '^1.0.0' },
+    ];
+    const root = { peerDependencies: { alpha: '^1.0.0' } };
+    expect((await read(lock({}, root), input)).coverage).toBe('partial');
+
+    const optional = { ...input, optionalPeerNames: new Set(['alpha']) };
+    const absent = await read(lock({}, root), optional);
+    expect(absent.coverage).toBe('complete');
+    expect(absent.direct.size).toBe(0);
+    expect(absent.packages).toEqual([]);
+
+    const installed = await read(
+      lock({ 'node_modules/alpha': alpha }, root),
+      optional,
+    );
+    expect(installed.direct.get('alpha')).toEqual(['1.2.0']);
+
+    const invalid = await read(
+      lock({ 'node_modules/alpha': null }, root),
+      optional,
+    );
+    expect(invalid.coverage).toBe('partial');
+
+    input.dependencies[0].declarations.push({
+      group: 'dependencies',
+      spec: '^1.0.0',
+    });
+    const both = await read(
+      lock({}, { ...root, dependencies: root.peerDependencies }),
+      optional,
+    );
+    expect(both.coverage).toBe('partial');
+  });
   it('rejects a top-level locked version inconsistent with its root range', async () => {
     expect(
       await read(
