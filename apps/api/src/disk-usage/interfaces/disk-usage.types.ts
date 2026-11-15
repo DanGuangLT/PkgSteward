@@ -68,6 +68,10 @@ export interface IDiskUsageJob extends IDiskUsageStart {
   failureCode: 'NOT_FOUND' | 'FORBIDDEN' | 'INTERNAL_SERVER_ERROR' | null;
 }
 
+export interface IDiskUsageActiveJob extends IDiskUsageJob {
+  requestPath: string;
+}
+
 export interface IDiskFs {
   entries(path: string, signal: AbortSignal): AsyncIterable<Dirent>;
   lstat(path: string, signal?: AbortSignal): Promise<BigIntStats>;

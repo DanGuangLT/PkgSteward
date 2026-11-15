@@ -1,5 +1,5 @@
 import { ApiError } from "../api/response.ts"
-import type { DiskStatus, DiskUsageJob, DiskUsageRow, DiskView, StartDiskUsage } from "@/lib/api/types"
+import type { DiskStatus, DiskUsageActiveJob, DiskUsageJob, DiskUsageRow, DiskView, StartDiskUsage } from "@/lib/api/types"
 
 export interface DiskRequestTarget { path: string; view: DiskView }
 export interface DiskSnapshot { job: DiskUsageJob; requestTarget: DiskRequestTarget }
@@ -22,6 +22,17 @@ export type DiskUiState = DiskContext & (
   | { phase: "starting" }
   | { phase: "tracking"; jobId: string; target: DiskTrackingTarget; cancelPending: boolean; errorCode?: string }
 )
+
+export function initialDiskUiState(form: DiskRequestTarget, active: DiskUsageActiveJob | null): DiskUiState {
+  const idle: DiskUiState = { phase: "idle", job: null, requestTarget: null, form }
+  if (active?.status !== "running") return idle
+
+  const samePath = form.path === active.requestPath || form.path === active.path
+  if (form.path !== "" && (!samePath || form.view !== active.view)) return idle
+
+  const target = { path: active.requestPath, view: active.view }
+  return diskReceiveJob(diskTrackJob({ ...idle, form: target }, active.jobId, target), active)
+}
 
 export function diskStatusKey(state: DiskUiState): `status.${DiskStatus | "idle" | "starting" | "cancelling" | "untracked"}` {
   if (state.phase === "starting") return "status.starting"

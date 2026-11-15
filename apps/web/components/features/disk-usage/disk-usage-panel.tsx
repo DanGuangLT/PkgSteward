@@ -8,13 +8,17 @@ import { DiskUsageControls } from "@/components/features/disk-usage/disk-usage-c
 import { DiskSize, DiskUsageItems } from "@/components/features/disk-usage/disk-usage-items"
 import { Button } from "@/components/ui/button"
 import { useDiskUsage } from "@/hooks/use-disk-usage"
-import type { DiskUsageRow, DiskView } from "@/lib/api/types"
+import type { DiskUsageActiveJob, DiskUsageRow, DiskView } from "@/lib/api/types"
 import { diskExpandTarget, diskMeasurementInput, diskSaveSnapshot, diskStatusKey, type DiskSnapshot } from "@/lib/disk-usage/disk-usage-policy"
 
-export function DiskUsagePanel({ initialPath, initialView }: { initialPath: string; initialView: DiskView }) {
+export function DiskUsagePanel({ initialPath, initialView, activeJob }: {
+  initialPath: string
+  initialView: DiskView
+  activeJob: DiskUsageActiveJob | null
+}) {
   const t = useTranslations("diskUsage")
   const format = useFormatter()
-  const controller = useDiskUsage({ path: initialPath, view: initialView })
+  const controller = useDiskUsage({ path: initialPath, view: initialView }, activeJob)
   const { state, error } = controller
   const job = state.job
   const busy = state.phase !== "idle"

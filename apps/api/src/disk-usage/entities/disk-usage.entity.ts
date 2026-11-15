@@ -4,6 +4,7 @@ import type {
   DiskStatus,
   DiskStop,
   DiskView,
+  IDiskUsageActiveJob,
   IDiskUsageJob,
   IDiskUsageProgress,
   IDiskUsageRow,
@@ -110,4 +111,12 @@ export class DiskUsageJobEntity
     enum: ['NOT_FOUND', 'FORBIDDEN', 'INTERNAL_SERVER_ERROR', null],
   })
   failureCode!: IDiskUsageJob['failureCode'];
+}
+
+export class DiskUsageActiveJobEntity
+  extends DiskUsageJobEntity
+  implements IDiskUsageActiveJob
+{
+  @ApiProperty()
+  requestPath!: string;
 }

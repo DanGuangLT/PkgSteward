@@ -2,7 +2,14 @@ import { Logger } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -219,6 +226,41 @@ describe('DiskUsage HTTP flow (e2e)', () => {
       first.data,
     );
     expect(await get(app, started.jobId)).toEqual(first.data);
+  });
+
+  it('returns the active measurement with its original package path until cancelled', async () => {
+    const app = await openApp(heldWalker());
+    const active = () =>
+      request(app.getHttpServer())
+        .get('/api/v1/disk-usage/active')
+        .expect('Cache-Control', 'no-store')
+        .expect(200);
+    expect((await active()).body).toMatchObject({
+      statusCode: 200,
+      code: 'SUCCESS',
+      data: null,
+    });
+
+    const target = join(root, 'other');
+    const parent = join(root, 'workspace');
+    await mkdir(parent);
+    const requestPath = join(parent, 'node_modules');
+    await symlink(target, requestPath, 'junction');
+    const { jobId } = await start(app, { path: requestPath, view: 'packages' });
+    expect((await active()).body).toMatchObject({
+      data: {
+        ...(await get(app, jobId)),
+        status: 'running',
+        view: 'packages',
+        path: await realpath(target),
+        requestPath,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/disk-usage/${jobId}/cancel`)
+      .expect(200);
+    expect((await active()).body).toMatchObject({ data: null });
   });
 
   it('polls more than 20 times in 10s without 429 while start and cancel retain global limits', async () => {
