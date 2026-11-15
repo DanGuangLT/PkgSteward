@@ -67,9 +67,16 @@ export class ProjectsService implements IProjectsService, OnModuleDestroy {
     ]);
     if (dependencies.length > 2000) warnings.add('LIMIT_EXCEEDED');
     if (input.registryPolicy) warnings.add(input.registryPolicy);
+    const diskUsage = await this.diskSummary(input, signal);
+    const running = this.current?.job;
     return structuredClone({
       path: input.path,
       requestPath: input.requestPath,
+      activeAnalysisJobId:
+        running?.status === 'running' &&
+        this.comparable(running.path) === this.comparable(input.path)
+          ? running.jobId
+          : undefined,
       name: input.manifest.name,
       version: input.manifest.version,
       manager: input.manager,
@@ -92,7 +99,7 @@ export class ProjectsService implements IProjectsService, OnModuleDestroy {
       })),
       scripts: input.manifest.scripts,
       warnings: [...warnings].sort(compareProjectText),
-      diskUsage: await this.diskSummary(input, signal),
+      diskUsage,
     });
   }
 

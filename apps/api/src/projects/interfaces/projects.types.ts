@@ -65,6 +65,7 @@ export interface IManifestInput {
 export interface IProjectDetail {
   path: string;
   requestPath: string;
+  activeAnalysisJobId?: string;
   name: string | null;
   version: string | null;
   manager: ProjectManager;
