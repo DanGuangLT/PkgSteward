@@ -66,7 +66,9 @@ const detail = (): IProjectDetail => ({
   dependencies: [
     {
       name: 'demo',
-      declarations: [{ group: 'dependencies', spec: '^1.0.0' }],
+      declarations: [
+        { group: 'dependencies', spec: '^1.0.0', lockedVersions: [] },
+      ],
       lockedVersions: [],
     },
   ],
@@ -93,6 +95,7 @@ const job = (): IProjectAnalysisJob => ({
       {
         name: 'demo',
         registryName: 'demo',
+        declaredSpec: '^1.0.0',
         lockedVersions: [],
         wanted: null,
         latest: '2.0.0',
@@ -485,6 +488,7 @@ describe('Projects Swagger contract', () => {
     });
     expect(schemas?.ProjectOutdatedEntity).toMatchObject({
       properties: {
+        declaredSpec: { type: 'string' },
         wanted: { nullable: true },
         latest: { nullable: true },
         behindWanted: { nullable: true },

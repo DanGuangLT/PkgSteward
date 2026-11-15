@@ -352,6 +352,7 @@ export interface ManifestDependency {
 }
 
 export interface ProjectDependency extends ManifestDependency {
+  declarations: (DependencyDeclaration & { lockedVersions?: string[] })[]
   lockedVersions: string[]
 }
 
@@ -380,6 +381,7 @@ export interface ProjectDetail {
 export interface ProjectOutdated {
   name: string
   registryName: string
+  declaredSpec?: string
   lockedVersions: string[]
   wanted: string | null
   latest: string | null

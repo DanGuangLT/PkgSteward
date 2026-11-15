@@ -73,6 +73,7 @@ function inventory(): ILockInventory {
   return {
     coverage: 'complete',
     direct: new Map([['pkg', ['1.0.0']]]),
+    directBySpec: new Map(),
     packages: [{ name: 'pkg', version: '1.0.0', direct: true }],
     warningCodes: [],
     failureCode: null,

@@ -12,6 +12,7 @@ import {
   jsonDepthWithinLimit,
   normalizeInventory,
   partialInventory,
+  recordDirectResolution,
   PROJECT_LOCK_BYTES,
   PROJECT_LOCK_RECORDS,
   registrySourceName,
@@ -102,7 +103,6 @@ export async function readNpmLock(
     const location = `node_modules/${dependency.name}`;
     const rawEntry = packages[location];
     const resolved = byLocation.get(location);
-    const versions: string[] = [];
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
       if (
@@ -129,9 +129,13 @@ export async function readNpmLock(
       }
       if (!versionMatchesTarget(resolved.version, target))
         return unavailableInventory('LOCKFILE_MISMATCH');
-      versions.push(resolved.version);
+      recordDirectResolution(
+        result,
+        dependency.name,
+        declaration.spec,
+        resolved.version,
+      );
     }
-    if (versions.length) result.direct.set(dependency.name, versions);
   }
   signal.throwIfAborted();
   return normalizeInventory(result, manifest);

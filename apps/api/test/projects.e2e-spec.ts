@@ -501,6 +501,12 @@ describe('Projects HTTP flow (mocked IO, real Nest pipeline)', () => {
       sizeBytes: 0,
       measuredAt: timestamp,
     });
+    expect(
+      body.data?.dependencies.find(({ name }) => name === 'demo'),
+    ).toMatchObject({
+      lockedVersions: ['1.0.0'],
+      declarations: [{ spec: '^1.0.0', lockedVersions: ['1.0.0'] }],
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(assertIdle).not.toHaveBeenCalled();
     const started = await start(app);
@@ -511,6 +517,7 @@ describe('Projects HTTP flow (mocked IO, real Nest pipeline)', () => {
     expect(completed.checkedAt).toEqual(expect.any(String));
     expect(completed.outdated.state).toBe('complete');
     expect(completed.outdated.items[0]).toMatchObject({
+      declaredSpec: '^1.0.0',
       name: 'demo',
       lockedVersions: ['1.0.0'],
       latest: '2.0.0',

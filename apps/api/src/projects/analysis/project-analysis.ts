@@ -22,6 +22,7 @@ import {
   isLockedVersion,
   isProjectRecord,
   isRegistryPackageName,
+  lockedVersionsForSpec,
   yieldProjectBatch,
 } from '@/projects/locks/project-lock-common';
 
@@ -93,6 +94,7 @@ function emptyRow(
   return {
     name: target.name,
     registryName: target.registryName ?? target.name,
+    declaredSpec: target.declaredSpec,
     lockedVersions: [...locked],
     wanted: null,
     latest: null,
@@ -357,6 +359,8 @@ export async function analyzeProject(
 
   const inventory = await deps.buildInventory(input, signal);
   signal.throwIfAborted();
+  const lockedFor = (target: IProjectOutdatedTarget) =>
+    lockedVersionsForSpec(inventory, target.name, target.declaredSpec);
   result.audit.warningCodes = [...inventory.warningCodes];
   let stopped: ProjectAnalysisCode | null = null;
   let metadataSucceeded = 0;
@@ -376,11 +380,7 @@ export async function analyzeProject(
       (inventory.coverage !== 'unavailable' &&
         !registryNames.has(target.registryName))
     ) {
-      rows[index] = emptyRow(
-        target,
-        inventory.direct.get(target.name) ?? [],
-        'UNSUPPORTED_SPEC',
-      );
+      rows[index] = emptyRow(target, lockedFor(target), 'UNSUPPORTED_SPEC');
       warn(result.outdated, 'UNSUPPORTED_SPEC');
       continue;
     }
@@ -406,11 +406,7 @@ export async function analyzeProject(
         const code = registryCode(error);
         if (stopsScheduling(code)) stopped ??= code;
         for (const { target, index } of group) {
-          rows[index] = emptyRow(
-            target,
-            inventory.direct.get(target.name) ?? [],
-            code,
-          );
+          rows[index] = emptyRow(target, lockedFor(target), code);
           result.outdated.checkedCount++;
         }
         warn(result.outdated, code);
@@ -420,7 +416,7 @@ export async function analyzeProject(
       for (const { target, index } of group) {
         const row = await outdatedRow(
           target,
-          inventory.direct.get(target.name) ?? [],
+          lockedFor(target),
           metadata,
           signal,
         );
@@ -448,11 +444,7 @@ export async function analyzeProject(
   if (stopped !== null) {
     for (let i = 0; i < targets.length; i++) {
       if (!rows[i]) {
-        rows[i] = emptyRow(
-          targets[i],
-          inventory.direct.get(targets[i].name) ?? [],
-          stopped,
-        );
+        rows[i] = emptyRow(targets[i], lockedFor(targets[i]), stopped);
       }
     }
   }
