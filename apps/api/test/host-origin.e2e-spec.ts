@@ -2,7 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
+import type { OpenAPIObject } from '@nestjs/swagger';
+import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 import { tmpdir } from 'os';
@@ -48,10 +49,18 @@ describe('Host/Origin guard (e2e)', () => {
 
   const server = () => app.getHttpServer();
 
-  it('exports Swagger JSON inside the temporary installation directory', () => {
-    expect(existsSync(join(tmpInstallDir, 'docs_API', 'swagger.json'))).toBe(
-      true,
-    );
+  it('exports the same versioned route paths as the live Swagger JSON', async () => {
+    const file = join(tmpInstallDir, 'docs_API', 'swagger.json');
+    const exported = JSON.parse(readFileSync(file, 'utf8')) as OpenAPIObject;
+    const response = await request(server())
+      .get('/swagger-json')
+      .set('Host', `localhost:${port}`)
+      .expect(200);
+    const live = response.body as OpenAPIObject;
+    const paths = Object.keys(exported.paths);
+
+    expect(paths).toContain('/api/v1/scans');
+    expect(paths.sort()).toEqual(Object.keys(live.paths).sort());
   });
 
   it.each(['localhost', '127.0.0.1', '[::1]'])(
