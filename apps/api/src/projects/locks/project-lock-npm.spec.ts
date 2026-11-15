@@ -289,9 +289,10 @@ describe('readNpmLock', () => {
     );
     expect(result.coverage).toBe('partial');
   });
-  it('audits nested bundled entries only under a verified public parent', async () => {
-    const result = await read(
-      lock({
+  it.each([false, true])(
+    'audits nested bundled entries under a verified public parent (reversed: %s)',
+    async (reversed) => {
+      const entries = Object.entries({
         'node_modules/alpha': alpha,
         'node_modules/alpha/node_modules/@scope/bundled': {
           version: '2.0.0',
@@ -301,17 +302,19 @@ describe('readNpmLock', () => {
           version: '3.0.0',
           inBundle: true,
         },
-      }),
-    );
-    expect(result.coverage).toBe('complete');
-    expect(result.warningCodes).toEqual([]);
-    expect(result.packages).toEqual([
-      { name: '@scope/bundled', version: '2.0.0', direct: false },
-      { name: 'alpha', version: '1.2.0', direct: true },
-      { name: 'nested', version: '3.0.0', direct: false },
-    ]);
-    expect(result.direct.get('alpha')).toEqual(['1.2.0']);
-  });
+      });
+      if (reversed) entries.reverse();
+      const result = await read(lock(Object.fromEntries(entries)));
+      expect(result.coverage).toBe('complete');
+      expect(result.warningCodes).toEqual([]);
+      expect(result.packages).toEqual([
+        { name: '@scope/bundled', version: '2.0.0', direct: false },
+        { name: 'alpha', version: '1.2.0', direct: true },
+        { name: 'nested', version: '3.0.0', direct: false },
+      ]);
+      expect(result.direct.get('alpha')).toEqual(['1.2.0']);
+    },
+  );
   it('skips bundles and their nested bundles under a file parent', async () => {
     const result = await read(
       lock({
