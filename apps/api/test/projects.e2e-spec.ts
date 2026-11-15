@@ -82,7 +82,7 @@ jest.mock('node:fs', () => {
   return {
     ...actual,
     constants: actual.constants,
-    promises: jest.requireMock<unknown>('node:fs/promises'),
+    promises: jest.requireMock<typeof nativeFs>('node:fs/promises'),
     access: blocked(),
     stat: blocked(),
     lstat: blocked(),
@@ -274,7 +274,7 @@ describe('Projects HTTP flow (mocked IO, real Nest pipeline)', () => {
       }
       return Promise.resolve({ realPath: absolute });
     });
-    peekCompletedSize = jest.fn(() => ({
+    peekCompletedSize = jest.fn<IProjectDetail['diskUsage'], [string]>(() => ({
       sizeBytes: 0,
       measuredAt: timestamp,
     }));
