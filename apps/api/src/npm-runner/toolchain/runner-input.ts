@@ -559,6 +559,7 @@ export async function readRunnerInput(
         warnings.push('PACKAGE_MANAGER_PIN_DIFFERS');
     } catch (error) {
       signal.throwIfAborted();
+      if (isProjectRecord(error) && error.name === 'AbortError') throw error;
       const details: unknown = isProjectRecord(error)
         ? error.details
         : undefined;
@@ -581,6 +582,20 @@ export async function readRunnerInput(
           file: compare(selectedTool.file),
           entry: selectedTool.entry && compare(selectedTool.entry),
           packageDir: compare(selectedTool.packageDir),
+          ...(selectedTool.npm10InstallCompat
+            ? {
+                npm10InstallCompat: selectedTool.npm10InstallCompat,
+                npm10InstallCompatIdentities:
+                  selectedTool.npm10InstallCompatIdentities?.map((item) => [
+                    compare(item.path),
+                    item.stat.dev,
+                    item.stat.ino,
+                    item.stat.size,
+                    item.stat.mtimeMs,
+                    item.stat.ctimeMs,
+                  ]),
+              }
+            : {}),
           identities: selectedTool.identities.map((item) => [
             compare(item.path),
             item.stat.dev,
@@ -705,8 +720,9 @@ export async function revalidateRunnerInput(
         throw runnerFailure('INPUT_CHANGED');
     }
     return current;
-  } catch {
+  } catch (error) {
     deps.signal.throwIfAborted();
+    if (isProjectRecord(error) && error.name === 'AbortError') throw error;
     throw runnerFailure('INPUT_CHANGED');
   }
 }

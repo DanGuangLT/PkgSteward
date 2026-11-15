@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, win32 as path } from 'node:path';
+import { join, resolve, win32 as path } from 'node:path';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -11,6 +11,7 @@ import {
   fsFixture,
   key,
   root,
+  npmDir,
   tool,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type {
@@ -19,6 +20,12 @@ import type {
   IRunnerInputDeps,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import { resolveRunnerTool } from './runner-tool';
+import { NpmRunnerService } from '../npm-runner.service';
+import { MutationGateService } from '../../core/mutation-gate/mutation-gate.service';
+import type { INpmRunnerRuntime } from '../interfaces/npm-runner.runtime';
+import type { IRunProcessExit } from '../execution/runner-process';
+
 import { PROJECT_LOCK_BYTES } from '@/projects/locks/project-lock-common';
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
 
@@ -813,5 +820,342 @@ describe('runner bounded ancestors/workspaces and cancellation', () => {
       return Promise.resolve(tool(manager));
     });
     await expect(f.read()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+// TEST snapshots; không phải yêu cầu nghiệp vụ. No SDK/fixture is mutated.
+const npm10Source = `const isGlobalInstall = this.npm.global
+const where = isGlobalInstall ? globalTop : this.npm.prefix
+if (where === globalTop && !args.length) {}
+if (where === globalTop && !args.every(Boolean)) {}
+if (!args.length && !isGlobalInstall && !ignoreScripts) {}`;
+const npm10Loader = `static cmd (c) {
+    const command = deref(c)
+    if (!command) {
+      throw Object.assign(new Error(\`Unknown command \${c}\`), {
+        code: 'EUNKNOWNCOMMAND',
+        command: c,
+      })
+    }
+    return require(\`./commands/\${command}.js\`)
+  }`;
+const npm10Setup = () => {
+  const f = fsFixture();
+  const installed = f.installTool('npm', '10.9.9');
+  const assets = {
+    preload: resolve(__dirname, '../execution/npm10-install-preload.js'),
+    source: path.join(installed.packageDir, 'lib/commands/install.js'),
+    loader: path.join(installed.packageDir, 'lib/npm.js'),
+  };
+  f.put(assets.preload, '// TEST standalone preload');
+  f.put(assets.source, npm10Source);
+  f.put(assets.loader, npm10Loader);
+  f.resolveTool.mockImplementation((manager) =>
+    resolveRunnerTool(manager, f.snapshot, f.fs),
+  );
+  const read = () => readRunnerInput(root, f.scan, f.deps);
+  return { ...f, assets, read };
+};
+const npm10Request = (
+  inputHash: string,
+  action: IRunRequest['action'] = 'install_all',
+): IRunRequest => ({
+  path: root,
+  inputHash,
+  action,
+  requestId: '00000000-0000-4000-8000-000000000020',
+  ...(action === 'script'
+    ? { script: 'dev' }
+    : action.endsWith('_one')
+      ? { package: 'alpha' }
+      : {}),
+});
+
+describe('npm10 resolver integration and action-scoped compatibility', () => {
+  it('snapshots the descriptor and additional canonical identities before building a command', async () => {
+    const f = npm10Setup();
+    const input = await f.read();
+    expect(input.reason).toBeNull();
+    expect(input.tool?.npm10InstallCompat).toMatchObject({
+      revision: 1,
+      supported: true,
+      ...f.assets,
+    });
+    expect(
+      buildRunCommand(input, npm10Request(input.inputHash)).args.slice(0, 3),
+    ).toEqual(['--require', f.assets.preload, input.tool?.entry]);
+    await expect(
+      revalidateRunnerInput(input, input.inputHash, f.deps),
+    ).resolves.toMatchObject({ inputHash: input.inputHash });
+    expect(
+      jest.requireMock<{ execa: unknown }>('execa').execa,
+    ).not.toHaveBeenCalled();
+  });
+  describe.each(['preload', 'source', 'loader'] as const)('%s', (asset) => {
+    it.each([
+      'missing',
+      'read-error',
+      'oversize',
+      'utf8',
+      'shape',
+      'redirect',
+      'link',
+      'handle-change',
+    ] as const)(
+      '%s refuses only install_all and leaves the other five npm10 actions usable',
+      async (fault) => {
+        const f = npm10Setup();
+        const file = f.assets[asset];
+        const before = f.stats.get(key(file))!;
+        if (fault === 'missing') f.remove(file);
+        else if (fault === 'read-error') {
+          const open = f.open.getMockImplementation()!;
+          f.open.mockImplementation((value) =>
+            key(value) === key(file)
+              ? Promise.reject(
+                  Object.assign(new Error('TEST denied'), { code: 'EACCES' }),
+                )
+              : open(value),
+          );
+        } else if (fault === 'oversize')
+          f.stats.set(key(file), { ...before, size: 1024 * 1024 + 1 });
+        else if (fault === 'utf8') {
+          f.files.set(key(file), Buffer.from([0xff]));
+          f.stats.set(key(file), { ...before, size: 1 });
+        } else if (fault === 'shape') {
+          if (asset === 'preload')
+            f.stats.set(key(file), { ...before, isFile: () => false });
+          else f.put(file, 'TEST unknown SDK shape');
+        } else if (fault === 'redirect')
+          f.realpaths.set(key(file), 'E:\\TEST\\redirect.js');
+        else if (fault === 'link')
+          f.stats.set(key(file), { ...before, isSymbolicLink: () => true });
+        else f.openedStats.set(key(file), { ...before, ino: before.ino + 1 });
+        const input = await f.read();
+        expect(input.reason).toBeNull();
+        expect(input.tool?.npm10InstallCompat).toMatchObject({
+          revision: 1,
+          supported: false,
+        });
+        let failure: unknown;
+        try {
+          buildRunCommand(input, npm10Request(input.inputHash));
+        } catch (error) {
+          failure = error;
+        }
+        expect(failure).toMatchObject({
+          details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+        });
+        for (const action of [
+          'install_one',
+          'update_all',
+          'update_one',
+          'uninstall_one',
+          'script',
+        ] as const) {
+          const command = buildRunCommand(
+            input,
+            npm10Request(input.inputHash, action),
+          );
+          expect(command.args[0]).toBe(input.tool?.entry);
+          expect(command.args).not.toContain('--require');
+        }
+        await expect(
+          revalidateRunnerInput(input, input.inputHash, f.deps),
+        ).resolves.toMatchObject({ reason: null });
+      },
+    );
+    it('hashes byte drift even when all file stat fields are unchanged', async () => {
+      const f = npm10Setup();
+      const previous = await f.read();
+      const file = f.assets[asset];
+      const bytes = f.files.get(key(file))!;
+      const changed = Buffer.from(bytes);
+      changed[changed.length - 1] ^= 1;
+      f.files.set(key(file), changed);
+      expect((await f.read()).inputHash).not.toBe(previous.inputHash);
+      await expect(
+        revalidateRunnerInput(previous, previous.inputHash, f.deps),
+      ).rejects.toMatchObject({ details: { reason: 'INPUT_CHANGED' } });
+    });
+    it('hashes unavailable status/recovery and extra file identity drift', async () => {
+      const f = npm10Setup();
+      const file = f.assets[asset];
+      const original = await f.read();
+      const before = f.stats.get(key(file))!;
+      f.stats.set(key(file), { ...before, ino: before.ino + 1 });
+      expect((await f.read()).inputHash).not.toBe(original.inputHash);
+      f.remove(file);
+      const missing = await f.read();
+      expect(missing.inputHash).not.toBe(original.inputHash);
+      f.put(file, 'TEST unknown bytes');
+      expect((await f.read()).inputHash).not.toBe(missing.inputHash);
+    });
+  });
+  it.each(['abort-signal', 'io-AbortError'] as const)(
+    'propagates %s during compatibility discovery',
+    async (fault) => {
+      const f = npm10Setup();
+      const open = f.open.getMockImplementation()!;
+      f.open.mockImplementation((file) => {
+        if (key(file) === key(f.assets.preload)) {
+          if (fault === 'abort-signal') f.controller.abort();
+          return Promise.reject(
+            new DOMException('TEST cancelled', 'AbortError'),
+          );
+        }
+        return open(file);
+      });
+      await expect(f.read()).rejects.toMatchObject({ name: 'AbortError' });
+    },
+  );
+  it('propagates an IO AbortError during final compatibility revalidation', async () => {
+    const f = npm10Setup();
+    const previous = await f.read();
+    const open = f.open.getMockImplementation()!;
+    f.open.mockImplementation((file) =>
+      key(file) === key(f.assets.preload)
+        ? Promise.reject(new DOMException('TEST cancelled', 'AbortError'))
+        : open(file),
+    );
+    await expect(
+      revalidateRunnerInput(previous, previous.inputHash, f.deps),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('npm10 real input → gate → audit → revalidation → launch pipeline (mocked IO)', () => {
+  const setup = () => {
+    const f = npm10Setup();
+    const outcome: IRunProcessExit = {
+      exitCode: 1,
+      signal: null,
+      failureCode: null,
+      termination: 'verified',
+      outputTruncated: false,
+    };
+    const runtime = {
+      input: f.deps,
+      env: { PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT: 'TEST inherited' },
+      processes: {
+        capture: jest.fn(() => Promise.resolve({ status: 'unknown' as const })),
+        descendants: jest.fn(() =>
+          Promise.resolve({ status: 'unknown' as const }),
+        ),
+        stopTree: jest.fn(() => Promise.resolve('attempted' as const)),
+        verifyGone: jest.fn(() => Promise.resolve('verified' as const)),
+      },
+      timeoutMs: undefined,
+      gate: new MutationGateService(),
+      readers: {
+        hasRunningScan: () => false,
+        hasRunningMeasurement: () => false,
+        hasRunningPreview: () => false,
+        hasRunningAnalysis: () => false,
+      },
+      audit: {
+        writeIntent: jest.fn(() => Promise.resolve()),
+        writeResult: jest.fn(() => Promise.resolve()),
+      },
+      invalidation: {
+        refreshProject: jest.fn(() => Promise.resolve()),
+        clearDiskUsage: jest.fn(),
+        staleAnalysis: jest.fn(),
+      },
+      launch: jest.fn<
+        ReturnType<INpmRunnerRuntime['launch']>,
+        Parameters<INpmRunnerRuntime['launch']>
+      >((_command, _env, callbacks) => {
+        callbacks.onOutput(
+          'stderr',
+          Buffer.from('TEST compatibility child refusal'),
+        );
+        return {
+          pid: 123,
+          settled: Promise.resolve(outcome),
+          stop: jest.fn(() => Promise.resolve('verified' as const)),
+        };
+      }),
+      now: () => new Date('2026-11-14T00:00:00Z'),
+      uuid: () => '00000000-0000-4000-8000-000000000010',
+      setTimer: (callback: () => void, ms: number) => setTimeout(callback, ms),
+      clearTimer: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
+    } satisfies INpmRunnerRuntime;
+    const service = new NpmRunnerService(runtime);
+    const finish = async () => {
+      for (
+        let turn = 0;
+        turn < 20 && service.latest()?.phase !== 'done';
+        turn++
+      )
+        await new Promise<void>((done) => setImmediate(done));
+      expect(service.latest()?.phase).toBe('done');
+    };
+    return { ...f, runtime, service, finish };
+  };
+  it('refuses preflight unsupported install_all with zero launches and a truthful result audit', async () => {
+    const f = setup();
+    f.remove(f.assets.preload);
+    const context = await f.service.context(root);
+    expect(context.available).toBe(true);
+    await f.service.start(npm10Request(context.inputHash));
+    await f.finish();
+    expect(f.runtime.launch).not.toHaveBeenCalled();
+    expect(f.runtime.audit.writeIntent).not.toHaveBeenCalled();
+    expect(f.runtime.audit.writeResult).toHaveBeenCalledTimes(1);
+    expect(f.service.latest()).toMatchObject({
+      failureCode: 'TOOL_LAYOUT_UNSUPPORTED',
+      spawned: false,
+      mayHaveChanged: false,
+      gateHeld: false,
+    });
+  });
+  it.each(['source', 'loader', 'preload'] as const)(
+    'refuses %s drift after intent audit before launch',
+    async (asset) => {
+      const f = setup();
+      const context = await f.service.context(root);
+      f.runtime.audit.writeIntent.mockImplementation(() => {
+        expect(f.runtime.gate.isBusy()).toBe(true);
+        f.put(f.assets[asset], 'TEST drift after audit');
+        return Promise.resolve();
+      });
+      await f.service.start(npm10Request(context.inputHash));
+      await f.finish();
+      expect(f.runtime.audit.writeIntent).toHaveBeenCalledTimes(1);
+      expect(f.runtime.launch).not.toHaveBeenCalled();
+      expect(f.service.latest()).toMatchObject({
+        failureCode: 'INPUT_CHANGED',
+        spawned: false,
+        gateHeld: false,
+      });
+    },
+  );
+  it('passes exact command/env once and audits a nonzero child refusal without retry', async () => {
+    const f = setup();
+    const context = await f.service.context(root);
+    await f.service.start(npm10Request(context.inputHash));
+    await f.finish();
+    expect(f.runtime.launch).toHaveBeenCalledTimes(1);
+    const [command, env] = f.runtime.launch.mock.calls[0];
+    expect(command.args.slice(0, 3)).toEqual([
+      '--require',
+      f.assets.preload,
+      path.join(npmDir, 'bin/npm-cli.js'),
+    ]);
+    expect(
+      JSON.parse(env.PKGSTEWARD_RUNNER_NPM10_INSTALL_COMPAT!),
+    ).toMatchObject({ schema: 1, version: '10.9.9', entry: command.args[2] });
+    expect(f.service.latest()).toMatchObject({
+      status: 'failed',
+      failureCode: 'COMMAND_FAILED',
+      exitCode: 1,
+      spawned: true,
+      mayHaveChanged: true,
+      terminationVerified: true,
+      gateHeld: false,
+    });
+    expect(f.runtime.audit.writeResult).toHaveBeenCalledTimes(1);
+    expect(f.runtime.invalidation.refreshProject).toHaveBeenCalledTimes(1);
   });
 });
