@@ -674,6 +674,25 @@ describe('DiskUsageService', () => {
     expect(f.service.get(first.jobId).status).toBe('running');
   });
 
+  it('retains the guarded node_modules path when a conflict follows a junction target', async () => {
+    const f = fixture();
+    const canonicalPath = 'D:\\TEST\\package-store';
+    f.guard.assertAllowed.mockResolvedValueOnce({
+      inputPath: root,
+      resolvedPath: root,
+      realPath: canonicalPath,
+      isSymbolicLink: true,
+    });
+    const started = await f.service.start({ path: root, view: 'packages' });
+    await expect(
+      f.service.start({ path: root, view: 'directory' }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { jobId: started.jobId, path: canonicalPath, requestPath: root },
+    });
+    expect(f.service.get(started.jobId).path).toBe(canonicalPath);
+  });
+
   it('creates one protected-tree matcher per job and passes it to the walker', async () => {
     const f = fixture();
     const first = await f.service.start({ path: root });
