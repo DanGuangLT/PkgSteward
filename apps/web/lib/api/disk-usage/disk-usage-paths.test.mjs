@@ -7,6 +7,10 @@ test("start path matches the disk usage endpoint", () => {
   assert.equal(diskUsagePaths.start, "/disk-usage")
 })
 
+test("active lookup uses the static disk usage endpoint", () => {
+  assert.equal(diskUsagePaths.active, "/disk-usage/active")
+})
+
 test("encoded id/path including Unicode # & + backslash", () => {
   const id = "TEST/ổ đĩa\\thư mục?# &+%"
   assert.equal(diskUsagePaths.job(id), `/disk-usage/${encodeURIComponent(id)}`)

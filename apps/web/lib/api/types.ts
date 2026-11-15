@@ -114,6 +114,10 @@ export interface DiskUsageJob extends DiskUsageStart {
   failureCode: "NOT_FOUND" | "FORBIDDEN" | "INTERNAL_SERVER_ERROR" | null
 }
 
+export interface DiskUsageActiveJob extends DiskUsageJob {
+  requestPath: string
+}
+
 export type RiskLevel = "low" | "medium" | "high"
 export type RiskCode =
   | "ORPHAN_NODE_MODULES"

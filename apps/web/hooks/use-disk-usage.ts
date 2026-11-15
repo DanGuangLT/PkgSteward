@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { cancelBrowserDiskUsage, pollBrowserDiskUsage, startBrowserDiskUsage } from "@/lib/api/disk-usage/disk-usage-browser"
 import { ApiError } from "@/lib/api/response"
-import type { StartDiskUsage } from "@/lib/api/types"
+import type { DiskUsageActiveJob, StartDiskUsage } from "@/lib/api/types"
 import {
   acceptDiskJob, diskAcceptPoll, diskBeginCancel, diskCanPoll,
   diskEditTarget, diskPollFailure, diskReceiveJob, diskRequestError, diskRestoreSnapshot, diskRetryPoll, diskTrackJob,
+  initialDiskUiState,
   type DiskError, type DiskRequestTarget, type DiskSnapshot, type DiskUiState,
 } from "@/lib/disk-usage/disk-usage-policy"
 
@@ -22,8 +23,8 @@ export interface DiskController {
   setTarget(target: DiskRequestTarget): void
 }
 
-export function useDiskUsage(initialTarget: DiskRequestTarget): DiskController {
-  const [state, setState] = useState<DiskUiState>({ phase: "idle", job: null, requestTarget: null, form: initialTarget })
+export function useDiskUsage(initialTarget: DiskRequestTarget, activeJob: DiskUsageActiveJob | null): DiskController {
+  const [state, setState] = useState(() => initialDiskUiState(initialTarget, activeJob))
   const [error, setError] = useState<DiskError | null>(null)
   const current = useRef<DiskUiState>(state)
   const mounted = useRef(false)
@@ -90,6 +91,7 @@ export function useDiskUsage(initialTarget: DiskRequestTarget): DiskController {
       else if (current.current.phase === "tracking" && !current.current.cancelPending) stopRequest()
     }
     document.addEventListener("visibilitychange", onVisibilityChange)
+    void poll()
     return () => document.removeEventListener("visibilitychange", onVisibilityChange)
   }, [poll, stopRequest])
 

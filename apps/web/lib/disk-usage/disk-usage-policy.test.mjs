@@ -4,6 +4,7 @@ import {
   acceptDiskJob, diskShouldPoll, diskCanPoll, diskAcceptPoll,
   diskBeginCancel, diskPollFailure, diskRetryPoll, diskTrackJob,
   diskMeasurementInput, diskReceiveJob, diskRequestError,
+  initialDiskUiState,
 } from "./disk-usage-policy.ts"
 import { ApiError } from "../api/response.ts"
 
@@ -12,6 +13,46 @@ const job = { jobId: "TEST-job", status: "running" }
 const form = { path: "D:\\TEST", view: "directory" }
 const context = { requestTarget: null, form }
 const state = { ...context, phase: "tracking", jobId: job.jobId, job: null, target: form, cancelPending: false }
+
+const active = {
+  ...job,
+  path: "D:\\TEST\\package-store",
+  requestPath: "D:\\TEST\\app\\node_modules",
+  view: "packages",
+}
+
+test("initial state follows the active measurement for a blank or matching selection", () => {
+  for (const selected of [
+    { path: "", view: "directory" },
+    { path: active.path, view: active.view },
+    { path: active.requestPath, view: active.view },
+  ]) {
+    const restored = initialDiskUiState(selected, active)
+    assert.equal(restored.phase, "tracking")
+    assert.equal(restored.jobId, active.jobId)
+    assert.equal(restored.job, active)
+    assert.deepEqual(restored.form, { path: active.requestPath, view: active.view })
+    assert.equal(diskCanPoll(restored, true), true)
+
+    const completed = diskReceiveJob(restored, { ...active, status: "completed" })
+    assert.deepEqual(diskMeasurementInput(completed, true), {
+      path: active.requestPath, view: active.view, force: true,
+    })
+  }
+})
+
+test("initial state preserves a different selection or an idle backend", () => {
+  for (const [selected, snapshot] of [
+    [form, active],
+    [{ path: active.requestPath, view: "directory" }, active],
+    [form, null],
+    [form, { ...active, status: "completed" }],
+  ]) {
+    const initial = initialDiskUiState(selected, snapshot)
+    assert.deepEqual(initial, { phase: "idle", job: null, requestTarget: null, form: selected })
+    assert.equal(diskCanPoll(initial, true), false)
+  }
+})
 
 test("running visible polls", () => {
   assert.equal(diskShouldPoll("running", true), true)

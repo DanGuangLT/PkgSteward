@@ -1,8 +1,8 @@
 import "server-only"
 
-import { apiFetchEnvelope } from "@/lib/api/client"
+import { apiFetch, apiFetchEnvelope } from "@/lib/api/client"
 import { diskUsagePaths } from "@/lib/api/disk-usage/disk-usage-paths"
-import type { ApiResponse, DiskUsageJob, DiskUsageStart, StartDiskUsage } from "@/lib/api/types"
+import type { ApiResponse, DiskUsageActiveJob, DiskUsageJob, DiskUsageStart, StartDiskUsage } from "@/lib/api/types"
 
 export function startDiskUsage(input: StartDiskUsage): Promise<ApiResponse<DiskUsageStart>> {
   return apiFetchEnvelope<DiskUsageStart>(diskUsagePaths.start, {
@@ -14,6 +14,10 @@ export function startDiskUsage(input: StartDiskUsage): Promise<ApiResponse<DiskU
 
 export function getDiskUsage(id: string): Promise<ApiResponse<DiskUsageJob>> {
   return apiFetchEnvelope<DiskUsageJob>(diskUsagePaths.job(id), { method: "GET" })
+}
+
+export function getActiveDiskUsage(): Promise<DiskUsageActiveJob | null> {
+  return apiFetch<DiskUsageActiveJob | null>(diskUsagePaths.active)
 }
 
 export function cancelDiskUsage(id: string): Promise<ApiResponse<DiskUsageJob>> {
