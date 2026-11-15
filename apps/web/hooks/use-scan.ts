@@ -8,12 +8,10 @@ import { toast } from "sonner"
 import { cancelBrowserScan, pollBrowserScan, startBrowserScan } from "@/lib/api/scans/scan-browser"
 import { ApiError } from "@/lib/api/response"
 import type { ScanJob } from "@/lib/api/types"
-import { pollFailureAction, shouldPoll, terminalAction } from "@/lib/scans/scan-policy"
+import { initialScanUiState, pollFailureAction, shouldPoll, terminalAction } from "@/lib/scans/scan-policy"
+import type { ScanUiState } from "@/lib/scans/scan-policy"
 
-export type ScanUiState = { phase: "idle" } | { phase: "starting" }
-  | { phase: "tracking"; scanId: string; job: ScanJob | null;
-      cancelPending: boolean; pollErrorCode?: string }
-  | { phase: "refreshing"; job: ScanJob }
+export type { ScanUiState } from "@/lib/scans/scan-policy"
 
 export interface ScanController {
   state: ScanUiState
@@ -30,12 +28,12 @@ function errorCode(error: unknown): string {
   return error instanceof ApiError ? error.code ?? "UNKNOWN" : "UNKNOWN"
 }
 
-export function useScan(): ScanController {
+export function useScan(activeScan: ScanJob | null = null): ScanController {
   const router = useRouter()
   const t = useTranslations("projects")
-  const [state, setState] = useState<ScanUiState>({ phase: "idle" })
+  const [state, setState] = useState(() => initialScanUiState(activeScan))
   const [refreshPending, startTransition] = useTransition()
-  const current = useRef<ScanUiState>({ phase: "idle" })
+  const current = useRef(state)
   const mounted = useRef(false)
   const request = useRef<AbortController | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)

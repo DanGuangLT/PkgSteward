@@ -3,8 +3,9 @@ import assert from "node:assert/strict"
 import { scanPaths } from "./scan-paths.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
-test("start and latest paths match the scanner endpoints", () => {
+test("start, active and latest paths match the scanner endpoints", () => {
   assert.equal(scanPaths.start, "/scans")
+  assert.equal(scanPaths.active, "/scans/active")
   assert.equal(scanPaths.latest, "/scans/latest")
 })
 

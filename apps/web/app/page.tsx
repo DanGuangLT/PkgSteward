@@ -3,7 +3,7 @@ import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/container"
 import { ProjectList, type InitialProjects } from "@/components/features/project-list/project-list"
 import { ApiError } from "@/lib/api/response"
-import { getLatestScan } from "@/lib/api/scans/scans"
+import { getActiveScan, getLatestScan } from "@/lib/api/scans/scans"
 
 async function getInitialProjects(): Promise<InitialProjects> {
   try {
@@ -29,9 +29,15 @@ async function getInitialProjects(): Promise<InitialProjects> {
   }
 }
 
+async function getInitialScanView() {
+  // Check for an active job first so a scan that finishes during the read is still observed.
+  const activeScan = await getActiveScan().catch(() => null)
+  return { activeScan, initial: await getInitialProjects() }
+}
+
 export default async function Home() {
-  const [initial, t] = await Promise.all([
-    getInitialProjects(),
+  const [{ initial, activeScan }, t] = await Promise.all([
+    getInitialScanView(),
     getTranslations("projects"),
   ])
   const referenceTime = new Date().toISOString()
@@ -39,7 +45,7 @@ export default async function Home() {
   return (
     <Container className="flex min-w-0 flex-1 flex-col gap-8 py-8 md:py-12 lg:py-16">
       <h1 className="text-heading-xl">{t("title")}</h1>
-      <ProjectList initial={initial} referenceTime={referenceTime} />
+      <ProjectList initial={initial} activeScan={activeScan} referenceTime={referenceTime} />
     </Container>
   )
 }
