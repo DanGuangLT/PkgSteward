@@ -203,10 +203,9 @@ jobs:
         shell: bash
         run: |
           npm --version
+          node --test scripts/*.test.mjs
           npm install
-          for app in apps/api apps/web; do
-            (cd "$app" && npm run build)
-          done
+          npm run build
 
   yarn-classic-windows:
     name: Yarn Classic on Windows, Node 24
