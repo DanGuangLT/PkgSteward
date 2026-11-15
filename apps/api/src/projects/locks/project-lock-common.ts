@@ -44,10 +44,10 @@ export function registryTarget(
   let registryName = name;
   let range = spec;
   if (spec.startsWith('npm:')) {
-    const alias = /^npm:(@[^/]+\/[^@]+|[^@]+)@(.+)$/.exec(spec);
+    const alias = /^npm:(@[^/]+\/[^@]+|[^@]+)(?:@(.+))?$/.exec(spec);
     if (alias) {
       registryName = alias[1];
-      range = alias[2];
+      range = alias[2] ?? 'latest';
     } else
       return {
         name,

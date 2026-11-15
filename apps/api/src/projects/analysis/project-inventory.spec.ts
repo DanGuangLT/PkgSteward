@@ -306,6 +306,8 @@ describe('getProjectOutdatedTargets', () => {
     },
   );
   it.each([
+    ['npm:is-number', 'is-number', 'latest', 'tag'],
+    ['npm:@scope/real', '@scope/real', 'latest', 'tag'],
     ['npm:actual@^3.0.0', 'actual', '^3.0.0', 'range'],
     ['npm:@scope/real@~2.0.0', '@scope/real', '~2.0.0', 'range'],
     ['npm:@scope/real@next', '@scope/real', 'next', 'tag'],
@@ -327,7 +329,8 @@ describe('getProjectOutdatedTargets', () => {
     'https://TEST.invalid/private.tgz',
     'github:TEST/repo',
     'npm:../bad@^1',
-    'npm:@scope/bad',
+    'npm:@scope/bad@',
+    'npm:@scope',
     '>=not-semver',
   ])(
     'retains unsupported declaration %s with no public-registry target',

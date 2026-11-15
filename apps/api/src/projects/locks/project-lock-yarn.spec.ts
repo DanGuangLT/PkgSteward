@@ -182,6 +182,41 @@ describe('readYarnLock', () => {
     ]);
   });
   it.each([
+    ['is-number', 'is-number', '7.0.0'],
+    ['@scope/real', 'real', '3.1.0'],
+  ])(
+    'reads the locked version for an alias of %s without a version suffix',
+    async (name, basename, version) => {
+      const input = manifest();
+      input.dependencies = [
+        {
+          name: 'alias',
+          declarations: [{ group: 'dependencies', spec: `npm:${name}` }],
+        },
+      ];
+      const value = `# yarn lockfile v1\n"alias@npm:${name}":\n  version "${version}"\n  resolved "https://registry.yarnpkg.com/${name}/-/${basename}-${version}.tgz"\n`;
+      const result = await read(value, input);
+      expect(result.coverage).toBe('complete');
+      expect(result.direct).toEqual(new Map([['alias', [version]]]));
+      expect(result.packages).toEqual([{ name, version, direct: true }]);
+    },
+  );
+  it('does not use a versionless alias with a mismatched registry source', async () => {
+    const input = manifest();
+    input.dependencies = [
+      {
+        name: 'alias',
+        declarations: [{ group: 'dependencies', spec: 'npm:is-number' }],
+      },
+    ];
+    const value =
+      '# yarn lockfile v1\n"alias@npm:is-number":\n  version "7.0.0"\n  resolved "https://registry.yarnpkg.com/other/-/other-7.0.0.tgz"\n';
+    const result = await read(value, input);
+    expect(result.coverage).toBe('partial');
+    expect(result.direct.size).toBe(0);
+    expect(result.packages).toEqual([]);
+  });
+  it.each([
     'file:../TEST',
     'git+https://TEST.invalid/repo',
     'https://TEST.invalid/private.tgz',
