@@ -73,6 +73,15 @@ export function projectDisplayName(project: ScannedProject): string {
 
 const projectSearchText = (value: string) => value.normalize("NFC").toLowerCase()
 
+function compareActivityNewestFirst(a: string, b: string): number {
+  const aTime = Date.parse(a)
+  const bTime = Date.parse(b)
+
+  if (Number.isNaN(aTime)) return Number.isNaN(bTime) ? 0 : 1
+  if (Number.isNaN(bTime)) return -1
+  return bTime - aTime
+}
+
 export function selectProjects(
   projects: readonly ScannedProject[],
   query: string,
@@ -89,7 +98,7 @@ export function selectProjects(
     projectSearchText(project.path).includes(search)
   )).sort((a, b) => {
     const order = sort === "activity"
-      ? Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt)
+      ? compareActivityNewestFirst(a.lastActivityAt, b.lastActivityAt)
       : collator.compare(projectDisplayName(a), projectDisplayName(b))
 
     return order || collator.compare(a.path, b.path) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)

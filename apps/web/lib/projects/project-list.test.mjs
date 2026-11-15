@@ -80,6 +80,18 @@ test("activity sorts newest first by timestamp including timezone offsets", () =
   assert.deepEqual(selectProjects([middle, oldest, newest], "", "activity", "vi"), [newest, middle, oldest])
 })
 
+test("activity sorts unknown dates last regardless of their paths or input order", () => {
+  const oldest = project({ path: "/TEST/a-old", lastActivityAt: "1969-12-31T23:59:59Z" })
+  const newest = project({ path: "/TEST/z-new", lastActivityAt: "1970-01-01T00:00:00Z" })
+  const unknownA = project({ path: "/TEST/b-unknown", lastActivityAt: "invalid" })
+  const unknownZ = project({ path: "/TEST/y-unknown", lastActivityAt: "" })
+  const expected = [newest, oldest, unknownA, unknownZ]
+
+  for (const input of [[oldest, unknownA, newest, unknownZ], [unknownZ, newest, unknownA, oldest]]) {
+    assert.deepEqual(selectProjects(input, "", "activity", "en"), expected)
+  }
+})
+
 test("name sorting uses the supplied locale and display-name fallback", () => {
   const a = project({ path: "/TEST/TEST-ä", name: null })
   const z = project({ path: "/TEST/z", name: "TEST-z" })
