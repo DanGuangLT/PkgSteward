@@ -105,6 +105,9 @@ opening or refreshing a detail page never starts them.
 | `GET /api/v1/projects/analyses/:jobId` | `200` with the current snapshot; polling bypasses throttling and logs at debug level |
 | `POST /api/v1/projects/analyses/:jobId/cancel` | No body; `200` with a snapshot; repeated cancellation is idempotent |
 
+Project detail includes `activeAnalysisJobId` when an online check is already running for the requested project's
+canonical path. Clients can poll that ID without issuing another start request.
+
 Responses use the standard envelope. Reads, including errors, are `no-store`. Paths must be single, nonempty,
 absolute strings of at most 32,768 characters, pass the path guard, and identify exactly a project in the latest
 scan. Job IDs are UUID v4. Extra DTO fields are rejected. Missing projects return `404 NOT_FOUND`; projects absent

@@ -570,6 +570,40 @@ describe('Projects HTTP flow (mocked IO, real Nest pipeline)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('advertises only the running analysis for the guarded project', async () => {
+    const analyze = jest.fn(heldAnalyzer);
+    const app = await openApp(analyze);
+    const alias = join(dirname(root), 'alias');
+    const detail = async (path: string) => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/projects')
+        .query({ path })
+        .expect('Cache-Control', 'no-store')
+        .expect(200);
+      return response.body as IApiResponse<IProjectDetail>;
+    };
+    expect((await detail(root)).data).not.toHaveProperty('activeAnalysisJobId');
+    const { jobId } = await start(app);
+    assertAllowed.mockImplementationOnce(() =>
+      Promise.resolve({ realPath: root }),
+    );
+    expect(await detail(alias)).toMatchObject({
+      code: 'SUCCESS',
+      data: { path: root, requestPath: alias, activeAnalysisJobId: jobId },
+    });
+    expect((await detail(other)).data).not.toHaveProperty(
+      'activeAnalysisJobId',
+    );
+    expect(await get(app, jobId)).toMatchObject({ status: 'running' });
+    await request(app.getHttpServer())
+      .post(`/api/v1/projects/analyses/${jobId}/cancel`)
+      .expect(200);
+    expect((await detail(root)).data).not.toHaveProperty('activeAnalysisJobId');
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(assertIdle).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('builds the runtime from the replaceable singleton registry provider', async () => {
     const getPackageMetadata = jest.fn(() =>
       Promise.resolve({ versions: ['1.0.0'], distTags: { latest: '1.0.0' } }),

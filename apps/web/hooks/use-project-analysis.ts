@@ -10,10 +10,12 @@ import type { ProjectAnalysisSession } from "@/lib/projects/project-analysis-ses
 
 export function useProjectAnalysis(detail: ProjectDetail | null) {
   const [state, setState] = useState(() => initialAnalysisState(detail))
+  const initialDetail = useRef(detail)
   const session = useRef<ProjectAnalysisSession | null>(null)
 
   useEffect(() => {
     const current = createProjectAnalysisSession({
+      initialDetail: initialDetail.current,
       api: { start: startBrowserProjectAnalysis, get: pollBrowserProjectAnalysis, cancel: cancelBrowserProjectAnalysis },
       clock: { setTimeout: (callback, delay) => window.setTimeout(callback, delay), clearTimeout: id => window.clearTimeout(id) },
       visibility: {

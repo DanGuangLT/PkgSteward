@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import type {
   IAnalysisSection,
@@ -91,6 +91,11 @@ export class ProjectDetailEntity implements IProjectDetail {
   path!: string;
   @ApiProperty({ description: 'Lexical requested path for links and refresh' })
   requestPath!: string;
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Running analysis for this canonical project, when present',
+  })
+  activeAnalysisJobId?: string;
   @ApiProperty({ type: String, nullable: true })
   name!: string | null;
   @ApiProperty({ type: String, nullable: true })
