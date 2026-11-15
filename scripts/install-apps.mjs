@@ -22,6 +22,18 @@ const isScript = ['.js', '.cjs', '.mjs'].includes(extname(cli).toLowerCase());
 const command = isScript ? process.execPath : cli;
 const args = isScript ? [cli, 'install'] : ['install'];
 
+if (manager === 'yarn') {
+  // Yarn Classic exposes CLI flags in its lifecycle argument metadata.
+  try {
+    const original = JSON.parse(process.env.npm_config_argv ?? '{}')?.original;
+    if (Array.isArray(original) && original.includes('--non-interactive')) {
+      args.push('--non-interactive');
+    }
+  } catch {
+    // The optional metadata is unavailable or malformed.
+  }
+}
+
 for (const app of apps) {
   console.log(`\n[install-apps] ${manager} install in ${app}`);
   const result = spawnSync(command, args, { cwd: join(root, app), stdio: 'inherit' });
