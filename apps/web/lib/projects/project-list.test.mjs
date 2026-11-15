@@ -59,6 +59,16 @@ test("Vietnamese accents are preserved when matching", () => {
   assert.deepEqual(selectProjects([accented], "du an", "name", "vi"), [])
 })
 
+test("project search matches equivalent Unicode without changing the stored name or path", () => {
+  const named = project({ name: "Mã nguồn".normalize("NFD") })
+  const byPath = project({ path: "D:\\Dự án\\app".normalize("NFD") })
+  assert.deepEqual(selectProjects([named, byPath], "  MÃ NGUỒN  ", "name", "vi"), [named])
+  assert.deepEqual(selectProjects([named, byPath], "d:\\dự án", "name", "vi"), [byPath])
+  assert.deepEqual(selectProjects([named, byPath], "du an", "name", "vi"), [])
+  assert.notEqual(named.name, named.name.normalize("NFC"))
+  assert.notEqual(byPath.path, byPath.path.normalize("NFC"))
+})
+
 test("no matching name or path returns an empty list", () => {
   assert.deepEqual(selectProjects([project()], "TEST-no-match", "activity", "vi"), [])
 })
