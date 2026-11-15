@@ -68,7 +68,9 @@ const fixture = (platform: PathPlatform = 'win32') => {
         ),
       );
     }),
-    readFile: jest.fn((p) => Promise.resolve(get(p).content)),
+    readFile: jest.fn<Promise<string>, Parameters<IScanFs['readFile']>>((p) =>
+      Promise.resolve(get(p).content),
+    ),
   };
   const onProgress = jest.fn<void, [IScanProgress]>();
   const onSkipped = jest.fn<void, [string, unknown]>();
