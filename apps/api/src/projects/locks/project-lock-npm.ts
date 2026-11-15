@@ -52,6 +52,8 @@ export async function readNpmLock(
   const keys = Object.keys(packages).filter((key) => key !== '');
   if (keys.length > PROJECT_LOCK_RECORDS)
     return unavailableInventory('LIMIT_EXCEEDED');
+  // Each parent path is a prefix of its bundled child paths.
+  keys.sort();
   const result = emptyInventory();
   const byLocation = new Map<string, ILockPackage>();
   for (let index = 0; index < keys.length; index++) {
