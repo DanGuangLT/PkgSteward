@@ -207,3 +207,29 @@ jobs:
           for app in apps/api apps/web; do
             (cd "$app" && npm run build)
           done
+
+  yarn-classic-windows:
+    name: Yarn Classic on Windows, Node 24
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download Yarn Classic
+        run: >-
+          npm install --prefix "$env:RUNNER_TEMP/yarn-classic"
+          --no-save --no-package-lock yarn@1.22.22
+
+      - name: Install, build and test with Yarn Classic
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # Invoke Yarn directly so its lifecycle scripts use Yarn for both apps.
+          $yarn = Join-Path $env:RUNNER_TEMP 'yarn-classic/node_modules/yarn/bin/yarn.js'
+          node $yarn --version
+          node $yarn install --non-interactive
+          node $yarn build
+          node $yarn --cwd apps/web test
