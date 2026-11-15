@@ -71,6 +71,8 @@ export function projectDisplayName(project: ScannedProject): string {
   return project.name ?? project.path.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) ?? ""
 }
 
+const projectSearchText = (value: string) => value.normalize("NFC").toLowerCase()
+
 export function selectProjects(
   projects: readonly ScannedProject[],
   query: string,
@@ -79,12 +81,12 @@ export function selectProjects(
   filters: ProjectFilters = DEFAULT_PROJECT_FILTERS,
   now = Date.now()
 ): ScannedProject[] {
-  const search = query.trim().toLowerCase()
+  const search = projectSearchText(query.trim())
   const collator = new Intl.Collator(locale)
 
   return projects.filter((project) => matchesProjectFilters(project, filters, now) && (
-    projectDisplayName(project).toLowerCase().includes(search) ||
-    project.path.toLowerCase().includes(search)
+    search === "" || projectSearchText(projectDisplayName(project)).includes(search) ||
+    projectSearchText(project.path).includes(search)
   )).sort((a, b) => {
     const order = sort === "activity"
       ? Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt)
