@@ -1,0 +1,13 @@
+{
+  "name": "test-yarn-classic-peers",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "devDependencies": {
+    "is-number": "7.0.0"
+  },
+  "peerDependencies": {
+    "is-number": ">=6.0.0",
+    "is-odd": "3.0.1"
+  }
+}
