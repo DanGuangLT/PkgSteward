@@ -45,9 +45,14 @@ try {
 } finally {
   try {
     if (-not $server.HasExited) {
-      taskkill.exe /PID $server.Id /T /F
-      if ($LASTEXITCODE -ne 0 -and -not $server.HasExited) {
-        throw "Could not stop the Yarn process tree: $($server.Id)"
+      # Handle taskkill's status here so it cannot become the workflow step's exit code.
+      $termination = Start-Process -FilePath taskkill.exe -ArgumentList '/PID', $server.Id, '/T', '/F' `
+        -NoNewWindow -Wait -PassThru
+      if (-not $server.WaitForExit(5000)) {
+        throw "Could not stop the Yarn process tree: $($server.Id) (taskkill exit $($termination.ExitCode))"
+      }
+      if ($termination.ExitCode -ne 0) {
+        Write-Warning "taskkill returned $($termination.ExitCode) after the Yarn process exited. Checking smoke-test ports."
       }
     }
   } finally {
