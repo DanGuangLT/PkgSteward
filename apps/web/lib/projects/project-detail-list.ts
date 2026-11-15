@@ -1,4 +1,4 @@
-import type { AnalysisSection, AnalysisStatus, ProjectAdvisory, ProjectAnalysisJob } from "@/lib/api/types"
+import type { AnalysisSection, AnalysisStatus, DependencyGroup, ProjectAdvisory, ProjectAnalysisJob, ProjectDependency, ProjectOutdated } from "@/lib/api/types"
 import type { ProjectAnalysisState } from "@/lib/projects/project-analysis-policy"
 
 export function projectDetailHref(path: string): string {
@@ -31,6 +31,39 @@ export function createProjectDependencyBadgeReader(job: ProjectAnalysisJob | nul
     outdated: outdated.has(name),
     vulnerable: vulnerable.has(name) || vulnerableAliases.has(name),
   })
+}
+
+type ProjectDependencySpec = { groups: DependencyGroup[]; lockedVersions?: string[] }
+
+export function createProjectDependencyRowsReader(items: readonly ProjectOutdated[]) {
+  const byName = new Map<string, ProjectOutdated[]>()
+  for (const item of items) {
+    const rows = byName.get(item.name) ?? []
+    rows.push(item)
+    byName.set(item.name, rows)
+  }
+
+  return (dependency: ProjectDependency) => {
+    const declarations = new Map<string, ProjectDependencySpec>()
+    for (const declaration of dependency.declarations) {
+      const row: ProjectDependencySpec = declarations.get(declaration.spec) ?? { groups: [] }
+      row.groups.push(declaration.group)
+      row.lockedVersions ??= declaration.lockedVersions
+      declarations.set(declaration.spec, row)
+    }
+
+    const results = byName.get(dependency.name) ?? []
+    const resultsBySpec = new Map(results.map(row => [row.declaredSpec, row]))
+    const singleSpec = declarations.size === 1
+    // An older API's name-only result can be matched only when both sides are unambiguous.
+    const legacyResult = singleSpec && results.length === 1 ? resultsBySpec.get(undefined) : undefined
+    return [...declarations].map(([spec, declaration]) => {
+      const result = resultsBySpec.get(spec) ?? legacyResult
+      const lockedVersions = result?.lockedVersions ?? declaration.lockedVersions
+        ?? (singleSpec ? dependency.lockedVersions : [])
+      return { spec, groups: declaration.groups, lockedVersions, result }
+    })
+  }
 }
 
 const severityOrder: Record<ProjectAdvisory["severity"], number> = {

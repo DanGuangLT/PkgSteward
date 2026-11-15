@@ -2,7 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   projectDetailHref, projectValueKnown, projectSectionIsComplete, projectAuditIsClean,
-  createProjectDependencyBadgeReader, sortProjectAdvisories, projectAnalysisStatusKey,
+  createProjectDependencyBadgeReader, createProjectDependencyRowsReader, sortProjectAdvisories, projectAnalysisStatusKey,
 } from "./project-detail-list.ts"
 import { initialAnalysisState, trackAnalysis, failAnalysisRequest, beginAnalysisCancel } from "./project-analysis-policy.ts"
 import { ApiError } from "../api/response.ts"
@@ -83,6 +83,45 @@ test("any registry target of an alias can add a vulnerability badge", () => {
     assert.deepEqual(badges("TEST-alias"), { outdated: true, vulnerable: true })
     assert.equal(badges("TEST-other").vulnerable, false)
   }
+})
+
+test("dependency rows match exact specs and group identical declarations", () => {
+  const dependency = { name: "TEST-alias", lockedVersions: ["1.0.0", "2.0.0"], declarations: [
+    { group: "dependencies", spec: "npm:TEST-one@^1", lockedVersions: ["1.0.0"] },
+    { group: "devDependencies", spec: "npm:TEST-two@^2", lockedVersions: ["2.0.0"] },
+    { group: "optionalDependencies", spec: "npm:TEST-one@^1", lockedVersions: ["1.0.0"] },
+    { group: "peerDependencies", spec: "^3", lockedVersions: [] },
+  ] }
+  const older = { name: "TEST-alias", declaredSpec: "npm:TEST-one@^1", lockedVersions: ["1.0.0"], wanted: "1.5.0" }
+  const newer = { name: "TEST-alias", declaredSpec: "npm:TEST-two@^2", lockedVersions: ["2.0.0"], wanted: "2.0.0" }
+  const unrelated = { ...older, name: "TEST-unrelated", wanted: "1.9.0" }
+  const readRows = createProjectDependencyRowsReader([newer, older, unrelated])
+
+  assert.deepEqual(readRows(dependency), [
+    { spec: "npm:TEST-one@^1", groups: ["dependencies", "optionalDependencies"], lockedVersions: ["1.0.0"], result: older },
+    { spec: "npm:TEST-two@^2", groups: ["devDependencies"], lockedVersions: ["2.0.0"], result: newer },
+    { spec: "^3", groups: ["peerDependencies"], lockedVersions: [], result: undefined },
+  ])
+})
+
+test("pending and legacy analysis keep local locks without borrowing another spec's result", () => {
+  const dependency = { name: "TEST-pkg", lockedVersions: ["1.0.0", "2.0.0"], declarations: [
+    { group: "dependencies", spec: "^1", lockedVersions: ["1.0.0"] },
+    { group: "devDependencies", spec: "^2", lockedVersions: ["2.0.0"] },
+  ] }
+  const partial = { name: "TEST-pkg", declaredSpec: "^1", lockedVersions: [], wanted: "1.5.0" }
+  const legacy = { name: "TEST-pkg", lockedVersions: ["1.0.0"], wanted: "1.5.0" }
+  const fromPartial = createProjectDependencyRowsReader([partial])
+  const fromLegacy = createProjectDependencyRowsReader([legacy])
+  assert.deepEqual(fromPartial(dependency).map(row => [row.lockedVersions, row.result]), [
+    [[], partial], [["2.0.0"], undefined],
+  ])
+  assert.deepEqual(fromLegacy(dependency).map(row => [row.lockedVersions, row.result]), [
+    [["1.0.0"], undefined], [["2.0.0"], undefined],
+  ])
+  const single = { ...dependency, lockedVersions: ["1.0.0"], declarations: [{ group: "dependencies", spec: "^1" }] }
+  assert.equal(fromLegacy(single)[0].result, legacy)
+  assert.deepEqual(createProjectDependencyRowsReader([])(single)[0].lockedVersions, ["1.0.0"])
 })
 
 test("severity sort is immutable and uses deterministic name/id ties", () => {
