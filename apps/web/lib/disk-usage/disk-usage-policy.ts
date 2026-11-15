@@ -73,7 +73,9 @@ export function diskRequestError(state: DiskUiState, operation: "start" | "poll"
   if (code === "CONFLICT" && typeof details === "object" && details !== null
     && "jobId" in details && typeof details.jobId === "string"
     && "path" in details && typeof details.path === "string") {
-    failure.conflict = { jobId: details.jobId, path: details.path }
+    const requestPath = "requestPath" in details && typeof details.requestPath === "string"
+      ? details.requestPath : details.path
+    failure.conflict = { jobId: details.jobId, path: requestPath }
   }
   return failure
 }

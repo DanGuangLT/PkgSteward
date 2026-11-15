@@ -31,6 +31,7 @@ import type {
 
 interface IActiveMeasurement {
   job: IDiskUsageJob;
+  requestPath: string;
   rootMtimeNs: bigint;
   controller: AbortController;
 }
@@ -56,7 +57,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     force = false,
   }: IStartDiskUsage): Promise<IDiskUsageStart> {
     this.assertOpen();
-    const { realPath } = await this.pathGuard.assertAllowed(path);
+    const { realPath, resolvedPath } = await this.pathGuard.assertAllowed(path);
     this.assertOpen();
     const basename = pathApi(this.platform).basename(path);
     if (
@@ -76,7 +77,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
     // Check after authorization/stat awaits; keep cache lookup and slot reservation synchronous.
     this.gate.assertIdle();
     if (this.current?.job.status === 'running') {
-      const running = this.current.job;
+      const { job: running, requestPath } = this.current;
       if (
         toComparable(running.path, this.platform) ===
           toComparable(realPath, this.platform) &&
@@ -88,7 +89,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
         409,
         'A disk usage measurement is already running',
         'CONFLICT',
-        { jobId: running.jobId, path: running.path },
+        { jobId: running.jobId, path: running.path, requestPath },
       );
     }
     if (force) this.cache.clear();
@@ -130,6 +131,7 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
         };
     const active: IActiveMeasurement = {
       job,
+      requestPath: resolvedPath,
       rootMtimeNs: root.mtimeNs,
       controller: new AbortController(),
     };

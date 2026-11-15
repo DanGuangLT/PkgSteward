@@ -3,7 +3,9 @@ import assert from "node:assert/strict"
 import {
   acceptDiskJob, diskShouldPoll, diskCanPoll, diskAcceptPoll,
   diskBeginCancel, diskPollFailure, diskRetryPoll, diskTrackJob,
+  diskMeasurementInput, diskReceiveJob, diskRequestError,
 } from "./disk-usage-policy.ts"
+import { ApiError } from "../api/response.ts"
 
 // Dữ liệu TEST trong file này không phải yêu cầu nghiệp vụ.
 const job = { jobId: "TEST-job", status: "running" }
@@ -75,6 +77,19 @@ test("new job polls while the previous terminal snapshot is preserved", () => {
   assert.equal(diskCanPoll(tracking, true), true)
   assert.equal(diskAcceptPoll(tracking, snapshot, 2, 2), false)
   assert.equal(diskPollFailure(tracking, "NOT_FOUND").job, snapshot)
+})
+
+test("recalculating a followed package measurement uses its guarded node_modules path", () => {
+  const path = "D:\\TEST\\package-store"
+  const requestPath = "D:\\TEST\\app\\node_modules"
+  const details = { jobId: job.jobId, path }
+  const conflict = diskRequestError(state, "start", new ApiError(409, "Conflict", "CONFLICT", { ...details, requestPath })).conflict
+  assert.deepEqual(conflict, { jobId: job.jobId, path: requestPath })
+  const followed = diskTrackJob(state, conflict.jobId, { path: conflict.path, view: null })
+  const completed = diskReceiveJob(followed, { ...job, path, view: "packages", status: "completed" })
+  assert.deepEqual(diskMeasurementInput(completed, true), { path: requestPath, view: "packages", force: true })
+  const legacy = diskRequestError(state, "start", new ApiError(409, "Conflict", "CONFLICT", details)).conflict
+  assert.deepEqual(legacy, details)
 })
 
 test("hidden resume preserves poll errors and terminal snapshots", () => {

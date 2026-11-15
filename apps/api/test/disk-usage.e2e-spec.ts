@@ -199,7 +199,11 @@ describe('DiskUsage HTTP flow (e2e)', () => {
     expect(conflict.body).toMatchObject({
       statusCode: 409,
       code: 'CONFLICT',
-      details: { jobId: started.jobId, path: await realpath(root) },
+      details: {
+        jobId: started.jobId,
+        path: await realpath(root),
+        requestPath: root,
+      },
     });
     const cancel = () =>
       request(app.getHttpServer())
