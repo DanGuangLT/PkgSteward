@@ -23,7 +23,10 @@ import type {
 } from '@/projects/interfaces/projects.types';
 import { readProjectInput } from '@/projects/input/project-input';
 import { buildProjectInventory } from '@/projects/analysis/project-inventory';
-import { compareProjectText } from '@/projects/locks/project-lock-common';
+import {
+  compareProjectText,
+  lockedVersionsForSpec,
+} from '@/projects/locks/project-lock-common';
 
 export const PROJECT_FS = Symbol('PROJECT_FS');
 export const PROJECT_RUNTIME = Symbol('PROJECT_RUNTIME');
@@ -77,6 +80,14 @@ export class ProjectsService implements IProjectsService, OnModuleDestroy {
       readAt: input.readAt,
       dependencies: dependencies.slice(0, 2000).map((dependency) => ({
         ...dependency,
+        declarations: dependency.declarations.map((declaration) => ({
+          ...declaration,
+          lockedVersions: lockedVersionsForSpec(
+            inventory,
+            dependency.name,
+            declaration.spec,
+          ),
+        })),
         lockedVersions: inventory.direct.get(dependency.name) ?? [],
       })),
       scripts: input.manifest.scripts,

@@ -43,7 +43,11 @@ export interface IManifestDependency {
   name: string;
   declarations: IDependencyDeclaration[];
 }
+export interface IProjectDependencyDeclaration extends IDependencyDeclaration {
+  lockedVersions: string[];
+}
 export interface IProjectDependency extends IManifestDependency {
+  declarations: IProjectDependencyDeclaration[];
   lockedVersions: string[];
 }
 export interface IProjectScript {
@@ -77,6 +81,7 @@ export interface IProjectDetail {
 export interface IProjectOutdated {
   name: string;
   registryName: string;
+  declaredSpec: string;
   lockedVersions: string[];
   wanted: string | null;
   latest: string | null;
@@ -183,6 +188,7 @@ export type ProjectScanSnapshot = Pick<IScanResult, 'scanId' | 'projects'>;
 export interface IProjectOutdatedTarget {
   name: string;
   registryName: string | null;
+  declaredSpec: string;
   spec: string;
   kind: 'range' | 'tag' | 'unsupported';
   warning: ProjectAnalysisCode | null;

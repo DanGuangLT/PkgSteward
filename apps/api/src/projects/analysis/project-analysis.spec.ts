@@ -1,6 +1,8 @@
 import { execa } from 'execa';
 import { analyzeProject } from '@/projects/analysis/project-analysis';
+import { projectDeclarationKey } from '@/projects/locks/project-lock-common';
 import { readNpmLock } from '@/projects/locks/project-lock-npm';
+import { readYarnLock } from '@/projects/locks/project-lock-yarn';
 import type {
   IProjectAnalysisDeps,
   IProjectAnalysisUpdate,
@@ -51,7 +53,12 @@ function inventory(names = ['pkg']): ILockInventory {
   return {
     coverage: 'complete',
     direct: new Map(names.map((name) => [name, ['1.0.0']])),
-    directBySpec: new Map(),
+    directBySpec: new Map(
+      names.map((name) => [
+        projectDeclarationKey(name, '^1.0.0'),
+        new Set(['1.0.0']),
+      ]),
+    ),
     packages: names.map((name) => ({ name, version: '1.0.0', direct: true })),
     warningCodes: [],
     failureCode: null,
@@ -152,6 +159,51 @@ describe('analyzeProject public-registry analysis', () => {
     expect(result.partial).toBe(false);
   });
 
+  it('compares each declaration with its own Yarn resolution and preserves a missing peer', async () => {
+    const source = input();
+    source.manager = 'yarn';
+    source.manifest.dependencies[0].declarations.push(
+      { group: 'devDependencies', spec: '^2.0.0' },
+      { group: 'peerDependencies', spec: '^3.0.0' },
+    );
+    const lockText = `# yarn lockfile v1
+pkg@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/pkg/-/pkg-1.0.0.tgz"
+pkg@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/pkg/-/pkg-2.0.0.tgz"
+`;
+    const lock = await readYarnLock(
+      lockText,
+      source.manifest,
+      controller.signal,
+    );
+    expect(lock.coverage).toBe('complete');
+    const f = fixture(lock);
+    f.getPackageMetadata.mockResolvedValue({
+      ...metadata(),
+      versions: [...metadata().versions, '3.0.0'],
+    });
+    const result = await analyzeProject(source, controller.signal, f.deps);
+
+    expect(f.getPackageMetadata).toHaveBeenCalledTimes(1);
+    expect(result.outdated.items).toMatchObject([
+      { declaredSpec: '^1.0.0', lockedVersions: ['1.0.0'], behindWanted: true },
+      {
+        declaredSpec: '^2.0.0',
+        lockedVersions: ['2.0.0'],
+        behindWanted: false,
+      },
+      {
+        declaredSpec: '^3.0.0',
+        lockedVersions: [],
+        wanted: '3.0.0',
+        behindWanted: null,
+      },
+    ]);
+  });
+
   it.each([
     ['1.0.0', '1.0.0'],
     ['next', '3.0.0-beta.1'],
@@ -173,6 +225,7 @@ describe('analyzeProject public-registry analysis', () => {
   it('keeps missing locked state null while still returning wanted/latest', async () => {
     const lock = inventory();
     lock.direct.clear();
+    lock.directBySpec.clear();
     const f = fixture(lock);
     const result = await analyzeProject(input(), controller.signal, f.deps);
     expect(result.outdated.items[0]).toMatchObject({
@@ -187,6 +240,9 @@ describe('analyzeProject public-registry analysis', () => {
   it('uses alias actual registry identity without overwriting the displayed name', async () => {
     const lock = inventory();
     lock.direct = new Map([['alias', ['1.0.0']]]);
+    lock.directBySpec = new Map([
+      [projectDeclarationKey('alias', 'npm:pkg@^1.0.0'), new Set(['1.0.0'])],
+    ]);
     const f = fixture(lock);
     const result = await analyzeProject(
       input('npm:pkg@^1.0.0', 'alias'),
@@ -197,6 +253,7 @@ describe('analyzeProject public-registry analysis', () => {
     expect(result.outdated.items[0]).toMatchObject({
       name: 'alias',
       registryName: 'pkg',
+      declaredSpec: 'npm:pkg@^1.0.0',
       wanted: '1.5.0',
     });
   });
@@ -244,6 +301,10 @@ describe('analyzeProject public-registry analysis', () => {
       const lock = inventory();
       lock.coverage = coverage;
       lock.direct.set('@private/secret', ['1.0.0']);
+      lock.directBySpec.set(
+        projectDeclarationKey('@private/secret', '^1.0.0'),
+        new Set(['1.0.0']),
+      );
       const f = fixture(lock);
       const result = await analyzeProject(source, controller.signal, f.deps);
       expect(f.getPackageMetadata).toHaveBeenCalledTimes(1);
@@ -550,6 +611,7 @@ describe('analyzeProject public-registry analysis', () => {
     const lock = inventory();
     lock.packages = [];
     lock.direct.clear();
+    lock.directBySpec.clear();
     const f = fixture(lock);
     const source = input();
     source.manifest.dependencies = [];
@@ -577,6 +639,7 @@ describe('analyzeProject public-registry analysis', () => {
       lock.warningCodes = [code];
       lock.packages = [];
       lock.direct.clear();
+      lock.directBySpec.clear();
       const f = fixture(lock);
       const result = await analyzeProject(input(), controller.signal, f.deps);
       expect(result.outdated.items[0].latest).toBe('2.0.0');

@@ -118,6 +118,7 @@ describe('buildProjectInventory', () => {
       {
         name: 'alpha',
         registryName: 'alpha',
+        declaredSpec: '^1.0.0',
         spec: '^1.0.0',
         kind: 'range',
         warning: null,
@@ -285,6 +286,7 @@ describe('getProjectOutdatedTargets', () => {
         {
           name: 'alpha',
           registryName: 'alpha',
+          declaredSpec: spec,
           spec,
           kind: 'range',
           warning: null,
@@ -301,6 +303,7 @@ describe('getProjectOutdatedTargets', () => {
         {
           name: 'alpha',
           registryName: 'alpha',
+          declaredSpec: spec,
           spec,
           kind: 'tag',
           warning: null,
@@ -320,7 +323,14 @@ describe('getProjectOutdatedTargets', () => {
       const value = manifest();
       value.dependencies[0].declarations[0].spec = spec;
       expect(getProjectOutdatedTargets(value)).toEqual([
-        { name: 'alpha', registryName, spec: normalized, kind, warning: null },
+        {
+          name: 'alpha',
+          registryName,
+          declaredSpec: spec,
+          spec: normalized,
+          kind,
+          warning: null,
+        },
       ]);
     },
   );
@@ -344,6 +354,7 @@ describe('getProjectOutdatedTargets', () => {
         {
           name: 'alpha',
           registryName: null,
+          declaredSpec: spec,
           spec,
           kind: 'unsupported',
           warning: 'UNSUPPORTED_SPEC',
@@ -369,6 +380,17 @@ describe('getProjectOutdatedTargets', () => {
       ['zeta', 'next'],
     ]);
     expect(JSON.stringify(value)).toBe(before);
+  });
+  it('retains different alias declarations even when they query the same tag', () => {
+    const value = manifest();
+    value.dependencies[0].declarations = [
+      { group: 'dependencies', spec: 'npm:real' },
+      { group: 'devDependencies', spec: 'npm:real@latest' },
+    ];
+    expect(getProjectOutdatedTargets(value)).toMatchObject([
+      { declaredSpec: 'npm:real', registryName: 'real', spec: 'latest' },
+      { declaredSpec: 'npm:real@latest', registryName: 'real', spec: 'latest' },
+    ]);
   });
   it('retains all internal targets beyond the 2,000 display cap', () => {
     const value = manifest();

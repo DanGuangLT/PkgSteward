@@ -2,11 +2,11 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import type {
   IAnalysisSection,
-  IDependencyDeclaration,
   IProjectAdvisory,
   IProjectAnalysisJob,
   IProjectAnalysisStart,
   IProjectDependency,
+  IProjectDependencyDeclaration,
   IProjectDetail,
   IProjectOutdated,
   IProjectScript,
@@ -43,7 +43,7 @@ const sectionStates = [
   'unavailable',
 ];
 
-export class ProjectDeclarationEntity implements IDependencyDeclaration {
+export class ProjectDeclarationEntity implements IProjectDependencyDeclaration {
   @ApiProperty({
     enum: [
       'dependencies',
@@ -52,9 +52,11 @@ export class ProjectDeclarationEntity implements IDependencyDeclaration {
       'peerDependencies',
     ],
   })
-  group!: IDependencyDeclaration['group'];
+  group!: IProjectDependencyDeclaration['group'];
   @ApiProperty()
   spec!: string;
+  @ApiProperty({ type: [String] })
+  lockedVersions!: string[];
 }
 
 export class ProjectDependencyEntity implements IProjectDependency {
@@ -123,6 +125,8 @@ export class ProjectOutdatedEntity implements IProjectOutdated {
   name!: string;
   @ApiProperty()
   registryName!: string;
+  @ApiProperty()
+  declaredSpec!: string;
   @ApiProperty({ type: [String] })
   lockedVersions!: string[];
   @ApiProperty({ type: String, nullable: true })

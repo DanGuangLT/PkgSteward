@@ -44,6 +44,7 @@ export function registryTarget(
   name: string,
   spec: string,
 ): IProjectOutdatedTarget {
+  const declared = { name, declaredSpec: spec };
   let registryName = name;
   let range = spec;
   if (spec.startsWith('npm:')) {
@@ -53,7 +54,7 @@ export function registryTarget(
       range = alias[2] ?? 'latest';
     } else
       return {
-        name,
+        ...declared,
         registryName: null,
         spec,
         kind: 'unsupported',
@@ -62,14 +63,26 @@ export function registryTarget(
   }
   if (isRegistryPackageName(name) && isRegistryPackageName(registryName)) {
     if (semver.validRange(range) !== null) {
-      return { name, registryName, spec: range, kind: 'range', warning: null };
+      return {
+        ...declared,
+        registryName,
+        spec: range,
+        kind: 'range',
+        warning: null,
+      };
     }
     if (/^[A-Za-z][A-Za-z0-9._-]*$/.test(range)) {
-      return { name, registryName, spec: range, kind: 'tag', warning: null };
+      return {
+        ...declared,
+        registryName,
+        spec: range,
+        kind: 'tag',
+        warning: null,
+      };
     }
   }
   return {
-    name,
+    ...declared,
     registryName: null,
     spec,
     kind: 'unsupported',
@@ -152,6 +165,17 @@ export function recordDirectResolution(
   const versionsBySpec = inventory.directBySpec.get(key) ?? new Set<string>();
   versionsBySpec.add(version);
   inventory.directBySpec.set(key, versionsBySpec);
+}
+
+export function lockedVersionsForSpec(
+  inventory: ILockInventory,
+  name: string,
+  spec: string,
+): string[] {
+  const versions = inventory.directBySpec.get(
+    projectDeclarationKey(name, spec),
+  );
+  return [...(versions ?? [])].sort(compareProjectText);
 }
 
 export async function yieldProjectBatch(signal: AbortSignal): Promise<void> {

@@ -10,6 +10,7 @@ import {
   compareProjectText,
   normalizeInventory,
   partialInventory,
+  projectDeclarationKey,
   registryTarget,
   unavailableInventory,
   yieldProjectBatch,
@@ -75,18 +76,15 @@ export function getProjectOutdatedTargets(
     for (const declaration of dependency.declarations) {
       const target = registryTarget(dependency.name, declaration.spec);
       unique.set(
-        JSON.stringify([
-          target.name,
-          target.registryName,
-          target.spec,
-          target.kind,
-        ]),
+        projectDeclarationKey(target.name, target.declaredSpec),
         target,
       );
     }
   }
   return [...unique.values()].sort(
     (a, b) =>
-      compareProjectText(a.name, b.name) || compareProjectText(a.spec, b.spec),
+      compareProjectText(a.name, b.name) ||
+      compareProjectText(a.spec, b.spec) ||
+      compareProjectText(a.declaredSpec, b.declaredSpec),
   );
 }
