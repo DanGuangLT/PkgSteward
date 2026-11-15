@@ -233,3 +233,10 @@ jobs:
           node $yarn install --non-interactive
           node $yarn build
           node $yarn --cwd apps/web test
+
+      - name: Test the backend with Yarn Classic
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $yarn = Join-Path $env:RUNNER_TEMP 'yarn-classic/node_modules/yarn/bin/yarn.js'
+          node $yarn --cwd apps/api test --runInBand
+          node $yarn --cwd apps/api test:e2e --runInBand
