@@ -295,6 +295,7 @@ in several breakdown rows, so adding row sizes does not necessarily equal the ro
 | Endpoint                                | Result                                                                                                                            |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/v1/disk-usage`               | JSON `{ "path": "D:\\Projects\\app", "view": "directory", "force": false }`; `202` with `{ jobId, status }`, including cache hits |
+| `GET /api/v1/disk-usage/active`         | `200` with the running snapshot and its original `requestPath`, or `null` when idle; `Cache-Control: no-store`                    |
 | `GET /api/v1/disk-usage/:jobId`         | `200` with the current snapshot; not rate limited, logged at debug level, `Cache-Control: no-store`                               |
 | `POST /api/v1/disk-usage/:jobId/cancel` | No body; `200` with the cancelled snapshot, or the unchanged terminal snapshot on repeated calls                                  |
 

@@ -24,6 +24,7 @@ import type {
   DiskStatus,
   ICompletedDiskSize,
   IDiskFs,
+  IDiskUsageActiveJob,
   IDiskUsageJob,
   IDiskUsageStart,
   IStartDiskUsage,
@@ -153,6 +154,12 @@ export class DiskUsageService implements IDiskUsageService, OnModuleDestroy {
 
   hasRunningMeasurement(): boolean {
     return this.current?.job.status === 'running';
+  }
+
+  getActive(): IDiskUsageActiveJob | null {
+    const active = this.current;
+    if (active?.job.status !== 'running') return null;
+    return { ...structuredClone(active.job), requestPath: active.requestPath };
   }
 
   get(jobId: string): IDiskUsageJob {

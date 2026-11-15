@@ -28,20 +28,23 @@ import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { StartDiskUsageDto } from '@/disk-usage/dto/start-disk-usage.dto';
 import { DiskUsageIdParamDto } from '@/disk-usage/dto/disk-usage-id-param.dto';
 import {
+  DiskUsageActiveJobEntity,
   DiskUsageJobEntity,
   DiskUsageStartEntity,
 } from '@/disk-usage/entities/disk-usage.entity';
 import type { IDiskUsageController } from '@/disk-usage/interfaces/disk-usage.controller.interface';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 
-const envelope = (entity: Type, statusCode: number) => ({
+const envelope = (entity: Type, statusCode: number, nullable = false) => ({
   type: 'object' as const,
   required: ['statusCode', 'message', 'code', 'data', 'timestamp', 'path'],
   properties: {
     statusCode: { type: 'integer' as const, example: statusCode },
     message: { type: 'string' as const },
     code: { type: 'string' as const, example: 'SUCCESS' },
-    data: { $ref: getSchemaPath(entity) },
+    data: nullable
+      ? { allOf: [{ $ref: getSchemaPath(entity) }], nullable: true }
+      : { $ref: getSchemaPath(entity) },
     timestamp: { type: 'string' as const, format: 'date-time' },
     path: { type: 'string' as const },
   },
@@ -60,7 +63,11 @@ const errorEnvelope = (statusCode: number, code: string) => ({
 });
 
 @ApiTags('disk-usage')
-@ApiExtraModels(DiskUsageStartEntity, DiskUsageJobEntity)
+@ApiExtraModels(
+  DiskUsageStartEntity,
+  DiskUsageJobEntity,
+  DiskUsageActiveJobEntity,
+)
 @Controller('disk-usage')
 export class DiskUsageController implements IDiskUsageController {
   constructor(private readonly diskUsage: DiskUsageService) {}
@@ -112,6 +119,19 @@ export class DiskUsageController implements IDiskUsageController {
       statusCode: 202,
       message: 'Disk usage measurement started successfully',
       data: plainToInstance(DiskUsageStartEntity, started),
+    };
+  }
+
+  @Get('active')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Retrieve the active measurement, if any' })
+  @ApiOkResponse({ schema: envelope(DiskUsageActiveJobEntity, 200, true) })
+  getActive(): IApiResponse<DiskUsageActiveJobEntity | null> {
+    const active = this.diskUsage.getActive();
+    return {
+      statusCode: 200,
+      message: 'Active disk usage measurement retrieved successfully',
+      data: active && plainToInstance(DiskUsageActiveJobEntity, active),
     };
   }
 

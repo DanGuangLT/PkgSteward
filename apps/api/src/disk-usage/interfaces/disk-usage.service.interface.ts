@@ -1,4 +1,5 @@
 import type {
+  IDiskUsageActiveJob,
   IDiskUsageJob,
   IDiskUsageStart,
   IStartDiskUsage,
@@ -8,6 +9,7 @@ import type {
 export interface IDiskUsageService {
   hasRunningMeasurement(): boolean;
   start(input: IStartDiskUsage): Promise<IDiskUsageStart>;
+  getActive(): IDiskUsageActiveJob | null;
   get(jobId: string): IDiskUsageJob;
   cancel(jobId: string): IDiskUsageJob;
   peekCompletedSize(canonicalPath: string): ICompletedDiskSize | null;
