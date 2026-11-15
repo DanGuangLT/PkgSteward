@@ -12,6 +12,7 @@ import {
   isRegistryPackageName,
   normalizeInventory,
   partialInventory,
+  recordDirectResolution,
   PROJECT_LOCK_BYTES,
   PROJECT_LOCK_RECORDS,
   registrySourceName,
@@ -159,7 +160,6 @@ export async function readPnpmLock(
   for (let index = 0; index < manifest.dependencies.length; index++) {
     if (index % 256 === 0) await yieldProjectBatch(signal);
     const dependency = manifest.dependencies[index];
-    const versions: string[] = [];
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
       const target = registryTarget(dependency.name, declaration.spec);
@@ -199,9 +199,13 @@ export async function readPnpmLock(
         partialInventory(result);
         continue;
       }
-      versions.push(resolved.version);
+      recordDirectResolution(
+        result,
+        dependency.name,
+        declaration.spec,
+        resolved.version,
+      );
     }
-    if (versions.length) result.direct.set(dependency.name, versions);
   }
   signal.throwIfAborted();
   return normalizeInventory(result, manifest);

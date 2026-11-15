@@ -98,6 +98,22 @@ describe('readYarnLock', () => {
     });
     expect(result.direct.size).toBe(0);
   });
+  it('retains the locked version for each distinct declaration of a name', async () => {
+    const input = manifest();
+    input.dependencies[0].declarations.push({
+      group: 'devDependencies',
+      spec: '~1.1.0',
+    });
+    const result = await read(text(), input);
+    expect(result.coverage).toBe('complete');
+    expect(result.direct.get('alpha')).toEqual(['1.1.0', '1.2.0']);
+    expect(result.directBySpec).toEqual(
+      new Map([
+        [JSON.stringify(['alpha', '^1.0.0']), new Set(['1.2.0'])],
+        [JSON.stringify(['alpha', '~1.1.0']), new Set(['1.1.0'])],
+      ]),
+    );
+  });
   it('keeps the dev version when a different peer descriptor is absent', async () => {
     const input = manifest();
     input.dependencies = [

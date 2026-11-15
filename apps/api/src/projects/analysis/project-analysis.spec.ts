@@ -51,6 +51,7 @@ function inventory(names = ['pkg']): ILockInventory {
   return {
     coverage: 'complete',
     direct: new Map(names.map((name) => [name, ['1.0.0']])),
+    directBySpec: new Map(),
     packages: names.map((name) => ({ name, version: '1.0.0', direct: true })),
     warningCodes: [],
     failureCode: null,

@@ -98,6 +98,9 @@ describe('buildProjectInventory', () => {
         { name: 'alpha', version: '1.2.0', direct: true },
       ]);
       expect(result.direct).toEqual(new Map([['alpha', ['1.2.0']]]));
+      expect(result.directBySpec).toEqual(
+        new Map([[JSON.stringify(['alpha', '^1.0.0']), new Set(['1.2.0'])]]),
+      );
       const execa = jest.requireMock<{ execa: jest.Mock }>('execa');
       expect(execa.execa).not.toHaveBeenCalled();
     },

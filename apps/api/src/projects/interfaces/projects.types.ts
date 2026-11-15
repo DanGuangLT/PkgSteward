@@ -150,6 +150,7 @@ export interface ILockPackage {
 export interface ILockInventory {
   coverage: 'complete' | 'partial' | 'unavailable';
   direct: Map<string, string[]>;
+  directBySpec: Map<string, Set<string>>;
   packages: ILockPackage[];
   warningCodes: ProjectAnalysisCode[];
   failureCode: ProjectAnalysisCode | null;

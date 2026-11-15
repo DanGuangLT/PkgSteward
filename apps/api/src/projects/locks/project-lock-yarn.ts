@@ -11,6 +11,7 @@ import {
   isProjectRecord,
   normalizeInventory,
   partialInventory,
+  recordDirectResolution,
   PROJECT_LOCK_BYTES,
   PROJECT_LOCK_RECORDS,
   registrySourceName,
@@ -87,7 +88,6 @@ export async function readYarnLock(
   for (let index = 0; index < manifest.dependencies.length; index++) {
     if (index % 256 === 0) await yieldProjectBatch(signal);
     const dependency = manifest.dependencies[index];
-    const versions: string[] = [];
     for (const declaration of dependency.declarations) {
       if (isLocalWorkspaceSpec(declaration.spec)) continue;
       const descriptor = `${dependency.name}@${declaration.spec}`;
@@ -107,9 +107,13 @@ export async function readYarnLock(
       }
       if (!versionMatchesTarget(resolved.version, target))
         return unavailableInventory('LOCKFILE_MISMATCH');
-      versions.push(resolved.version);
+      recordDirectResolution(
+        result,
+        dependency.name,
+        declaration.spec,
+        resolved.version,
+      );
     }
-    if (versions.length) result.direct.set(dependency.name, versions);
   }
   signal.throwIfAborted();
   return normalizeInventory(result, manifest);

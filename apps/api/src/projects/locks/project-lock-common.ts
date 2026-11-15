@@ -22,6 +22,9 @@ export const PROJECT_DEPENDENCY_GROUPS: readonly DependencyGroup[] = [
 export const compareProjectText = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
+export const projectDeclarationKey = (name: string, spec: string): string =>
+  JSON.stringify([name, spec]);
+
 export const isProjectRecord = (
   value: unknown,
 ): value is Record<string, unknown> =>
@@ -109,6 +112,7 @@ export function unavailableInventory(
   return {
     coverage: 'unavailable',
     direct: new Map(),
+    directBySpec: new Map(),
     packages: [],
     warningCodes: [code],
     failureCode: code,
@@ -119,6 +123,7 @@ export function emptyInventory(): ILockInventory {
   return {
     coverage: 'complete',
     direct: new Map(),
+    directBySpec: new Map(),
     packages: [],
     warningCodes: [],
     failureCode: null,
@@ -131,6 +136,22 @@ export function partialInventory(
 ): void {
   if (result.coverage === 'complete') result.coverage = 'partial';
   if (!result.warningCodes.includes(code)) result.warningCodes.push(code);
+}
+
+export function recordDirectResolution(
+  inventory: ILockInventory,
+  name: string,
+  spec: string,
+  version: string,
+): void {
+  const versions = inventory.direct.get(name) ?? [];
+  versions.push(version);
+  inventory.direct.set(name, versions);
+
+  const key = projectDeclarationKey(name, spec);
+  const versionsBySpec = inventory.directBySpec.get(key) ?? new Set<string>();
+  versionsBySpec.add(version);
+  inventory.directBySpec.set(key, versionsBySpec);
 }
 
 export async function yieldProjectBatch(signal: AbortSignal): Promise<void> {
