@@ -78,6 +78,7 @@ start it, poll its progress, then read the result.
 | Endpoint | Result |
 |---|---|
 | `POST /api/v1/scans` | `202` with `{ scanId, status }`. Only one scan runs at a time: while one is running, the same job is returned |
+| `GET /api/v1/scans/active` | Current progress when a scan is running, or `data: null` when idle |
 | `GET /api/v1/scans/:scanId` | Job status and progress (`visitedDirs`, `foundProjects`, `skippedCount`). Not rate limited, meant for polling |
 | `POST /api/v1/scans/:scanId/cancel` | Cancels a running scan; a finished job is returned unchanged |
 | `GET /api/v1/scans/latest` | Latest result: roots, projects and orphan `node_modules` folders. `404` until a scan has finished |

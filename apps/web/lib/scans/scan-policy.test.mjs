@@ -1,7 +1,19 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { pollFailureAction, shouldPoll, terminalAction } from "./scan-policy.ts"
+import { initialScanUiState, pollFailureAction, shouldPoll, terminalAction } from "./scan-policy.ts"
+
+test("a fresh page tracks the running scan with its existing progress", () => {
+  const activeScan = { scanId: "TEST-scan", status: "running", progress: { visitedDirs: 6, foundProjects: 2, skippedCount: 0 } }
+  assert.deepEqual(initialScanUiState(activeScan), {
+    phase: "tracking", scanId: activeScan.scanId, job: activeScan, cancelPending: false,
+  })
+})
+
+test("a page stays idle when the active lookup has no running scan", () => {
+  assert.deepEqual(initialScanUiState(null), { phase: "idle" })
+  assert.deepEqual(initialScanUiState({ scanId: "TEST-scan", status: "completed" }), { phase: "idle" })
+})
 
 for (const [code, action] of [
   ["NOT_FOUND", "abandon"],

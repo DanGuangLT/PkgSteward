@@ -9,6 +9,10 @@ export function startScan(): Promise<ApiResponse<ScanStart>> {
   return apiFetchEnvelope<ScanStart>(scanPaths.start, { method: "POST" })
 }
 
+export function getActiveScan(): Promise<ScanJob | null> {
+  return apiFetch<ScanJob | null>(scanPaths.active, { method: "GET" })
+}
+
 export function getScan(id: string): Promise<ApiResponse<ScanJob>> {
   return apiFetchEnvelope<ScanJob>(scanPaths.job(id), { method: "GET" })
 }

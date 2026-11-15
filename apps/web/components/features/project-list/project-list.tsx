@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ScanResult } from "@/lib/api/types"
+import type { ScanJob, ScanResult } from "@/lib/api/types"
 import { useScan } from "@/hooks/use-scan"
 import {
   countProjectFilters,
@@ -46,6 +46,7 @@ export type InitialProjects = { kind: "ready"; snapshot: ProjectSnapshot }
 
 interface ProjectListProps {
   initial: InitialProjects
+  activeScan: ScanJob | null
   referenceTime: string
 }
 
@@ -97,7 +98,7 @@ function FilterSelect<Option extends string>({ label, value, options, onChange, 
   )
 }
 
-export function ProjectList({ initial, referenceTime }: ProjectListProps) {
+export function ProjectList({ initial, activeScan, referenceTime }: ProjectListProps) {
   const t = useTranslations("projects")
   const format = useFormatter()
   const locale = useLocale()
@@ -106,7 +107,7 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<ProjectSort>("activity")
   const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_PROJECT_FILTERS)
-  const scanController = useScan()
+  const scanController = useScan(activeScan)
 
   const snapshot = initial.kind === "ready" ? initial.snapshot : null
   const now = Date.parse(referenceTime)
@@ -147,8 +148,8 @@ export function ProjectList({ initial, referenceTime }: ProjectListProps) {
             </ul>
           </div>
         ) : null}
-        {initial.kind !== "error" ? (
-          <ScanControls controller={scanController} mode={initial.kind === "empty" ? "first" : "rescan"} />
+        {initial.kind !== "error" || scanController.state.phase !== "idle" ? (
+          <ScanControls controller={scanController} mode={snapshot ? "rescan" : "first"} />
         ) : null}
       </div>
 

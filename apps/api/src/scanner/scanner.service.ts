@@ -136,6 +136,11 @@ export class ScannerService
     return this.current?.job.status === 'running';
   }
 
+  getActiveScan(): IScanJob | null {
+    const job = this.current?.job;
+    return job?.status === 'running' ? this.getScan(job.scanId) : null;
+  }
+
   getScan(scanId: string): IScanJob {
     return plainToInstance(
       ScanJobEntity,
