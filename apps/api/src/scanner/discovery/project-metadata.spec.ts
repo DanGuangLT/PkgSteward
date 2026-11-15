@@ -1,6 +1,7 @@
 import type { Dirent } from 'node:fs';
 import * as path from 'node:path';
 import { inspectScanDirectory } from '@/scanner/discovery/project-metadata';
+import type { IScanFs } from '@/scanner/interfaces/scanner.types';
 
 const directory = 'D:\\Scan\\app';
 const errno = (code: string) => Object.assign(new Error(code), { code });
@@ -25,7 +26,9 @@ const fixture = (content = '{"name":"example"}') => {
       const value = stats.get(path.win32.relative(directory, p));
       return value ? Promise.resolve(value) : Promise.reject(errno('ENOENT'));
     }),
-    readFile: jest.fn(() => Promise.resolve(content)),
+    readFile: jest.fn<Promise<string>, Parameters<IScanFs['readFile']>>(() =>
+      Promise.resolve(content),
+    ),
   };
   const signal = new AbortController().signal;
   const deps = { platform: 'win32' as const, fs, signal };
