@@ -60,7 +60,15 @@ bản mới nhất mà từng `package.json` cho phép, và lockfile do chúng t
 
 Khi cài mới bằng Yarn Classic (`1.22.22`), dùng bản Node.js 24 mới để đáp ứng yêu cầu của các dependency
 được tải về. Chạy `yarn install` ở thư mục gốc, sau đó chạy `yarn build` và `yarn start`, hoặc dùng
-`yarn dev` khi phát triển. Chạy kiểm thử frontend bằng `yarn --cwd apps/web test`.
+`yarn dev` khi phát triển.
+
+Sau khi cài bằng Yarn, chạy các bộ kiểm thử từ thư mục gốc:
+
+```bash
+yarn --cwd apps/web test                  # kiểm thử đơn vị frontend
+yarn --cwd apps/api test --runInBand       # kiểm thử đơn vị backend
+yarn --cwd apps/api test:e2e --runInBand   # kiểm thử HTTP đầu cuối của backend
+```
 
 PkgSteward nhận diện dự án Yarn và đọc lockfile Yarn Classic để phân tích dependency. Trình chạy lệnh
 trong ứng dụng dùng npm và pnpm, còn `NPM_COMMAND_TIMEOUT_MS` áp dụng cho thao tác do ứng dụng khởi chạy.
