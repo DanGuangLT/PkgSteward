@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { test } from 'node:test';
 
-test('generated notices keep multiline dependency metadata on one Markdown line', (t) => {
+function setupNotices(t) {
   const root = mkdtempSync(join(tmpdir(), 'pkgsteward-notices-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const folder of ['scripts', 'apps/api', 'apps/web', 'bin']) {
@@ -30,11 +30,44 @@ test('generated notices keep multiline dependency metadata on one Markdown line'
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
   env[pathKey] = [bin, dirname(process.execPath), env[pathKey]].filter(Boolean).join(delimiter);
 
-  const result = spawnSync(process.execPath, [script], { encoding: 'utf8', env, timeout: 5000 });
-  assert.equal(result.error, undefined);
+  const run = (...args) => {
+    const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env, timeout: 5000 });
+    assert.equal(result.error, undefined);
+    return result;
+  };
+  return { run, noticePath: join(root, 'THIRD_PARTY_NOTICES.md') };
+}
+
+test('generated notices keep multiline dependency metadata on one Markdown line', (t) => {
+  const { run, noticePath } = setupNotices(t);
+  const result = run();
   assert.equal(result.status, 0, result.stderr);
-  const notice = readFileSync(join(root, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+  const notice = readFileSync(noticePath, 'utf8');
   assert.match(notice, /^### Example License \(1\)$/m);
   assert.ok(notice.includes('| fixture-package | 1.0.0 | Ada Lovelace \\| Team | https://example.invalid/docs Readme |'));
   assert.match(notice, /^\| fixture-package \| 1\.0\.0 \| @pkgsteward\/api \| Example License \|/m);
+});
+
+test('notice check reports stale or missing output without rewriting it', (t) => {
+  const { run, noticePath } = setupNotices(t);
+  const missing = run('--check');
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /THIRD_PARTY_NOTICES\.md is missing/);
+  assert.throws(() => readFileSync(noticePath), { code: 'ENOENT' });
+
+  const staleContent = 'Old notices\n';
+  writeFileSync(noticePath, staleContent);
+  const stale = run('--check');
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /THIRD_PARTY_NOTICES\.md is out of date/);
+  assert.equal(readFileSync(noticePath, 'utf8'), staleContent);
+
+  const generated = run();
+  assert.equal(generated.status, 0, generated.stderr);
+  const currentContent = readFileSync(noticePath, 'utf8').replaceAll('\n', '\r\n');
+  writeFileSync(noticePath, currentContent);
+  const current = run('--check');
+  assert.equal(current.status, 0, current.stderr);
+  assert.match(current.stdout, /THIRD_PARTY_NOTICES\.md is up to date/);
+  assert.equal(readFileSync(noticePath, 'utf8'), currentContent);
 });
