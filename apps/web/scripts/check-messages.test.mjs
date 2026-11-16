@@ -11,17 +11,28 @@ function createFixture(t, vi = { section: { title: "Tiêu đề" } }) {
   const script = join(root, "scripts", "check-messages.mjs")
   const messages = join(root, "messages")
   mkdirSync(join(root, "scripts"))
+  mkdirSync(join(root, "i18n"))
   mkdirSync(messages)
   copyFileSync(new URL("./check-messages.mjs", import.meta.url), script)
+  writeFileSync(
+    join(root, "i18n", "config.ts"),
+    'export const locales = ["vi", "en"] as const\nexport const defaultLocale = "vi"\n',
+  )
   writeFileSync(join(messages, "vi.json"), JSON.stringify(vi))
 
   return (en) => {
-    writeFileSync(join(messages, "en.json"), JSON.stringify(en))
+    if (en !== undefined) writeFileSync(join(messages, "en.json"), JSON.stringify(en))
     const result = spawnSync(process.execPath, [script], { encoding: "utf8", timeout: 5000 })
     assert.equal(result.error, undefined)
     return result
   }
 }
+
+test("fails when a configured locale has no catalog file", (t) => {
+  const result = createFixture(t)()
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /missing.+messages\/en\.json/i)
+})
 
 test("rejects translation values that are neither text nor a namespace", (t) => {
   const check = createFixture(t)
