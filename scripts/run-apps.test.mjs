@@ -26,6 +26,21 @@ function setupFakeLauncher(t, cliSource) {
   return { launcher, cli, eventsFile };
 }
 
+test('root launcher rejects unknown commands before starting an app', (t) => {
+  const { launcher, cli } = setupFakeLauncher(t, "console.log('unexpected app launch'); process.exit(17);");
+  for (const args of [[], ['deploy'], ['toString'], ['constructor'], ['__proto__']]) {
+    const result = spawnSync(process.execPath, [launcher, ...args], {
+      env: { ...process.env, npm_execpath: cli, npm_config_user_agent: 'yarn/1' },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^\[run-apps\] Task must be one of: dev, build, start/);
+    assert.equal(result.stdout, '');
+  }
+});
+
 test('root dev and start never launch web if api exits before becoming ready', (t) => {
   const { launcher, cli, eventsFile } = setupFakeLauncher(
     t,

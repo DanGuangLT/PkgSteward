@@ -23,11 +23,11 @@ const tasks = {
 const readyLines = { api: /Application is running on:/, web: /\bReady in\b/ };
 
 const taskName = process.argv[2];
-const task = tasks[taskName];
-if (!task) {
+if (!Object.hasOwn(tasks, taskName)) {
   console.error(`[run-apps] Task must be one of: ${Object.keys(tasks).join(', ')} (got ${JSON.stringify(taskName)}).`);
   process.exit(1);
 }
+const task = tasks[taskName];
 
 // Every supported package manager sets these for scripts:
 // npm_config_user_agent = "<name>/<version> ..." and npm_execpath = the CLI file that is running.
