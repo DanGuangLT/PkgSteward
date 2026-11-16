@@ -59,11 +59,27 @@ test("rejects literal dots inside message keys", (t) => {
   }
 })
 
+test("rejects message and namespace conflicts with the default catalog", (t) => {
+  const check = createFixture(t)
+  for (const [messages, path] of [
+    [{ section: { title: {} } }, /en\.json.*section\.title.*vi\.json/],
+    [{ section: "Text" }, /en\.json.*"section".*vi\.json/],
+  ]) {
+    const result = check(messages)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, path)
+  }
+})
+
 test("warns about missing keys and fails for extra keys", (t) => {
   const check = createFixture(t)
   const missing = check({})
   assert.equal(missing.status, 0, missing.stderr)
   assert.match(missing.stdout, /section\.title/)
+
+  const emptyNamespace = check({ section: {} })
+  assert.equal(emptyNamespace.status, 0, emptyNamespace.stderr)
+  assert.match(emptyNamespace.stdout, /section\.title/)
 
   const extra = check({ section: { title: "Title" }, extra: "Unexpected key" })
   assert.equal(extra.status, 1)
