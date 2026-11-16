@@ -68,8 +68,8 @@ The frontend has its own `PORT` (default `24680`, integer `1`–`65535`) and `HO
 only `127.0.0.1`, `localhost` or `::1`), set in `apps/web/.env.local` or `apps/web/.env`.
 For each frontend variable, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
 When changing the frontend address, update this backend's `LIST_ORIGIN_CORS` to match the origin used in the
-browser (for example, `http://localhost:24680`). When changing this backend's `PORT` or `HOST`, update the
-frontend's `API_BASE_URL` (default `http://127.0.0.1:24681/api/v1`) to match.
+browser (for example, `http://localhost:24680`). Update the frontend's `API_BASE_URL` (default
+`http://127.0.0.1:24681/api/v1`) when changing this backend's `HOST`, `PORT`, `GLOBAL_PREFIX` or `VERSION`.
 
 ## Scan API
 
