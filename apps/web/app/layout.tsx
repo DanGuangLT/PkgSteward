@@ -3,10 +3,13 @@ import { Geist_Mono, Inter } from "next/font/google"
 import { NextIntlClientProvider } from "next-intl"
 import { getLocale, getTranslations } from "next-intl/server"
 
+import { NpmRunnerProvider } from "@/components/features/npm-runner/npm-runner-provider"
+import { TerminalDock } from "@/components/features/npm-runner/terminal-dock"
 import { TopNav } from "@/components/layout/top-nav"
 import { ThemeProvider } from "@/components/theme/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { NavigationContinuityProvider } from "@/hooks/use-navigation-continuity"
 import { getThemePreset } from "@/lib/theme/get-theme-preset"
 import { cn } from "@/lib/utils"
 
@@ -48,17 +51,22 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <NextIntlClientProvider>
           <ThemeProvider>
             <TooltipProvider>
-              <a
-                href="#main-content"
-                className="sr-only z-50 rounded-md bg-background px-4 py-2 text-button text-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus-ring"
-              >
-                {t("skipToContent")}
-              </a>
-              <TopNav />
-              <main id="main-content" className="flex flex-1 flex-col">
-                {children}
-              </main>
-              <Toaster />
+              <NavigationContinuityProvider>
+                <NpmRunnerProvider>
+                  <a
+                    href="#main-content"
+                    className="sr-only z-50 rounded-md bg-background px-4 py-2 text-button text-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus-ring"
+                  >
+                    {t("skipToContent")}
+                  </a>
+                  <TopNav />
+                  <main id="main-content" className="flex flex-1 flex-col">
+                    {children}
+                  </main>
+                  <TerminalDock />
+                  <Toaster />
+                </NpmRunnerProvider>
+              </NavigationContinuityProvider>
             </TooltipProvider>
           </ThemeProvider>
         </NextIntlClientProvider>

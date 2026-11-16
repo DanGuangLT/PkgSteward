@@ -1,12 +1,13 @@
 "use client"
 
-import { useId, useState, type ReactNode } from "react"
+import { useEffect, useId, useRef, type ReactNode } from "react"
 import { AlertTriangleIcon, FolderSearchIcon } from "lucide-react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 
 import { ProjectItems } from "@/components/features/project-list/project-items"
 import { ScanControls } from "@/components/features/project-list/scan-controls"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Empty,
   EmptyContent,
@@ -25,17 +26,33 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ScanJob, ScanResult } from "@/lib/api/types"
+import {
+  replaceHistoryUrlPreservingState,
+  useNavigationContinuity,
+  useRouteScrollContinuity,
+  useViewState,
+} from "@/hooks/use-navigation-continuity"
 import { useScan } from "@/hooks/use-scan"
 import {
   countProjectFilters,
   DEFAULT_PROJECT_FILTERS,
-  PROJECT_ACTIVITY_FILTERS,
-  PROJECT_MANAGER_FILTERS,
-  PROJECT_NODE_MODULES_FILTERS,
+  PROJECT_ACTIVITY_OPTIONS,
+  PROJECT_MANAGER_OPTIONS,
+  PROJECT_NODE_MODULES_OPTIONS,
   selectProjects,
-  type ProjectFilters,
-  type ProjectSort,
 } from "@/lib/projects/project-list"
+import {
+  clampSearchQuery,
+  DEFAULT_PROJECT_LIST_VIEW_STATE,
+  formatProjectListUrl,
+  makeViewStateKey,
+  mergeProjectListUrlOverrides,
+  projectListViewCodec,
+  readProjectListUrlOverrides,
+  type ProjectListViewState,
+} from "@/lib/ui/navigation-targets"
+
+const PROJECT_LIST_KEY = makeViewStateKey("projects")
 
 export type ProjectSnapshot = Pick<ScanResult, "scanId" | "finishedAt" | "partial" | "skippedCount" | "projects">
   & { orphanCount: number }
@@ -69,32 +86,55 @@ function ProjectEmpty({ title, description, children }: {
   )
 }
 
-// 1 bộ lọc dạng dropdown: chỉ nhận giá trị nằm trong `options`.
-function FilterSelect<Option extends string>({ label, value, options, onChange, optionLabel }: {
+function FilterGroup<Option extends string>({
+  label,
+  selectedLabel,
+  clearLabel,
+  value,
+  options,
+  onChange,
+  optionLabel,
+}: {
   label: string
-  value: Option
+  selectedLabel: string
+  clearLabel: string
+  value: readonly Option[]
   options: readonly Option[]
-  onChange: (value: Option) => void
+  onChange: (value: Option[]) => void
   optionLabel: (value: Option) => string
 }) {
   const id = useId()
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={(next) => {
-        const option = options.find((candidate) => candidate === next)
-        if (option) onChange(option)
-      }}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option} value={option}>{optionLabel(option)}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <details className="min-w-0 max-w-full rounded-md border border-input bg-background text-foreground">
+      <summary className="min-h-11 cursor-pointer rounded-md px-4 py-3 text-body-sm font-semibold focus-ring [overflow-wrap:anywhere]">
+        {label}<span className="ml-2 font-normal text-muted-foreground">{selectedLabel}</span>
+      </summary>
+      <fieldset className="min-w-0 space-y-1 border-t border-border p-3">
+        <legend className="sr-only">{label}</legend>
+        {options.map((option, index) => (
+          <div key={option} className="flex min-h-11 min-w-0 items-center gap-3 px-2">
+            <Checkbox
+              id={`${id}-${index}`}
+              checked={value.includes(option)}
+              onCheckedChange={(checked) => onChange(
+                checked === true
+                  ? (value.includes(option) ? [...value] : [...value, option])
+                  : value.filter((item) => item !== option),
+              )}
+            />
+            <Label
+              htmlFor={`${id}-${index}`}
+              className="min-w-0 flex-1 py-3 text-body-sm font-normal leading-normal [overflow-wrap:anywhere]"
+            >
+              {optionLabel(option)}
+            </Label>
+          </div>
+        ))}
+        <Button type="button" variant="secondary" disabled={value.length === 0} onClick={() => onChange([])}>
+          {clearLabel}
+        </Button>
+      </fieldset>
+    </details>
   )
 }
 
@@ -104,16 +144,53 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
   const locale = useLocale()
   const searchId = useId()
   const sortId = useId()
-  const [query, setQuery] = useState("")
-  const [sort, setSort] = useState<ProjectSort>("activity")
-  const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_PROJECT_FILTERS)
+  const [storedViewState, setStoredViewState] = useViewState(
+    PROJECT_LIST_KEY,
+    projectListViewCodec,
+    DEFAULT_PROJECT_LIST_VIEW_STATE,
+  )
+  const { hydrated, currentUrl, bumpMutationEpoch } = useNavigationContinuity()
+  const currentSearch = currentUrl.includes("?") ? currentUrl.slice(currentUrl.indexOf("?")) : ""
+  const viewState = hydrated
+    ? mergeProjectListUrlOverrides(storedViewState, readProjectListUrlOverrides(currentSearch))
+    : DEFAULT_PROJECT_LIST_VIEW_STATE
+  const { query, sort, filters } = viewState
   const scanController = useScan(activeScan)
 
   const snapshot = initial.kind === "ready" ? initial.snapshot : null
+  const observedScanIdRef = useRef<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    const currentScanId = snapshot?.scanId ?? null
+    if (observedScanIdRef.current === undefined) {
+      observedScanIdRef.current = currentScanId
+      return
+    }
+    if (currentScanId !== null && currentScanId !== observedScanIdRef.current) {
+      observedScanIdRef.current = currentScanId
+      bumpMutationEpoch("scan")
+    }
+  }, [snapshot?.scanId, bumpMutationEpoch])
+
+  useRouteScrollContinuity({ routeKey: PROJECT_LIST_KEY, ready: true })
+
+  function updateViewState(updater: (current: ProjectListViewState) => ProjectListViewState) {
+    const next = updater(viewState)
+    const normalized: ProjectListViewState = {
+      ...next,
+      query: clampSearchQuery(next.query),
+    }
+    setStoredViewState(normalized)
+    replaceHistoryUrlPreservingState(formatProjectListUrl("/", normalized, currentSearch))
+  }
+
   const now = Date.parse(referenceTime)
   const projects = snapshot ? selectProjects(snapshot.projects, query, sort, locale, filters, now) : []
   const counts = countProjectFilters(snapshot?.projects ?? [], now)
-  const hasActiveFilters = Object.values(filters).some((value) => value !== "all")
+  const hasActiveFilters = filters.managers.length > 0 || filters.nodeModules.length > 0 || filters.activities.length > 0
+  const selectedLabel = (count: number) => count > 0
+    ? t("filters.selected", { count: format.number(count) })
+    : t("filters.all")
   const optionCount = (label: string, count: number) => t("filters.optionCount", { label, count: format.number(count) })
   const errorMessage = initial.kind === "error"
     ? initial.code === "BACKEND_UNAVAILABLE" ? t("errors.backendUnavailable")
@@ -179,15 +256,21 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
               <Input
                 id={searchId}
                 type="search"
+                maxLength={512}
                 placeholder={t("search.placeholder")}
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  const nextQuery = event.target.value
+                  updateViewState((current) => ({ ...current, query: nextQuery }))
+                }}
               />
             </div>
             <div className="flex min-w-0 flex-col gap-2 sm:w-64">
               <Label htmlFor={sortId}>{t("sort.label")}</Label>
               <Select value={sort} onValueChange={(value) => {
-                if (value === "activity" || value === "name") setSort(value)
+                if (value === "activity" || value === "name") {
+                  updateViewState((current) => ({ ...current, sort: value }))
+                }
               }}>
                 <SelectTrigger id={sortId} className="w-full">
                   <SelectValue />
@@ -200,34 +283,52 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
             </div>
           </div>
           <fieldset className="min-w-0 space-y-4" aria-label={t("filters.label")}>
-            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-              <FilterSelect
+            <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-3">
+              <FilterGroup
                 label={t("filters.manager.label")}
-                value={filters.manager}
-                options={PROJECT_MANAGER_FILTERS}
-                onChange={(manager) => setFilters((current) => ({ ...current, manager }))}
+                selectedLabel={selectedLabel(filters.managers.length)}
+                clearLabel={t("filters.clearGroup")}
+                value={filters.managers}
+                options={PROJECT_MANAGER_OPTIONS}
+                onChange={(managers) => updateViewState((current) => ({
+                  ...current,
+                  filters: { ...current.filters, managers },
+                }))}
                 optionLabel={(value) => optionCount(
-                  value === "all" ? t("filters.manager.all") : value === "unknown" ? t("manager.unknown") : value,
-                  counts.manager[value]
+                  value === "unknown" ? t("manager.unknown") : value,
+                  counts.managers[value],
                 )}
               />
-              <FilterSelect
+              <FilterGroup
                 label={t("filters.nodeModules.label")}
+                selectedLabel={selectedLabel(filters.nodeModules.length)}
+                clearLabel={t("filters.clearGroup")}
                 value={filters.nodeModules}
-                options={PROJECT_NODE_MODULES_FILTERS}
-                onChange={(nodeModules) => setFilters((current) => ({ ...current, nodeModules }))}
+                options={PROJECT_NODE_MODULES_OPTIONS}
+                onChange={(nodeModules) => updateViewState((current) => ({
+                  ...current,
+                  filters: { ...current.filters, nodeModules },
+                }))}
                 optionLabel={(value) => optionCount(t(`filters.nodeModules.${value}`), counts.nodeModules[value])}
               />
-              <FilterSelect
+              <FilterGroup
                 label={t("filters.activity.label")}
-                value={filters.activity}
-                options={PROJECT_ACTIVITY_FILTERS}
-                onChange={(activity) => setFilters((current) => ({ ...current, activity }))}
-                optionLabel={(value) => optionCount(t(`filters.activity.${value}`), counts.activity[value])}
+                selectedLabel={selectedLabel(filters.activities.length)}
+                clearLabel={t("filters.clearGroup")}
+                value={filters.activities}
+                options={PROJECT_ACTIVITY_OPTIONS}
+                onChange={(activities) => updateViewState((current) => ({
+                  ...current,
+                  filters: { ...current.filters, activities },
+                }))}
+                optionLabel={(value) => optionCount(t(`filters.activity.${value}`), counts.activities[value])}
               />
             </div>
             {hasActiveFilters ? (
-              <Button variant="secondary" onClick={() => setFilters(DEFAULT_PROJECT_FILTERS)}>{t("filters.reset")}</Button>
+              <Button type="button" variant="secondary" onClick={() => updateViewState((current) => ({
+                ...current,
+                filters: DEFAULT_PROJECT_FILTERS,
+              }))}>{t("filters.reset")}</Button>
             ) : null}
           </fieldset>
           <p role="status" className="text-body-sm text-muted-foreground">
@@ -235,10 +336,11 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
           </p>
           {projects.length === 0 ? (
             <ProjectEmpty title={t("noMatch.title")} description={t("noMatch.description")}>
-              <Button variant="secondary" onClick={() => {
-                setQuery("")
-                setFilters(DEFAULT_PROJECT_FILTERS)
-              }}>{t("search.clearAll")}</Button>
+              <Button type="button" variant="secondary" onClick={() => updateViewState((current) => ({
+                ...current,
+                query: "",
+                filters: DEFAULT_PROJECT_FILTERS,
+              }))}>{t("search.clearAll")}</Button>
             </ProjectEmpty>
           ) : (
             <ProjectItems projects={projects} referenceTime={referenceTime} />

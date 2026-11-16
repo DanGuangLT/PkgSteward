@@ -3,6 +3,11 @@
 import { useId } from "react"
 import { DownloadIcon, EyeIcon, PencilIcon, RotateCcwIcon, WrenchIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { TEXT_DISCOVERY, textDiscoveryCodec } from "@/lib/ui/discovery-state"
+import { selectVersionOptions } from "@/lib/global-packages/discovery"
 import { GlobalActionLabel, GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,6 +29,8 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
 }) {
   const t = useTranslations("globalPackages")
   const id = useId()
+  const d = useTranslations("listDiscovery")
+  const [view, setView, reset] = useViewState(makeViewStateKey("npm-version-options", inventory.npmVersion?.prefix ?? inventory.globalRoot), textDiscoveryCodec, TEXT_DISCOVERY)
   const card = npmVersionCard(inventory)
   if (!card) return null
   const { state } = controller
@@ -32,6 +39,7 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
   const versions = state.versions?.manager === "npm" && state.versions.package === "npm" ? state.versions : null
   const options = versions ? npmVersionOptions(versions, card.terminalVersion) : null
   const chosen = options?.some(option => option.version === selection.targetVersion && !option.current) ? selection.targetVersion ?? "" : ""
+  const visible = selectVersionOptions(options ?? [], view.query, versions?.tags ?? {}, chosen)
   const change: GlobalSelection = { ...NPM_SELF, action: "change", targetVersion: editing ? chosen : "" }
   const loadingVersions = globalActionPending(state, "versions", NPM_SELF)
   const previewingChange = globalActionPending(state, "preview", change)
@@ -73,14 +81,16 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
     </div> : null}
     {editing ? <div id={`${id}-change`} className="min-w-0 space-y-3 rounded-md border border-border bg-muted p-4 [overflow-wrap:anywhere]">
       <p role="status" aria-live="polite" aria-atomic="true" className="text-body-sm">{loadingVersions ? t("loadingVersions") : options ? t("versionsReady") : t("versionsHint")}</p>
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ query })} count={visible.matches.length} total={options?.length ?? 0} onReset={reset} />
+      {options && visible.matches.length === 0 ? <DiscoveryEmpty total={options.length} /> : null}
       {options ? options.length ? <div className="min-w-0 space-y-2">
         <Label htmlFor={`${id}-versions`}>{t("availableVersions")}</Label>
         <select id={`${id}-versions`} value={chosen} disabled={blocked} aria-describedby={`${id}-hint`}
           className="min-h-10 w-full min-w-0 rounded-md border border-input bg-background p-2 font-mono text-body-sm focus-ring-input"
           onChange={event => controller.select({ ...change, targetVersion: event.target.value })}>
           <option value="">{t("chooseVersion")}</option>
-          {options.map(option => <option key={option.version} value={option.version} disabled={option.current}>
-            {option.current ? t("currentVersion", { version: option.version }) : option.version}</option>)}
+          {visible.options.map(option => <option key={option.version} value={option.version} disabled={option.current}>
+            {visible.selectedHidden && option.version === chosen ? d("selectedHidden", { version: option.version }) : option.current ? t("currentVersion", { version: option.version }) : option.version}</option>)}
         </select>
       </div> : <p className="text-body-sm">{t("npmVersion.noOptions")}</p> : null}
       <p id={`${id}-hint`} className="text-body-sm text-muted-foreground">{t("npmVersion.optionsHint")}</p>

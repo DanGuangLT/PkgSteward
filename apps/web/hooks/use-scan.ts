@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/response"
 import type { ScanJob } from "@/lib/api/types"
 import { initialScanUiState, pollFailureAction, shouldPoll, terminalAction } from "@/lib/scans/scan-policy"
 import type { ScanUiState } from "@/lib/scans/scan-policy"
+import { invalidateNavigationSnapshots } from "@/lib/ui/navigation-store"
 
 export type { ScanUiState } from "@/lib/scans/scan-policy"
 
@@ -90,6 +91,7 @@ export function useScan(activeScan: ScanJob | null = null): ScanController {
     }
 
     if (action === "refresh") {
+      invalidateNavigationSnapshots("scan")
       publish({ phase: "refreshing", job })
       startTransition(() => router.refresh())
     } else {

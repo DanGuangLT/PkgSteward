@@ -3,7 +3,7 @@
 import { AlertTriangleIcon, CheckIcon, CircleIcon, HardDriveIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useTransition } from "react"
+import { useEffect, useTransition } from "react"
 import type { ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
@@ -13,11 +13,19 @@ import { ProjectAdvisories } from "@/components/features/project-detail/project-
 import { ProjectDependencies } from "@/components/features/project-detail/project-dependencies"
 import { ProjectScripts } from "@/components/features/project-detail/project-scripts"
 import { Button } from "@/components/ui/button"
+import { useNavigationContinuity, useRouteScrollContinuity } from "@/hooks/use-navigation-continuity"
 import { useProjectAnalysis } from "@/hooks/use-project-analysis"
-import type { AnalysisSection, ProjectDetail } from "@/lib/api/types"
+import type { AnalysisSection, ProjectAnalysisJob, ProjectDetail } from "@/lib/api/types"
 import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
 import { projectAnalysisStatusKey, projectAuditIsClean, projectDetailHref } from "@/lib/projects/project-detail-list"
+import { appendReturnContext, makeViewStateKey } from "@/lib/ui/navigation-targets"
 import type messages from "@/messages/vi.json"
+
+interface ProjectAnalysisMemorySnapshot {
+  job: ProjectAnalysisJob
+  scanId: string
+  inputHash: string
+}
 
 export function ProjectErrorMessage({ code }: { code: string }) {
   const t = useTranslations("projectDetail")
@@ -43,20 +51,49 @@ function ProjectSectionStatus({ title, section, progress }: {
   )
 }
 
-export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy }: {
+export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy, active = true }: {
   detail: ProjectDetail | null
   detailError: string | null
   runner: ReactNode
   runnerBusy: boolean
+  active?: boolean
 }) {
   const t = useTranslations("projectDetail")
   const format = useFormatter()
   const router = useRouter()
   const [refreshing, beginRefresh] = useTransition()
+  const { hydrated, currentUrl, entryId, getMemorySnapshot, setMemorySnapshot } = useNavigationContinuity()
   const controller = useProjectAnalysis(detail)
-  const { state } = controller
+  const { state, restoreSnapshot } = controller
   const local = detail ? state.detail ?? detail : null
   const job = state.job
+  const analysisKey = local ? makeViewStateKey("project-analysis", local.requestPath) : null
+  const scrollKey = makeViewStateKey("project-detail", local?.requestPath ?? "")
+
+  useEffect(() => {
+    if (!hydrated || !detail || detail.activeAnalysisJobId || !analysisKey) return
+    if (state.phase !== "idle" || state.job !== null) return
+    const record = getMemorySnapshot<ProjectAnalysisMemorySnapshot>(analysisKey)
+    if (!record || record.invalid) return
+    if (record.value.scanId !== detail.scanId || record.value.inputHash !== detail.inputHash) return
+    restoreSnapshot(record.value.job)
+  }, [analysisKey, detail, getMemorySnapshot, hydrated, restoreSnapshot, state.job, state.phase])
+
+  useEffect(() => {
+    if (!hydrated || !analysisKey || !local || !job || job.status === "running" || job.stale) return
+    if (job.scanId !== local.scanId || job.inputHash !== local.inputHash) return
+    const existing = getMemorySnapshot<ProjectAnalysisMemorySnapshot>(analysisKey)
+    if (existing && !existing.invalid && existing.value.job === job) return
+    setMemorySnapshot<ProjectAnalysisMemorySnapshot>(analysisKey, {
+      job,
+      scanId: local.scanId,
+      inputHash: local.inputHash,
+    })
+  }, [analysisKey, getMemorySnapshot, hydrated, job, local, setMemorySnapshot])
+
+  useRouteScrollContinuity({ routeKey: scrollKey, ready: true, active })
+
+  const returnContext = { returnTo: hydrated ? currentUrl : undefined, originId: hydrated ? entryId : null }
   const busy = state.phase === "starting" || state.phase === "tracking"
   const blocked = local?.warnings.includes("REGISTRY_CONFIG_UNSUPPORTED")
   const previous = job !== null && (state.phase === "starting" || state.startUnknown
@@ -120,7 +157,7 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy }: 
                 <ProjectErrorMessage code={conflict ? "ANALYSIS_RUNNING" : state.error.code} />
                 {conflict ? <>
                   <p className="font-mono [overflow-wrap:anywhere]">{conflict.path}</p>
-                  <Link href={projectDetailHref(conflict.path)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("analysis.follow")}</Link>
+                  <Link href={appendReturnContext(projectDetailHref(conflict.path), returnContext)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("analysis.follow")}</Link>
                 </> : null}
               </div>
             ) : null}
@@ -152,14 +189,14 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy }: 
             ) : null}
           </section>
 
-          <ProjectDependencies dependencies={local.dependencies} job={job} />
-          {job ? <ProjectAdvisories items={job.audit.items} /> : (
+          <ProjectDependencies dependencies={local.dependencies} job={job} resourceKey={local.requestPath} />
+          {job ? <ProjectAdvisories items={job.audit.items} resourceKey={local.requestPath} /> : (
             <section className="space-y-3 text-body-sm" aria-label={t("audit.title")}>
               <h2 className="text-heading-md">{t("audit.title")}</h2>
               <p>{t("audit.lockfileCoverage")}</p><p>{t("audit.notInstalledState")}</p><p>{t("status.idle")}</p>
             </section>
           )}
-          <ProjectScripts scripts={local.scripts} />
+          <ProjectScripts scripts={local.scripts} resourceKey={local.requestPath} />
           <section className="min-w-0 space-y-3 text-body-sm" aria-label={t("diskUsage.title")}>
             <h2 className="text-heading-md">{t("diskUsage.title")}</h2>
             {local.diskUsage !== null ? <>
@@ -168,7 +205,7 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy }: 
             </> : <>
               <p>{t("diskUsage.unknown")}</p>
               <Button asChild variant="secondary" size="sm">
-                <Link href={diskUsageHref(`${local.requestPath.replace(/[\\/]+$/, "")}/node_modules`, "packages")} prefetch={false}>
+                <Link href={appendReturnContext(diskUsageHref(`${local.requestPath.replace(/[\\/]+$/, "")}/node_modules`, "packages"), returnContext)} prefetch={false}>
                   <HardDriveIcon data-icon="inline-start" aria-hidden="true" />
                   {t("diskUsage.view")}
                 </Link>

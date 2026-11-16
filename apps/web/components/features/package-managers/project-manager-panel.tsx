@@ -4,6 +4,10 @@ import { AlertTriangleIcon, CheckIcon, CircleIcon, EyeIcon, ListIcon, RefreshCwI
 import Link from "next/link"
 import { useEffect, useId, useRef, useState } from "react"
 import { useFormatter, useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryFilter, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useNavigationContinuity, useViewState } from "@/hooks/use-navigation-continuity"
+import { appendReturnContext, makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { VERSION_DISCOVERY, VERSION_SUPPORT, VERSION_DEPRECATION, versionDiscoveryCodec, selectManagerVersions } from "@/lib/package-managers/discovery"
 
 import { PmActionLabel, PmCodeMessage } from "@/components/features/package-managers/pm-messages"
 import { PmPreviewDialog } from "@/components/features/package-managers/pm-preview-dialog"
@@ -46,6 +50,8 @@ export function ProjectManagerPanel({ path }: { path: string }) {
   const t = useTranslations("packageManagers")
   const format = useFormatter()
   const id = useId()
+  const { hydrated, currentUrl, entryId } = useNavigationContinuity()
+  const returnContext = { returnTo: hydrated ? currentUrl : undefined, originId: hydrated ? entryId : null }
   const controller = usePackageManagers(path)
   const { state, stopPreview } = controller
   const context = state.context
@@ -58,8 +64,11 @@ export function ProjectManagerPanel({ path }: { path: string }) {
 
   const pinned = context?.parsedPin?.manager
   const manager: PmWritableManager = chosen ?? (writable(pinned) ? pinned : context?.lockManagers.find(writable) ?? "npm")
+  const d = useTranslations("listDiscovery")
+  const [view, setView, reset] = useViewState(makeViewStateKey("package-manager-versions", JSON.stringify([path, manager])), versionDiscoveryCodec, VERSION_DISCOVERY)
   const catalog = state.versions?.manager === manager ? state.versions : null
-  const options = catalog?.versions.filter(item => item.supported) ?? []
+  const visible = selectManagerVersions(catalog?.versions ?? [], view, catalog?.tags ?? {}, target)
+  const options = visible.options
   const tagOf = new Map(Object.entries(catalog?.tags ?? {}).map(([tag, version]) => [version, tag]))
   const cleanupPending = pmCleanupPending(state.job)
   const busy = state.phase !== "idle" || state.startUnknown || state.cancelPending || cleanupPending
@@ -129,6 +138,11 @@ export function ProjectManagerPanel({ path }: { path: string }) {
       </div> : blocker ? <p className="text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={blocker} /></p> : null}
       {context?.warnings.map(code => <p key={code} className="text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage kind="warnings" code={code} /></p>)}
 
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.matches.length} total={catalog?.versions.length ?? 0} onReset={reset}>
+        <DiscoveryFilter label={d("support")} value={view.support} options={VERSION_SUPPORT.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.supported === (value === "supported")).length ?? 0 }))} onValueChange={support => setView({ ...view, support })} />
+        <DiscoveryFilter label={d("deprecation")} value={view.deprecation} options={VERSION_DEPRECATION.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.deprecated === (value === "deprecated")).length ?? 0 }))} onValueChange={deprecation => setView({ ...view, deprecation })} />
+      </DiscoveryControls>
+      {catalog && visible.matches.length === 0 ? <DiscoveryEmpty total={catalog.versions.length} /> : null}
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
           <Label htmlFor={`${id}-manager`}>{t("manager")}</Label>
@@ -141,8 +155,8 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <Label htmlFor={`${id}-version`}>{t("version")}</Label>
           <Select value={target} disabled={blocked || options.length === 0} onValueChange={value => { setTarget(value); controller.select({ manager, targetVersion: value }) }}>
             <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono"><SelectValue placeholder={t("versionPlaceholder")} /></SelectTrigger>
-            <SelectContent>{options.map(item => <SelectItem key={item.version} value={item.version} className="font-mono">
-              {tagOf.has(item.version) ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" }) : item.version}
+            <SelectContent>{options.map(item => <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
+              {visible.selectedHidden && item.version === target ? d("selectedHidden", { version: item.version }) : tagOf.has(item.version) ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" }) : item.version}
             </SelectItem>)}</SelectContent>
           </Select>
         </div>
@@ -183,7 +197,7 @@ export function ProjectManagerPanel({ path }: { path: string }) {
         {otherRunning && state.otherJob ? <div className="space-y-2">
           <p>{t("otherJob")}</p>
           <p className="break-all font-mono">{state.otherJob.path}</p>
-          <Link href={projectDetailHref(state.otherJob.path)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
+          <Link href={appendReturnContext(projectDetailHref(state.otherJob.path), returnContext)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
         </div> : null}
         {state.lostJobId ? <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("lostNotice")}</p> : null}
         {readFailure ? <p role="alert"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={readFailure} /></p> : null}

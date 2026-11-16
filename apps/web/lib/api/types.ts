@@ -274,6 +274,9 @@ export type RunFailureCode =
 export type RunWarningCode = "NO_LOCKFILE" | "PACKAGE_MANAGER_PIN_DIFFERS" | "OUTPUT_TRUNCATED"
   | "OUTPUT_ENCODING_LOSS" | "LOGS_MAY_CONTAIN_SECRETS" | "PROJECT_CODE_EXECUTION" | "PATH_RACE_RESIDUAL"
 
+export type TerminalDeliveryStatus = "delivered" | "not_delivered" | "unknown"
+export type TerminalAckStatus = TerminalDeliveryStatus | "pending"
+
 export interface RunRequest {
   path: string
   action: RunAction
@@ -281,6 +284,9 @@ export interface RunRequest {
   requestId: string
   package?: string
   script?: string
+  terminal?: boolean
+  cols?: number
+  rows?: number
 }
 export interface RunStart { jobId: string; requestId: string; status: RunStatus }
 export interface RunnerScript { name: string; command: string; eligible: boolean }
@@ -292,9 +298,21 @@ export interface RunnerContext {
   manager: ProjectManager
   version: string | null
   available: boolean
+  terminalAvailable?: boolean
   reason: RunFailureCode | null
   scripts: RunnerScript[]
   warnings: RunWarningCode[]
+}
+export interface RunTerminalMeta {
+  mode: "pty"
+  generation: number
+  available: boolean
+  ready: boolean
+  firstCursor: number
+  endCursor: number
+  droppedBytes: number
+  writerGeneration: number | null
+  inputBlocked: boolean
 }
 export interface RunJob extends RunStart {
   requestPath: string
@@ -322,7 +340,57 @@ export interface RunJob extends RunStart {
   firstCursor: number
   endCursor: number
   droppedBytes: number
+  terminal?: RunTerminalMeta | null
 }
+export interface TerminalOutputChunk { cursor: number; endCursor: number; text: string }
+export interface TerminalOutputPage {
+  jobId: string
+  generation: number
+  firstCursor: number
+  nextCursor: number
+  endCursor: number
+  gap: boolean
+  truncated: boolean
+  parserReset: boolean
+  droppedBytes: number
+  chunks: TerminalOutputChunk[]
+}
+export interface TerminalWriter { tabId: string; token: string; writerGeneration: number }
+export interface TerminalInputAck {
+  jobId: string
+  generation: number
+  writerGeneration: number
+  sequence: number
+  status: TerminalAckStatus
+  receivedAt: number
+}
+export interface TerminalClaimRequest {
+  requestId: string
+  generation: number
+  tabId: string
+  takeover: boolean
+}
+export interface TerminalInputAckRequest {
+  requestId: string
+  generation: number
+  tabId: string
+  token: string
+  writerGeneration: number
+  sequence: number
+}
+export interface TerminalInputRequest extends TerminalInputAckRequest {
+  text: string
+}
+export interface TerminalResizeRequest {
+  requestId: string
+  generation: number
+  tabId: string
+  token: string
+  writerGeneration: number
+  cols: number
+  rows: number
+}
+export interface TerminalResizeResult { queued: boolean }
 export interface RunLogChunk { seq: number; stream: "stdout" | "stderr"; text: string }
 export interface RunLogPage {
   jobId: string

@@ -2,6 +2,10 @@
 
 import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon, Link2Icon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryFilter, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { TREE_DISCOVERY, TREE_KINDS, treeDiscoveryCodec, selectLoadedTree, hiddenSelectedCount } from "@/lib/file-ops/discovery"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { Button } from "@/components/ui/button"
@@ -18,6 +22,8 @@ interface FileTreeProps {
   tree: FileTreeController
   selected: ReadonlySet<string>
   onToggle(entry: FileTreeEntry): void
+  visiblePaths?: ReadonlySet<string>
+  filtering?: boolean
 }
 
 function EntryIcon({ entry }: { entry: FileTreeEntry }) {
@@ -27,7 +33,7 @@ function EntryIcon({ entry }: { entry: FileTreeEntry }) {
 
 function TreeRow({ entry, ...tree }: FileTreeProps & { entry: FileTreeEntry }) {
   const t = useTranslations("fileOps")
-  const open = tree.tree.expanded.has(entry.path)
+  const open = tree.tree.expanded.has(entry.path) || (tree.filtering === true && tree.visiblePaths?.has(entry.path) === true && tree.tree.levels.has(entry.path))
   const state = treeCheckState(tree.selected, entry.path)
   const checkboxId = `tree-${entry.path}`
 
@@ -82,7 +88,7 @@ function TreeLevelView({ path, ...tree }: FileTreeProps & { path: string }) {
   return (
     <>
       <ul className={path === tree.root ? "min-w-0" : "min-w-0 pl-4 sm:pl-6"}>
-        {level.entries.map((entry) => <TreeRow key={entry.path} {...tree} entry={entry} />)}
+        {level.entries.filter(entry => !tree.visiblePaths || tree.visiblePaths.has(entry.path)).map((entry) => <TreeRow key={entry.path} {...tree} entry={entry} />)}
       </ul>
       {level.truncated ? <p className="py-2 pl-10 text-body-sm text-muted-foreground">{t("tree.truncated", { limit: format.number(2000) })}</p> : null}
     </>
@@ -90,5 +96,18 @@ function TreeLevelView({ path, ...tree }: FileTreeProps & { path: string }) {
 }
 
 export function FileTree(props: FileTreeProps) {
-  return <div className="min-w-0 rounded-md bg-card p-2 text-card-foreground sm:p-4"><TreeLevelView {...props} path={props.root} /></div>
+  const d = useTranslations("listDiscovery")
+  const format = useFormatter()
+  const [view, setView, reset] = useViewState(makeViewStateKey("file-tree-filter", props.root), treeDiscoveryCodec, TREE_DISCOVERY)
+  const discovery = selectLoadedTree(props.root, props.tree.levels, props.tree.expanded, view)
+  const hidden = hiddenSelectedCount(props.selected, discovery.visiblePaths)
+  return <div className="min-w-0 space-y-4 rounded-md bg-card p-2 text-card-foreground sm:p-4">
+    <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={discovery.count} total={discovery.total} onReset={reset}>
+      <DiscoveryFilter label={d("kinds")} value={view.kinds} options={TREE_KINDS.map(value => ({ value, label: d(`values.${value}`), count: discovery.kindCounts[value] }))} onValueChange={kinds => setView({ ...view, kinds })} />
+    </DiscoveryControls>
+    <p className="text-body-sm text-muted-foreground">{d("loadedScope")}</p>
+    {hidden > 0 ? <p role="status" className="text-body-sm">{d("hiddenSelected", { count: format.number(hidden) })}</p> : null}
+    {discovery.active && discovery.count === 0 ? <DiscoveryEmpty total={discovery.total} /> : null}
+    <TreeLevelView {...props} path={props.root} visiblePaths={discovery.visiblePaths} filtering={discovery.active} />
+  </div>
 }

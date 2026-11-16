@@ -183,6 +183,24 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange,
       job: changed && state.job ? { ...state.job, stale: true } : state.job })
   }
 
+  function restoreSnapshot(job: ProjectAnalysisJob): boolean {
+    if (
+      disposed
+      || state.phase !== "idle"
+      || state.job !== null
+      || state.detail === null
+      || Boolean(state.detail.activeAnalysisJobId)
+      || job.status === "running"
+      || job.requestPath !== state.detail.requestPath
+      || job.scanId !== state.detail.scanId
+      || job.inputHash !== state.detail.inputHash
+    ) {
+      return false
+    }
+    publish({ ...state, job })
+    return true
+  }
+
   function dispose() {
     if (disposed) return
     disposed = true
@@ -193,7 +211,7 @@ export function createProjectAnalysisSession({ api, clock, visibility, onChange,
   }
 
   void poll()
-  return { start, cancel, retryPoll, refresh, dispose, getSnapshot: () => state }
+  return { start, cancel, retryPoll, refresh, restoreSnapshot, dispose, getSnapshot: () => state }
 }
 
 export type ProjectAnalysisSession = ReturnType<typeof createProjectAnalysisSession>

@@ -1,6 +1,18 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { getBrowserRunnerContext, startBrowserNpmRun, getBrowserLatestNpmRun, pollBrowserNpmRun, getBrowserNpmRunLogs, cancelBrowserNpmRun } from "./npm-runs-browser.ts"
+import {
+  getBrowserRunnerContext,
+  startBrowserNpmRun,
+  getBrowserLatestNpmRun,
+  pollBrowserNpmRun,
+  getBrowserNpmRunLogs,
+  cancelBrowserNpmRun,
+  getBrowserNpmRunTerminalOutput,
+  claimBrowserNpmRunTerminal,
+  sendBrowserNpmRunTerminalInput,
+  getBrowserNpmRunTerminalInputAck,
+  resizeBrowserNpmRunTerminal,
+} from "./npm-runs-browser.ts"
 
 // TEST data; không phải yêu cầu nghiệp vụ.
 const id = "00000000-0000-4000-8000-000000000001"
@@ -48,4 +60,45 @@ test("transport and parser failures never retry POST; conflicts retain reason an
     t.mock.method(globalThis, "fetch", async (_url, init) => init.signal.throwIfAborted())
     await assert.rejects(call(controller.signal), { name: "AbortError" })
   }
+})
+
+test("five terminal browser calls use same origin, no-store, abort signals and exact payloads", async t => {
+  const requests = []
+  const tabId = "00000000-0000-4000-8000-000000000011"
+  const token = "00000000-0000-4000-8000-000000000012"
+  const claimBody = { requestId: id, generation: 1, tabId, takeover: false }
+  const inputBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, sequence: 1, text: "y\r" }
+  const ackBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, sequence: 1 }
+  const resizeBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, cols: 120, rows: 30 }
+  const terminalCalls = [
+    s => getBrowserNpmRunTerminalOutput(id, 1, 64, s),
+    s => claimBrowserNpmRunTerminal(id, claimBody, s),
+    s => sendBrowserNpmRunTerminalInput(id, inputBody, s),
+    s => getBrowserNpmRunTerminalInputAck(id, ackBody, s),
+    s => resizeBrowserNpmRunTerminal(id, resizeBody, s),
+  ]
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    requests.push({ url, init })
+    return Response.json({ statusCode: 200, message: "TEST", data: { ok: true } }, { status: 200 })
+  })
+  for (const call of terminalCalls) {
+    const controller = new AbortController()
+    assert.deepEqual(await call(controller.signal), { ok: true })
+    assert.equal(requests.at(-1).init.cache, "no-store")
+    controller.abort()
+    assert.equal(requests.at(-1).init.signal.aborted, true)
+  }
+  assert.deepEqual(requests.map(r => [new URL(r.url, "http://localhost").pathname, r.init.method]), [
+    [`/api/npm-runs/${id}/terminal-output`, "GET"],
+    [`/api/npm-runs/${id}/terminal-claim`, "POST"],
+    [`/api/npm-runs/${id}/terminal-input`, "POST"],
+    [`/api/npm-runs/${id}/terminal-input-ack`, "POST"],
+    [`/api/npm-runs/${id}/terminal-resize`, "POST"],
+  ])
+  assert.equal(new URL(requests[0].url, "http://localhost").searchParams.get("generation"), "1")
+  assert.equal(new URL(requests[0].url, "http://localhost").searchParams.get("cursor"), "64")
+  assert.deepEqual(JSON.parse(requests[1].init.body), claimBody)
+  assert.deepEqual(JSON.parse(requests[2].init.body), inputBody)
+  assert.deepEqual(JSON.parse(requests[3].init.body), ackBody)
+  assert.deepEqual(JSON.parse(requests[4].init.body), resizeBody)
 })

@@ -7,11 +7,14 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
 import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
+import { TERMINAL_DOCK_STATE_KEY, terminalDockCodec, type TerminalDockMode } from "@/components/features/npm-runner/terminal-dock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useNavigationContinuity, useViewState } from "@/hooks/use-navigation-continuity"
 import type { useNpmRunner } from "@/hooks/use-npm-runner"
 import { runnerDisplay } from "@/lib/npm-runner/runner-display"
-import type { RunnerSelection } from "@/lib/npm-runner/runner-policy"
+import { isRunActive, runnerFollowHref, type RunnerSelection } from "@/lib/npm-runner/runner-policy"
+import { appendReturnContext } from "@/lib/ui/navigation-targets"
 import { revealRegion } from "@/lib/ui/reveal-region"
 import type messages from "@/messages/vi.json"
 
@@ -21,12 +24,26 @@ export function NpmRunnerPanel({ controller, contextError }: {
 }) {
   const t = useTranslations("npmRunner")
   const format = useFormatter()
+  const { hydrated, currentUrl, entryId } = useNavigationContinuity()
+  const [dockMode, setDockMode] = useViewState<TerminalDockMode>(TERMINAL_DOCK_STATE_KEY, terminalDockCodec, "expanded")
   const [selection, setSelection] = useState<RunnerSelection>({ action: "install_all" })
   const statusRef = useRef<HTMLDivElement>(null)
   const { state } = controller
   const display = runnerDisplay(state, selection, contextError)
   const job = state.job
-  const href = state.error?.conflict ? controller.follow() : null
+  const runningOtherPath = job && isRunActive(job) && job.requestPath !== state.requestPath ? job.requestPath : null
+  const conflictPath = state.error?.conflict?.requestPath ?? runningOtherPath
+  const conflictHref = state.error?.conflict
+    ? controller.follow()
+    : runningOtherPath
+      ? runnerFollowHref({ reason: "RUNNING", jobId: job!.jobId, requestPath: runningOtherPath })
+      : null
+  const href = conflictHref
+    ? appendReturnContext(conflictHref, { returnTo: hydrated ? currentUrl : undefined, originId: hydrated ? entryId : null })
+    : null
+  const hasDockContent = Boolean(
+    state.phase !== "idle" || job || state.terminal.output.chunks.length > 0 || state.logs.chunks.length > 0,
+  )
   const Icon = display.status === "success" ? CheckIcon
     : ["idle", "starting", "running", "stopping"].includes(display.status) ? CircleIcon : AlertTriangleIcon
   const warningCodes = [...new Set([...(state.context?.warnings ?? []), ...(job?.warningCodes ?? [])])]
@@ -59,15 +76,17 @@ export function NpmRunnerPanel({ controller, contextError }: {
         className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button> : null}
+      {hasDockContent && dockMode === "collapsed" ? <Button type="button" variant="secondary"
+        className="h-auto min-h-10 whitespace-normal" onClick={() => setDockMode("expanded")}>{t("terminal.openDock")}</Button> : null}
     </div>
     {state.startUnknown ? <p className="text-body-sm">{t("outcome.startUnknown")}</p> : null}
     {state.cancelUnknown ? <p className="text-body-sm">{t("outcome.cancelUnknown")}</p> : null}
     {state.phase === "lost" ? <p className="text-body-sm">{t("outcome.lost")}</p> : null}
-    {state.error || state.pollError ? <div role="alert" className="min-w-0 space-y-2 rounded-md bg-muted p-4 text-body-sm">
-      <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? "UNKNOWN")}</p>
+    {state.error || state.pollError || runningOtherPath ? <div role="alert" className="min-w-0 space-y-2 rounded-md bg-muted p-4 text-body-sm">
+      <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? (runningOtherPath ? "RUNNING" : "UNKNOWN"))}</p>
       {state.pollError ? <p>{t("outcome.pollPaused")}</p> : null}
-      {href ? <>
-        <p className="font-mono [overflow-wrap:anywhere]">{state.error?.conflict?.requestPath}</p>
+      {href && conflictPath ? <>
+        <p className="font-mono [overflow-wrap:anywhere]">{conflictPath}</p>
         <Link href={href} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
       </> : null}
     </div> : null}

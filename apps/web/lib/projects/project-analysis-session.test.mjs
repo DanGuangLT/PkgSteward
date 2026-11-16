@@ -395,3 +395,36 @@ test("refresh with replaced scan marks terminal snapshot stale even when hash is
   assert.equal(h.session.getSnapshot().detail.scanId, "TEST-replaced-scan")
   assert.equal(h.get().length, 1)
 })
+
+test("restoreSnapshot restores matching completed job read-only without requests and rejects running/mismatched/active states", async t => {
+  const completed = job({ status: "completed", phase: "done", checkedAt: "TEST-checked" })
+
+  // Valid matching idle restore -> zero network calls
+  const h = harness(t, { initialDetail: detail() })
+  assert.equal(h.session.restoreSnapshot(completed), true)
+  assert.equal(h.session.getSnapshot().phase, "idle")
+  assert.equal(h.session.getSnapshot().job, completed)
+  assert.equal(h.requests.length, 0)
+
+  // Reject when already populated
+  assert.equal(h.session.restoreSnapshot(job({ status: "completed", jobId: "TEST-other" })), false)
+  assert.equal(h.session.getSnapshot().job.jobId, "TEST-job")
+
+  // Reject running job, mismatched scanId/inputHash/requestPath, or activeAnalysisJobId
+  for (const candidate of [
+    job({ status: "running" }),
+    { ...completed, scanId: "TEST-other-scan" },
+    { ...completed, inputHash: "TEST-other-hash" },
+    { ...completed, requestPath: "D:\\TEST-other" },
+  ]) {
+    const idle = harness(t, { initialDetail: detail() })
+    assert.equal(idle.session.restoreSnapshot(candidate), false)
+    assert.equal(idle.session.getSnapshot().job, null)
+    assert.equal(idle.requests.length, 0)
+  }
+
+  const running = harness(t, { initialDetail: detail({ activeAnalysisJobId: "TEST-live" }) })
+  assert.equal(running.session.restoreSnapshot(completed), false)
+  assert.equal(running.session.getSnapshot().phase, "tracking")
+  assert.equal(running.session.getSnapshot().job, null)
+})

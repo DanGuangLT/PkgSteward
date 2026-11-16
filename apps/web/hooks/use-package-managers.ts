@@ -11,6 +11,7 @@ import type { PmSelection } from "@/lib/package-managers/pm-preview-form"
 import { createPmSession, initialPmState } from "@/lib/package-managers/pm-session"
 import type { PmSession } from "@/lib/package-managers/pm-session"
 import type { PmManager } from "@/lib/package-managers/pm-types"
+import { invalidateNavigationSnapshots } from "@/lib/ui/navigation-store"
 
 // Thin React binding: all state rules live in the framework-free session.
 export function usePackageManagers(path: string) {
@@ -40,7 +41,11 @@ export function usePackageManagers(path: string) {
       },
       onChange: setState,
       // The manifest may have changed: re-read this panel and the server-rendered project detail once.
-      onMutated: () => { void current.loadContext(); startRefresh(() => router.refresh()) },
+      onMutated: () => {
+        invalidateNavigationSnapshots("package-manager")
+        void current.loadContext()
+        startRefresh(() => router.refresh())
+      },
     })
     session.current = current
     void current.refresh()

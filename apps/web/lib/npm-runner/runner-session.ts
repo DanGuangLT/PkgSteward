@@ -1,8 +1,33 @@
 import { ApiError } from "../api/response.ts"
 import { initialRunnerState, isRunActive, runnerError, runnerEligibility, runnerFollowHref, buildRunRequest } from "./runner-policy.ts"
 import { initialRunnerLogs, mergeRunnerLogs, needsLogDrain } from "./runner-log-view.ts"
-import type { RunJob, RunLogPage, RunRequest, RunStart, RunnerContext } from "@/lib/api/types"
+import {
+  clampTerminalSize,
+  initialTerminalClientState,
+  initialTerminalOutput,
+  isValidTerminalInputText,
+  mergeTerminalOutput,
+  needsTerminalOutputDrain,
+} from "./terminal-session.ts"
+import type {
+  RunJob,
+  RunLogPage,
+  RunRequest,
+  RunStart,
+  RunnerContext,
+  TerminalClaimRequest,
+  TerminalInputAck,
+  TerminalInputAckRequest,
+  TerminalInputRequest,
+  TerminalOutputPage,
+  TerminalResizeRequest,
+  TerminalResizeResult,
+  TerminalWriter,
+} from "@/lib/api/types"
 import type { RunnerSelection, RunnerState } from "@/lib/npm-runner/runner-policy"
+import type { TerminalClientState } from "@/lib/npm-runner/terminal-session"
+
+const RESIZE_COALESCE_MS = 60
 
 export interface RunnerApi {
   context(path: string, signal: AbortSignal): Promise<RunnerContext>
@@ -11,6 +36,11 @@ export interface RunnerApi {
   get(id: string, signal: AbortSignal): Promise<RunJob>
   logs(id: string, cursor: number, signal: AbortSignal): Promise<RunLogPage>
   cancel(id: string, signal: AbortSignal): Promise<RunJob>
+  terminalOutput?(id: string, generation: number, cursor: number, signal: AbortSignal): Promise<TerminalOutputPage>
+  claimTerminal?(id: string, input: TerminalClaimRequest, signal: AbortSignal): Promise<TerminalWriter>
+  terminalInput?(id: string, input: TerminalInputRequest, signal: AbortSignal): Promise<TerminalInputAck>
+  terminalInputAck?(id: string, input: TerminalInputAckRequest, signal: AbortSignal): Promise<TerminalInputAck>
+  resizeTerminal?(id: string, input: TerminalResizeRequest, signal: AbortSignal): Promise<TerminalResizeResult>
 }
 export interface RunnerClock {
   setTimeout(callback: () => void, delay: number): number
@@ -30,17 +60,65 @@ export interface RunnerSessionOptions {
 }
 
 export function createRunnerSession({ api, clock, visibility, onChange, onMutated, uuid = () => crypto.randomUUID() }: RunnerSessionOptions) {
-  let state = initialRunnerState()
+  const tabId = uuid()
+  let state = initialRunnerState(null, tabId)
   let disposed = false
+  let recoveredOnce = false
   let timer: number | null = null
   let pollRequest: AbortController | null = null
   let commandRequest: AbortController | null = null
   let latestRequest: AbortController | null = null
   let contextRequest: AbortController | null = null
+  let claimRequest: AbortController | null = null
+  let inputRequest: AbortController | null = null
+  let resizeRequest: AbortController | null = null
+  let resizeTimer: number | null = null
+  let pendingResize: { cols: number; rows: number } | null = null
   let pendingRecovery = false
   let pendingContext = false
   const mutated = new Set<string>()
 
+  function resetTerminal(jobId: string | null = null, generation = 0): TerminalClientState {
+    return {
+      ...initialTerminalClientState(tabId, jobId, generation),
+      cols: state.terminal.cols,
+      rows: state.terminal.rows,
+    }
+  }
+  function abortTerminalRequests() {
+    claimRequest?.abort()
+    claimRequest = null
+    inputRequest?.abort()
+    inputRequest = null
+    if (resizeTimer !== null) {
+      clock.clearTimeout(resizeTimer)
+      resizeTimer = null
+    }
+    resizeRequest?.abort()
+    resizeRequest = null
+    pendingResize = null
+  }
+  function syncTerminalMeta(prev: TerminalClientState, job: RunJob): TerminalClientState {
+    const meta = job.terminal
+    if (!meta?.available) return prev
+    if (prev.jobId !== job.jobId || prev.generation !== meta.generation) {
+      return {
+        ...initialTerminalClientState(tabId, job.jobId, meta.generation),
+        cols: prev.cols,
+        rows: prev.rows,
+        inputUnknown: Boolean(meta.inputBlocked),
+      }
+    }
+    const writerSuperseded = prev.writer !== null
+      && meta.writerGeneration !== null
+      && meta.writerGeneration !== prev.writer.writerGeneration
+    if (!writerSuperseded) return prev
+    return {
+      ...prev,
+      writer: null,
+      claimError: "WRITER_SUPERSEDED",
+    }
+  }
   function publish(next: RunnerState) {
     if (disposed) return
     state = next
@@ -56,6 +134,7 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   }
   function invalidate() {
     stopPoll()
+    abortTerminalRequests()
     commandRequest?.abort()
     commandRequest = null
     latestRequest?.abort()
@@ -75,12 +154,15 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     }
   }
   function finishDrain() {
-    if (state.job && state.job.status !== "running" && state.job.status !== "stopping" && !needsLogDrain(state.logs, state.job)) {
+    if (state.job && state.job.status !== "running" && state.job.status !== "stopping"
+      && !needsLogDrain(state.logs, state.job)
+      && !needsTerminalOutputDrain(state.terminal.output, state.job)) {
       publish({ ...state, phase: "idle" })
     }
   }
   function receiveJob(job: RunJob) {
-    publish({ ...state, job, cancelPending: false, cancelUnknown: false, error: null, pollError: null })
+    const terminal = syncTerminalMeta(state.terminal, job)
+    publish({ ...state, job, terminal, cancelPending: false, cancelUnknown: false, error: null, pollError: null })
     if (job.spawned && job.status !== "running" && job.status !== "stopping" && !mutated.has(job.jobId)) {
       mutated.add(job.jobId)
       // Context refresh is local metadata only. The caller refreshes its server
@@ -93,7 +175,11 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   function canPoll(): boolean {
     return !disposed && visibility.isVisible() && state.phase === "tracking" && state.jobId !== null
       && !state.cancelPending && !state.pollError && !commandRequest
-      && (!state.job || state.job.status === "running" || state.job.status === "stopping" || needsLogDrain(state.logs, state.job))
+      && (!state.job
+        || state.job.status === "running"
+        || state.job.status === "stopping"
+        || needsLogDrain(state.logs, state.job)
+        || needsTerminalOutputDrain(state.terminal.output, state.job))
   }
   async function poll(): Promise<void> {
     if (pollRequest || !canPoll() || !state.jobId) return
@@ -104,11 +190,23 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     const id = state.jobId
     const cursor = state.logs.cursor
     const needStatus = !state.job || state.job.status === "running" || state.job.status === "stopping"
+    const termMeta = state.job?.terminal
+    const needTerminalOutput = Boolean(
+      api.terminalOutput
+      && termMeta?.available
+      && termMeta.generation >= 1
+      && (needStatus || needsTerminalOutputDrain(state.terminal.output, state.job)),
+    )
+    const termGeneration = termMeta?.generation ?? 0
+    const termCursor = state.terminal.output.generation === termGeneration ? state.terminal.output.cursor : 0
     pollRequest = controller
-    // Hold the slot until BOTH requests settle, including ignored aborts.
-    const [status, output] = await Promise.allSettled([
+    // Hold the slot until all parallel poll requests settle, including ignored aborts.
+    const [status, output, termOutput] = await Promise.allSettled([
       needStatus ? api.get(id, controller.signal) : Promise.resolve(null),
       api.logs(id, cursor, controller.signal),
+      needTerminalOutput && api.terminalOutput
+        ? api.terminalOutput(id, termGeneration, termCursor, controller.signal)
+        : Promise.resolve(null),
     ])
     if (active(controller, generation) && state.jobId === id) {
       let failure: unknown = null
@@ -125,6 +223,17 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
           publish({ ...state, logs: mergeRunnerLogs(state.logs, page) })
         } catch (cause) { failure ??= cause }
       } else failure ??= output.reason
+      if (termOutput.status === "fulfilled" && termOutput.value) {
+        try {
+          const baseOutput = state.terminal.output.jobId === id && state.terminal.output.generation === termGeneration
+            ? state.terminal.output
+            : initialTerminalOutput(id, termGeneration)
+          publish({
+            ...state,
+            terminal: { ...state.terminal, output: mergeTerminalOutput(baseOutput, termOutput.value) },
+          })
+        } catch (cause) { failure ??= cause }
+      } else if (termOutput.status === "rejected") failure ??= termOutput.reason
       finishDrain()
       if (failure) failPoll(failure)
     }
@@ -163,7 +272,9 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   function track(job: RunJob) {
     const sameJob = state.jobId === job.jobId
     publish({ ...state, phase: "tracking", jobId: job.jobId, requestId: job.requestId,
-      logs: sameJob ? state.logs : initialRunnerLogs(job.jobId), error: null, pollError: null,
+      logs: sameJob ? state.logs : initialRunnerLogs(job.jobId),
+      terminal: sameJob ? state.terminal : resetTerminal(job.jobId, job.terminal?.generation ?? 0),
+      error: null, pollError: null,
       startUnknown: false, cancelPending: false, cancelUnknown: false })
     receiveJob(job)
     finishDrain()
@@ -209,17 +320,20 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   async function start(selection: RunnerSelection): Promise<void> {
     if (disposed || commandRequest || runnerEligibility(state, selection) || !state.context) return
     const requestId = uuid()
-    const input = buildRunRequest(state.context, selection, requestId)
+    const input = buildRunRequest(state.context, selection, requestId, {
+      cols: state.terminal.cols,
+      rows: state.terminal.rows,
+    })
     const generation = invalidate()
     publish({ ...state, phase: "starting", generation, requestId, jobId: null, job: null,
-      logs: initialRunnerLogs(), startUnknown: false, cancelUnknown: false, error: null, pollError: null })
+      logs: initialRunnerLogs(), terminal: resetTerminal(), startUnknown: false, cancelUnknown: false, error: null, pollError: null })
     const controller = new AbortController()
     commandRequest = controller
     try {
       const started = await api.start(input, controller.signal)
       if (!active(controller, generation) || commandRequest !== controller) return
       if (!started.jobId || started.requestId !== requestId) throw new ApiError(502, "Unexpected start response.", "INVALID_RESPONSE")
-      publish({ ...state, phase: "tracking", jobId: started.jobId, logs: initialRunnerLogs(started.jobId) })
+      publish({ ...state, phase: "tracking", jobId: started.jobId, logs: initialRunnerLogs(started.jobId), terminal: resetTerminal(started.jobId, 0) })
     } catch (cause) {
       if (active(controller, generation) && commandRequest === controller) {
         const error = runnerError(cause)
@@ -276,17 +390,435 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     if (context !== undefined) {
       const switched = state.requestPath !== requestPath
       if (switched) {
+        recoveredOnce = true
         const generation = invalidate()
-        publish({ ...initialRunnerState(context), generation, requestPath })
+        publish({ ...initialRunnerState(context, tabId), generation, requestPath, terminal: resetTerminal() })
         pendingRecovery = true
         await recoverLatest()
       } else publish({ ...state, context })
       return
     }
+    recoveredOnce = true
     pendingContext = true
     if (state.startUnknown || state.phase === "lost" || !state.jobId) pendingRecovery = true
     await Promise.all([refreshContext(), recoverLatest()])
     if (state.phase === "tracking" && state.pollError) retryPoll()
+  }
+  function hasBusyRun(): boolean {
+    if (state.phase === "starting" || state.startUnknown || state.cancelUnknown) return true
+    if (state.jobId === null) return false
+    if (!state.job) return state.phase === "tracking"
+    return isRunActive(state.job)
+      || state.phase === "tracking"
+      || needsLogDrain(state.logs, state.job)
+      || needsTerminalOutputDrain(state.terminal.output, state.job)
+  }
+  function syncProjectContext(context: RunnerContext | null, nextRequestPath = context?.requestPath ?? null): void {
+    if (disposed) return
+    const switched = state.requestPath !== nextRequestPath
+    if (!switched && state.context === context && recoveredOnce) return
+    if (contextRequest && switched) {
+      contextRequest.abort()
+      contextRequest = null
+    }
+    pendingContext = false
+    const busy = hasBusyRun()
+    const nextError = busy ? state.error : (state.error?.code === "RUNNING" ? null : state.error)
+    publish({
+      ...state,
+      context,
+      requestPath: nextRequestPath,
+      contextError: null,
+      error: nextError,
+    })
+    if (!busy && (!recoveredOnce || (switched && !state.jobId))) {
+      recoveredOnce = true
+      pendingRecovery = true
+      void recoverLatest()
+    }
+  }
+  async function flushResize(): Promise<void> {
+    if (disposed || resizeRequest || !pendingResize || !api.resizeTerminal) return
+    const nextSize = pendingResize
+    const jobId = state.jobId
+    const requestId = state.requestId
+    const termMeta = state.job?.terminal
+    const writer = state.terminal.writer
+    if (!jobId || !requestId || state.job?.status !== "running" || !termMeta?.available || !termMeta.ready || !writer) {
+      pendingResize = null
+      return
+    }
+    pendingResize = null
+    const controller = new AbortController()
+    const generation = state.generation
+    const termGeneration = termMeta.generation
+    resizeRequest = controller
+    try {
+      await api.resizeTerminal(jobId, {
+        requestId,
+        generation: termGeneration,
+        tabId,
+        token: writer.token,
+        writerGeneration: writer.writerGeneration,
+        cols: nextSize.cols,
+        rows: nextSize.rows,
+      }, controller.signal)
+      if (!active(controller, generation) || resizeRequest !== controller) return
+      publish({ ...state, terminal: { ...state.terminal, resizeError: null } })
+    } catch (cause) {
+      if (active(controller, generation) && resizeRequest === controller) {
+        const err = runnerError(cause)
+        const stale = err.terminalCode === "STALE_WRITER"
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            writer: stale ? null : state.terminal.writer,
+            claimError: stale ? "STALE_WRITER" : state.terminal.claimError,
+            resizeError: err.terminalCode ?? err.code,
+          },
+        })
+      }
+    } finally {
+      if (resizeRequest === controller) resizeRequest = null
+      if (!disposed && pendingResize && state.terminal.writer && resizeTimer === null) {
+        resizeTimer = clock.setTimeout(() => { resizeTimer = null; void flushResize() }, RESIZE_COALESCE_MS)
+      }
+    }
+  }
+  function resizeTerminal(cols: number, rows: number): void {
+    if (disposed) return
+    const clamped = clampTerminalSize(cols, rows)
+    if (!clamped) return
+    if (state.terminal.cols !== clamped.cols || state.terminal.rows !== clamped.rows) {
+      publish({ ...state, terminal: { ...state.terminal, cols: clamped.cols, rows: clamped.rows } })
+    }
+    const termMeta = state.job?.terminal
+    if (!api.resizeTerminal || !state.jobId || !state.requestId || state.job?.status !== "running"
+      || !termMeta?.available || !termMeta.ready || !state.terminal.writer) {
+      return
+    }
+    pendingResize = clamped
+    if (resizeTimer === null && !resizeRequest) {
+      resizeTimer = clock.setTimeout(() => { resizeTimer = null; void flushResize() }, RESIZE_COALESCE_MS)
+    }
+  }
+  async function claimTerminal(takeover = false): Promise<void> {
+    if (disposed || !api.claimTerminal || claimRequest) return
+    const jobId = state.jobId
+    const requestId = state.requestId
+    const termMeta = state.job?.terminal
+    if (!jobId || !requestId || state.job?.status !== "running" || !termMeta?.available || !termMeta.ready) return
+    if (!takeover && state.terminal.writer) return
+    if (takeover && (state.terminal.inputUnknown || termMeta.inputBlocked)) {
+      publish({ ...state, terminal: { ...state.terminal, claimError: "INPUT_UNKNOWN" } })
+      return
+    }
+    const controller = new AbortController()
+    const generation = state.generation
+    const termGeneration = termMeta.generation
+    claimRequest = controller
+    publish({ ...state, terminal: { ...state.terminal, claiming: true, claimError: null } })
+    try {
+      const writer = await api.claimTerminal(jobId, {
+        requestId,
+        generation: termGeneration,
+        tabId,
+        takeover,
+      }, controller.signal)
+      if (!active(controller, generation) || claimRequest !== controller || state.jobId !== jobId) return
+      publish({
+        ...state,
+        terminal: {
+          ...state.terminal,
+          writer,
+          claiming: false,
+          claimError: null,
+          nextSequence: 1,
+          pendingSequence: null,
+          pendingText: null,
+          inputPending: false,
+          inputUnknown: false,
+          lastInputAck: null,
+          inputStatus: null,
+          inputError: null,
+          resizeError: null,
+        },
+      })
+      if (state.terminal.cols !== null && state.terminal.rows !== null) {
+        pendingResize = { cols: state.terminal.cols, rows: state.terminal.rows }
+        if (resizeTimer === null && !resizeRequest) {
+          resizeTimer = clock.setTimeout(() => { resizeTimer = null; void flushResize() }, RESIZE_COALESCE_MS)
+        }
+      }
+    } catch (cause) {
+      if (active(controller, generation) && claimRequest === controller) {
+        const err = runnerError(cause)
+        const code = err.terminalCode ?? err.code
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            claiming: false,
+            claimError: code,
+            inputUnknown: state.terminal.inputUnknown || code === "INPUT_UNKNOWN",
+          },
+        })
+      }
+    } finally {
+      if (claimRequest === controller) claimRequest = null
+    }
+  }
+  async function sendTerminalInput(text: string): Promise<void> {
+    if (disposed || !api.terminalInput || inputRequest || state.terminal.inputPending) return
+    const jobId = state.jobId
+    const requestId = state.requestId
+    const termMeta = state.job?.terminal
+    const writer = state.terminal.writer
+    if (!jobId || !requestId || state.job?.status !== "running" || !termMeta?.available || !termMeta.ready || !writer) return
+    if (state.terminal.inputUnknown || termMeta.inputBlocked) return
+    if (!isValidTerminalInputText(text)) {
+      publish({ ...state, terminal: { ...state.terminal, inputError: "INVALID_INPUT" } })
+      return
+    }
+    const sequence = state.terminal.nextSequence
+    const controller = new AbortController()
+    const generation = state.generation
+    const termGeneration = termMeta.generation
+    inputRequest = controller
+    publish({
+      ...state,
+      terminal: {
+        ...state.terminal,
+        nextSequence: sequence + 1,
+        pendingSequence: sequence,
+        pendingText: text,
+        inputPending: true,
+        inputStatus: "pending",
+        inputError: null,
+      },
+    })
+    try {
+      const ack = await api.terminalInput(jobId, {
+        requestId,
+        generation: termGeneration,
+        tabId,
+        token: writer.token,
+        writerGeneration: writer.writerGeneration,
+        sequence,
+        text,
+      }, controller.signal)
+      if (!active(controller, generation) || inputRequest !== controller || state.jobId !== jobId) return
+      if (ack.status === "delivered") {
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            inputPending: false,
+            inputUnknown: false,
+            pendingSequence: null,
+            pendingText: null,
+            lastInputAck: ack,
+            inputStatus: "delivered",
+            inputError: null,
+          },
+        })
+      } else if (ack.status === "not_delivered") {
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            inputPending: false,
+            inputUnknown: false,
+            pendingSequence: null,
+            pendingText: null,
+            lastInputAck: ack,
+            inputStatus: "not_delivered",
+            inputError: "INPUT_NOT_DELIVERED",
+          },
+        })
+      } else {
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            inputPending: false,
+            inputUnknown: true,
+            lastInputAck: ack,
+            inputStatus: ack.status,
+            inputError: "INPUT_UNKNOWN",
+          },
+        })
+      }
+    } catch (cause) {
+      if (active(controller, generation) && inputRequest === controller) {
+        const err = runnerError(cause)
+        const code = err.terminalCode ?? err.code
+        if (code === "STALE_WRITER") {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              writer: null,
+              inputPending: false,
+              pendingSequence: null,
+              pendingText: null,
+              claimError: "STALE_WRITER",
+              inputError: "STALE_WRITER",
+            },
+          })
+        } else if (err.statusCode === undefined || err.statusCode >= 500 || code === "INPUT_UNKNOWN") {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              inputPending: false,
+              inputUnknown: true,
+              inputStatus: "unknown",
+              inputError: code,
+            },
+          })
+        } else {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              inputPending: false,
+              inputUnknown: false,
+              pendingSequence: null,
+              pendingText: null,
+              inputStatus: "not_delivered",
+              inputError: code,
+            },
+          })
+        }
+      }
+    } finally {
+      if (inputRequest === controller) inputRequest = null
+    }
+  }
+  async function reconcileTerminalInput(): Promise<void> {
+    if (disposed || !api.terminalInputAck || inputRequest) return
+    const jobId = state.jobId
+    const requestId = state.requestId
+    const termMeta = state.job?.terminal
+    const writer = state.terminal.writer
+    const sequence = state.terminal.pendingSequence
+    if (!jobId || !requestId || !termMeta?.available || !writer || sequence === null) return
+    const controller = new AbortController()
+    const generation = state.generation
+    const termGeneration = termMeta.generation
+    inputRequest = controller
+    publish({ ...state, terminal: { ...state.terminal, inputPending: true } })
+    try {
+      const ack = await api.terminalInputAck(jobId, {
+        requestId,
+        generation: termGeneration,
+        tabId,
+        token: writer.token,
+        writerGeneration: writer.writerGeneration,
+        sequence,
+      }, controller.signal)
+      if (!active(controller, generation) || inputRequest !== controller || state.jobId !== jobId) return
+      if (ack.status === "delivered" || ack.status === "not_delivered") {
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            inputPending: false,
+            inputUnknown: false,
+            pendingSequence: null,
+            pendingText: null,
+            lastInputAck: ack,
+            inputStatus: ack.status,
+            inputError: ack.status === "not_delivered" ? "INPUT_NOT_DELIVERED" : null,
+          },
+        })
+      } else {
+        publish({
+          ...state,
+          terminal: {
+            ...state.terminal,
+            inputPending: false,
+            inputUnknown: true,
+            lastInputAck: ack,
+            inputStatus: ack.status,
+            inputError: "INPUT_UNKNOWN",
+          },
+        })
+      }
+    } catch (cause) {
+      if (active(controller, generation) && inputRequest === controller) {
+        const err = runnerError(cause)
+        const code = err.terminalCode ?? err.code
+        if (err.statusCode === 404 && code === "ACK_NOT_FOUND") {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              inputPending: false,
+              inputUnknown: false,
+              pendingSequence: null,
+              pendingText: null,
+              inputStatus: "not_delivered",
+              inputError: "ACK_NOT_FOUND",
+            },
+          })
+        } else if (code === "STALE_WRITER") {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              writer: null,
+              inputPending: false,
+              claimError: "STALE_WRITER",
+              inputError: "STALE_WRITER",
+            },
+          })
+        } else {
+          publish({
+            ...state,
+            terminal: {
+              ...state.terminal,
+              inputPending: false,
+              inputError: code,
+            },
+          })
+        }
+      }
+    } finally {
+      if (inputRequest === controller) inputRequest = null
+    }
+  }
+  function clearTerminalOutput(): void {
+    if (disposed) return
+    publish({
+      ...state,
+      logs: { ...state.logs, chunks: [] },
+      terminal: {
+        ...state.terminal,
+        output: {
+          ...state.terminal.output,
+          chunks: [],
+          totalBytes: 0,
+          localDroppedBytes: 0,
+          resetRevision: state.terminal.output.resetRevision + 1,
+        },
+      },
+    })
+  }
+  function dismissCompletedJob(): void {
+    if (disposed || hasBusyRun()) return
+    publish({
+      ...state,
+      jobId: null,
+      requestId: null,
+      job: null,
+      logs: initialRunnerLogs(),
+      terminal: resetTerminal(),
+      error: null,
+      pollError: null,
+    })
   }
 
   const unsubscribe = visibility.subscribe(() => {
@@ -307,7 +839,8 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     invalidate()
     unsubscribe()
   }
-  return { start, cancel, retryPoll, refresh,
+  return { start, cancel, retryPoll, refresh, syncProjectContext, claimTerminal, sendTerminalInput,
+    reconcileTerminalInput, resizeTerminal, clearTerminalOutput, dismissCompletedJob,
     follow: () => state.error?.conflict ? runnerFollowHref(state.error.conflict) : null,
     dispose, getSnapshot: () => state }
 }
