@@ -39,6 +39,15 @@ test("rejects a catalog whose root is not a message object", (t) => {
   assert.match(result.stderr, /vi\.json.*message object/)
 })
 
+test("rejects literal dots inside message keys", (t) => {
+  const check = createFixture(t)
+  for (const messages of [{ "section.title": "Flat" }, { section: { "group.title": "Nested" } }]) {
+    const result = check(messages)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /en\.json.*section\.(?:group\.)?title.*dot/)
+  }
+})
+
 test("warns about missing keys and fails for extra keys", (t) => {
   const check = createFixture(t)
   const missing = check({})
