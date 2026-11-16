@@ -15,7 +15,15 @@ import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import { GlobalPackagesController } from '@/global-packages/global-packages.controller';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
 import type { IGlobalPackagesService } from '@/global-packages/interfaces/global-packages.service.interface';
-import type { IGlobalJob } from '@/global-packages/interfaces/global-packages.types';
+import type {
+  IGlobalActivityRequest,
+  IGlobalExecuteRequest,
+  IGlobalJob,
+  IGlobalJobStart,
+  IGlobalLogPage,
+  IGlobalPreviewRequest,
+  IGlobalVersionsRequest,
+} from '@/global-packages/interfaces/global-packages.types';
 import {
   GlobalJobEntity,
   GlobalJobStartEntity,
@@ -79,12 +87,14 @@ describe('GlobalPackagesController HTTP contract', () => {
   let controller: GlobalPackagesController;
   let waitForPreflight: jest.Mock<Promise<void>, [string]>;
   beforeEach(() => {
-    waitForPreflight = jest.fn(() => Promise.resolve());
-    const accepted = {
+    waitForPreflight = jest.fn<Promise<void>, [string]>(() =>
+      Promise.resolve(),
+    );
+    const accepted: IGlobalJobStart = {
       jobId: TEST_JOB_ID,
       requestId: TEST_REQUEST_ID,
       previewId: null,
-      status: 'running' as const,
+      status: 'running',
     };
     service = {
       getSnapshot: jest.fn(() => ({
@@ -93,14 +103,22 @@ describe('GlobalPackagesController HTTP contract', () => {
         stale: false,
         managers: [],
       })),
-      inventory: jest.fn(() => Promise.resolve(accepted)),
-      versions: jest.fn(() => Promise.resolve(accepted)),
-      preview: jest.fn(() => Promise.resolve(accepted)),
-      execute: jest.fn(() => Promise.resolve(accepted)),
+      inventory: jest.fn<Promise<IGlobalJobStart>, [IGlobalActivityRequest]>(
+        () => Promise.resolve(accepted),
+      ),
+      versions: jest.fn<Promise<IGlobalJobStart>, [IGlobalVersionsRequest]>(
+        () => Promise.resolve(accepted),
+      ),
+      preview: jest.fn<Promise<IGlobalJobStart>, [IGlobalPreviewRequest]>(() =>
+        Promise.resolve(accepted),
+      ),
+      execute: jest.fn<Promise<IGlobalJobStart>, [IGlobalExecuteRequest]>(() =>
+        Promise.resolve(accepted),
+      ),
       waitForPreflight,
       getLatest: jest.fn(job),
-      getJob: jest.fn(job),
-      getLogs: jest.fn(() => ({
+      getJob: jest.fn<IGlobalJob, [string]>(job),
+      getLogs: jest.fn<IGlobalLogPage, [string, number]>(() => ({
         jobId: TEST_JOB_ID,
         firstCursor: 0,
         nextCursor: 0,
@@ -109,7 +127,9 @@ describe('GlobalPackagesController HTTP contract', () => {
         droppedBytes: 0,
         chunks: [],
       })),
-      cancel: jest.fn(() => Promise.resolve(job())),
+      cancel: jest.fn<Promise<IGlobalJob>, [string]>(() =>
+        Promise.resolve(job()),
+      ),
     };
     controller = new GlobalPackagesController(service);
   });

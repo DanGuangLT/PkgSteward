@@ -60,7 +60,9 @@ function bindings() {
     scanner,
     gate: f.runtime.gate,
     audit: f.runtime.audit,
-    config: new ConfigService({ NPM_COMMAND_TIMEOUT_MS: '' }),
+    config: new ConfigService<Record<string | symbol, unknown>>({
+      NPM_COMMAND_TIMEOUT_MS: '',
+    }),
     host: {
       platform: 'win32',
       execPath: TEST_PATHS.node,
@@ -154,7 +156,9 @@ describe('GlobalPackagesModule runtime bindings', () => {
     'uses only the validated numeric command timeout: %p',
     (timeout) => {
       const b = bindings();
-      b.input.config = new ConfigService({ NPM_COMMAND_TIMEOUT_MS: timeout });
+      b.input.config = new ConfigService<Record<string | symbol, unknown>>({
+        NPM_COMMAND_TIMEOUT_MS: timeout,
+      });
       expect(createGlobalPackagesRuntime(b.input).timeoutMs).toBe(
         typeof timeout === 'number' ? timeout : undefined,
       );
