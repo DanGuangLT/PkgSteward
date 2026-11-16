@@ -66,8 +66,9 @@ In `apps/web/`, copy `.env.example` to `.env.local` before starting the frontend
 Copy-Item .env.example .env.local
 ```
 
-`API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host and port must match
-`HOST` and `PORT` in `apps/api/.env`; update `API_BASE_URL` whenever the backend address changes.
+`API_BASE_URL` defaults to `http://127.0.0.1:24681/api/v1`. Its host, port, prefix and version must match
+the backend's `HOST`, `PORT`, `GLOBAL_PREFIX` and `VERSION`. For example, if the backend sets
+`GLOBAL_PREFIX=steward` and `VERSION=2` on its default address, use `http://127.0.0.1:24681/steward/v2`.
 Use `http://[::1]:24681/api/v1` for an IPv6 loopback backend.
 This variable is read only on the server; do not add the `NEXT_PUBLIC_` prefix.
 Start the backend first by running `pnpm dev` in `apps/api/`, then start the frontend as above.

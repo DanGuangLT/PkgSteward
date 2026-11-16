@@ -107,12 +107,14 @@ Frontend variables go in `apps/web/.env.local` or `apps/web/.env` (copy the fron
 |---|---|---|
 | `PORT` | `24680` | Frontend listen port; decimal integer from `1` to `65535` |
 | `HOST` | `127.0.0.1` | Frontend listen host; only `127.0.0.1`, `localhost` or `::1` |
-| `API_BASE_URL` | `http://127.0.0.1:24681/api/v1` | Server-only backend URL; must match the backend address |
+| `API_BASE_URL` | `http://127.0.0.1:24681/api/v1` | Server-only backend URL, including its API prefix and version |
 
 For frontend `PORT`/`HOST`, the first nonempty value wins: real environment → `.env.local` → `.env` → default.
 Whitespace-only values count as empty; invalid values stop startup. When changing the frontend `PORT` or `HOST`,
 update the backend's `LIST_ORIGIN_CORS` to match the origin used in the browser (for example,
-`http://localhost:24680`). When changing the backend `PORT` or `HOST`, update the frontend's `API_BASE_URL`.
+`http://localhost:24680`). Update the frontend's `API_BASE_URL` when changing the backend `HOST`, `PORT`,
+`GLOBAL_PREFIX` or `VERSION`. For example, with `GLOBAL_PREFIX=steward` and `VERSION=2` on the default address,
+set `API_BASE_URL=http://127.0.0.1:24681/steward/v2` in `apps/web/.env.local`.
 
 > [!IMPORTANT]
 > The API has no authentication by design. Keep `HOST` on a loopback address (default `127.0.0.1`) and do not expose it to a network.
