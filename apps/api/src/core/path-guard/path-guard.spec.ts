@@ -48,6 +48,10 @@ const makeGuard = ({
   scanRoots = { kind: 'paths', paths: ['D:\\Scan'] },
   drives = ['C:\\', 'D:\\', 'E:\\'],
   fs = makeFs(),
+}: {
+  scanRoots?: ScanRoots;
+  drives?: string[];
+  fs?: ReturnType<typeof makeFs>;
 } = {}) => {
   const driveDetector = {
     listFixedDrives: jest.fn(() => Promise.resolve(drives)),
@@ -63,10 +67,9 @@ const makeGuard = ({
     driveDetector,
   };
 };
-const ALL = { kind: 'all-fixed-drives' } as ScanRoots;
+const ALL: ScanRoots = { kind: 'all-fixed-drives' };
 
 describe('PathGuard.checkMany', () => {
-  // A separately typed fixture keeps the pre-existing makeGuard TS2322 issue out of new cases.
   const batchFixture = (
     options: Partial<
       Pick<IPathGuardDeps, 'scanRoots' | 'platform' | 'denylist'>
