@@ -28,10 +28,49 @@ import {
   pnpmPreviewFacts,
 } from '@/global-packages/__fixtures__/pnpm11/inventory';
 import type { IPnpmGlobalGroupFacts } from '@/global-packages/interfaces/pnpm-global.types';
-import { pnpm10InventoryFixture } from '../__fixtures__/pnpm10/inventory';
+import {
+  pnpm10InventoryFixture,
+  pnpm10PrivateHoistFixture,
+} from '../__fixtures__/pnpm10/inventory';
 import { readPnpm10GlobalInventory } from '../discovery/pnpm10-global-inventory';
 
 describe('pnpm 10 preview facts', () => {
+  it('pins a coherent private graph extension without exposing transitive preview rows', async () => {
+    const a = await pnpm10PrivateHoistFixture();
+    const b = await pnpm10PrivateHoistFixture(true);
+    const capture = async (h: typeof a) => {
+      const result = await readPnpm10GlobalInventory(h.location, h.deps);
+      expect(result.ownershipComplete).toBe(true);
+      return snapshotGlobalPreviewFacts({
+        location: h.location,
+        current: result.facts.find((dep) => dep.name === 'wrap-ansi')!,
+        target: null,
+        binOwners: result.binOwners,
+        pnpm10Inventory: result.pnpm10Inventory!,
+      });
+    };
+    const expected = await capture(a);
+    const actual = await capture(b);
+    const preview = createGlobalPreview(
+      TEST_PREVIEW_ID,
+      testRequest({ manager: 'pnpm', package: 'wrap-ansi' }),
+      expected,
+      testClock().now(),
+    );
+    expect(preview.sharedPackages).toEqual([
+      { name: 'cliui', version: '8.0.1', linked: false },
+    ]);
+    expect(actual.pnpm10Inventory.project.dependencies).toEqual(
+      expected.pnpm10Inventory.project.dependencies,
+    );
+    expect(actual.pnpm10Inventory.project.files).toHaveLength(
+      expected.pnpm10Inventory.project.files.length + 1,
+    );
+    await expectGlobalReason(
+      () => assertGlobalPreviewUnchanged(expected, actual),
+      'PREVIEW_CHANGED',
+    );
+  });
   async function facts10() {
     const h = await pnpm10InventoryFixture(6);
     const r = await readPnpm10GlobalInventory(h.location, h.deps);
@@ -273,11 +312,27 @@ describe('M7 ready preview store', () => {
       stat: nativeStat,
     };
     facts.location.tool.identities = [testIdentity(facts.location.tool.file)];
+    facts.location.tool.npm10InstallCompatIdentities = [
+      testIdentity('D:\\TEST\\npm10-compat.cjs'),
+    ];
     facts.current.binIdentities = [testIdentity('D:\\TEST\\test-tool.cmd')];
     facts.location.configIdentities[0].file = testIdentity(
       facts.location.userConfig,
     );
-    facts.locations = [facts.location];
+    facts.locations = [
+      facts.location,
+      {
+        ...facts.location,
+        manager: 'pnpm',
+        tool: {
+          ...facts.location.tool,
+          manager: 'pnpm',
+          npm10InstallCompatIdentities: [
+            testIdentity('D:\\TEST\\sibling-npm10-compat.cjs'),
+          ],
+        },
+      },
+    ];
     const store = new GlobalPreviewStore(testClock());
     store.put(testPreview(), facts);
     const retained = store.get(TEST_PREVIEW_ID).facts;
@@ -285,9 +340,11 @@ describe('M7 ready preview store', () => {
       retained.current!.manifest.file,
       ...retained.current!.binIdentities,
       ...retained.location.tool.identities,
+      ...(retained.location.tool.npm10InstallCompatIdentities ?? []),
       ...retained.location.configIdentities.map((identity) => identity.file),
       ...retained.locations!.flatMap((location) => [
         ...location.tool.identities,
+        ...(location.tool.npm10InstallCompatIdentities ?? []),
         ...location.configIdentities.map((identity) => identity.file),
       ]),
     ];
@@ -302,6 +359,11 @@ describe('M7 ready preview store', () => {
     }
     expect(() => structuredClone(retained)).not.toThrow();
     expect(() => assertGlobalPreviewUnchanged(retained, facts)).not.toThrow();
+    const compatDrift = structuredClone(retained);
+    compatDrift.locations![1].tool.npm10InstallCompatIdentities![0].stat.ino = 9999;
+    expect(() => assertGlobalPreviewUnchanged(retained, compatDrift)).toThrow(
+      AppException,
+    );
     nativeStat.ino = 99;
     retained.current!.manifest.file.stat.ino = 77;
     expect(

@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { win32 } from 'node:path';
+import { parse, stringify } from 'yaml';
 import { AppException } from '@/common/exceptions/app.exception';
 import * as locationAdapter from '@/global-packages/discovery/global-location';
 import * as inventoryAdapter from '@/global-packages/discovery/global-inventory';
@@ -47,9 +48,12 @@ import type { IPnpmGlobalPolicy } from '@/global-packages/interfaces/pnpm-global
 import {
   pnpm10BinlessFixture,
   pnpm10InventoryFixture,
+  pnpm10PrivateHoistFixture,
 } from './__fixtures__/pnpm10/inventory';
+import { P10 } from './__fixtures__/pnpm10/config';
 import { readPnpm10GlobalInventory } from './discovery/pnpm10-global-inventory';
 import { readPnpm10GlobalConfig } from './config/pnpm10-global-config';
+import { snapshotGlobalPreviewFacts } from './policy/global-preview';
 
 describe('pnpm 10 shared-project service integration', () => {
   afterEach(() => jest.restoreAllMocks());
@@ -67,6 +71,10 @@ describe('pnpm 10 shared-project service integration', () => {
   async function setup10(
     action: 'change' | 'remove' = 'remove',
     fixture?: Awaited<ReturnType<typeof pnpm10InventoryFixture>>,
+    target = {
+      name: action === 'change' ? 'is-number' : 'semver',
+      version: '6.0.0',
+    },
   ) {
     const f = testRuntime();
     const h =
@@ -91,9 +99,9 @@ describe('pnpm 10 shared-project service integration', () => {
         readPnpm10GlobalInventory(location, deps),
       );
     jest.spyOn(GlobalRegistry.prototype, 'getTarget').mockResolvedValue({
-      name: 'is-number',
-      version: '6.0.0',
-      requestedVersion: '6.0.0',
+      name: target.name,
+      version: target.version,
+      requestedVersion: target.version,
       manifestHash: 'TEST',
       integrity: 'TEST',
       bins: [],
@@ -105,8 +113,8 @@ describe('pnpm 10 shared-project service integration', () => {
       requestId: f.uuid(),
       manager: 'pnpm' as const,
       action,
-      package: action === 'change' ? 'is-number' : 'semver',
-      ...(action === 'change' ? { targetVersion: '6.0.0' } : {}),
+      package: target.name,
+      ...(action === 'change' ? { targetVersion: target.version } : {}),
     };
     const ready = async () => {
       const start = await service.preview(request);
@@ -124,6 +132,356 @@ describe('pnpm 10 shared-project service integration', () => {
       );
     return { ...f, h, service, ready, execute };
   }
+  type PrivateFixture = Awaited<ReturnType<typeof pnpm10PrivateHoistFixture>>;
+  async function waitForLaunch10(
+    f: Awaited<ReturnType<typeof setup10>>,
+    id: string,
+    count = 1,
+  ) {
+    await f.service.waitForPreflight(id);
+    for (let index = 0; index < 100; index++) {
+      if (f.child.launch.mock.calls.length === count) return;
+      expect(f.service.getJob(id).phase).not.toBe('done');
+      await settleJobs();
+    }
+    throw new Error('TEST pnpm 10 mutation did not launch');
+  }
+  const privatePath = (relative: string) => win32.join(P10.root, relative);
+  const sharedManifest = privatePath(
+    '.pnpm/string-width@4.2.3/node_modules/string-width/package.json',
+  );
+  function replaceEntries(to: PrivateFixture, from: PrivateFixture) {
+    to.entries.clear();
+    for (const [path, entry] of from.entries) to.entries.set(path, entry);
+    to.location.pnpm10 = from.location.pnpm10;
+    to.location.configIdentities = [...from.location.configIdentities];
+  }
+  function driftIdentity(h: PrivateFixture, path: string) {
+    const matches = (actual: string) =>
+      actual.toLowerCase() === path.toLowerCase();
+    const lstat = h.lstat.getMockImplementation()!;
+    h.lstat.mockImplementation(async (actual) => {
+      const stat = await lstat(actual);
+      return matches(actual) ? { ...stat, ino: 99 } : stat;
+    });
+    const open = h.open.getMockImplementation()!;
+    h.open.mockImplementation(async (actual) => {
+      const handle = await open(actual);
+      return matches(actual)
+        ? {
+            ...handle,
+            stat: async () => ({ ...(await handle.stat()), ino: 99 }),
+          }
+        : handle;
+    });
+  }
+  it('previews private hoists as ancillary, with only direct shared rows and no bin ownership', async () => {
+    const f = await setup10('change', await pnpm10PrivateHoistFixture(true), {
+      name: 'wrap-ansi',
+      version: '8.0.0',
+    });
+    const preview = await f.ready();
+    expect(preview.sharedPackages).toEqual([
+      { name: 'cliui', version: '8.0.1', linked: false },
+    ]);
+    const result = await readPnpm10GlobalInventory(f.h.location, f.h.deps);
+    expect(result.packages.map((p) => p.name).sort()).toEqual([
+      'cliui',
+      'wrap-ansi',
+    ]);
+    expect(result.binOwners.filter((b) => b.owner !== null)).toEqual([]);
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+  it('keeps private-hoist binless previews supported when configured B is physically absent', async () => {
+    const h = await pnpm10PrivateHoistFixture(true);
+    const binDir = 'D:\\TEST\\private-hoist-absent-bin';
+    Object.assign(h.environment, {
+      npm_config_global_bin_dir: binDir,
+      PATH: `${binDir};${win32.dirname(h.location.tool.file)}`,
+    });
+    const config = await readPnpm10GlobalConfig({
+      fs: h.fs,
+      tool: h.location.tool,
+      environment: h.environment,
+      cwd: h.location.cwd,
+      signal: h.controller.signal,
+      checkDirectory: h.checkDirectory,
+    });
+    h.location.binDir = binDir;
+    h.location.pnpm10 = config;
+    h.location.configIdentities = [...config.configIdentities];
+    const f = await setup10('remove', h, {
+      name: 'wrap-ansi',
+      version: '7.0.0',
+    });
+    expect((await f.ready()).sharedPackages).toEqual([
+      { name: 'cliui', version: '8.0.1', linked: false },
+    ]);
+    expect(config.missingDirectoryPaths).toContain(binDir);
+    expect(h.entries.has(binDir.toLowerCase())).toBe(false);
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+  describe.each(['before-execute', 'after-intent'] as const)(
+    'private-hoist drift %s',
+    (phase) => {
+      it.each([
+        'metadata-bytes',
+        'wanted-lock-bytes',
+        'current-lock-bytes',
+        'manifest-bytes',
+        'metadata-identity',
+        'wanted-lock-identity',
+        'current-lock-identity',
+        'manifest-identity',
+        'link-identity',
+        'scope-identity',
+        'ancestor-identity',
+        'private-directory-identity',
+        'target-directory-identity',
+        'junction-target',
+        'missing-link',
+        'extra-link',
+        'scope-escape',
+        'ancestor-escape',
+        'private-directory-escape',
+        'target-directory-escape',
+        'coherent-new-graph',
+      ])('refuses %s with zero launches', async (kind) => {
+        const h = await pnpm10PrivateHoistFixture(kind.startsWith('scope'));
+        const f = await setup10('remove', h, {
+          name: 'wrap-ansi',
+          version: '7.0.0',
+        });
+        const preview = await f.ready();
+        const alternate = await pnpm10PrivateHoistFixture(true);
+        const files: Record<string, string> = {
+          metadata: privatePath('node_modules/.modules.yaml'),
+          'wanted-lock': privatePath('pnpm-lock.yaml'),
+          'current-lock': privatePath('node_modules/.pnpm/lock.yaml'),
+          manifest: sharedManifest,
+          link: privatePath('.pnpm/node_modules/string-width'),
+          scope: privatePath('.pnpm/node_modules/@test'),
+          ancestor: privatePath('.pnpm'),
+          'private-directory': privatePath('.pnpm/node_modules'),
+          'target-directory': win32.dirname(sharedManifest),
+        };
+        const drift = () => {
+          if (kind.endsWith('-identity'))
+            driftIdentity(h, files[kind.replace('-identity', '')]);
+          else if (kind.endsWith('-bytes')) {
+            const path = files[kind.replace('-bytes', '')];
+            const text = h.entries.get(path.toLowerCase())!.text!;
+            h.put(path, {
+              text:
+                kind === 'manifest-bytes'
+                  ? JSON.stringify({
+                      ...(JSON.parse(text) as object),
+                      description: 'TEST private manifest drift',
+                    })
+                  : `${text}\n`,
+            });
+          } else if (kind === 'junction-target')
+            h.put(files.link, {
+              link: true,
+              real: privatePath(
+                '.pnpm/ansi-regex@5.0.1/node_modules/ansi-regex',
+              ),
+            });
+          else if (kind === 'missing-link')
+            h.entries.delete(files.link.toLowerCase());
+          else if (kind === 'extra-link')
+            h.put(privatePath('.pnpm/node_modules/test-extra'), {
+              link: true,
+              real: win32.dirname(sharedManifest),
+            });
+          else if (kind.endsWith('-escape'))
+            h.put(files[kind.replace('-escape', '')], {
+              link: true,
+              real: 'E:\\TEST\\external',
+            });
+          else replaceEntries(h, alternate);
+        };
+        if (phase === 'before-execute') drift();
+        else
+          f.audit.mockImplementation((record) => {
+            if (record.phase === 'intent') drift();
+            return Promise.resolve();
+          });
+        // These still-valid layouts must fail because preview facts are pinned,
+        // rather than merely because the adapter rejects malformed input.
+        if (
+          phase === 'before-execute' &&
+          (kind.endsWith('-bytes') ||
+            kind.endsWith('-identity') ||
+            kind === 'coherent-new-graph')
+        )
+          expect(
+            (await readPnpm10GlobalInventory(h.location, h.deps))
+              .ownershipComplete,
+          ).toBe(true);
+        const start = await f.execute(preview);
+        expect(await finish10(f.service, start.jobId)).toMatchObject({
+          status: 'failed',
+          failureCode: 'PREVIEW_CHANGED',
+          mutationSpawned: false,
+          gateHeld: false,
+        });
+        expect(
+          f.audit.mock.calls.filter(([record]) => record.phase === 'intent'),
+        ).toHaveLength(phase === 'after-intent' ? 1 : 0);
+        expect(f.child.launch).not.toHaveBeenCalled();
+      });
+    },
+  );
+  it('accepts synthetic target-only hoist recomputation across change then remove', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    const f = await setup10('change', h, {
+      name: 'wrap-ansi',
+      version: '8.0.0',
+    });
+    const original = await readPnpm10GlobalInventory(h.location, h.deps);
+    const snapshot = (inventory: IGlobalInventoryResult) =>
+      snapshotGlobalPreviewFacts({
+        location: h.location,
+        current: inventory.facts.find((dep) => dep.name === 'cliui')!,
+        target: null,
+        binOwners: inventory.binOwners,
+        pnpm10Inventory: inventory.pnpm10Inventory!,
+      });
+    const before = snapshot(original);
+    const shared = before.pnpm10Inventory.project.files.find(
+      (file) => file.file.path.toLowerCase() === sharedManifest.toLowerCase(),
+    )!;
+    expect(shared.file.path).toBe(sharedManifest);
+    const assertShared = (inventory: IGlobalInventoryResult) => {
+      const next = snapshot(inventory);
+      expect(next.current).toEqual(before.current);
+      expect(
+        next.pnpm10Inventory.project.dependencies.find(
+          (dep) => dep.name === 'cliui',
+        ),
+      ).toEqual(
+        before.pnpm10Inventory.project.dependencies.find(
+          (dep) => dep.name === 'cliui',
+        ),
+      );
+      expect(
+        next.pnpm10Inventory.project.files.find(
+          (file) =>
+            file.file.path.toLowerCase() === sharedManifest.toLowerCase(),
+        ),
+      ).toEqual(shared);
+    };
+    const preview = await f.ready();
+    const change = await f.execute(preview);
+    await waitForLaunch10(f, change.jobId);
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(f.child.launch.mock.calls[0][0].args.at(-1)).toBe('wrap-ansi@8.0.0');
+    replaceEntries(h, await pnpm10PrivateHoistFixture(false, 'change'));
+    f.child.exit();
+    expect(await finish10(f.service, change.jobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      gateHeld: false,
+      refreshRequired: false,
+    });
+    assertShared(await readPnpm10GlobalInventory(h.location, h.deps));
+    expect(
+      h.entries.has(
+        privatePath('.pnpm/node_modules/@test/target-only').toLowerCase(),
+      ),
+    ).toBe(true);
+    const next = await f.service.preview({
+      requestId: f.uuid(),
+      manager: 'pnpm',
+      package: 'wrap-ansi',
+      action: 'remove',
+    });
+    const removePreview = await finish10(f.service, next.jobId);
+    expect(removePreview).toMatchObject({ status: 'completed' });
+    const removeChild = testProcess();
+    f.child.launch.mockImplementationOnce(removeChild.launch);
+    const remove = await f.execute(removePreview.preview!);
+    await waitForLaunch10(f, remove.jobId, 2);
+    expect(f.child.launch).toHaveBeenCalledTimes(2);
+    replaceEntries(h, await pnpm10PrivateHoistFixture(false, 'remove'));
+    removeChild.exit();
+    expect(await finish10(f.service, remove.jobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      gateHeld: false,
+      refreshRequired: false,
+    });
+    const after = await readPnpm10GlobalInventory(h.location, h.deps);
+    expect(after.packages.map((p) => p.name)).toEqual(['cliui']);
+    assertShared(after);
+    expect(
+      h.entries.has(privatePath('.pnpm/node_modules/wrap-ansi').toLowerCase()),
+    ).toBe(true);
+    expect(
+      h.entries.has(
+        privatePath('.pnpm/node_modules/@test/target-only').toLowerCase(),
+      ),
+    ).toBe(false);
+  });
+  it.each(['layout', 'manifest', 'link', 'neighbour'] as const)(
+    'fails synthetic after-state %s without retry or rollback',
+    async (kind) => {
+      const h = await pnpm10PrivateHoistFixture();
+      const f = await setup10('change', h, {
+        name: 'wrap-ansi',
+        version: '8.0.0',
+      });
+      const start = await f.execute(await f.ready());
+      await waitForLaunch10(f, start.jobId);
+      replaceEntries(h, await pnpm10PrivateHoistFixture(false, 'change'));
+      if (kind === 'layout')
+        h.put(privatePath('.pnpm/node_modules/test-extra'), {
+          link: true,
+          real: win32.dirname(sharedManifest),
+        });
+      if (kind === 'manifest')
+        h.put(sharedManifest, {
+          text: JSON.stringify({ name: 'string-width', version: '9.0.0' }),
+        });
+      if (kind === 'link')
+        h.put(privatePath('.pnpm/node_modules/string-width'), {
+          link: true,
+          real: 'E:\\TEST\\external',
+        });
+      if (kind === 'neighbour') {
+        h.put(privatePath('package.json'), {
+          text: JSON.stringify({
+            dependencies: { cliui: '^8.0.1', 'wrap-ansi': '8.0.0' },
+          }),
+        });
+        for (const relative of [
+          'pnpm-lock.yaml',
+          'node_modules/.pnpm/lock.yaml',
+        ]) {
+          const path = privatePath(relative);
+          const lock = parse(h.entries.get(path.toLowerCase())!.text!) as {
+            importers: Record<
+              string,
+              { dependencies: Record<string, { specifier: string }> }
+            >;
+          };
+          lock.importers['.'].dependencies.cliui.specifier = '^8.0.1';
+          h.put(path, { text: stringify(lock) });
+        }
+      }
+      f.child.exit();
+      expect(await finish10(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'POSTCONDITION_FAILED',
+        mutationSpawned: true,
+        refreshRequired: true,
+        gateHeld: kind !== 'neighbour',
+      });
+      expect(f.child.launch).toHaveBeenCalledTimes(1);
+      expect(f.busy()).toBe(kind !== 'neighbour');
+    },
+  );
   it('completes binless change after separate bin cleanup, then removes the final package', async () => {
     const f = await setup10(
       'change',
