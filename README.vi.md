@@ -119,6 +119,11 @@ Chạy cả hai ứng dụng từ thư mục gốc, bằng trình quản lý gó
 pnpm dev        # hoặc: npm run dev / yarn dev
 ```
 
+Sau khi kéo bản cập nhật, các lệnh `dev`, `build` và `start` ở thư mục gốc kiểm tra các gói đã khai báo
+trong từng ứng dụng, gồm cả gói dùng khi phát triển. Nếu thiếu gói, lệnh chạy `install` trong ứng dụng đó
+bằng cùng trình quản lý gói. Nếu cài thất bại, lệnh nêu tên ứng dụng gặp lỗi và dừng trước khi khởi chạy ứng dụng nào.
+Dùng bước cài đặt ở trên cho lần đầu hoặc khi cần cập nhật phiên bản gói theo lockfile mới.
+
 Hai ứng dụng chạy chung một terminal (`apps/api` khởi động trước, sau khi backend sẵn sàng mới chạy `apps/web`; mỗi dòng log bắt đầu bằng `[api]` hoặc `[web]`). Nhấn `Ctrl+C` để dừng cả hai.
 Nếu một ứng dụng dừng (ví dụ vì giá trị trong `.env` không hợp lệ), ứng dụng còn lại cũng được dừng theo (hoặc `apps/web` sẽ không được khởi động nếu `apps/api` lỗi lúc khởi chạy).
 
