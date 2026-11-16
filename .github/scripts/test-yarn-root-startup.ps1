@@ -14,21 +14,26 @@ if (Get-NetTCPConnection -State Listen -LocalPort $ports -ErrorAction SilentlyCo
   throw 'A PkgSteward smoke-test port is already in use'
 }
 
-$smoke = Join-Path $env:RUNNER_TEMP "pkgsteward-yarn-$Command"
+$smoke = Join-Path $env:RUNNER_TEMP "pkgsteward-yarn-$Command-$([guid]::NewGuid())"
 $scan = Join-Path $smoke 'scan'
 New-Item -ItemType Directory -Path $scan -Force | Out-Null
-$env:MODE = if ($Command -eq 'dev') { 'development' } else { 'production' }
-$env:HOST = '127.0.0.1'
-$env:PORT = $null
-$env:API_BASE_URL = 'http://127.0.0.1:24681/api/v1'
-$env:PKGSTEWARD_NO_BROWSER = '1'
-$env:PKGSTEWARD_DATA_DIR = Join-Path $smoke 'data'
-$env:SCAN_ROOT_PATHS = $scan
+$smokeEnvironment = @{
+  MODE = if ($Command -eq 'dev') { 'development' } else { 'production' }
+  HOST = '127.0.0.1'
+  PORT = $null
+  GLOBAL_PREFIX = 'api'
+  VERSION = '1'
+  EXPORT_SWAGGER_API_JSON = 'false'
+  API_BASE_URL = 'http://127.0.0.1:24681/api/v1'
+  PKGSTEWARD_NO_BROWSER = '1'
+  PKGSTEWARD_DATA_DIR = Join-Path $smoke 'data'
+  SCAN_ROOT_PATHS = $scan
+}
 
 $stdout = Join-Path $smoke 'stdout.log'
 $stderr = Join-Path $smoke 'stderr.log'
 $server = Start-Process node -ArgumentList ('"{0}" {1}' -f $Yarn, $Command) -PassThru -WindowStyle Hidden `
-  -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+  -RedirectStandardOutput $stdout -RedirectStandardError $stderr -Environment $smokeEnvironment
 try {
   $swaggerStatus = if ($Command -eq 'dev') { 200 } else { 404 }
   $expectedStatuses = [ordered]@{
