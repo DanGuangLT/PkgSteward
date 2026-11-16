@@ -19,6 +19,9 @@ machine. NestJS 12 + TypeScript.
 
 Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11. Target platform: Windows 11.
 
+Use a current Node.js 24 release for the backend Jest unit and end-to-end tests. CI starts the built
+backend on Node 22 and runs the Jest suites on Node 24, which can load the ESM-only NestJS packages.
+
 ## Install
 
 Run inside `apps/api/`:

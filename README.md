@@ -157,6 +157,9 @@ Yarn, `yarn <script>`.
 
 ## Scripts
 
+Use a current Node.js 24 release to run the backend Jest tests (`test` and `test:e2e`). The backend
+runtime supports Node.js 22.18 and newer.
+
 | App | Command | What it does |
 |---|---|---|
 | Root | `pnpm install` | Install both apps |
