@@ -40,7 +40,7 @@ pnpm dev        # http://localhost:24680
 | `pnpm lint` | ESLint (including the theme rules below) |
 | `pnpm test` | Frontend unit tests (Node.js test runner) |
 | `pnpm theme:check` | Check WCAG 2.1 AA contrast for every preset in `styles/themes/` |
-| `pnpm i18n:check` | Compare each locale's keys with the default locale (`vi`): extra keys fail, missing keys only warn |
+| `pnpm i18n:check` | Check message values and compare keys with the default locale (`vi`). Invalid values and extra keys fail. Missing keys warn. |
 
 ## Frontend listen address
 

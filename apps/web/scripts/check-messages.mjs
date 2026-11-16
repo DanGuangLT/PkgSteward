@@ -8,26 +8,33 @@ import { join } from "node:path"
 const MESSAGES_DIR = join(import.meta.dirname, "..", "messages")
 const DEFAULT_LOCALE = "vi"
 
-function flatten(tree, prefix = "") {
+function isMessageObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function flatten(tree, file, prefix = "") {
   return Object.entries(tree).flatMap(([key, value]) => {
     const path = prefix ? `${prefix}.${key}` : key
-    return typeof value === "object" && value !== null
-      ? flatten(value, path)
-      : [path]
+    if (typeof value === "string") return [path]
+    if (isMessageObject(value)) return flatten(value, file, path)
+    throw new Error(`${file} has an invalid message at "${path}". Expected a string or a message object.`)
   })
 }
 
-const read = (locale) =>
-  JSON.parse(readFileSync(join(MESSAGES_DIR, `${locale}.json`), "utf8"))
+function readKeys(file) {
+  const messages = JSON.parse(readFileSync(join(MESSAGES_DIR, file), "utf8"))
+  if (!isMessageObject(messages)) throw new Error(`${file} must contain a message object.`)
+  return new Set(flatten(messages, file))
+}
 
-const baseKeys = new Set(flatten(read(DEFAULT_LOCALE)))
+const baseKeys = readKeys(`${DEFAULT_LOCALE}.json`)
 let hasError = false
 
 for (const file of readdirSync(MESSAGES_DIR).filter((f) => f.endsWith(".json"))) {
   const locale = file.replace(/\.json$/, "")
   if (locale === DEFAULT_LOCALE) continue
 
-  const keys = new Set(flatten(read(locale)))
+  const keys = readKeys(file)
   const missing = [...baseKeys].filter((k) => !keys.has(k))
   const extra = [...keys].filter((k) => !baseKeys.has(k))
 
