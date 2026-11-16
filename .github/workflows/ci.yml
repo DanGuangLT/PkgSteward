@@ -81,7 +81,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22', '24']
+        include:
+          - node: '22'
+            version: '22.18.0'
+          - node: '24'
+            version: '24'
     defaults:
       run:
         working-directory: apps/api
@@ -94,7 +98,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.version }}
           cache: pnpm
           cache-dependency-path: apps/api/pnpm-lock.yaml
 
@@ -144,7 +148,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22', '24']
+        include:
+          - node: '22'
+            version: '22.18.0'
+          - node: '24'
+            version: '24'
     defaults:
       run:
         working-directory: apps/web
@@ -157,7 +165,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.version }}
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
