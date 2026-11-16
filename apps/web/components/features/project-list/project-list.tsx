@@ -6,8 +6,8 @@ import { useFormatter, useLocale, useTranslations } from "next-intl"
 
 import { ProjectItems } from "@/components/features/project-list/project-items"
 import { ScanControls } from "@/components/features/project-list/scan-controls"
+import { ListDiscoveryFilter } from "@/components/shared/list-discovery"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Empty,
   EmptyContent,
@@ -103,38 +103,10 @@ function FilterGroup<Option extends string>({
   onChange: (value: Option[]) => void
   optionLabel: (value: Option) => string
 }) {
-  const id = useId()
   return (
-    <details className="min-w-0 max-w-full rounded-md border border-input bg-background text-foreground">
-      <summary className="min-h-11 cursor-pointer rounded-md px-4 py-3 text-body-sm font-semibold focus-ring [overflow-wrap:anywhere]">
-        {label}<span className="ml-2 font-normal text-muted-foreground">{selectedLabel}</span>
-      </summary>
-      <fieldset className="min-w-0 space-y-1 border-t border-border p-3">
-        <legend className="sr-only">{label}</legend>
-        {options.map((option, index) => (
-          <div key={option} className="flex min-h-11 min-w-0 items-center gap-3 px-2">
-            <Checkbox
-              id={`${id}-${index}`}
-              checked={value.includes(option)}
-              onCheckedChange={(checked) => onChange(
-                checked === true
-                  ? (value.includes(option) ? [...value] : [...value, option])
-                  : value.filter((item) => item !== option),
-              )}
-            />
-            <Label
-              htmlFor={`${id}-${index}`}
-              className="min-w-0 flex-1 py-3 text-body-sm font-normal leading-normal [overflow-wrap:anywhere]"
-            >
-              {optionLabel(option)}
-            </Label>
-          </div>
-        ))}
-        <Button type="button" variant="secondary" disabled={value.length === 0} onClick={() => onChange([])}>
-          {clearLabel}
-        </Button>
-      </fieldset>
-    </details>
+    <ListDiscoveryFilter label={label} selectedLabel={selectedLabel} clearLabel={clearLabel}
+      value={value} options={options.map(option => ({ value: option, label: optionLabel(option) }))}
+      onValueChange={onChange} />
   )
 }
 
