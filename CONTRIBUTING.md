@@ -98,6 +98,8 @@ Run the same checks as CI in every app you changed:
 Note: the backend `pnpm lint` runs ESLint with `--fix`. Commit the fixes it makes: CI runs it too and fails if it
 modifies any file.
 
+For frontend changes, also run `pnpm test` in `apps/web/` to run the unit tests.
+
 If you add, remove or update a production dependency, run `pnpm install` in both apps, then regenerate the
 third-party list with `node scripts/third-party-notices.mjs` and commit `THIRD_PARTY_NOTICES.md`. Check its
 "Needs attention" section for licenses that are not plainly permissive. A release that bundles dependencies must
