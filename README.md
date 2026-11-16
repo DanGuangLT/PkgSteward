@@ -128,6 +128,8 @@ pnpm dev        # or: npm run dev / yarn dev
 Both apps run in one terminal (`apps/api` starts first, then `apps/web` starts once the backend is ready; each output line starts with `[api]` or `[web]`). Press `Ctrl+C` to stop both.
 If one app stops (for example, because of an invalid `.env` value), the other one is stopped too (or `apps/web` is not launched if `apps/api` fails during startup).
 
+Root `dev` and `start` allow two minutes per app to become ready. On timeout, the command names the stalled app, stops the apps it launched, and exits with an error. Set `PKGSTEWARD_STARTUP_TIMEOUT_MS` to a positive integer in milliseconds to change the limit.
+
 For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run at the repository root:
 
 ```bash
