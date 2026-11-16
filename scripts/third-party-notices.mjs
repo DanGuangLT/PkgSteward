@@ -35,8 +35,9 @@ const listLicenses = (dir) => {
   return JSON.parse(out);
 };
 
+const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
 // Escape "\" too, so a value ending in "\" cannot escape the next "|".
-const cell = (value) => String(value ?? '').replace(/[\\|]/g, '\\$&').trim();
+const cell = (value) => oneLine(value).replace(/[\\|]/g, '\\$&');
 // Keep the author's name only: npm writes "Name <email> (url)", so take the text before the first "<" or "(".
 const authorName = (author) => cell(String(author ?? '').split(/[<(]/, 1)[0]) || '—';
 const homepage = (pkg) => pkg.homepage || `https://www.npmjs.com/package/${pkg.name}`;
@@ -69,7 +70,7 @@ for (const app of apps) {
 
   sections.push('', `## ${app.name} (\`${app.dir}\`)`, '', `${total} packages.`);
   for (const { license, pkgs } of groups) {
-    sections.push('', `### ${license} (${pkgs.length})`, '', '| Package | Version | Author | Homepage |', '|---|---|---|---|');
+    sections.push('', `### ${oneLine(license)} (${pkgs.length})`, '', '| Package | Version | Author | Homepage |', '|---|---|---|---|');
     for (const pkg of pkgs) {
       sections.push(`| ${cell(pkg.name)} | ${cell(pkg.versions.join(', '))} | ${authorName(pkg.author)} | ${cell(homepage(pkg))} |`);
     }
