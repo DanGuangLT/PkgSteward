@@ -224,6 +224,10 @@ jobs:
           --no-save --no-package-lock yarn@1.22.22
 
       - name: Install, build and test with Yarn Classic
+        env:
+          # The root postinstall passes these settings to both app installs.
+          YARN_REGISTRY: https://registry.npmjs.org
+          YARN_NETWORK_TIMEOUT: '120000'
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           # Invoke Yarn directly so its lifecycle scripts use Yarn for both apps.
