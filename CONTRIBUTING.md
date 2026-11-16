@@ -92,7 +92,7 @@ Run the same checks as CI in every app you changed:
 
 | App | Commands |
 |---|---|
-| Backend | `pnpm lint` · `pnpm build` · `pnpm test` · `pnpm test:e2e` |
+| Backend | `pnpm lint` · `pnpm typecheck` · `pnpm build` · `pnpm test` · `pnpm test:e2e` |
 | Frontend | `pnpm lint` · `pnpm build` · `pnpm theme:check` (styles changed) · `pnpm i18n:check` (messages changed) |
 
 Note: the backend `pnpm lint` runs ESLint with `--fix`. Commit the fixes it makes: CI runs it too and fails if it

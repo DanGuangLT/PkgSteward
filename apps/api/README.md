@@ -40,6 +40,7 @@ pnpm dev
 |---|---|
 | `pnpm dev` | Start in watch mode (`nest start --watch`) |
 | `pnpm lint` | ESLint (with `--fix`) |
+| `pnpm typecheck` | Check TypeScript in the backend and its test fixtures without emitting files |
 | `pnpm build` | Compile to `dist/` |
 | `pnpm start:prod` | Run the compiled build |
 | `pnpm test` / `pnpm test:e2e` | Unit / end-to-end tests |
