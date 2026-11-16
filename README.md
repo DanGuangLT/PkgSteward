@@ -129,6 +129,11 @@ Start both apps from the repository root, with the package manager you installed
 pnpm dev        # or: npm run dev / yarn dev
 ```
 
+After pulling updates, the root `dev`, `build`, and `start` commands check each app for missing declared
+dependencies, including development dependencies. If a package is missing, the launcher runs `install` in
+that app with the same package manager. An installation failure names the affected app and stops the command
+before either app runs. Use the install step above for initial setup and to refresh versions after lockfile changes.
+
 Both apps run in one terminal (`apps/api` starts first, then `apps/web` starts once the backend is ready; each output line starts with `[api]` or `[web]`). Press `Ctrl+C` to stop both.
 If one app stops (for example, because of an invalid `.env` value), the other one is stopped too (or `apps/web` is not launched if `apps/api` fails during startup).
 
