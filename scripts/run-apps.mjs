@@ -43,8 +43,16 @@ const isScript = ['.js', '.cjs', '.mjs'].includes(extname(cli).toLowerCase());
 const command = isScript ? process.execPath : cli;
 const runArgs = (script) => (isScript ? [cli, 'run', script] : ['run', script]);
 
-if (task.sequential) runSequential(task.apps);
-else runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER);
+if (task.sequential) {
+  runSequential(task.apps);
+} else {
+  const startupTimeoutMs = Number(process.env.PKGSTEWARD_STARTUP_TIMEOUT_MS ?? 120_000);
+  if (!Number.isInteger(startupTimeoutMs) || startupTimeoutMs < 1 || startupTimeoutMs > 2_147_483_647) {
+    console.error('[run-apps] PKGSTEWARD_STARTUP_TIMEOUT_MS must be an integer from 1 to 2147483647.');
+    process.exit(1);
+  }
+  runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER, startupTimeoutMs);
+}
 
 function runSequential(apps) {
   for (const [app, script] of apps) {
@@ -58,7 +66,7 @@ function runSequential(apps) {
   }
 }
 
-function runServices(apps, openBrowser) {
+function runServices(apps, openBrowser, startupTimeoutMs) {
   // Output is piped for the prefix, so children would drop colors; keep them when the terminal has colors.
   const env = { ...process.env };
   if (process.stdout.isTTY && env.FORCE_COLOR === undefined && env.NO_COLOR === undefined) env.FORCE_COLOR = '1';
@@ -75,20 +83,6 @@ function runServices(apps, openBrowser) {
     for (const child of running) stopTree(child);
   };
 
-  const watchLine = (index, app, child, line) => {
-    if (stoppedByUser || exitCode !== undefined || child.exitCode !== null || child.signalCode !== null) return;
-    const text = stripVTControlCharacters(line);
-    if (app === 'web') webUrl ??= text.match(/\bLocal:\s+(\S+)/)?.[1];
-    if (!ready.has(app) && readyLines[app]?.test(text)) {
-      ready.add(app);
-      if (index + 1 < apps.length) startApp(index + 1);
-      if (openBrowser && !browserOpened && ready.size === apps.length) {
-        browserOpened = true;
-        openInBrowser(webUrl);
-      }
-    }
-  };
-
   const startApp = (index) => {
     const [app, script] = apps[index];
     if (stoppedByUser || exitCode !== undefined || started.has(app)) return;
@@ -101,10 +95,33 @@ function runServices(apps, openBrowser) {
       windowsHide: true,
     });
     running.add(child);
+    const readyTimer = setTimeout(() => {
+      if (stoppedByUser || exitCode !== undefined) return;
+      exitCode = 1;
+      console.error(`[run-apps] apps/${app} did not become ready within ${startupTimeoutMs} ms. Stopping startup.`);
+      stopAll();
+    }, startupTimeoutMs);
+
+    const watchLine = (line) => {
+      if (stoppedByUser || exitCode !== undefined || child.exitCode !== null || child.signalCode !== null) return;
+      const text = stripVTControlCharacters(line);
+      if (app === 'web') webUrl ??= text.match(/\bLocal:\s+(\S+)/)?.[1];
+      if (!ready.has(app) && readyLines[app]?.test(text)) {
+        clearTimeout(readyTimer);
+        ready.add(app);
+        if (index + 1 < apps.length) startApp(index + 1);
+        if (openBrowser && !browserOpened && ready.size === apps.length) {
+          browserOpened = true;
+          openInBrowser(webUrl);
+        }
+      }
+    };
+
     let settled = false;
     const finish = (code) => {
       if (settled) return;
       settled = true;
+      clearTimeout(readyTimer);
       running.delete(child);
       if (exitCode === undefined) {
         exitCode = stoppedByUser ? 0 : (code || 1);
@@ -115,7 +132,7 @@ function runServices(apps, openBrowser) {
       if (running.size === 0) process.exit(exitCode);
     };
 
-    prefixLines(child.stdout, process.stdout, `[${app}]`, (line) => watchLine(index, app, child, line));
+    prefixLines(child.stdout, process.stdout, `[${app}]`, watchLine);
     prefixLines(child.stderr, process.stderr, `[${app}]`);
 
     child.once('error', (error) => {
@@ -125,6 +142,7 @@ function runServices(apps, openBrowser) {
     // An app that exits right after its ready line must not get a browser tab: its output can still
     // arrive between 'exit' and 'close'.
     child.once('exit', () => {
+      clearTimeout(readyTimer);
       browserOpened = true;
     });
     child.once('close', (code) => finish(code));

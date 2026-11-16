@@ -118,6 +118,8 @@ pnpm dev        # hoặc: npm run dev / yarn dev
 Hai ứng dụng chạy chung một terminal (`apps/api` khởi động trước, sau khi backend sẵn sàng mới chạy `apps/web`; mỗi dòng log bắt đầu bằng `[api]` hoặc `[web]`). Nhấn `Ctrl+C` để dừng cả hai.
 Nếu một ứng dụng dừng (ví dụ vì giá trị trong `.env` không hợp lệ), ứng dụng còn lại cũng được dừng theo (hoặc `apps/web` sẽ không được khởi động nếu `apps/api` lỗi lúc khởi chạy).
 
+Lệnh `dev` và `start` ở thư mục gốc chờ tối đa hai phút để mỗi ứng dụng báo sẵn sàng. Khi hết thời gian, lệnh nêu tên ứng dụng chưa sẵn sàng, dừng các ứng dụng đã khởi chạy và thoát với mã lỗi. Đặt `PKGSTEWARD_STARTUP_TIMEOUT_MS` bằng một số nguyên dương tính theo mili giây để đổi giới hạn.
+
 Muốn chạy production: đặt `MODE=production` trong `apps/api/.env` (tắt Swagger), rồi chạy ở thư mục gốc:
 
 ```bash
