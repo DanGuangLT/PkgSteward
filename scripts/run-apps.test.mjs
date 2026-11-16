@@ -89,7 +89,7 @@ test('root dev and start launch web once only after api prints its ready line, a
       '} else {',
       "  console.log('Local: http://127.0.0.1:24680');",
       "  console.log('Ready in 42 ms');",
-      '  setTimeout(() => process.exit(Number(process.env.TEST_WEB_EXIT)), 250);',
+      '  setTimeout(() => process.exit(Number(process.env.TEST_WEB_EXIT)), 900);',
       '}',
     ].join('\n'),
   );
@@ -106,6 +106,7 @@ test('root dev and start launch web once only after api prints its ready line, a
           npm_execpath: cli,
           npm_config_user_agent: 'yarn/1',
           PKGSTEWARD_NO_BROWSER: '1',
+          PKGSTEWARD_STARTUP_TIMEOUT_MS: '600',
           TEST_WEB_EXIT: String(webExit),
           TEST_EVENTS_FILE: eventsFile,
         },
@@ -123,6 +124,70 @@ test('root dev and start launch web once only after api prints its ready line, a
         `${mode}: reload must not spawn a second web process`,
       );
     }
+  }
+});
+
+test('startup times out a stalled app and stops each process it launched', (t) => {
+  const { launcher, cli, eventsFile } = setupFakeLauncher(
+    t,
+    [
+      "const { appendFileSync } = require('node:fs');",
+      "const { basename } = require('node:path');",
+      "const app = basename(process.cwd());",
+      "appendFileSync(process.env.TEST_EVENTS_FILE, `${app}:${process.pid}\\n`);",
+      "if (app === 'api' && process.env.TEST_STALLED_APP === 'web') {",
+      "  console.log('Application is running on: http://127.0.0.1:24681/api/v1');",
+      '}',
+      // Let the fixture exit on its own if the launcher never terminates it.
+      'setTimeout(() => process.exit(99), 2500);',
+    ].join('\n'),
+  );
+
+  for (const mode of ['dev', 'start']) {
+    for (const stalled of ['api', 'web']) {
+      writeFileSync(eventsFile, '');
+      const result = spawnSync(process.execPath, [launcher, mode], {
+        env: {
+          ...process.env,
+          npm_execpath: cli,
+          npm_config_user_agent: 'yarn/1',
+          PKGSTEWARD_NO_BROWSER: '1',
+          PKGSTEWARD_STARTUP_TIMEOUT_MS: '600',
+          TEST_EVENTS_FILE: eventsFile,
+          TEST_STALLED_APP: stalled,
+        },
+        encoding: 'utf8',
+        timeout: 6000,
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, `${mode}: ${stalled} stalled`);
+      assert.match(result.stderr, new RegExp(`apps/${stalled} did not become ready within 600 ms`));
+      const children = readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/).map((line) => line.split(':'));
+      assert.deepEqual(children.map(([app]) => app), stalled === 'api' ? ['api'] : ['api', 'web']);
+      for (const [, pid] of children) {
+        assert.throws(() => process.kill(Number(pid), 0), { code: 'ESRCH' });
+      }
+    }
+  }
+});
+
+test('an invalid startup timeout fails before any app launches', (t) => {
+  const { launcher, cli } = setupFakeLauncher(t, "console.log('unexpected app launch'); process.exit(17);");
+  for (const timeout of ['0', '-1', '1.5', 'invalid', '2147483648']) {
+    const result = spawnSync(process.execPath, [launcher, 'dev'], {
+      env: {
+        ...process.env,
+        npm_execpath: cli,
+        npm_config_user_agent: 'yarn/1',
+        PKGSTEWARD_STARTUP_TIMEOUT_MS: timeout,
+      },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1, timeout);
+    assert.match(result.stderr, /PKGSTEWARD_STARTUP_TIMEOUT_MS/);
+    assert.doesNotMatch(result.stdout, /unexpected app launch/);
   }
 });
 
