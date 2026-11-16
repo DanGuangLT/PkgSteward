@@ -231,7 +231,7 @@ jobs:
         shell: bash
         run: |
           npm --version
-          node --test scripts/*.test.mjs
+          npm run test:scripts
           npm install
           npm run build
 

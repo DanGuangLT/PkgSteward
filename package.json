@@ -7,7 +7,8 @@
     "postinstall": "node scripts/install-apps.mjs",
     "dev": "node scripts/run-apps.mjs dev",
     "build": "node scripts/run-apps.mjs build",
-    "start": "node scripts/run-apps.mjs start"
+    "start": "node scripts/run-apps.mjs start",
+    "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "engines": {
     "node": ">=22.18"
