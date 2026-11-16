@@ -17,7 +17,7 @@ export function config10Fixture(patch: NodeJS.ProcessEnv = {}) {
   const memory = memoryFs();
   const controller = new AbortController();
   const tool = testTool('pnpm', '10.34.9');
-  const environment = {
+  const environment: NodeJS.ProcessEnv = {
     USERPROFILE: P10.profile,
     LOCALAPPDATA: P10.local,
     PNPM_HOME: P10.home,
