@@ -15,6 +15,7 @@ function isMessageObject(value) {
 function flatten(tree, file, prefix = "") {
   return Object.entries(tree).flatMap(([key, value]) => {
     const path = prefix ? `${prefix}.${key}` : key
+    if (key.includes(".")) throw new Error(`${file} has an invalid key at "${path}". Message keys cannot contain dots.`)
     if (typeof value === "string") return [path]
     if (isMessageObject(value)) return flatten(value, file, path)
     throw new Error(`${file} has an invalid message at "${path}". Expected a string or a message object.`)

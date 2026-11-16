@@ -383,6 +383,7 @@ To add a preset: create `styles/themes/<id>.css` and import it in `app/globals.c
 
 Locales: Vietnamese (`vi`, default) and English (`en`), chosen with the `NEXT_LOCALE` cookie (no locale prefix in
 URLs). Missing keys fall back to Vietnamese, and translation keys are type-checked through `global.d.ts`.
+Use nested JSON objects for namespaces. Individual message keys cannot contain dots.
 
 To add a language: copy `messages/en.json` to `messages/<code>.json` and translate it, add `<code>` and its label in
 `i18n/config.ts`, then run `pnpm i18n:check`.
