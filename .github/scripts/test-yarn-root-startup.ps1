@@ -44,16 +44,26 @@ try {
     'http://127.0.0.1:24681/swagger-yaml' = $swaggerStatus
   }
   $pending = @($expectedStatuses.Keys)
+  $lastResponses = @{}
   for ($attempt = 0; $attempt -lt 30 -and $pending.Count -gt 0; $attempt++) {
     if ($server.HasExited) { throw "yarn $Command exited with code $($server.ExitCode)" }
     $pending = @($pending | Where-Object {
-      try { (Invoke-WebRequest -Uri $_ -TimeoutSec 2 -SkipHttpErrorCheck).StatusCode -ne $expectedStatuses[$_] }
-      catch { $true }
+      $url = $_
+      try {
+        $status = (Invoke-WebRequest -Uri $url -TimeoutSec 2 -SkipHttpErrorCheck).StatusCode
+        $lastResponses[$url] = "HTTP $status"
+        $status -ne $expectedStatuses[$url]
+      } catch {
+        $lastResponses[$url] = 'no HTTP response'
+        $true
+      }
     })
     if ($pending.Count -gt 0) { Start-Sleep -Seconds 1 }
   }
   if ($pending.Count -gt 0) {
-    $expectations = $pending | ForEach-Object { "$_ (expect HTTP $($expectedStatuses[$_]))" }
+    $expectations = $pending | ForEach-Object {
+      "$_ (expected HTTP $($expectedStatuses[$_]), got $($lastResponses[$_]))"
+    }
     throw "Unexpected response from: $($expectations -join ', ')"
   }
   Write-Output "Root yarn $Command returned HTTP 200 for both apps and HTTP $swaggerStatus for Swagger"
