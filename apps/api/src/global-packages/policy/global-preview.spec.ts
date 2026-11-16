@@ -151,7 +151,9 @@ describe('pnpm 10 preview facts', () => {
     actual.pnpm10Inventory.project.dependencies = [
       ...actual.pnpm10Inventory.project.dependencies,
     ].reverse();
-    actual.pnpm10Inventory.binSlots[0].identity.stat.atimeMs = 999;
+    Object.assign(actual.pnpm10Inventory.binSlots[0].identity.stat, {
+      atimeMs: 999,
+    });
     expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
     const preview = createGlobalPreview(
       TEST_PREVIEW_ID,

@@ -4,6 +4,7 @@ import {
   pnpm10PrivateHoistFixture,
 } from '../__fixtures__/pnpm10/inventory';
 import { readPnpm10GlobalInventory } from '../discovery/pnpm10-global-inventory';
+import type { IGlobalTargetFacts } from '../interfaces/global-packages.runtime';
 import { snapshotGlobalPreviewFacts } from './global-preview';
 import { verifyPnpm10GlobalPostcondition } from './pnpm10-global-postcondition';
 
@@ -65,19 +66,20 @@ describe('pnpm 10 semantic postcondition', () => {
       b = await pnpm10InventoryFixture(to);
     const prev = await readPnpm10GlobalInventory(a.location, a.deps);
     const next = await readPnpm10GlobalInventory(b.location, b.deps);
+    const target: IGlobalTargetFacts = {
+      name: 'is-number',
+      version: '6.0.0',
+      requestedVersion: '6.0.0',
+      bins: [],
+      integrity: 'TEST',
+      manifestHash: 'TEST',
+      deprecated: false,
+      engines: null,
+    };
     const before = snapshotGlobalPreviewFacts({
       location: a.location,
       current: prev.facts.find((d) => d.name === 'is-number')!,
-      target: {
-        name: 'is-number',
-        version: '6.0.0',
-        requestedVersion: '6.0.0',
-        bins: [],
-        integrity: 'TEST',
-        manifestHash: 'TEST',
-        deprecated: false,
-        engines: null,
-      },
+      target,
       binOwners: prev.binOwners,
       pnpm10Inventory: prev.pnpm10Inventory!,
     });
