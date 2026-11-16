@@ -41,6 +41,7 @@ jobs:
           pnpm lint
           git diff --exit-code
 
+      - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
       - run: pnpm test:e2e
