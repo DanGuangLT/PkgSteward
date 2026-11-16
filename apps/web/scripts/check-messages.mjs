@@ -1,12 +1,14 @@
-// So sánh key bản dịch của từng ngôn ngữ với ngôn ngữ mặc định (vi).
+// So sánh key bản dịch của từng ngôn ngữ với ngôn ngữ mặc định.
 // Chạy: pnpm i18n:check
 // - Key THIẾU: chỉ cảnh báo (app tự hiện bằng ngôn ngữ mặc định) — giúp dịch dần.
-// - Key THỪA (không có trong vi): báo lỗi — thường là gõ sai tên key.
+// - Key THỪA (không có trong bản mặc định): báo lỗi.
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
+import { defaultLocale, locales } from "../i18n/config.ts"
+
 const MESSAGES_DIR = join(import.meta.dirname, "..", "messages")
-const DEFAULT_LOCALE = "vi"
+const defaultFile = `${defaultLocale}.json`
 
 function isMessageObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -28,12 +30,18 @@ function readKeys(file) {
   return new Set(flatten(messages, file))
 }
 
-const baseKeys = readKeys(`${DEFAULT_LOCALE}.json`)
+const files = readdirSync(MESSAGES_DIR).filter((file) => file.endsWith(".json"))
+const missingCatalogs = locales.map((locale) => `${locale}.json`).filter((file) => !files.includes(file))
+if (missingCatalogs.length > 0) {
+  for (const file of missingCatalogs) console.error(`Missing translation catalog: messages/${file}`)
+  process.exit(1)
+}
+
+const baseKeys = readKeys(defaultFile)
 let hasError = false
 
-for (const file of readdirSync(MESSAGES_DIR).filter((f) => f.endsWith(".json"))) {
-  const locale = file.replace(/\.json$/, "")
-  if (locale === DEFAULT_LOCALE) continue
+for (const file of files) {
+  if (file === defaultFile) continue
 
   const keys = readKeys(file)
   const missing = [...baseKeys].filter((k) => !keys.has(k))
@@ -41,7 +49,7 @@ for (const file of readdirSync(MESSAGES_DIR).filter((f) => f.endsWith(".json")))
 
   console.log(`\n${file}: ${keys.size - extra.length}/${baseKeys.size} key đã dịch`)
   for (const k of missing) console.log(`  ⚠ thiếu: ${k}`)
-  for (const k of extra) console.log(`  ✗ thừa (không có trong ${DEFAULT_LOCALE}.json): ${k}`)
+  for (const k of extra) console.log(`  ✗ thừa (không có trong ${defaultFile}): ${k}`)
   if (extra.length > 0) hasError = true
 }
 

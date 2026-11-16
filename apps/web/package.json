@@ -29,7 +29,7 @@
     "test": "node --test \"lib/**/*.test.mjs\" \"scripts/**/*.test.mjs\"",
     "lint": "eslint",
     "theme:check": "node scripts/check-theme-contrast.mjs",
-    "i18n:check": "node scripts/check-messages.mjs"
+    "i18n:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-messages.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

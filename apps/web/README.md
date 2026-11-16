@@ -387,6 +387,7 @@ Use nested JSON objects for namespaces. Individual message keys cannot contain d
 
 To add a language: copy `messages/en.json` to `messages/<code>.json` and translate it, add `<code>` and its label in
 `i18n/config.ts`, then run `pnpm i18n:check`.
+Every configured locale needs its own JSON file. Individual missing keys still use the default translation.
 
 ## Structure
 
