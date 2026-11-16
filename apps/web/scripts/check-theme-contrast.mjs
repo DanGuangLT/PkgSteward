@@ -75,11 +75,14 @@ for (const file of readdirSync(THEMES_DIR).filter((f) => f.endsWith(".css"))) {
   ]) {
     console.log(`\n${file} — ${mode}`)
     for (const [fg, bg, min] of PAIRS) {
-      const [a, b] = [vars[fg], vars[bg]]
-      if (!isHex(a) || !isHex(b)) {
-        console.log(`  ?  ${fg} / ${bg}: bỏ qua (không phải mã hex)`)
+      const invalidTokens = [fg, bg].filter((token) => !isHex(vars[token]))
+      if (invalidTokens.length > 0) {
+        failures++
+        const tokens = invalidTokens.map((token) => `--${token}`).join(", ")
+        console.log(`  ✗  ${fg} / ${bg}: cần mã hex cho ${tokens}`)
         continue
       }
+      const [a, b] = [vars[fg], vars[bg]]
       const ratio = contrast(a, b)
       const ok = ratio >= min
       if (!ok) failures++
@@ -91,7 +94,7 @@ for (const file of readdirSync(THEMES_DIR).filter((f) => f.endsWith(".css"))) {
 }
 
 if (failures > 0) {
-  console.error(`\n${failures} cặp màu chưa đạt WCAG AA.`)
+  console.error(`\n${failures} cặp màu không đo được hoặc chưa đạt WCAG AA.`)
   process.exit(1)
 }
 console.log("\nTất cả cặp màu đạt WCAG AA.")
