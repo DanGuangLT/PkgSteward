@@ -125,14 +125,14 @@ Start both apps from the repository root, with the package manager you installed
 pnpm dev        # or: npm run dev / yarn dev
 ```
 
-Both apps run in one terminal; each output line starts with `[api]` or `[web]`. Press `Ctrl+C` to stop both.
-If one app stops (for example, because of an invalid `.env` value), the other one is stopped too.
+Both apps run in one terminal (`apps/api` starts first, then `apps/web` starts once the backend is ready; each output line starts with `[api]` or `[web]`). Press `Ctrl+C` to stop both.
+If one app stops (for example, because of an invalid `.env` value), the other one is stopped too (or `apps/web` is not launched if `apps/api` fails during startup).
 
 For production, set `MODE=production` in `apps/api/.env` (Swagger off), then run at the repository root:
 
 ```bash
 pnpm build      # or: npm run build / yarn build (builds apps/api, then apps/web)
-pnpm start      # or: npm start / yarn start (runs start:prod in apps/api and start in apps/web)
+pnpm start      # or: npm start / yarn start (starts start:prod in apps/api, then start in apps/web)
 ```
 
 `start` opens the web UI in your default browser once both apps are ready (one tab per run; `dev` never opens one).
