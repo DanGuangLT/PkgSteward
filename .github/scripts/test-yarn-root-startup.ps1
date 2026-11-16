@@ -30,18 +30,28 @@ $stderr = Join-Path $smoke 'stderr.log'
 $server = Start-Process node -ArgumentList ('"{0}" {1}' -f $Yarn, $Command) -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 try {
-  $pending = @('http://127.0.0.1:24681/api/v1', 'http://127.0.0.1:24680/')
-  if ($Command -eq 'dev') { $pending += 'http://127.0.0.1:24681/swagger' }
+  $swaggerStatus = if ($Command -eq 'dev') { 200 } else { 404 }
+  $expectedStatuses = [ordered]@{
+    'http://127.0.0.1:24681/api/v1' = 200
+    'http://127.0.0.1:24680/' = 200
+    'http://127.0.0.1:24681/swagger' = $swaggerStatus
+    'http://127.0.0.1:24681/swagger-json' = $swaggerStatus
+    'http://127.0.0.1:24681/swagger-yaml' = $swaggerStatus
+  }
+  $pending = @($expectedStatuses.Keys)
   for ($attempt = 0; $attempt -lt 30 -and $pending.Count -gt 0; $attempt++) {
     if ($server.HasExited) { throw "yarn $Command exited with code $($server.ExitCode)" }
     $pending = @($pending | Where-Object {
-      try { (Invoke-WebRequest -Uri $_ -TimeoutSec 2).StatusCode -ne 200 }
+      try { (Invoke-WebRequest -Uri $_ -TimeoutSec 2 -SkipHttpErrorCheck).StatusCode -ne $expectedStatuses[$_] }
       catch { $true }
     })
     if ($pending.Count -gt 0) { Start-Sleep -Seconds 1 }
   }
-  if ($pending.Count -gt 0) { throw "No HTTP 200 from: $($pending -join ', ')" }
-  Write-Output "Root yarn $Command returned HTTP 200 for each expected endpoint"
+  if ($pending.Count -gt 0) {
+    $expectations = $pending | ForEach-Object { "$_ (expect HTTP $($expectedStatuses[$_]))" }
+    throw "Unexpected response from: $($expectations -join ', ')"
+  }
+  Write-Output "Root yarn $Command returned HTTP 200 for both apps and HTTP $swaggerStatus for Swagger"
 } finally {
   try {
     if (-not $server.HasExited) {
