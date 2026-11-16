@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 const startupTimeoutMs = 3000;
@@ -343,4 +343,28 @@ test('root launcher installs missing app dependencies before running tasks and a
   assert.equal(failedRun.status, 9);
   assert.match(failedRun.stderr, /npm install failed in apps\/api/);
   assert.deepEqual(readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/), ['api:install']);
+});
+
+test('root launcher stops if a successful install leaves a dependency missing', (t) => {
+  const { launcher, cli, eventsFile } = setupFakeLauncher(t, [
+    "const { appendFileSync } = require('node:fs');",
+    "appendFileSync(process.env.TEST_EVENTS_FILE, process.argv.slice(2).join(' ') + '\\n');",
+  ].join('\n'));
+  const apiManifest = join(dirname(launcher), '..', 'apps', 'api', 'package.json');
+  writeFileSync(apiManifest, JSON.stringify({ devDependencies: { '@fixture/compiler': '1.0.0' } }));
+
+  const result = spawnSync(process.execPath, [launcher, 'build'], {
+    env: {
+      ...process.env,
+      npm_execpath: cli,
+      npm_config_user_agent: 'npm/10',
+      TEST_EVENTS_FILE: eventsFile,
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /apps\/api.*@fixture\/compiler.*still missing/);
+  assert.equal(readFileSync(eventsFile, 'utf8').trim(), 'install');
 });
