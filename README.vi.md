@@ -115,14 +115,14 @@ Chạy cả hai ứng dụng từ thư mục gốc, bằng trình quản lý gó
 pnpm dev        # hoặc: npm run dev / yarn dev
 ```
 
-Hai ứng dụng chạy chung một terminal; mỗi dòng log bắt đầu bằng `[api]` hoặc `[web]`. Nhấn `Ctrl+C` để dừng cả hai.
-Nếu một ứng dụng dừng (ví dụ vì giá trị trong `.env` không hợp lệ), ứng dụng còn lại cũng được dừng theo.
+Hai ứng dụng chạy chung một terminal (`apps/api` khởi động trước, sau khi backend sẵn sàng mới chạy `apps/web`; mỗi dòng log bắt đầu bằng `[api]` hoặc `[web]`). Nhấn `Ctrl+C` để dừng cả hai.
+Nếu một ứng dụng dừng (ví dụ vì giá trị trong `.env` không hợp lệ), ứng dụng còn lại cũng được dừng theo (hoặc `apps/web` sẽ không được khởi động nếu `apps/api` lỗi lúc khởi chạy).
 
 Muốn chạy production: đặt `MODE=production` trong `apps/api/.env` (tắt Swagger), rồi chạy ở thư mục gốc:
 
 ```bash
 pnpm build      # hoặc: npm run build / yarn build (build apps/api rồi đến apps/web)
-pnpm start      # hoặc: npm start / yarn start (chạy start:prod trong apps/api và start trong apps/web)
+pnpm start      # hoặc: npm start / yarn start (chạy start:prod trong apps/api trước rồi đến start trong apps/web)
 ```
 
 `start` tự mở giao diện web trong trình duyệt mặc định khi cả hai ứng dụng đã sẵn sàng (mỗi lần chạy mở một tab;
