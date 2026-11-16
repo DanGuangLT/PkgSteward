@@ -25,7 +25,13 @@ function catalogEntries(tree, file, prefix = "") {
 }
 
 function readCatalog(file) {
-  const messages = JSON.parse(readFileSync(join(MESSAGES_DIR, file), "utf8"))
+  const content = readFileSync(join(MESSAGES_DIR, file), "utf8")
+  let messages
+  try {
+    messages = JSON.parse(content)
+  } catch (error) {
+    throw new SyntaxError(`Invalid JSON in messages/${file}: ${error.message}`, { cause: error })
+  }
   if (!isMessageObject(messages)) throw new Error(`${file} must contain a message object.`)
   return new Map(catalogEntries(messages, file))
 }

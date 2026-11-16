@@ -20,8 +20,9 @@ function createFixture(t, vi = { section: { title: "Tiêu đề" } }) {
   )
   writeFileSync(join(messages, "vi.json"), JSON.stringify(vi))
 
-  return (en) => {
+  return (en, { malformedFile } = {}) => {
     if (en !== undefined) writeFileSync(join(messages, "en.json"), JSON.stringify(en))
+    if (malformedFile) writeFileSync(join(messages, malformedFile), '{"section":')
     const result = spawnSync(process.execPath, [script], { encoding: "utf8", timeout: 5000 })
     assert.equal(result.error, undefined)
     return result
@@ -32,6 +33,16 @@ test("fails when a configured locale has no catalog file", (t) => {
   const result = createFixture(t)()
   assert.equal(result.status, 1)
   assert.match(result.stderr, /missing.+messages\/en\.json/i)
+})
+
+test("names the catalog with invalid JSON syntax", (t) => {
+  for (const malformedFile of ["vi.json", "en.json"]) {
+    const check = createFixture(t)
+    const result = check({}, { malformedFile })
+    assert.equal(result.status, 1)
+    assert.ok(result.stderr.includes("Invalid JSON in messages/" + malformedFile))
+    assert.match(result.stderr, /Unexpected end of JSON input/)
+  }
 })
 
 test("rejects translation values that are neither text nor a namespace", (t) => {
