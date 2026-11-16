@@ -17,9 +17,11 @@ const startupTimeoutMs = 3000;
 function setupFakeLauncher(t, cliSource) {
   const root = mkdtempSync(join(tmpdir(), 'pkgsteward-run-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const folder of ['scripts', 'apps/api', 'apps/web']) {
+  for (const folder of ['scripts', 'apps/api/dist', 'apps/web/.next']) {
     mkdirSync(join(root, folder), { recursive: true });
   }
+  writeFileSync(join(root, 'apps/api/dist/main.js'), '');
+  writeFileSync(join(root, 'apps/web/.next/BUILD_ID'), 'fixture');
   const launcher = join(root, 'scripts', 'run-apps.mjs');
   const cli = join(root, 'cli.cjs');
   const eventsFile = join(root, 'events.log');
@@ -39,6 +41,26 @@ test('root launcher rejects unknown commands before starting an app', (t) => {
     assert.equal(result.error, undefined);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /^\[run-apps\] Task must be one of: dev, build, start/);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('root start tells the user to build when a production output is missing', (t) => {
+  const { launcher, cli } = setupFakeLauncher(t, "console.log('unexpected command');");
+  const apps = join(dirname(launcher), '..', 'apps');
+  rmSync(join(apps, 'web', '.next', 'BUILD_ID'));
+  writeFileSync(join(apps, 'api', 'package.json'), JSON.stringify({ dependencies: { 'fixture-package': '1.0.0' } }));
+
+  for (const [manager, buildCommand] of [['npm', 'npm run build'], ['pnpm', 'pnpm build'], ['yarn', 'yarn build']]) {
+    const result = spawnSync(process.execPath, [launcher, 'start'], {
+      env: { ...process.env, npm_execpath: cli, npm_config_user_agent: manager + '/1' },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Missing production build.*apps\/web\/\.next\/BUILD_ID/);
+    assert.ok(result.stderr.includes(buildCommand));
     assert.equal(result.stdout, '');
   }
 });

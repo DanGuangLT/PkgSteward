@@ -54,8 +54,19 @@ if (task.sequential) {
     console.error('[run-apps] PKGSTEWARD_STARTUP_TIMEOUT_MS must be an integer from 1 to 2147483647.');
     process.exit(1);
   }
+  if (taskName === 'start') ensureProductionBuilds();
   ensureInstalled(task.apps);
   runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER, startupTimeoutMs);
+}
+
+function ensureProductionBuilds() {
+  const expected = ['apps/api/dist/main.js', 'apps/web/.next/BUILD_ID'];
+  const missing = expected.filter((file) => !existsSync(join(root, file)));
+  if (missing.length === 0) return;
+
+  const buildCommand = manager === 'npm' ? 'npm run build' : `${manager} build`;
+  console.error(`[run-apps] Missing production build: ${missing.join(', ')}. Run "${buildCommand}" at the repository root first.`);
+  process.exit(1);
 }
 
 function findMissingDependency(appDir) {
