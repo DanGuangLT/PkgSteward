@@ -1,10 +1,65 @@
 import 'reflect-metadata';
-import { pnpm10InventoryFixture } from '../__fixtures__/pnpm10/inventory';
+import {
+  pnpm10InventoryFixture,
+  pnpm10PrivateHoistFixture,
+} from '../__fixtures__/pnpm10/inventory';
 import { readPnpm10GlobalInventory } from '../discovery/pnpm10-global-inventory';
 import { snapshotGlobalPreviewFacts } from './global-preview';
 import { verifyPnpm10GlobalPostcondition } from './pnpm10-global-postcondition';
 
 describe('pnpm 10 semantic postcondition', () => {
+  it.each(['change', 'remove'] as const)(
+    'accepts coherent synthetic %s with recomputed private hoists',
+    async (action) => {
+      const a = await pnpm10PrivateHoistFixture(
+        false,
+        action === 'remove' ? 'change' : undefined,
+      );
+      const b = await pnpm10PrivateHoistFixture(false, action);
+      const previous = await readPnpm10GlobalInventory(a.location, a.deps);
+      const next = await readPnpm10GlobalInventory(b.location, b.deps);
+      const before = snapshotGlobalPreviewFacts({
+        location: a.location,
+        current: previous.facts.find((dep) => dep.name === 'wrap-ansi')!,
+        target:
+          action === 'change'
+            ? {
+                name: 'wrap-ansi',
+                version: '8.0.0',
+                requestedVersion: '8.0.0',
+                bins: [],
+                integrity: 'TEST',
+                manifestHash: 'TEST',
+                deprecated: false,
+                engines: null,
+              }
+            : null,
+        binOwners: previous.binOwners,
+        pnpm10Inventory: previous.pnpm10Inventory!,
+      });
+      const modules = (h: typeof a) =>
+        h.entries.get(
+          `${h.location.globalRoot}\\node_modules\\.modules.yaml`.toLowerCase(),
+        )!.text;
+      expect(modules(a)).not.toBe(modules(b));
+      expect(next.ownershipComplete).toBe(true);
+      expect(
+        verifyPnpm10GlobalPostcondition(before, next, {
+          action,
+          package: 'wrap-ansi',
+        }),
+      ).toBe(true);
+      if (action === 'change') {
+        before.target!.version = '8.1.0';
+        expect(
+          verifyPnpm10GlobalPostcondition(before, next, {
+            action,
+            package: 'wrap-ansi',
+          }),
+        ).toBe(false);
+      }
+    },
+  );
   async function setup(from = 4, to = 5) {
     const a = await pnpm10InventoryFixture(from),
       b = await pnpm10InventoryFixture(to);

@@ -59,6 +59,13 @@ const inside = (p: string, parent: string): boolean =>
   key(p).startsWith(`${key(parent)}\\`);
 const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
+// Same narrow registry resolution accepted by the direct reader. Locator text
+// alone never proves registry provenance (a tarball can use the same key).
+const registryResolution = (value: unknown): boolean =>
+  record(value) &&
+  Object.keys(value).length === 1 &&
+  typeof value.integrity === 'string' &&
+  /^sha(?:256|384|512)-[a-z0-9+/=]+$/i.test(value.integrity);
 const missing = (e: unknown): boolean => record(e) && e.code === 'ENOENT';
 const sameEntry = (a: IRunnerFileIdentity, b: IRunnerFileIdentity): boolean =>
   key(a.path) === key(b.path) &&
@@ -140,6 +147,10 @@ class Pnpm10InventoryReader {
     [];
   private readonly enumerations = new Map<string, readonly string[]>();
   private readonly owners = new Map<string, string | null>();
+  private readonly privateHoists: (Pick<
+    IPnpm10DependencyFacts,
+    'logicalPath' | 'realPath' | 'linkIdentity'
+  > & { directoryIdentity: IRunnerFileIdentity })[] = [];
 
   constructor(
     private readonly location: IGlobalResolvedLocation,
@@ -203,7 +214,12 @@ class Pnpm10InventoryReader {
     if (this.entryCount > 40_000) return failed('LIMIT_EXCEEDED');
     if (new Set(names.map((n) => n.toLowerCase())).size !== names.length)
       return failed();
-    this.enumerations.set(path, names);
+    // Later structural traversal must preserve the names used by an earlier
+    // semantic proof, rather than replacing that proof's baseline.
+    const previous = this.enumerations.get(path);
+    if (previous) {
+      if (!isDeepStrictEqual(previous, names)) return failed();
+    } else this.enumerations.set(path, names);
     return names;
   }
   private async data(
@@ -224,7 +240,16 @@ class Pnpm10InventoryReader {
       this.absent.push(path);
       return null;
     }
-    this.files.push(data.identity);
+    const previous = this.files.find(
+      (file) => key(file.file.path) === key(path),
+    );
+    if (previous) {
+      if (
+        !sameEntry(previous.file, data.identity.file) ||
+        previous.sha256 !== data.identity.sha256
+      )
+        return failed();
+    } else this.files.push(data.identity);
     return dataObject(data.text, win32.extname(path).toLowerCase() === '.json');
   }
   private dependencyMap(value: unknown): Record<string, string> {
@@ -299,7 +324,12 @@ class Pnpm10InventoryReader {
       return failed();
     return identity;
   }
-  private async recheckLink(fact: IPnpm10DependencyFacts): Promise<void> {
+  private async recheckLink(
+    fact: Pick<
+      IPnpm10DependencyFacts,
+      'logicalPath' | 'realPath' | 'linkIdentity'
+    >,
+  ): Promise<void> {
     await this.guard(win32.dirname(fact.logicalPath));
     if (!sameEntry(fact.linkIdentity, await this.identity(fact.logicalPath)))
       return failed();
@@ -516,11 +546,7 @@ class Pnpm10InventoryReader {
     const unsupportedResolution = Object.keys(entry.resolution).some(
       (name) => name !== 'integrity',
     );
-    if (
-      !unsupportedResolution &&
-      (typeof entry.resolution.integrity !== 'string' ||
-        !/^sha(?:256|384|512)-[a-z0-9+/=]+$/i.test(entry.resolution.integrity))
-    )
+    if (!unsupportedResolution && !registryResolution(entry.resolution))
       return failed();
     const expected = win32.join(
       this.location.globalRoot,
@@ -536,7 +562,10 @@ class Pnpm10InventoryReader {
     const manifest = await this.data(win32.join(realPath, 'package.json'));
     if (!manifest || manifest.name !== name || manifest.version !== version)
       return failed();
-    fact.manifest = this.files.at(-1)!;
+    fact.manifest = this.files.find(
+      (file) =>
+        key(file.file.path) === key(win32.join(realPath, 'package.json')),
+    )!;
     fact.version = version;
     fact.bins = normalizeGlobalBins(name, manifest.bin);
     const binIdentities: IRunnerFileIdentity[] = [];
@@ -602,6 +631,106 @@ class Pnpm10InventoryReader {
     await this.recheckLink(fact);
     this.dependencies.push(fact);
     return { row, valid };
+  }
+  private async provePrivateHoists(
+    value: unknown,
+    lock: Record<string, unknown>,
+    current: Record<string, unknown> | null,
+    maximum: number,
+  ): Promise<void> {
+    if (!record(value)) return failed();
+    const entries = Object.entries(value);
+    if (entries.length > 10_000) return failed('LIMIT_EXCEEDED');
+    if (entries.length && !current) return failed();
+    const names = new Set<string>();
+    const declarations: { name: string; version: string; locator: string }[] =
+      [];
+    for (const [locator, aliases] of entries) {
+      await this.checkpoint();
+      const separator = locator.lastIndexOf('@');
+      const name = locator.slice(0, separator);
+      const version = locator.slice(separator + 1);
+      if (
+        separator <= 0 ||
+        !isGlobalPackageName(name) ||
+        name !== name.toLowerCase() ||
+        names.has(name) ||
+        !isGlobalExactVersion(version) ||
+        !/^\d+\.\d+\.\d+(?:\+[a-z0-9.-]+)?$/i.test(version) ||
+        !record(aliases) ||
+        Object.keys(aliases).length !== 1 ||
+        aliases[name] !== 'private' ||
+        !record(lock.packages) ||
+        !record(lock.packages[locator]) ||
+        !registryResolution(lock.packages[locator].resolution) ||
+        !record(lock.snapshots) ||
+        !record(lock.snapshots[locator])
+      )
+        return failed();
+      names.add(name);
+      declarations.push({ name, version, locator });
+    }
+    const directory = win32.join(
+      this.location.globalRoot,
+      '.pnpm',
+      'node_modules',
+    );
+    try {
+      await this.identity(directory);
+    } catch (error) {
+      this.deps.signal.throwIfAborted();
+      if (!missing(error)) throw error;
+      if (entries.length) return failed();
+      await this.guard(directory, true);
+      this.absent.push(directory);
+      return;
+    }
+    const actual = new Set<string>();
+    for (const name of await this.directory(directory)) {
+      // No observed/generated private .bin proof yet. Refuse rather than grant
+      // private shims any global ownership or silently accept unknown content.
+      if (name.startsWith('@')) {
+        const children = await this.directory(win32.join(directory, name));
+        if (!children.length) return failed();
+        for (const child of children) actual.add(`${name}/${child}`);
+      } else actual.add(name);
+    }
+    if (!isDeepStrictEqual([...actual].sort(), [...names].sort()))
+      return failed();
+    for (const { name, version, locator } of declarations) {
+      const logicalPath = win32.join(directory, name);
+      await this.guard(win32.dirname(logicalPath));
+      const linkIdentity = await this.identity(logicalPath);
+      if (!linkIdentity.stat.isSymbolicLink()) return failed();
+      const realPath = await this.deps.fs.realpath(logicalPath);
+      this.deps.signal.throwIfAborted();
+      const expected = win32.join(
+        this.location.globalRoot,
+        '.pnpm',
+        pnpm10DepPathToFilename(locator, maximum),
+        'node_modules',
+        name,
+      );
+      // Compare before guarding/opening the target: foreign destinations must
+      // never become read paths, even when the entry itself is a valid junction.
+      if (!isGlobalAbsolutePath(realPath) || key(realPath) !== key(expected))
+        return failed();
+      await this.guard(expected);
+      const directoryIdentity = await this.identity(expected);
+      const manifest = await this.data(win32.join(expected, 'package.json'));
+      if (!manifest || manifest.name !== name || manifest.version !== version)
+        return failed();
+      const fact = {
+        logicalPath,
+        realPath: expected,
+        linkIdentity,
+        directoryIdentity,
+      };
+      await this.recheckLink(fact);
+      this.privateHoists.push(fact);
+      // Existing structural traversal pins both link and directory identities;
+      // data() contributes the previously unpinned manifest identity and hash.
+    }
   }
   // Structural facts only. In R\.pnpm: <id> (depth 0), <id>\node_modules
   // (depth 1), <name> or @scope (depth 2), @scope\<name> (depth 3). Package
@@ -700,6 +829,14 @@ class Pnpm10InventoryReader {
       ].sort();
       if (!isDeepStrictEqual(now, names)) return failed();
     }
+    for (const fact of this.privateHoists) {
+      await this.recheckLink(fact);
+      await this.guard(fact.realPath);
+      if (
+        !sameEntry(fact.directoryIdentity, await this.identity(fact.realPath))
+      )
+        return failed();
+    }
   }
   async read(): Promise<IGlobalInventoryResult> {
     const config = this.location.pnpm10;
@@ -756,8 +893,6 @@ class Pnpm10InventoryReader {
         modules.nodeLinker !== 'isolated' ||
         typeof modules.packageManager !== 'string' ||
         !/^pnpm@10\.\d+\.\d+$/.test(modules.packageManager) ||
-        !record(modules.hoistedDependencies) ||
-        Object.keys(modules.hoistedDependencies).length ||
         !Number.isSafeInteger(modules.virtualStoreDirMaxLength)
       )
         return failed();
@@ -785,6 +920,12 @@ class Pnpm10InventoryReader {
           !isDeepStrictEqual(current, wanted))
       )
         return failed();
+      await this.provePrivateHoists(
+        modules.hoistedDependencies,
+        wanted,
+        current,
+        modules.virtualStoreDirMaxLength as number,
+      );
       await this.checkDirectNames(names);
       if (
         directory.missing &&

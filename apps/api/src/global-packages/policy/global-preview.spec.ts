@@ -28,10 +28,49 @@ import {
   pnpmPreviewFacts,
 } from '@/global-packages/__fixtures__/pnpm11/inventory';
 import type { IPnpmGlobalGroupFacts } from '@/global-packages/interfaces/pnpm-global.types';
-import { pnpm10InventoryFixture } from '../__fixtures__/pnpm10/inventory';
+import {
+  pnpm10InventoryFixture,
+  pnpm10PrivateHoistFixture,
+} from '../__fixtures__/pnpm10/inventory';
 import { readPnpm10GlobalInventory } from '../discovery/pnpm10-global-inventory';
 
 describe('pnpm 10 preview facts', () => {
+  it('pins a coherent private graph extension without exposing transitive preview rows', async () => {
+    const a = await pnpm10PrivateHoistFixture();
+    const b = await pnpm10PrivateHoistFixture(true);
+    const capture = async (h: typeof a) => {
+      const result = await readPnpm10GlobalInventory(h.location, h.deps);
+      expect(result.ownershipComplete).toBe(true);
+      return snapshotGlobalPreviewFacts({
+        location: h.location,
+        current: result.facts.find((dep) => dep.name === 'wrap-ansi')!,
+        target: null,
+        binOwners: result.binOwners,
+        pnpm10Inventory: result.pnpm10Inventory!,
+      });
+    };
+    const expected = await capture(a);
+    const actual = await capture(b);
+    const preview = createGlobalPreview(
+      TEST_PREVIEW_ID,
+      testRequest({ manager: 'pnpm', package: 'wrap-ansi' }),
+      expected,
+      testClock().now(),
+    );
+    expect(preview.sharedPackages).toEqual([
+      { name: 'cliui', version: '8.0.1', linked: false },
+    ]);
+    expect(actual.pnpm10Inventory.project.dependencies).toEqual(
+      expected.pnpm10Inventory.project.dependencies,
+    );
+    expect(actual.pnpm10Inventory.project.files).toHaveLength(
+      expected.pnpm10Inventory.project.files.length + 1,
+    );
+    await expectGlobalReason(
+      () => assertGlobalPreviewUnchanged(expected, actual),
+      'PREVIEW_CHANGED',
+    );
+  });
   async function facts10() {
     const h = await pnpm10InventoryFixture(6);
     const r = await readPnpm10GlobalInventory(h.location, h.deps);

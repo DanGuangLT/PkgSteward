@@ -8,12 +8,531 @@ import {
 import {
   pnpm10BinlessFixture,
   pnpm10InventoryFixture,
+  pnpm10PrivateHoistFixture,
 } from '../__fixtures__/pnpm10/inventory';
 import { P10 } from '../__fixtures__/pnpm10/config';
 import { expectGlobalReason } from '../__fixtures__/global-adapters';
 import { assertGlobalPackageMutable } from '../policy/global-policy';
 
+type HoistFixture = Awaited<ReturnType<typeof pnpm10PrivateHoistFixture>>;
+function rewriteHoistModules(
+  h: HoistFixture,
+  edit: (data: Record<string, unknown>) => void,
+) {
+  const path = win32.join(P10.root, 'node_modules/.modules.yaml');
+  const data = JSON.parse(h.entries.get(path.toLowerCase())!.text!) as Record<
+    string,
+    unknown
+  >;
+  edit(data);
+  h.put(path, { text: JSON.stringify(data) });
+}
+
 describe('pnpm 10 static direct-dependency inventory', () => {
+  it('proves eight private registry hoists as ancillary with exactly two manageable direct rows', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    const r = await readPnpm10GlobalInventory(h.location, h.deps);
+    expect(r.packages).toMatchObject([
+      { name: 'cliui', version: '8.0.1', status: 'manageable' },
+      { name: 'wrap-ansi', version: '7.0.0', status: 'manageable' },
+    ]);
+    expect(r.packages).toHaveLength(2);
+    expect(r.facts).toHaveLength(2);
+    expect(r.pnpm10Inventory?.project.dependencies).toHaveLength(2);
+    expect(r.ownershipComplete).toBe(true);
+    expect(r.binOwners.every((bin) => bin.owner === null)).toBe(true);
+    const project = r.pnpm10Inventory!.project;
+    expect(
+      project.ancillary.find(
+        (a) =>
+          a.identity.path === `${P10.root}\\.pnpm\\node_modules\\string-width`,
+      )?.realPath,
+    ).toBe(
+      `${P10.root}\\.pnpm\\string-width@4.2.3\\node_modules\\string-width`,
+    );
+    expect(
+      project.files.find(
+        (f) =>
+          f.file.path ===
+          `${P10.root}\\.pnpm\\string-width@4.2.3\\node_modules\\string-width\\package.json`,
+      )?.sha256,
+    ).toMatch(/^[a-f0-9]{64}$/);
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+  it('proves canonical scoped private hoists without adding direct rows or bin owners', async () => {
+    const h = await pnpm10PrivateHoistFixture(true);
+    const r = await readPnpm10GlobalInventory(h.location, h.deps);
+    expect(r.packages.map((p) => p.name)).toEqual(['cliui', 'wrap-ansi']);
+    expect(
+      r.pnpm10Inventory?.project.ancillary.find(
+        (a) =>
+          a.identity.path === `${P10.root}\\.pnpm\\node_modules\\@test\\tool`,
+      )?.realPath,
+    ).toBe(`${P10.root}\\.pnpm\\@test+tool@1.0.0\\node_modules\\@test\\tool`);
+    expect(r.ownershipComplete).toBe(true);
+    expect(r.binOwners.every((bin) => bin.owner === null)).toBe(true);
+  });
+  it.each([null, [], 'private', 1])(
+    'refuses non-map hoist metadata %p',
+    async (value) => {
+      const h = await pnpm10PrivateHoistFixture();
+      rewriteHoistModules(h, (m) => {
+        m.hoistedDependencies = value;
+      });
+      await expectGlobalReason(
+        () => readPnpm10GlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+    },
+  );
+  it.each([
+    null,
+    [],
+    'private',
+    {},
+    { 'string-width': 'public' },
+    { 'string-width': { private: true } },
+    { alias: 'private' },
+    { 'string-width': 'private', alias: 'private' },
+  ])(
+    'refuses malformed/private-public/ambiguous aliases %p',
+    async (aliases) => {
+      const h = await pnpm10PrivateHoistFixture();
+      rewriteHoistModules(h, (m) => {
+        (m.hoistedDependencies as Record<string, unknown>)[
+          'string-width@4.2.3'
+        ] = aliases;
+      });
+      await expectGlobalReason(
+        () => readPnpm10GlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+    },
+  );
+  it.each([
+    'string-width',
+    'string-width@latest',
+    'string-width@^4.2.3',
+    'string-width@04.2.3',
+    'string-width@4.2.3(peer@1.0.0)',
+    'string-width@4.2.3-beta.1',
+    'npm:string-width@4.2.3',
+    'string-width@npm:other@4.2.3',
+    'file:../string-width',
+    'link:../string-width',
+    'workspace:string-width@4.2.3',
+    'git+https://example.test/string-width',
+    'https://example.test/string-width@4.2.3',
+    '@test@4.2.3',
+    '@test//tool@4.2.3',
+    '../string-width@4.2.3',
+    'string-width\\evil@4.2.3',
+    'string-width\u0000@4.2.3',
+    'String-width@4.2.3',
+  ])(
+    'refuses unsupported hoist locator %s before opening its destination',
+    async (locator) => {
+      const h = await pnpm10PrivateHoistFixture();
+      rewriteHoistModules(h, (m) => {
+        const hoists = m.hoistedDependencies as Record<string, unknown>;
+        delete hoists['string-width@4.2.3'];
+        hoists[locator] = { 'string-width': 'private' };
+      });
+      await expectGlobalReason(
+        () => readPnpm10GlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+      expect(
+        h.open.mock.calls.some(([p]) => /example\.test|evil/.test(p)),
+      ).toBe(false);
+    },
+  );
+  it.each([
+    'duplicate-version',
+    'case-clash',
+    'prototype-key',
+    'duplicate-key',
+  ])('refuses hoist ambiguity %s', async (kind) => {
+    const h = await pnpm10PrivateHoistFixture();
+    rewriteHoistModules(h, (m) => {
+      const hoists = m.hoistedDependencies as Record<string, unknown>;
+      hoists[
+        kind === 'duplicate-version'
+          ? 'string-width@4.2.2'
+          : 'String-width@4.2.3'
+      ] = { 'string-width': 'private' };
+    });
+    if (kind === 'prototype-key' || kind === 'duplicate-key') {
+      const path = win32.join(P10.root, 'node_modules/.modules.yaml');
+      const text = h.entries.get(path.toLowerCase())!.text!;
+      h.put(path, {
+        text: text.replace(
+          '"hoistedDependencies":{',
+          kind === 'prototype-key'
+            ? '"hoistedDependencies":{"__proto__":{},'
+            : '"hoistedDependencies":{"string-width@4.2.3":{"string-width":"private"},',
+        ),
+      });
+    }
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+  });
+  it.each([
+    'missing-link',
+    'extra-link',
+    'empty-map',
+    'public-root',
+    'wrong-target',
+    'outside',
+    'ordinary-directory',
+    'private-bin',
+    'redirected-scope',
+    'redirected-directory',
+    'redirected-target',
+    'wrong-manifest-name',
+    'wrong-manifest-version',
+    'manifest-symlink',
+  ])('refuses incoherent private hoist topology %s', async (kind) => {
+    const h = await pnpm10PrivateHoistFixture(kind === 'redirected-scope');
+    const link = `${P10.root}\\.pnpm\\node_modules\\string-width`;
+    const target = `${P10.root}\\.pnpm\\string-width@4.2.3\\node_modules\\string-width`;
+    if (kind === 'missing-link') h.entries.delete(link.toLowerCase());
+    if (kind === 'extra-link')
+      h.put(`${P10.root}\\.pnpm\\node_modules\\unlisted`, {
+        link: true,
+        real: target,
+      });
+    if (kind === 'empty-map')
+      rewriteHoistModules(h, (m) => {
+        m.hoistedDependencies = {};
+      });
+    if (kind === 'public-root')
+      h.put(`${P10.root}\\node_modules\\string-width`, {
+        link: true,
+        real: target,
+      });
+    if (kind === 'wrong-target' || kind === 'outside')
+      h.put(link, {
+        link: true,
+        real:
+          kind === 'outside'
+            ? 'E:\\TEST\\outside'
+            : `${P10.root}\\.pnpm\\strip-ansi@6.0.1\\node_modules\\strip-ansi`,
+      });
+    if (kind === 'ordinary-directory') h.put(link, { directory: true });
+    if (kind === 'private-bin')
+      h.put(`${P10.root}\\.pnpm\\node_modules\\.bin\\tool.cmd`, {
+        text: 'TEST unproved private shim',
+      });
+    if (kind === 'redirected-scope')
+      h.put(`${P10.root}\\.pnpm\\node_modules\\@test`, {
+        link: true,
+        real: 'E:\\TEST\\outside',
+      });
+    if (kind === 'redirected-directory')
+      h.put(`${P10.root}\\.pnpm\\node_modules`, {
+        link: true,
+        real: 'E:\\TEST\\outside',
+      });
+    if (kind === 'redirected-target')
+      h.put(win32.dirname(target), { link: true, real: 'E:\\TEST\\outside' });
+    if (kind.startsWith('wrong-manifest'))
+      h.put(`${target}\\package.json`, {
+        text: JSON.stringify({
+          name: kind.endsWith('name') ? 'other' : 'string-width',
+          version: kind.endsWith('version') ? '4.2.2' : '4.2.3',
+        }),
+      });
+    if (kind === 'manifest-symlink')
+      h.put(`${target}\\package.json`, {
+        link: true,
+        real: 'E:\\TEST\\outside\\package.json',
+      });
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+    expect(h.open.mock.calls.some(([p]) => p.startsWith('E:'))).toBe(false);
+    expect(h.lstat.mock.calls.some(([p]) => p.startsWith('E:'))).toBe(false);
+  });
+  it.each([
+    'missing-package',
+    'missing-snapshot',
+    'wrong-version',
+    'current-lock',
+    'tarball',
+    'extra-field',
+    'file',
+    'git',
+    'link',
+    'directory',
+    'missing-integrity',
+    'invalid-integrity',
+    'array-resolution',
+  ])(
+    'requires integrity-only registry corroboration for hoist %s',
+    async (kind) => {
+      const h = await pnpm10PrivateHoistFixture();
+      for (const relative of [
+        'pnpm-lock.yaml',
+        'node_modules/.pnpm/lock.yaml',
+      ]) {
+        const path = win32.join(P10.root, relative);
+        const lock = parse(h.entries.get(path.toLowerCase())!.text!) as {
+          packages: Record<string, { resolution: unknown }>;
+          snapshots: Record<string, unknown>;
+        };
+        const locator = 'string-width@4.2.3';
+        if (kind === 'missing-package') delete lock.packages[locator];
+        else if (kind === 'missing-snapshot') delete lock.snapshots[locator];
+        else if (kind === 'wrong-version') {
+          lock.packages['string-width@4.2.2'] = lock.packages[locator];
+          delete lock.packages[locator];
+        } else if (kind === 'current-lock') {
+          if (relative.startsWith('node_modules'))
+            delete lock.packages[locator];
+        } else
+          lock.packages[locator].resolution = (
+            {
+              tarball: {
+                integrity: 'sha512-TEST==',
+                tarball: 'https://example.test/tool.tgz',
+              },
+              'extra-field': { integrity: 'sha512-TEST==', unexpected: 'TEST' },
+              file: { integrity: 'sha512-TEST==', tarball: 'file:../tool.tgz' },
+              git: {
+                integrity: 'sha512-TEST==',
+                repo: 'https://example.test/tool.git',
+              },
+              link: { integrity: 'sha512-TEST==', type: 'link' },
+              directory: { directory: '../tool', type: 'directory' },
+              'missing-integrity': {},
+              'invalid-integrity': { integrity: 'not-integrity' },
+              'array-resolution': ['sha512-TEST=='],
+            } as Record<string, unknown>
+          )[kind];
+        h.put(path, { text: stringify(lock) });
+      }
+      await expectGlobalReason(
+        () => readPnpm10GlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+    },
+  );
+  it.each(['link', 'directory', 'cancel'])(
+    'refuses private-hoist drift/cancellation during structural enumeration: %s',
+    async (kind) => {
+      const h = await pnpm10PrivateHoistFixture();
+      const original = h.readdir.getMockImplementation()! as (
+        path: string,
+      ) => Promise<readonly string[]>;
+      let observations = 0;
+      h.readdir.mockImplementation((path: string) => {
+        if (
+          path.toLowerCase() ===
+            `${P10.root}\\.pnpm\\node_modules`.toLowerCase() &&
+          ++observations === 2
+        ) {
+          if (kind === 'cancel')
+            h.controller.abort(new Error('TEST private hoist abort'));
+          else if (kind === 'link')
+            h.put(`${P10.root}\\.pnpm\\node_modules\\string-width`, {
+              link: true,
+              real: `${P10.root}\\.pnpm\\strip-ansi@6.0.1\\node_modules\\strip-ansi`,
+            });
+          else
+            h.put(`${P10.root}\\.pnpm\\string-width@4.2.3\\node_modules`, {
+              link: true,
+              real: 'E:\\TEST\\outside',
+            });
+        }
+        return original(path);
+      });
+      if (kind === 'cancel')
+        await expect(
+          readPnpm10GlobalInventory(h.location, h.deps),
+        ).rejects.toThrow('TEST private hoist abort');
+      else
+        await expectGlobalReason(
+          () => readPnpm10GlobalInventory(h.location, h.deps),
+          'INVENTORY_FAILED',
+        );
+      expect(h.open.mock.calls.some(([p]) => p.startsWith('E:'))).toBe(false);
+    },
+  );
+  it.each(['ordinary-alias', 'scoped-child', 'private-bin'])(
+    'refuses an undeclared %s added on the second private-directory enumeration',
+    async (kind) => {
+      const h = await pnpm10PrivateHoistFixture(kind === 'scoped-child');
+      const before = await readPnpm10GlobalInventory(h.location, h.deps);
+      expect(before.packages.map((p) => p.name)).toEqual([
+        'cliui',
+        'wrap-ansi',
+      ]);
+      expect(before.ownershipComplete).toBe(true);
+      const privateDirectory = `${P10.root}\\.pnpm\\node_modules`;
+      const observedDirectory =
+        kind === 'scoped-child'
+          ? `${privateDirectory}\\@test`
+          : privateDirectory;
+      const original = h.readdir.getMockImplementation()! as (
+        path: string,
+      ) => Promise<readonly string[]>;
+      let observations = 0;
+      h.readdir.mockImplementation((path: string) => {
+        if (
+          path.toLowerCase() === observedDirectory.toLowerCase() &&
+          ++observations === 2
+        ) {
+          if (kind === 'private-bin')
+            h.put(`${privateDirectory}\\.bin\\unproved.cmd`, {
+              text: 'TEST inert private shim',
+            });
+          else
+            h.put(`${observedDirectory}\\unlisted`, {
+              link: true,
+              real: `${P10.root}\\.pnpm\\string-width@4.2.3\\node_modules\\string-width`,
+            });
+        }
+        return original(path);
+      });
+      await expectGlobalReason(
+        () => readPnpm10GlobalInventory(h.location, h.deps),
+        'INVENTORY_FAILED',
+      );
+      expect(observations).toBe(2);
+      expect(h.open.mock.calls.some(([p]) => p.startsWith('E:'))).toBe(false);
+      expect(h.spawn).not.toHaveBeenCalled();
+    },
+  );
+  it('caps private-hoist declarations and nested metadata before traversal', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    rewriteHoistModules(h, (m) => {
+      m.hoistedDependencies = Object.fromEntries(
+        Array.from({ length: 10_001 }, (_, i) => [
+          `test-${i}@1.0.0`,
+          { [`test-${i}`]: 'private' },
+        ]),
+      );
+    });
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'LIMIT_EXCEEDED',
+    );
+    const nested = await pnpm10PrivateHoistFixture();
+    const path = win32.join(P10.root, 'node_modules/.modules.yaml');
+    nested.put(path, {
+      text:
+        '{"hoistedDependencies":' +
+        '{"nested":'.repeat(65) +
+        '{}' +
+        '}'.repeat(65) +
+        '}',
+    });
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(nested.location, nested.deps),
+      'INVENTORY_FAILED',
+    );
+  });
+  it('rejects private junction replacement during the final directory recheck', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    const original = h.readdir.getMockImplementation()! as (
+      path: string,
+    ) => Promise<readonly string[]>;
+    let observations = 0;
+    h.readdir.mockImplementation((path: string) => {
+      if (
+        path.toLowerCase() ===
+          `${P10.root}\\.pnpm\\node_modules`.toLowerCase() &&
+        ++observations === 3
+      )
+        h.put(`${P10.root}\\.pnpm\\node_modules\\string-width`, {
+          link: true,
+          real: `${P10.root}\\.pnpm\\strip-ansi@6.0.1\\node_modules\\strip-ansi`,
+        });
+      return original(path);
+    });
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+  });
+  it('requires the current lock for nonempty hoists even without direct dependencies', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    h.put(`${P10.root}\\package.json`, { text: '{"dependencies":{}}' });
+    for (const name of ['cliui', 'wrap-ansi'])
+      h.entries.delete(`${P10.root}\\node_modules\\${name}`.toLowerCase());
+    const path = `${P10.root}\\pnpm-lock.yaml`;
+    const lock = parse(h.entries.get(path.toLowerCase())!.text!) as {
+      importers: Record<string, unknown>;
+    };
+    lock.importers['.'] = {};
+    h.put(path, { text: stringify(lock) });
+    h.entries.delete(
+      `${P10.root}\\node_modules\\.pnpm\\lock.yaml`.toLowerCase(),
+    );
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+  });
+  it('pins an already-proven direct manifest only once when also privately hoisted', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    rewriteHoistModules(h, (m) => {
+      (m.hoistedDependencies as Record<string, unknown>)['cliui@8.0.1'] = {
+        cliui: 'private',
+      };
+    });
+    h.put(`${P10.root}\\.pnpm\\node_modules\\cliui`, {
+      link: true,
+      real: `${P10.root}\\.pnpm\\cliui@8.0.1\\node_modules\\cliui`,
+    });
+    const r = await readPnpm10GlobalInventory(h.location, h.deps);
+    expect(r.packages.map((p) => p.name)).toEqual(['cliui', 'wrap-ansi']);
+    expect(
+      r.pnpm10Inventory?.project.files.filter(
+        (f) =>
+          f.file.path ===
+          `${P10.root}\\.pnpm\\cliui@8.0.1\\node_modules\\cliui\\package.json`,
+      ),
+    ).toHaveLength(1);
+    expect(r.facts.find((f) => f.name === 'cliui')?.manifest.file.path).toBe(
+      `${P10.root}\\.pnpm\\cliui@8.0.1\\node_modules\\cliui\\package.json`,
+    );
+  });
+  it('rejects same-identity manifest byte drift between private and direct proofs', async () => {
+    const h = await pnpm10PrivateHoistFixture();
+    rewriteHoistModules(h, (m) => {
+      (m.hoistedDependencies as Record<string, unknown>)['cliui@8.0.1'] = {
+        cliui: 'private',
+      };
+    });
+    const target = `${P10.root}\\.pnpm\\cliui@8.0.1\\node_modules\\cliui`;
+    h.put(`${P10.root}\\.pnpm\\node_modules\\cliui`, {
+      link: true,
+      real: target,
+    });
+    const manifest = `${target}\\package.json`;
+    const text = JSON.stringify({
+      name: 'cliui',
+      version: '8.0.1',
+      marker: 'old',
+    });
+    h.put(manifest, { text });
+    const original = h.open.getMockImplementation()!;
+    let reads = 0;
+    h.open.mockImplementation((path) => {
+      if (path === manifest && ++reads === 2)
+        h.put(manifest, { text: text.replace('old', 'new') });
+      return original(path);
+    });
+    await expectGlobalReason(
+      () => readPnpm10GlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+  });
   it('proves an existing all-registry binless project with its configured bin directory absent', async () => {
     const h = await pnpm10BinlessFixture();
     const r = await readPnpm10GlobalInventory(h.location, h.deps);
