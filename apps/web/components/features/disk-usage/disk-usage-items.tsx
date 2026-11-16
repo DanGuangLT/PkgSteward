@@ -1,13 +1,19 @@
 "use client"
 
-import { useMemo } from "react"
+import { useId, useMemo } from "react"
+import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { DISK_DISCOVERY, DISK_KINDS, DISK_STATES, diskDiscoveryCodec, selectDiskRows } from "@/lib/disk-usage/discovery"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { DiskUsageJob, DiskUsageRow } from "@/lib/api/types"
-import { diskSizeKind, sortDiskRows } from "@/lib/disk-usage/disk-usage-list"
+import { diskSizeKind } from "@/lib/disk-usage/disk-usage-list"
 
 export function DiskSize({ bytes, partial = false }: { bytes: number | null; partial?: boolean }) {
   const t = useTranslations("diskUsage")
@@ -74,12 +80,22 @@ export function DiskUsageItems({ job, resultsId, onExpand, interaction }: {
 }) {
   const t = useTranslations("diskUsage")
   const locale = useLocale()
-  const rows = useMemo(() => sortDiskRows(job.children, locale), [job.children, locale])
+  const d = useTranslations("listDiscovery")
+  const minId = useId()
+  const [view, setView, reset] = useViewState(makeViewStateKey("disk-usage-items", JSON.stringify([job.path, job.view])), diskDiscoveryCodec, DISK_DISCOVERY)
+  const rows = useMemo(() => selectDiskRows(job.children, view, locale), [job.children, view, locale])
   const canExpand = interaction === "ready" && job.status !== "running"
-  if (rows.length === 0) return <p className="text-body-sm text-muted-foreground">{t(job.status === "running" ? "empty.listing" : "empty.rows")}</p>
+
 
   return (
     <>
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={rows.length} total={job.children.length} onReset={reset}>
+        <DiscoveryFilter label={d("kinds")} value={view.kinds} options={DISK_KINDS.map(value => ({ value, label: d(`values.${value}`), count: job.children.filter(row => row.kind === value).length }))} onValueChange={kinds => setView({ ...view, kinds })} />
+        <DiscoveryFilter label={d("states")} value={view.states} options={DISK_STATES.map(value => ({ value, label: d(`values.${value}`), count: job.children.filter(row => row.state === value).length }))} onValueChange={states => setView({ ...view, states })} />
+        <div className="min-w-0 space-y-2"><Label htmlFor={minId}>{d("minSize")}</Label><Input id={minId} type="text" inputMode="numeric" value={view.minSize} onChange={event => { const minSize = event.target.value; if (/^\d{0,15}$/.test(minSize)) setView({ ...view, minSize }) }} /></div>
+        <DiscoverySort value={view.sort} options={[{ value: "size", label: d("size") }, { value: "name", label: d("name") }]} onValueChange={sort => setView({ ...view, sort })} />
+      </DiscoveryControls>
+      {rows.length === 0 ? job.children.length === 0 && job.status === "running" ? <p className="text-body-sm">{t("empty.listing")}</p> : <DiscoveryEmpty total={job.children.length} /> : null}
       <div className="hidden min-w-0 rounded-md bg-card text-card-foreground lg:block">
         <Table className="table-fixed">
           <TableCaption className="sr-only">{t("listLabel")}</TableCaption>

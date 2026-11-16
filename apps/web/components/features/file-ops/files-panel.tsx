@@ -7,14 +7,31 @@ import { useFormatter, useTranslations } from "next-intl"
 import { FileOpsJob } from "@/components/features/file-ops/file-ops-job"
 import { FileTree } from "@/components/features/file-ops/file-tree"
 import { PreviewReview } from "@/components/features/file-ops/preview-review"
+import { ReturnLink } from "@/components/shared/return-link"
 import { Button } from "@/components/ui/button"
 import { useFileOps } from "@/hooks/use-file-ops"
 import { useFileTree } from "@/hooks/use-file-tree"
+import { useRouteScrollContinuity } from "@/hooks/use-navigation-continuity"
 import type { FileTreeEntry, ScannedProject } from "@/lib/api/types"
 import { MAX_DELETE_PATHS, isInsidePath, toggleTreePath } from "@/lib/file-ops/tree-selection"
+import { makeViewStateKey, type ResolvedReturnTarget } from "@/lib/ui/navigation-targets"
 
-export function FilesPanel({ project }: { project: ScannedProject }) {
+const DEFAULT_BACK_TARGET: ResolvedReturnTarget = { href: "/", originId: null, isFallback: true }
+
+export function FilesPanel({
+  project,
+  backTarget = DEFAULT_BACK_TARGET,
+  embedded = false,
+  active = true,
+}: {
+  project: ScannedProject
+  backTarget?: ResolvedReturnTarget
+  embedded?: boolean
+  active?: boolean
+}) {
   const t = useTranslations("fileOps")
+  const tNav = useTranslations("navigationState")
+  const tCommon = useTranslations("common")
   const format = useFormatter()
   const router = useRouter()
   const controller = useFileOps()
@@ -31,6 +48,18 @@ export function FilesPanel({ project }: { project: ScannedProject }) {
   const count = selected.size
   const tooMany = count > MAX_DELETE_PATHS
 
+  useRouteScrollContinuity({
+    routeKey: makeViewStateKey("files", project.path),
+    ready: tree.levels.get(project.path)?.status !== "loading",
+    active,
+  })
+
+  const backLabel = backTarget.isFallback || backTarget.href === "/" || backTarget.href.startsWith("/?")
+    ? t("actions.toProjects")
+    : backTarget.href.startsWith("/projects")
+      ? tNav("backToProject")
+      : tCommon("back")
+
   function toggle(entry: FileTreeEntry) {
     setSelected((previous) => toggleTreePath(previous, entry, tree.childrenOf))
   }
@@ -45,6 +74,11 @@ export function FilesPanel({ project }: { project: ScannedProject }) {
 
   return (
     <section className="flex min-w-0 flex-col gap-6" aria-label={t("files.title")}>
+      {!embedded ? (
+        <ReturnLink href={backTarget.href} originId={backTarget.originId} className="self-start">
+          {backLabel}
+        </ReturnLink>
+      ) : null}
       <div className="min-w-0 space-y-1">
         <p className="text-heading-md [overflow-wrap:anywhere]">{project.name ?? project.path}</p>
         <p className="font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>

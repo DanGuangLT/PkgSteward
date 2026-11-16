@@ -10,6 +10,7 @@ import { createGlobalSession, initialGlobalState } from "@/lib/global-packages/g
 import type { GlobalSession, GlobalState } from "@/lib/global-packages/global-session"
 import type { GlobalJob, GlobalSnapshot, GlobalVersionsRequest } from "@/lib/global-packages/global-types"
 import type { GlobalConsent, GlobalSelection } from "@/lib/global-packages/global-preview-form"
+import { invalidateNavigationSnapshots } from "@/lib/ui/navigation-store"
 
 export function useGlobalPackages(snapshot: GlobalSnapshot | null, latest: GlobalJob | null, onMutated: (job: GlobalJob) => void) {
   const [state, setState] = useState<GlobalState>(() => initialGlobalState(snapshot))
@@ -32,7 +33,11 @@ export function useGlobalPackages(snapshot: GlobalSnapshot | null, latest: Globa
           return () => document.removeEventListener("visibilitychange", callback)
         },
       },
-      onChange: setState, onMutated: job => onMutatedRef.current(job),
+      onChange: setState,
+      onMutated: job => {
+        invalidateNavigationSnapshots("global-packages")
+        onMutatedRef.current(job)
+      },
     })
     session.current = current
     return () => { current.dispose(); session.current = null }

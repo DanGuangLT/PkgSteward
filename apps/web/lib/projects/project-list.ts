@@ -2,33 +2,86 @@ import type { ScannedProject } from "@/lib/api/types"
 
 export type ProjectSort = "activity" | "name"
 
-export const PROJECT_MANAGER_FILTERS = ["all", "npm", "pnpm", "yarn", "unknown"] as const
-export const PROJECT_NODE_MODULES_FILTERS = ["all", "present", "missing"] as const
-export const PROJECT_ACTIVITY_FILTERS = [
-  "all", "within7d", "within30d", "within90d", "olderThan90d", "olderThan180d", "olderThan365d",
+export const PROJECT_MANAGER_OPTIONS = ["npm", "pnpm", "yarn", "unknown"] as const
+export const PROJECT_NODE_MODULES_OPTIONS = ["present", "missing"] as const
+export const PROJECT_ACTIVITY_OPTIONS = [
+  "within7d", "within30d", "within90d", "olderThan90d", "olderThan180d", "olderThan365d",
 ] as const
 
+export type ProjectManagerOption = typeof PROJECT_MANAGER_OPTIONS[number]
+export type ProjectNodeModulesOption = typeof PROJECT_NODE_MODULES_OPTIONS[number]
+export type ProjectActivityOption = typeof PROJECT_ACTIVITY_OPTIONS[number]
+
 export type ProjectFilters = {
-  manager: typeof PROJECT_MANAGER_FILTERS[number]
-  nodeModules: typeof PROJECT_NODE_MODULES_FILTERS[number]
-  activity: typeof PROJECT_ACTIVITY_FILTERS[number]
+  managers: ProjectManagerOption[]
+  nodeModules: ProjectNodeModulesOption[]
+  activities: ProjectActivityOption[]
 }
 
+export type LegacyProjectFilters = {
+  manager?: ProjectManagerOption | "all"
+  nodeModules?: ProjectNodeModulesOption | "all"
+  activity?: ProjectActivityOption | "all"
+}
+
+export type ProjectFiltersInput = Partial<ProjectFilters> | LegacyProjectFilters
+
 export const DEFAULT_PROJECT_FILTERS: ProjectFilters = {
-  manager: "all",
-  nodeModules: "all",
-  activity: "all",
+  managers: [],
+  nodeModules: [],
+  activities: [],
 }
 
 export type ProjectFilterCounts = {
-  [Filter in keyof ProjectFilters]: Record<ProjectFilters[Filter], number>
+  managers: Record<ProjectManagerOption, number>
+  nodeModules: Record<ProjectNodeModulesOption, number>
+  activities: Record<ProjectActivityOption, number>
 }
 
 const DAY_MS = 86_400_000
 
-function matchesActivity(age: number, activity: ProjectFilters["activity"]): boolean {
+function normalizeOptionList<Option extends string>(
+  rawArray: unknown,
+  legacyScalar: unknown,
+  allowed: readonly Option[],
+): Option[] {
+  if (Array.isArray(rawArray)) {
+    const seen = new Set<Option>()
+    for (const item of rawArray) {
+      if (typeof item === "string" && allowed.includes(item as Option)) {
+        seen.add(item as Option)
+      }
+    }
+    return [...seen]
+  }
+  if (typeof legacyScalar === "string") {
+    if (legacyScalar === "all") return []
+    if (allowed.includes(legacyScalar as Option)) return [legacyScalar as Option]
+  }
+  return []
+}
+
+/**
+ * Normalizes multi-checkbox project filters and safely migrates legacy scalar shapes.
+ */
+export function normalizeProjectFilters(input: unknown): ProjectFilters {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { managers: [], nodeModules: [], activities: [] }
+  }
+  const raw = input as Record<string, unknown>
+  return {
+    managers: normalizeOptionList(raw.managers, raw.manager, PROJECT_MANAGER_OPTIONS),
+    nodeModules: normalizeOptionList(
+      raw.nodeModules,
+      typeof raw.nodeModules === "string" ? raw.nodeModules : undefined,
+      PROJECT_NODE_MODULES_OPTIONS,
+    ),
+    activities: normalizeOptionList(raw.activities, raw.activity, PROJECT_ACTIVITY_OPTIONS),
+  }
+}
+
+function matchesActivity(age: number, activity: ProjectActivityOption): boolean {
   switch (activity) {
-    case "all": return true
     case "within7d": return age <= 7 * DAY_MS
     case "within30d": return age <= 30 * DAY_MS
     case "within90d": return age <= 90 * DAY_MS
@@ -38,29 +91,42 @@ function matchesActivity(age: number, activity: ProjectFilters["activity"]): boo
   }
 }
 
+function matchesNormalizedFilters(
+  project: ScannedProject,
+  filters: ProjectFilters,
+  now: number,
+): boolean {
+  if (filters.managers.length > 0 && !filters.managers.includes(project.packageManager ?? "unknown")) return false
+  const nmState: ProjectNodeModulesOption = project.nodeModules.exists ? "present" : "missing"
+  if (filters.nodeModules.length > 0 && !filters.nodeModules.includes(nmState)) return false
+  if (filters.activities.length > 0) {
+    const age = now - Date.parse(project.lastActivityAt)
+    if (!filters.activities.some((activity) => matchesActivity(age, activity))) return false
+  }
+  return true
+}
+
 export function matchesProjectFilters(
   project: ScannedProject,
-  filters: ProjectFilters = DEFAULT_PROJECT_FILTERS,
-  now = Date.now()
+  filters: ProjectFiltersInput = DEFAULT_PROJECT_FILTERS,
+  now = Date.now(),
 ): boolean {
-  if (filters.manager !== "all" && filters.manager !== (project.packageManager ?? "unknown")) return false
-  if (filters.nodeModules !== "all" && project.nodeModules.exists !== (filters.nodeModules === "present")) return false
-  return matchesActivity(now - Date.parse(project.lastActivityAt), filters.activity)
+  return matchesNormalizedFilters(project, normalizeProjectFilters(filters), now)
 }
 
 export function countProjectFilters(projects: readonly ScannedProject[], now = Date.now()): ProjectFilterCounts {
   const counts: ProjectFilterCounts = {
-    manager: { all: projects.length, npm: 0, pnpm: 0, yarn: 0, unknown: 0 },
-    nodeModules: { all: projects.length, present: 0, missing: 0 },
-    activity: { all: 0, within7d: 0, within30d: 0, within90d: 0, olderThan90d: 0, olderThan180d: 0, olderThan365d: 0 },
+    managers: { npm: 0, pnpm: 0, yarn: 0, unknown: 0 },
+    nodeModules: { present: 0, missing: 0 },
+    activities: { within7d: 0, within30d: 0, within90d: 0, olderThan90d: 0, olderThan180d: 0, olderThan365d: 0 },
   }
 
   for (const project of projects) {
-    counts.manager[project.packageManager ?? "unknown"]++
+    counts.managers[project.packageManager ?? "unknown"]++
     counts.nodeModules[project.nodeModules.exists ? "present" : "missing"]++
     const age = now - Date.parse(project.lastActivityAt)
-    for (const activity of PROJECT_ACTIVITY_FILTERS) {
-      if (matchesActivity(age, activity)) counts.activity[activity]++
+    for (const activity of PROJECT_ACTIVITY_OPTIONS) {
+      if (matchesActivity(age, activity)) counts.activities[activity]++
     }
   }
 
@@ -87,13 +153,14 @@ export function selectProjects(
   query: string,
   sort: ProjectSort,
   locale: string,
-  filters: ProjectFilters = DEFAULT_PROJECT_FILTERS,
+  filters: ProjectFiltersInput = DEFAULT_PROJECT_FILTERS,
   now = Date.now()
 ): ScannedProject[] {
   const search = projectSearchText(query.trim())
   const collator = new Intl.Collator(locale)
+  const normalizedFilters = normalizeProjectFilters(filters)
 
-  return projects.filter((project) => matchesProjectFilters(project, filters, now) && (
+  return projects.filter((project) => matchesNormalizedFilters(project, normalizedFilters, now) && (
     search === "" || projectSearchText(projectDisplayName(project)).includes(search) ||
     projectSearchText(project.path).includes(search)
   )).sort((a, b) => {

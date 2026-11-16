@@ -1,13 +1,16 @@
 "use client"
 
-import { useMemo } from "react"
 import { CheckIcon, MinusIcon, OctagonAlertIcon, TriangleAlertIcon } from "lucide-react"
-import { useFormatter, useTranslations } from "next-intl"
+import { useFormatter, useLocale, useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { RESULT_DISCOVERY, TARGET_KINDS, RESULT_STATUSES, resultDiscoveryCodec, selectResults } from "@/lib/file-ops/discovery"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { Badge } from "@/components/ui/badge"
 import type { FileOpsOperation, FileOpsTargetResult } from "@/lib/api/types"
-import { operationCounts, resultErrorKey, sortOperationResults } from "@/lib/file-ops/file-ops-list"
+import { operationCounts, resultErrorKey } from "@/lib/file-ops/file-ops-list"
 
 const STATUS = {
   success: { variant: "success", Icon: CheckIcon },
@@ -37,7 +40,10 @@ export function OperationResults({ operation }: { operation: FileOpsOperation })
   const t = useTranslations("fileOps")
   const format = useFormatter()
   const counts = operationCounts(operation)
-  const results = useMemo(() => sortOperationResults(operation.results), [operation.results])
+  const d = useTranslations("listDiscovery")
+  const locale = useLocale()
+  const [view, setView, reset] = useViewState(makeViewStateKey("cleanup-results", operation.previewId), resultDiscoveryCodec, RESULT_DISCOVERY)
+  const results = selectResults(operation.results, view, locale)
 
   return (
     <section className="flex min-w-0 flex-col gap-4" aria-label={t("results.label")}>
@@ -58,6 +64,12 @@ export function OperationResults({ operation }: { operation: FileOpsOperation })
       {counts.recycled > 0 ? <p className="text-body-sm">{t("results.recycledHint", {
         count: counts.recycled, formattedCount: format.number(counts.recycled),
       })}</p> : null}
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={results.length} total={operation.results.length} onReset={reset}>
+        <DiscoveryFilter label={d("kinds")} value={view.kinds} options={TARGET_KINDS.filter(value => value !== "unknown").map(value => ({ value, label: d(`values.${value}`), count: operation.results.filter(row => row.kind === value).length }))} onValueChange={kinds => setView({ ...view, kinds })} />
+        <DiscoveryFilter label={d("statuses")} value={view.statuses} options={RESULT_STATUSES.map(value => ({ value, label: d(`values.${value}`), count: operation.results.filter(row => row.status === value).length }))} onValueChange={statuses => setView({ ...view, statuses })} />
+        <DiscoverySort value={view.sort} options={[{ value: "status", label: d("status") }, { value: "name", label: d("name") }]} onValueChange={sort => setView({ ...view, sort })} />
+      </DiscoveryControls>
+      {results.length === 0 ? <DiscoveryEmpty total={operation.results.length} /> : null}
       <ul className="grid min-w-0 gap-3">
         {results.map((result) => <ResultRow key={result.path} result={result} />)}
       </ul>

@@ -3,4 +3,5 @@ allowBuilds:
   # Prebuilt binaries come from optionalDependencies; build script is only a fallback.
   '@parcel/watcher': false
   '@scarf/scarf': true
+  node-pty: true
   unrs-resolver: true

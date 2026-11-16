@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangleIcon, CheckIcon, FolderOpenIcon, HardDriveIcon, InfoIcon, MinusIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, InfoIcon, MinusIcon } from "lucide-react"
 import Link from "next/link"
 import { useFormatter, useTranslations } from "next-intl"
 
@@ -18,10 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ScannedProject } from "@/lib/api/types"
-import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
-import { fileManagerHref } from "@/lib/file-ops/file-ops-list"
+import { useNavigationContinuity } from "@/hooks/use-navigation-continuity"
 import { projectDisplayName } from "@/lib/projects/project-list"
 import { projectDetailHref } from "@/lib/projects/project-detail-list"
+import { appendReturnContext } from "@/lib/ui/navigation-targets"
 
 interface ProjectItemsProps {
   projects: readonly ScannedProject[]
@@ -45,7 +45,7 @@ function ProjectManager({ project }: { project: ScannedProject }) {
 function ProjectNodeModules({ project }: { project: ScannedProject }) {
   const t = useTranslations("projects")
   const format = useFormatter()
-  const { exists, path, sizeBytes, sizeMeasuredAt } = project.nodeModules
+  const { exists, sizeBytes, sizeMeasuredAt } = project.nodeModules
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 text-body-sm">
       <span className="inline-flex items-center gap-1.5">
@@ -60,36 +60,24 @@ function ProjectNodeModules({ project }: { project: ScannedProject }) {
           {t("nodeModules.measuredAt")} <time dateTime={sizeMeasuredAt}>{format.dateTime(new Date(sizeMeasuredAt), { dateStyle: "medium", timeStyle: "short" })}</time>
         </p>
       ) : null}
-      {exists ? (
-        <Button asChild variant="secondary" size="sm">
-          <Link href={diskUsageHref(path, "packages")}>
-            <HardDriveIcon data-icon="inline-start" aria-hidden="true" />
-            {t("nodeModules.viewSize")}
-          </Link>
-        </Button>
-      ) : null}
     </div>
   )
 }
 
 // Hành động của 1 dự án: hiện dạng nút (có icon) để người dùng nhận ra là bấm được.
-function ProjectActions({ project }: { project: ScannedProject }) {
+function ProjectActions({ project, returnTo, originId }: {
+  project: ScannedProject
+  returnTo: string
+  originId: string | null
+}) {
   const t = useTranslations("projects")
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button asChild variant="secondary" size="sm">
-        <Link href={projectDetailHref(project.path)} prefetch={false}>
-          <InfoIcon data-icon="inline-start" aria-hidden="true" />
-          {t("viewDetails")}
-        </Link>
-      </Button>
-      <Button asChild variant="secondary" size="sm">
-        <Link href={fileManagerHref(project.path)}>
-          <FolderOpenIcon data-icon="inline-start" aria-hidden="true" />
-          {t("actions.manageFiles")}
-        </Link>
-      </Button>
-    </div>
+    <Button asChild variant="secondary" size="sm" className="h-auto min-h-9 max-w-full whitespace-normal">
+      <Link href={appendReturnContext(projectDetailHref(project.path), { returnTo, originId })} prefetch={false}>
+        <InfoIcon data-icon="inline-start" aria-hidden="true" />
+        {t("viewDetails")}
+      </Link>
+    </Button>
   )
 }
 
@@ -100,6 +88,9 @@ function ProjectActivity({ date, referenceTime }: { date: string; referenceTime:
 
 export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
   const t = useTranslations("projects")
+  const { hydrated, currentUrl, entryId } = useNavigationContinuity()
+  const returnTo = hydrated ? currentUrl : "/"
+  const originId = hydrated ? entryId : null
 
   return (
     <>
@@ -108,11 +99,12 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
           <TableCaption className="sr-only">{t("listLabel")}</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-2/5" scope="col">{t("columns.project")}</TableHead>
+              <TableHead className="w-1/3" scope="col">{t("columns.project")}</TableHead>
               <TableHead className="whitespace-normal" scope="col">{t("columns.manager")}</TableHead>
               <TableHead className="whitespace-normal" scope="col">{t("columns.lockfile")}</TableHead>
               <TableHead className="whitespace-normal" scope="col">{t("columns.nodeModules")}</TableHead>
               <TableHead className="whitespace-normal" scope="col">{t("columns.activity")}</TableHead>
+              <TableHead className="whitespace-normal" scope="col">{t("columns.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -121,7 +113,6 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                 <TableCell className="min-w-0 whitespace-normal">
                   <p className="font-semibold text-foreground [overflow-wrap:anywhere]">{projectDisplayName(project)}</p>
                   <p className="mt-1 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
-                  <div className="mt-3"><ProjectActions project={project} /></div>
                 </TableCell>
                 <TableCell className="whitespace-normal"><ProjectManager project={project} /></TableCell>
                 <TableCell className="whitespace-normal"><ProjectLockfile project={project} /></TableCell>
@@ -129,6 +120,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
                 <TableCell className="text-muted-foreground whitespace-normal">
                   <ProjectActivity date={project.lastActivityAt} referenceTime={referenceTime} />
                 </TableCell>
+                <TableCell className="whitespace-normal"><ProjectActions project={project} returnTo={returnTo} originId={originId} /></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -142,7 +134,7 @@ export function ProjectItems({ projects, referenceTime }: ProjectItemsProps) {
               <CardHeader className="min-w-0">
                 <CardTitle className="min-w-0 [overflow-wrap:anywhere]">{projectDisplayName(project)}</CardTitle>
                 <p className="min-w-0 font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">{project.path}</p>
-                <ProjectActions project={project} />
+                <div className="pt-1"><ProjectActions project={project} returnTo={returnTo} originId={originId} /></div>
               </CardHeader>
               <CardContent>
                 <dl className="flex flex-col gap-4 text-body-sm">

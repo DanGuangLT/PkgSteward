@@ -1,10 +1,12 @@
 import { ApiError } from "../api/response.ts"
 import { initialRunnerLogs } from "./runner-log-view.ts"
+import { clampTerminalSize, initialTerminalClientState } from "./terminal-session.ts"
 import type { RunAction, RunJob, RunRequest, RunnerContext } from "@/lib/api/types"
 import type { RunnerLogs } from "@/lib/npm-runner/runner-log-view"
+import type { TerminalClientState } from "@/lib/npm-runner/terminal-session"
 
 export interface RunnerConflict { reason: "RUNNING"; jobId: string; requestPath: string }
-export interface RunnerError { code: string; statusCode?: number; conflict?: RunnerConflict }
+export interface RunnerError { code: string; statusCode?: number; conflict?: RunnerConflict; terminalCode?: string }
 export interface RunnerSelection { action: RunAction; package?: string; script?: string }
 export interface RunnerState {
   phase: "idle" | "starting" | "tracking" | "lost"
@@ -15,6 +17,7 @@ export interface RunnerState {
   jobId: string | null
   job: RunJob | null
   logs: RunnerLogs
+  terminal: TerminalClientState
   error: RunnerError | null
   pollError: string | null
   contextError: string | null
@@ -24,9 +27,13 @@ export interface RunnerState {
   refreshing: boolean
 }
 
-export function initialRunnerState(context: RunnerContext | null = null): RunnerState {
+export function initialRunnerState(
+  context: RunnerContext | null = null,
+  tabId = "00000000-0000-4000-8000-000000000000",
+): RunnerState {
   return { phase: "idle", context, requestPath: context?.requestPath ?? null, generation: 0,
-    requestId: null, jobId: null, job: null, logs: initialRunnerLogs(), error: null, pollError: null,
+    requestId: null, jobId: null, job: null, logs: initialRunnerLogs(),
+    terminal: initialTerminalClientState(tabId), error: null, pollError: null,
     contextError: null, startUnknown: false, cancelUnknown: false, cancelPending: false, refreshing: false }
 }
 export function isRunActive(job: Pick<RunJob, "status" | "gateHeld">): boolean {
@@ -40,12 +47,17 @@ export function runnerError(cause: unknown): RunnerError {
   if (!(cause instanceof ApiError)) return { code: "UNKNOWN" }
   const error: RunnerError = { code: cause.code ?? "UNKNOWN", statusCode: cause.statusCode }
   const details = cause.details
-  if (cause.statusCode === 409 && cause.code === "CONFLICT" && typeof details === "object" && details !== null
-    && "reason" in details && typeof details.reason === "string" && details.reason) {
-    error.code = details.reason
-    if (details.reason === "RUNNING" && "jobId" in details && typeof details.jobId === "string" && details.jobId
-      && "requestPath" in details && typeof details.requestPath === "string" && details.requestPath) {
-      error.conflict = { reason: "RUNNING", jobId: details.jobId, requestPath: details.requestPath }
+  if (typeof details === "object" && details !== null) {
+    if ("terminalCode" in details && typeof details.terminalCode === "string" && details.terminalCode) {
+      error.terminalCode = details.terminalCode
+    }
+    if (cause.statusCode === 409 && cause.code === "CONFLICT"
+      && "reason" in details && typeof details.reason === "string" && details.reason) {
+      error.code = details.reason
+      if (details.reason === "RUNNING" && "jobId" in details && typeof details.jobId === "string" && details.jobId
+        && "requestPath" in details && typeof details.requestPath === "string" && details.requestPath) {
+        error.conflict = { reason: "RUNNING", jobId: details.jobId, requestPath: details.requestPath }
+      }
     }
   }
   return error
@@ -91,11 +103,26 @@ export function runnerEligibility(state: RunnerState, selection: RunnerSelection
   if (!state.context.available || state.context.reason) return state.context.reason ?? "UNKNOWN"
   return selectionError(state.context, selection)
 }
-export function buildRunRequest(context: RunnerContext, selection: RunnerSelection, requestId: string): RunRequest {
+export function buildRunRequest(
+  context: RunnerContext,
+  selection: RunnerSelection,
+  requestId: string,
+  terminalSize?: { cols?: number | null; rows?: number | null },
+): RunRequest {
   const error = selectionError(context, selection)
   if (error) throw new ApiError(400, "Invalid run selection.", error)
   const input: RunRequest = { path: context.requestPath, action: selection.action, inputHash: context.inputHash, requestId }
   if (["install_one", "update_one", "uninstall_one"].includes(selection.action)) input.package = selection.package
   if (selection.action === "script") input.script = selection.script
+  if (context.terminalAvailable === true) {
+    input.terminal = true
+    if (typeof terminalSize?.cols === "number" && typeof terminalSize?.rows === "number") {
+      const clamped = clampTerminalSize(terminalSize.cols, terminalSize.rows)
+      if (clamped) {
+        input.cols = clamped.cols
+        input.rows = clamped.rows
+      }
+    }
+  }
   return input
 }

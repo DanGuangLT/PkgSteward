@@ -5,6 +5,20 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { getBrowserFileTree } from "@/lib/api/file-ops/file-ops-browser"
 import { ApiError } from "@/lib/api/response"
 import type { FileTreeEntry } from "@/lib/api/types"
+import { getDefaultNavigationStore } from "@/lib/ui/navigation-store"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+
+const MAX_EXPANDED_PATHS = 256
+
+function readInitialExpanded(root: string): string[] {
+  const store = getDefaultNavigationStore()
+  if (!store.isHydrated()) return []
+  const record = store.getEphemeral<string[]>(makeViewStateKey("file-tree-expanded", root))
+  if (!record || record.invalid || !Array.isArray(record.value)) return []
+  return record.value
+    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0 && entry !== root)
+    .slice(0, MAX_EXPANDED_PATHS)
+}
 
 export type TreeLevel =
   | { status: "loading" }
@@ -31,9 +45,15 @@ async function readLevel(path: string, signal: AbortSignal): Promise<TreeLevel> 
 
 /** Tải lười từng tầng: mở folder mới gọi API, không bao giờ duyệt cả cây một lúc. */
 export function useFileTree(root: string): FileTreeController {
-  const [levels, setLevels] = useState<ReadonlyMap<string, TreeLevel>>(() => new Map([[root, { status: "loading" }]]))
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const [initialExpanded] = useState<string[]>(() => readInitialExpanded(root))
+  const [levels, setLevels] = useState<ReadonlyMap<string, TreeLevel>>(() => {
+    const map = new Map<string, TreeLevel>([[root, { status: "loading" }]])
+    for (const path of initialExpanded) map.set(path, { status: "loading" })
+    return map
+  })
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(initialExpanded))
   const requests = useRef(new Set<AbortController>())
+  const ephemeralKey = makeViewStateKey("file-tree-expanded", root)
 
   const setLevel = useCallback((path: string, level: TreeLevel) => {
     setLevels((previous) => new Map(previous).set(path, level))
@@ -55,8 +75,16 @@ export function useFileTree(root: string): FileTreeController {
 
   useEffect(() => {
     load(root)
+    for (const path of initialExpanded) load(path)
     return stopRequests
-  }, [load, root, stopRequests])
+  }, [initialExpanded, load, root, stopRequests])
+
+  useEffect(() => {
+    const store = getDefaultNavigationStore()
+    if (!store.isHydrated()) return
+    if (expanded.size === 0) store.clearEphemeral(ephemeralKey)
+    else store.setEphemeral(ephemeralKey, [...expanded].slice(0, MAX_EXPANDED_PATHS))
+  }, [ephemeralKey, expanded])
 
   const childrenOf = useCallback((path: string) => {
     const level = levels.get(path)
@@ -83,10 +111,11 @@ export function useFileTree(root: string): FileTreeController {
 
   const reload = useCallback(() => {
     stopRequests()
+    getDefaultNavigationStore().clearEphemeral(ephemeralKey)
     setExpanded(new Set())
     setLevels(new Map([[root, { status: "loading" }]]))
     load(root)
-  }, [load, root, stopRequests])
+  }, [ephemeralKey, load, root, stopRequests])
 
   return { levels, expanded, childrenOf, toggleExpanded, retry, reload }
 }

@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { cancelBrowserProjectAnalysis, pollBrowserProjectAnalysis, startBrowserProjectAnalysis } from "@/lib/api/projects/projects-browser"
-import type { ProjectDetail } from "@/lib/api/types"
+import type { ProjectAnalysisJob, ProjectDetail } from "@/lib/api/types"
 import { initialAnalysisState } from "@/lib/projects/project-analysis-policy"
 import { createProjectAnalysisSession } from "@/lib/projects/project-analysis-session"
 import type { ProjectAnalysisSession } from "@/lib/projects/project-analysis-session"
 
-export function useProjectAnalysis(detail: ProjectDetail | null) {
+export function useProjectAnalysis(detail: ProjectDetail | null, initialSnapshot: ProjectAnalysisJob | null = null) {
   const [state, setState] = useState(() => initialAnalysisState(detail))
   const initialDetail = useRef(detail)
+  const initialJobRef = useRef(initialSnapshot)
   const session = useRef<ProjectAnalysisSession | null>(null)
 
   useEffect(() => {
@@ -28,6 +29,10 @@ export function useProjectAnalysis(detail: ProjectDetail | null) {
       onChange: setState,
     })
     session.current = current
+    if (initialJobRef.current) {
+      current.restoreSnapshot(initialJobRef.current)
+      initialJobRef.current = null
+    }
     return () => { current.dispose(); session.current = null }
   }, [])
 
@@ -37,6 +42,7 @@ export function useProjectAnalysis(detail: ProjectDetail | null) {
   const cancel = useCallback(() => session.current?.cancel() ?? Promise.resolve(), [])
   const retryPoll = useCallback(() => session.current?.retryPoll(), [])
   const refresh = useCallback((next: ProjectDetail) => session.current?.refresh(next), [])
+  const restoreSnapshot = useCallback((job: ProjectAnalysisJob) => session.current?.restoreSnapshot(job) ?? false, [])
 
-  return { state, start, cancel, retryPoll, refresh }
+  return { state, start, cancel, retryPoll, refresh, restoreSnapshot }
 }

@@ -1,6 +1,11 @@
 "use client"
 
-import { useFormatter, useTranslations } from "next-intl"
+import { useId } from "react"
+import { useFormatter, useLocale, useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { CLEANUP_DISCOVERY, TARGET_KINDS, TARGET_VALIDITIES, TARGET_RISKS, cleanupDiscoveryCodec, selectCleanupTargets, hiddenSelectedCount } from "@/lib/file-ops/discovery"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { RiskBadge, RiskReasons } from "@/components/features/file-ops/risk-badge"
@@ -19,6 +24,7 @@ interface CleanupItemsProps {
   interaction: TargetInteraction
   referenceTime: string
   onToggle(path: string): void
+  resourceKey?: string
 }
 
 type TargetProps = Pick<CleanupItemsProps, "selected" | "interaction" | "onToggle"> & { target: FileOpsTarget }
@@ -86,12 +92,27 @@ function TargetRisk({ target }: { target: FileOpsTarget }) {
   )
 }
 
-export function CleanupItems({ targets, selected, interaction, referenceTime, onToggle }: CleanupItemsProps) {
+export function CleanupItems({ targets, selected, interaction, referenceTime, onToggle, resourceKey }: CleanupItemsProps) {
   const t = useTranslations("fileOps")
   const rowProps = { selected, interaction, onToggle }
+  const d = useTranslations("listDiscovery")
+  const format = useFormatter()
+  const locale = useLocale()
+  const fallbackKey = useId()
+  const [view, setView, reset] = useViewState(makeViewStateKey("cleanup-review", resourceKey ?? fallbackKey), cleanupDiscoveryCodec, CLEANUP_DISCOVERY)
+  const visible = selectCleanupTargets(targets, view, locale)
+  const hidden = hiddenSelectedCount(selected, new Set(visible.map(target => target.path)))
 
   return (
     <>
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.length} total={targets.length} onReset={reset}>
+        <DiscoveryFilter label={d("kinds")} value={view.kinds} options={TARGET_KINDS.map(value => ({ value, label: d(`values.${value}`), count: targets.filter(row => (row.kind ?? "unknown") === value).length }))} onValueChange={kinds => setView({ ...view, kinds })} />
+        <DiscoveryFilter label={d("validities")} value={view.validities} options={TARGET_VALIDITIES.map(value => ({ value, label: d(`values.${value}`), count: targets.filter(row => row.valid === (value === "valid")).length }))} onValueChange={validities => setView({ ...view, validities })} />
+        <DiscoveryFilter label={d("risks")} value={view.risks} options={TARGET_RISKS.map(value => ({ value, label: d(`values.${value}`), count: targets.filter(row => row.risk.level === value).length }))} onValueChange={risks => setView({ ...view, risks })} />
+        <DiscoverySort value={view.sort} options={[{ value: "size", label: d("size") }, { value: "age", label: d("age") }]} onValueChange={sort => setView({ ...view, sort })} />
+      </DiscoveryControls>
+      {hidden > 0 ? <p role="status" className="text-body-sm">{d("hiddenSelected", { count: format.number(hidden) })}</p> : null}
+      {visible.length === 0 ? <DiscoveryEmpty total={targets.length} /> : null}
       <div className="hidden min-w-0 rounded-md bg-card text-card-foreground lg:block">
         <Table className="table-fixed">
           <TableCaption className="sr-only">{t("listLabel")}</TableCaption>
@@ -103,7 +124,7 @@ export function CleanupItems({ targets, selected, interaction, referenceTime, on
             <TableHead className="whitespace-normal" scope="col">{t("columns.activity")}</TableHead>
             <TableHead className="w-1/5 whitespace-normal" scope="col">{t("columns.risk")}</TableHead>
           </TableRow></TableHeader>
-          <TableBody>{targets.map((target) => (
+          <TableBody>{visible.map((target) => (
             <TableRow key={target.path}>
               <TableCell className="align-top"><TargetCheckbox target={target} {...rowProps} /></TableCell>
               <TableCell className="align-top whitespace-normal"><TargetName target={target} /></TableCell>
@@ -119,7 +140,7 @@ export function CleanupItems({ targets, selected, interaction, referenceTime, on
       </div>
 
       <ul className="grid min-w-0 gap-4 lg:hidden" aria-label={t("listLabel")}>
-        {targets.map((target) => (
+        {visible.map((target) => (
           <li key={target.path} className="min-w-0">
             <Card>
               <CardHeader className="min-w-0">

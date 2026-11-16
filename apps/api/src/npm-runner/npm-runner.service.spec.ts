@@ -14,6 +14,12 @@ import type {
   IRunProcessExit,
   IRunProcessCallbacks,
 } from '@/npm-runner/execution/runner-process';
+import type { ITerminalRunCallbacks } from '@/npm-runner/terminal/terminal-worker-process';
+import type {
+  ITerminalInputFrame,
+  ITerminalSize,
+  TerminalDeliveryStatus,
+} from '@/npm-runner/terminal/terminal-protocol';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -871,5 +877,328 @@ describe('NpmRunnerService lifecycle', () => {
     expect(f.gate.isBusy()).toBe(true);
     expect(f.leave).not.toHaveBeenCalled();
     expect(f.service.latest().terminationVerified).toBe(false);
+  });
+});
+
+describe('NpmRunnerService terminal lifecycle', () => {
+  const tabId = '00000000-0000-4000-8000-000000000031';
+  const token1 = '00000000-0000-4000-8000-000000000041';
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date('2026-11-16T03:00:00.000Z') });
+    jest.mocked(readRunnerInput).mockReset().mockResolvedValue(runnerInput());
+    jest
+      .mocked(revalidateRunnerInput)
+      .mockReset()
+      .mockResolvedValue(runnerInput());
+  });
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  function terminalFixture() {
+    const f = fixture();
+    const ready = deferred<boolean>();
+    const ended = deferred<IRunProcessExit>();
+    let callbacks: ITerminalRunCallbacks | undefined;
+    const writes: ITerminalInputFrame[] = [];
+    const resizes: { size: ITerminalSize; wg: number }[] = [];
+    const write = jest.fn(
+      (frame: ITerminalInputFrame): Promise<TerminalDeliveryStatus> => {
+        writes.push(frame);
+        return Promise.resolve('delivered');
+      },
+    );
+    const resize = jest.fn((size: ITerminalSize, wg: number) => {
+      resizes.push({ size, wg });
+      return Promise.resolve();
+    });
+    const stop = jest.fn(() =>
+      Promise.resolve<'verified' | 'unconfirmed'>('verified'),
+    );
+    const launchTerminal = jest.fn<
+      ReturnType<NonNullable<INpmRunnerRuntime['launchTerminal']>>,
+      Parameters<NonNullable<INpmRunnerRuntime['launchTerminal']>>
+    >((_command, _env, listener) => {
+      callbacks = listener;
+      return {
+        pid: 456,
+        ready: ready.promise,
+        settled: ended.promise,
+        stop,
+        write,
+        resize,
+      };
+    });
+    f.runtime.launchTerminal = launchTerminal;
+    let uuidCounter = 0;
+    f.uuid.mockImplementation(() => (uuidCounter++ === 0 ? jobId : token1));
+    return {
+      ...f,
+      ready,
+      ended,
+      writes,
+      resizes,
+      write,
+      resize,
+      stopTerm: stop,
+      launchTerminal,
+      emitTerminalOutput: (text: string) => {
+        callbacks?.onTerminalOutput?.(text);
+        callbacks?.onOutput('stdout', Buffer.from(text, 'utf8'));
+      },
+      emitTerminalAck: (
+        writerGeneration: number,
+        sequence: number,
+        status: TerminalDeliveryStatus,
+      ) => {
+        callbacks?.onTerminalAck?.({
+          jobId,
+          generation: 1,
+          type: 'input-ack',
+          writerGeneration,
+          sequence,
+          status,
+        });
+      },
+      exitTerminal: async (result = success()) => {
+        ended.resolve(result);
+        callbacks?.onExit(result);
+        await flush();
+      },
+    };
+  }
+
+  it('reports terminalAvailable in context and rejects terminal start when launchTerminal is absent', async () => {
+    const plain = fixture();
+    await expect(plain.service.context(root)).resolves.toMatchObject({
+      terminalAvailable: false,
+    });
+    await expect(
+      plain.service.start(requestBody({ terminal: true })),
+    ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(plain.enter).not.toHaveBeenCalled();
+
+    const tf = terminalFixture();
+    await expect(tf.service.context(root)).resolves.toMatchObject({
+      terminalAvailable: true,
+    });
+  });
+
+  it('gates claim/input/resize until ready, serves terminal output/input/resize/ack and reconciles late acks', async () => {
+    const tf = terminalFixture();
+    await tf.service.start(
+      requestBody({ terminal: true, cols: 100, rows: 30 }),
+    );
+    await flush();
+
+    expect(tf.launchTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: root }),
+      expect.any(Object),
+      expect.any(Object),
+      { jobId, generation: 1 },
+      { cols: 100, rows: 30 },
+    );
+    expect(tf.service.get(jobId).terminal).toMatchObject({
+      mode: 'pty',
+      generation: 1,
+      available: true,
+      ready: false,
+      writerGeneration: null,
+      inputBlocked: false,
+    });
+
+    expect(() =>
+      tf.service.claimTerminal(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        takeover: false,
+      }),
+    ).toThrow(AppException);
+
+    tf.ready.resolve(true);
+    await flush();
+    expect(tf.service.get(jobId).terminal?.ready).toBe(true);
+
+    const writer = tf.service.claimTerminal(jobId, {
+      requestId,
+      generation: 1,
+      tabId,
+      takeover: false,
+    });
+    expect(writer).toEqual({ tabId, token: token1, writerGeneration: 1 });
+    expect(tf.service.get(jobId).terminal?.writerGeneration).toBe(1);
+
+    tf.emitTerminalOutput('hello \x1b[32mpty\x1b[0m\r\n');
+    const page = tf.service.terminalOutput(jobId, 1, 0);
+    expect(page.chunks.map((c) => c.text).join('')).toBe(
+      'hello \x1b[32mpty\x1b[0m\r\n',
+    );
+    expect(tf.service.get(jobId).terminal?.endCursor).toBe(page.endCursor);
+
+    // First input times out -> unknown, blocks subsequent input until late ack reconciles
+    tf.write.mockResolvedValueOnce('unknown');
+    const firstAck = await tf.service.terminalInput(jobId, {
+      requestId,
+      generation: 1,
+      tabId,
+      token: writer.token,
+      writerGeneration: 1,
+      sequence: 1,
+      text: 'SECRET_INPUT\r',
+    });
+    expect(firstAck.status).toBe('unknown');
+    expect(tf.service.get(jobId).terminal?.inputBlocked).toBe(true);
+    await expect(
+      tf.service.terminalInput(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        sequence: 2,
+        text: 'y\r',
+      }),
+    ).rejects.toMatchObject({ details: { terminalCode: 'INPUT_UNKNOWN' } });
+
+    tf.emitTerminalAck(1, 1, 'delivered');
+    expect(tf.service.get(jobId).terminal?.inputBlocked).toBe(false);
+    expect(
+      tf.service.terminalInputAck(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        sequence: 1,
+      }).status,
+    ).toBe('delivered');
+    expect(tf.write).toHaveBeenCalledTimes(1);
+
+    // Resize returns queued: true and dispatches resize
+    expect(
+      tf.service.terminalResize(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        cols: 120,
+        rows: 40,
+      }),
+    ).toEqual({ queued: true });
+    await flush();
+    expect(tf.resizes).toEqual([{ size: { cols: 120, rows: 40 }, wg: 1 }]);
+
+    // Mismatched requestId / generation throws WRONG_JOB
+    expect(() =>
+      tf.service.claimTerminal(jobId, {
+        requestId: nextRequestId,
+        generation: 1,
+        tabId,
+        takeover: false,
+      }),
+    ).toThrow(AppException);
+    expect(() => tf.service.terminalOutput(jobId, 2, 0)).toThrow(AppException);
+
+    // Job completion transitions control to terminal while ack & output stay readable
+    await tf.exitTerminal();
+    expect(tf.service.get(jobId)).toMatchObject({
+      status: 'completed',
+      gateHeld: false,
+    });
+    expect(tf.service.get(jobId).terminal?.inputBlocked).toBe(true);
+    expect(
+      tf.service.terminalInputAck(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        sequence: 1,
+      }).status,
+    ).toBe('delivered');
+    expect(tf.service.terminalOutput(jobId, 1, 0).endCursor).toBe(
+      page.endCursor,
+    );
+    await expect(
+      tf.service.terminalInput(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        sequence: 2,
+        text: 'late',
+      }),
+    ).rejects.toMatchObject({ details: { terminalCode: 'NOT_RUNNING' } });
+
+    // Input text and writer token must never appear on job snapshot or audit records
+    expect(JSON.stringify(tf.service.get(jobId))).not.toContain('SECRET_INPUT');
+    expect(JSON.stringify(tf.service.get(jobId))).not.toContain(writer.token);
+    expect(JSON.stringify(tf.writeResult.mock.calls)).not.toContain(
+      'SECRET_INPUT',
+    );
+    expect(JSON.stringify(tf.writeResult.mock.calls)).not.toContain(
+      writer.token,
+    );
+  });
+
+  it('sets stopping gate synchronously on cancel and never constructs control when ready resolves false', async () => {
+    const tf = terminalFixture();
+    await tf.service.start(requestBody({ terminal: true }));
+    await flush();
+    tf.ready.resolve(false);
+    await flush();
+    expect(() =>
+      tf.service.claimTerminal(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        takeover: false,
+      }),
+    ).toThrow(AppException);
+
+    await tf.exitTerminal(success({ failureCode: 'COMMAND_FAILED' }));
+    expect(tf.service.get(jobId).status).toBe('failed');
+
+    const tf2 = terminalFixture();
+    const stopGate = deferred<'verified' | 'unconfirmed'>();
+    tf2.stopTerm.mockReturnValueOnce(stopGate.promise);
+    tf2.uuid.mockReturnValue(jobId);
+    let seq = 0;
+    tf2.uuid.mockImplementation(() => (seq++ === 0 ? jobId : token1));
+    await tf2.service.start(requestBody({ terminal: true }));
+    await flush();
+    tf2.ready.resolve(true);
+    await flush();
+    const writer = tf2.service.claimTerminal(jobId, {
+      requestId,
+      generation: 1,
+      tabId,
+      takeover: false,
+    });
+    await tf2.service.cancel(jobId);
+    expect(tf2.service.get(jobId).terminal?.inputBlocked).toBe(true);
+    await expect(
+      tf2.service.terminalInput(jobId, {
+        requestId,
+        generation: 1,
+        tabId,
+        token: writer.token,
+        writerGeneration: 1,
+        sequence: 1,
+        text: 'y\r',
+      }),
+    ).rejects.toMatchObject({ details: { terminalCode: 'NOT_RUNNING' } });
+    stopGate.resolve('verified');
+    await tf2.exitTerminal(success({ exitCode: null, signal: 'SIGTERM' }));
+    expect(tf2.service.get(jobId)).toMatchObject({
+      status: 'cancelled',
+      gateHeld: false,
+    });
   });
 });

@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import {
   createFileOpsSession, type FileOpsActions, type FileOpsEnvironment, type FileOpsSnapshot,
 } from "@/lib/file-ops/file-ops-session"
+import { invalidateNavigationSnapshots } from "@/lib/ui/navigation-store"
 
 export type FileOpsController = FileOpsActions & FileOpsSnapshot
 
@@ -36,6 +37,18 @@ const browserEnvironment: FileOpsEnvironment = {
 export function useFileOps(): FileOpsController {
   const [session] = useState(() => createFileOpsSession(browserEnvironment))
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
+  const invalidatedKeyRef = useRef<string | null>(null)
   useEffect(() => session.connect(), [session])
+  useEffect(() => {
+    const { phase, operation } = snapshot.state
+    if (phase !== "finished" && phase !== "lost") return
+    const mayHaveMutated = phase === "lost"
+      || (operation !== null && (operation.status !== "cancelled" || operation.results.some((item) => item.status === "success" || item.mayBePartial)))
+    if (!mayHaveMutated) return
+    const key = operation?.operationId ?? phase
+    if (invalidatedKeyRef.current === key) return
+    invalidatedKeyRef.current = key
+    invalidateNavigationSnapshots("file-ops")
+  }, [snapshot.state])
   return { ...session, ...snapshot }
 }

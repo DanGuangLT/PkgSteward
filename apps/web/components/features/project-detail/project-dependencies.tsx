@@ -1,8 +1,13 @@
 "use client"
 
 import { AlertTriangleIcon, ArrowUpIcon } from "lucide-react"
-import { useMemo } from "react"
-import { useFormatter, useTranslations } from "next-intl"
+import { useMemo, useState } from "react"
+import { useFormatter, useLocale, useTranslations } from "next-intl"
+import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { useViewState } from "@/hooks/use-navigation-continuity"
+import { makeViewStateKey } from "@/lib/ui/navigation-targets"
+import { DEPENDENCY_GROUP_FILTERS, DEPENDENCY_STATUS_FILTERS, selectDependencies, createDependencyStatusReader } from "@/lib/projects/detail-filters"
+import { DEPENDENCY_DISCOVERY, dependencyDiscoveryCodec } from "@/lib/projects/detail-discovery-state"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,22 +48,35 @@ function DependencyVersions({ lockedVersions, result }: { lockedVersions: readon
   )
 }
 
-export function ProjectDependencies({ dependencies, job }: {
+export function ProjectDependencies({ dependencies, job, resourceKey }: {
   dependencies: readonly ProjectDependency[]
   job: ProjectAnalysisJob | null
+  resourceKey?: string
 }) {
   const t = useTranslations("projectDetail")
   const format = useFormatter()
+  const d = useTranslations("listDiscovery")
+  const locale = useLocale()
+  const persisted = useViewState(makeViewStateKey("project-dependencies", resourceKey), dependencyDiscoveryCodec, DEPENDENCY_DISCOVERY)
+  const [local, setLocal] = useState(DEPENDENCY_DISCOVERY)
+  const [view, setView, reset] = resourceKey ? persisted : [local, setLocal, () => setLocal(DEPENDENCY_DISCOVERY)] as const
+  const visible = useMemo(() => selectDependencies(dependencies, job, view.query, view.sort, locale, view), [dependencies, job, view, locale])
+  const readStatus = createDependencyStatusReader(job)
   const items = useMemo(() => {
     const readBadges = createProjectDependencyBadgeReader(job)
     const readRows = createProjectDependencyRowsReader(job?.outdated.items ?? [])
-    return dependencies.map(dependency => ({ dependency, badges: readBadges(dependency.name), rows: readRows(dependency) }))
-  }, [dependencies, job])
+    return visible.map(dependency => ({ dependency, badges: readBadges(dependency.name), rows: readRows(dependency) }))
+  }, [visible, job])
   return (
     <section className="min-w-0 space-y-4" aria-label={t("dependencies.title")}>
       <h2 className="text-heading-md">{t("dependencies.title")}</h2>
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.length} total={dependencies.length} onReset={reset}>
+        <DiscoveryFilter label={d("groups")} value={view.groups} options={DEPENDENCY_GROUP_FILTERS.map(value => ({ value, label: d(`values.${value}`), count: dependencies.filter(item => item.declarations.some(row => row.group === value)).length }))} onValueChange={groups => setView({ ...view, groups })} />
+        <DiscoveryFilter label={d("statuses")} value={view.statuses} options={DEPENDENCY_STATUS_FILTERS.map(value => ({ value, label: d(`values.${value}`), count: dependencies.filter(item => readStatus(item)[value]).length }))} onValueChange={statuses => setView({ ...view, statuses })} />
+        <DiscoverySort value={view.sort} options={[{ value: "name", label: d("name") }, { value: "status", label: d("status") }]} onValueChange={sort => setView({ ...view, sort })} />
+      </DiscoveryControls>
       <p className="text-body-sm text-muted-foreground">{t("dependencies.count", { count: dependencies.length, formattedCount: format.number(dependencies.length) })}</p>
-      {dependencies.length === 0 ? <p className="text-body-sm">{t("dependencies.empty")}</p> : (
+      {visible.length === 0 ? <DiscoveryEmpty total={dependencies.length} /> : (
         <>
           <div className="hidden min-w-0 rounded-md bg-card text-card-foreground lg:block">
             <Table className="table-fixed">

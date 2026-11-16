@@ -39,7 +39,13 @@ import type {
   IRunLogPage,
   IRunStart,
   IRunnerContext,
+  ITerminalResizeResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
+import type {
+  ITerminalInputAck,
+  ITerminalWriter,
+} from '@/npm-runner/terminal/terminal-control';
 import {
   createNpmRunnerRuntime,
   NpmRunnerModule,
@@ -50,6 +56,12 @@ import type {
   IRunProcessCallbacks,
   IRunProcessExit,
 } from '@/npm-runner/execution/runner-process';
+import type { ITerminalRunCallbacks } from '@/npm-runner/terminal/terminal-worker-process';
+import type {
+  ITerminalInputFrame,
+  ITerminalSize,
+  TerminalDeliveryStatus,
+} from '@/npm-runner/terminal/terminal-protocol';
 import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import {
   fsFixture,
@@ -118,6 +130,11 @@ function fixture() {
     resolveRunnerTool(manager, input.snapshot, input.fs);
   const gate = new MutationGateService();
   let callbacks: IRunProcessCallbacks | undefined;
+  let terminalCallbacks: ITerminalRunCallbacks | undefined;
+  let resolveReady!: (ready: boolean) => void;
+  const ready = new Promise<boolean>((resolve) => {
+    resolveReady = resolve;
+  });
   let complete!: (exit: IRunProcessExit) => void;
   const settled = new Promise<IRunProcessExit>((resolve) => {
     complete = resolve;
@@ -133,6 +150,7 @@ function fixture() {
     };
     complete(exit);
     callbacks?.onExit(exit);
+    terminalCallbacks?.onExit(exit);
   };
   const stop = jest.fn(() => {
     finish({ exitCode: null, signal: 'SIGTERM' });
@@ -144,6 +162,32 @@ function fixture() {
   >((_c, _e, listener) => {
     callbacks = listener;
     return { pid: 123, settled, stop };
+  });
+  const terminalWrites: ITerminalInputFrame[] = [];
+  const terminalResizes: { size: ITerminalSize; wg: number }[] = [];
+  const terminalWrite = jest.fn(
+    (frame: ITerminalInputFrame): Promise<TerminalDeliveryStatus> => {
+      terminalWrites.push(frame);
+      return Promise.resolve('delivered');
+    },
+  );
+  const terminalResize = jest.fn((size: ITerminalSize, wg: number) => {
+    terminalResizes.push({ size, wg });
+    return Promise.resolve();
+  });
+  const launchTerminal = jest.fn<
+    ReturnType<NonNullable<INpmRunnerRuntime['launchTerminal']>>,
+    Parameters<NonNullable<INpmRunnerRuntime['launchTerminal']>>
+  >((_c, _e, listener) => {
+    terminalCallbacks = listener;
+    return {
+      pid: 456,
+      ready,
+      settled,
+      stop,
+      write: terminalWrite,
+      resize: terminalResize,
+    };
   });
   let deadline: (() => void) | undefined;
   let clockOffsetMs = 0;
@@ -182,6 +226,7 @@ function fixture() {
       staleAnalysis: invalidateAfterMutation,
     },
     launch,
+    launchTerminal,
     now: () => new Date(Date.now() + clockOffsetMs),
     uuid: () => id,
     setTimer: (callback, ms) => {
@@ -194,14 +239,25 @@ function fixture() {
     if (!callbacks) throw new Error('TEST no fake child');
     callbacks.onOutput('stdout', bytes);
   };
+  const terminalOutput = (text: string) => {
+    if (!terminalCallbacks) throw new Error('TEST no fake terminal child');
+    terminalCallbacks.onTerminalOutput?.(text);
+    terminalCallbacks.onOutput('stdout', Buffer.from(text, 'utf8'));
+  };
   return {
     input,
     gate,
     runtime,
     launch,
+    launchTerminal,
+    resolveReady,
+    terminalWrite,
+    terminalWrites,
+    terminalResizes,
     stop,
     finish,
     output,
+    terminalOutput,
     audit,
     refreshProject,
     clearCache,
@@ -705,5 +761,214 @@ describe('NpmRunner HTTP flow (real Nest, mocked IO)', () => {
       refreshRequired: false,
     });
     expect(result.result).not.toContain('TEST_VALUE');
+    expect(typeof runtime.launchTerminal).toBe('function');
+  });
+
+  it('terminal HTTP flow: context -> start(terminal) -> ready gate -> claim/takeover -> output/input/ack/resize -> cancel', async () => {
+    let uuidSeq = 0;
+    const token1 = '00000000-0000-4000-8000-000000000041';
+    const token2 = '00000000-0000-4000-8000-000000000042';
+    const tab1 = '00000000-0000-4000-8000-000000000051';
+    const tab2 = '00000000-0000-4000-8000-000000000052';
+    f.runtime.uuid = () => {
+      uuidSeq++;
+      if (uuidSeq === 1) return id;
+      return uuidSeq === 2 ? token1 : token2;
+    };
+
+    const app = await open(100);
+    const context = await getContext(app);
+    expect(context.terminalAvailable).toBe(true);
+
+    const startRes = await request(app.getHttpServer())
+      .post('/api/v1/npm-runs')
+      .send({
+        path: root,
+        action: 'install_all',
+        inputHash: context.inputHash,
+        requestId,
+        terminal: true,
+        cols: 100,
+        rows: 30,
+      })
+      .expect(202);
+    expect((startRes.body as IApiResponse<IRunStart>).data?.jobId).toBe(id);
+    await tick();
+
+    // Claim rejected before ready
+    const preReadyClaim = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
+      .send({ requestId, generation: 1, tabId: tab1, takeover: false })
+      .expect(409);
+    expect(
+      (preReadyClaim.body as { details: { terminalCode: string } }).details
+        .terminalCode,
+    ).toBe('NOT_INITIALIZED');
+
+    f.resolveReady(true);
+    await tick();
+    expect((await poll(app)).terminal).toMatchObject({
+      mode: 'pty',
+      generation: 1,
+      available: true,
+      ready: true,
+      writerGeneration: null,
+      inputBlocked: false,
+    });
+
+    // Claim tab1; competing tab2 fails with WRITER_HELD; takeover transfers to tab2
+    const claim1 = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
+      .send({ requestId, generation: 1, tabId: tab1, takeover: false })
+      .expect(200);
+    const writer1 = (claim1.body as IApiResponse<ITerminalWriter>).data!;
+    expect(writer1).toEqual({
+      tabId: tab1,
+      token: token1,
+      writerGeneration: 1,
+    });
+
+    const conflictClaim = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
+      .send({ requestId, generation: 1, tabId: tab2, takeover: false })
+      .expect(409);
+    expect(
+      (conflictClaim.body as { details: { terminalCode: string } }).details
+        .terminalCode,
+    ).toBe('WRITER_HELD');
+
+    const claim2 = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
+      .send({ requestId, generation: 1, tabId: tab2, takeover: true })
+      .expect(200);
+    const writer2 = (claim2.body as IApiResponse<ITerminalWriter>).data!;
+    expect(writer2).toEqual({
+      tabId: tab2,
+      token: token2,
+      writerGeneration: 2,
+    });
+
+    // Output polling (no-store, unthrottled)
+    f.terminalOutput('prompt> ');
+    const outRes = await request(app.getHttpServer())
+      .get(`/api/v1/npm-runs/${id}/terminal-output`)
+      .query({ generation: 1, cursor: 0 })
+      .expect(200);
+    expect(outRes.headers['cache-control']).toBe('no-store');
+    const outPage = (outRes.body as IApiResponse<ITerminalOutputPage>).data!;
+    expect(outPage.chunks[0].text).toBe('prompt> ');
+    expect(outPage.nextCursor).toBe(8);
+
+    // Input delivery + read-only ack + resize
+    const inputRes = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-input`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab2,
+        token: writer2.token,
+        writerGeneration: 2,
+        sequence: 1,
+        text: 'SECRET_HTTP_INPUT\r',
+      })
+      .expect(200);
+    expect(
+      (inputRes.body as IApiResponse<ITerminalInputAck>).data,
+    ).toMatchObject({
+      jobId: id,
+      generation: 1,
+      writerGeneration: 2,
+      sequence: 1,
+      status: 'delivered',
+    });
+
+    const ackRes = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-input-ack`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab2,
+        token: writer2.token,
+        writerGeneration: 2,
+        sequence: 1,
+      })
+      .expect(200);
+    expect((ackRes.body as IApiResponse<ITerminalInputAck>).data?.status).toBe(
+      'delivered',
+    );
+
+    const resizeRes = await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-resize`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab2,
+        token: writer2.token,
+        writerGeneration: 2,
+        cols: 120,
+        rows: 40,
+      })
+      .expect(200);
+    expect(
+      (resizeRes.body as IApiResponse<ITerminalResizeResult>).data,
+    ).toEqual({ queued: true });
+    await tick();
+    expect(f.terminalResizes).toEqual([
+      { size: { cols: 120, rows: 40 }, wg: 2 },
+    ]);
+
+    // Reject invalid DTOs (400) and stale writer (409)
+    await request(app.getHttpServer())
+      .get(`/api/v1/npm-runs/${id}/terminal-output`)
+      .query({ generation: 0, cursor: 0 })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-input`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab1,
+        token: writer1.token,
+        writerGeneration: 1,
+        sequence: 1,
+        text: 'stale',
+      })
+      .expect(409);
+
+    // Cancel and verify final read-only access
+    await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/cancel`)
+      .send({})
+      .expect(202);
+    await tick();
+    const finalJob = await poll(app);
+    expect(finalJob.status).toBe('cancelled');
+    expect(finalJob.terminal?.inputBlocked).toBe(true);
+    expect(JSON.stringify(finalJob)).not.toContain('SECRET_HTTP_INPUT');
+    expect(JSON.stringify(finalJob)).not.toContain(writer2.token);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-input-ack`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab2,
+        token: writer2.token,
+        writerGeneration: 2,
+        sequence: 1,
+      })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/api/v1/npm-runs/${id}/terminal-input`)
+      .send({
+        requestId,
+        generation: 1,
+        tabId: tab2,
+        token: writer2.token,
+        writerGeneration: 2,
+        sequence: 2,
+        text: 'after-cancel',
+      })
+      .expect(409);
   });
 });
