@@ -312,11 +312,27 @@ describe('M7 ready preview store', () => {
       stat: nativeStat,
     };
     facts.location.tool.identities = [testIdentity(facts.location.tool.file)];
+    facts.location.tool.npm10InstallCompatIdentities = [
+      testIdentity('D:\\TEST\\npm10-compat.cjs'),
+    ];
     facts.current.binIdentities = [testIdentity('D:\\TEST\\test-tool.cmd')];
     facts.location.configIdentities[0].file = testIdentity(
       facts.location.userConfig,
     );
-    facts.locations = [facts.location];
+    facts.locations = [
+      facts.location,
+      {
+        ...facts.location,
+        manager: 'pnpm',
+        tool: {
+          ...facts.location.tool,
+          manager: 'pnpm',
+          npm10InstallCompatIdentities: [
+            testIdentity('D:\\TEST\\sibling-npm10-compat.cjs'),
+          ],
+        },
+      },
+    ];
     const store = new GlobalPreviewStore(testClock());
     store.put(testPreview(), facts);
     const retained = store.get(TEST_PREVIEW_ID).facts;
@@ -324,9 +340,11 @@ describe('M7 ready preview store', () => {
       retained.current!.manifest.file,
       ...retained.current!.binIdentities,
       ...retained.location.tool.identities,
+      ...(retained.location.tool.npm10InstallCompatIdentities ?? []),
       ...retained.location.configIdentities.map((identity) => identity.file),
       ...retained.locations!.flatMap((location) => [
         ...location.tool.identities,
+        ...(location.tool.npm10InstallCompatIdentities ?? []),
         ...location.configIdentities.map((identity) => identity.file),
       ]),
     ];
@@ -341,6 +359,11 @@ describe('M7 ready preview store', () => {
     }
     expect(() => structuredClone(retained)).not.toThrow();
     expect(() => assertGlobalPreviewUnchanged(retained, facts)).not.toThrow();
+    const compatDrift = structuredClone(retained);
+    compatDrift.locations![1].tool.npm10InstallCompatIdentities![0].stat.ino = 9999;
+    expect(() => assertGlobalPreviewUnchanged(retained, compatDrift)).toThrow(
+      AppException,
+    );
     nativeStat.ino = 99;
     retained.current!.manifest.file.stat.ino = 77;
     expect(

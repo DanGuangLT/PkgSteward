@@ -126,6 +126,12 @@ function snapshotLocation(location: IGlobalLocation): IGlobalLocation {
     tool: {
       ...location.tool,
       identities: location.tool.identities.map(snapshotIdentity),
+      ...(location.tool.npm10InstallCompatIdentities
+        ? {
+            npm10InstallCompatIdentities:
+              location.tool.npm10InstallCompatIdentities.map(snapshotIdentity),
+          }
+        : {}),
     },
     configIdentities: location.configIdentities.map((identity) => ({
       ...identity,
@@ -318,6 +324,13 @@ function locationFacts(location: IGlobalLocation) {
       entry: location.tool.entry ? pathKey(location.tool.entry) : null,
       packageDir: pathKey(location.tool.packageDir),
       identities: identities(location.tool.identities),
+      ...(location.tool.npm10InstallCompatIdentities
+        ? {
+            npm10InstallCompatIdentities: identities(
+              location.tool.npm10InstallCompatIdentities,
+            ),
+          }
+        : {}),
     },
     paths: [
       location.prefix,
