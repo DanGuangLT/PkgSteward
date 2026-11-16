@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-test('the root installer forwards an explicit non-interactive flag only to Yarn', (t) => {
+test('the root installer forwards supported explicit install flags only to Yarn', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'pkgsteward-install-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const folder of ['scripts', 'apps/api', 'apps/web']) {
@@ -18,10 +18,17 @@ test('the root installer forwards an explicit non-interactive flag only to Yarn'
 
   const cases = [
     ['yarn', '{"original":["install","--non-interactive"]}', ['install', '--non-interactive']],
+    ['yarn', '{"original":["install","--offline"]}', ['install', '--offline']],
+    [
+      'yarn',
+      '{"original":["install","--offline","--non-interactive","--ignore-scripts"]}',
+      ['install', '--non-interactive', '--offline'],
+    ],
+    ['yarn', '{"original":["install","--offline=false"]}', ['install']],
     ['yarn', '{"original":["install"]}', ['install']],
     ['yarn', 'invalid JSON', ['install']],
-    ['npm', '{"original":["install","--non-interactive"]}', ['install']],
-    ['pnpm', '{"original":["install","--non-interactive"]}', ['install']],
+    ['npm', '{"original":["install","--non-interactive","--offline"]}', ['install']],
+    ['pnpm', '{"original":["install","--non-interactive","--offline"]}', ['install']],
   ];
   for (const [manager, argv, expected] of cases) {
     const result = spawnSync(process.execPath, [installer], {

@@ -26,8 +26,8 @@ if (manager === 'yarn') {
   // Yarn Classic exposes CLI flags in its lifecycle argument metadata.
   try {
     const original = JSON.parse(process.env.npm_config_argv ?? '{}')?.original;
-    if (Array.isArray(original) && original.includes('--non-interactive')) {
-      args.push('--non-interactive');
+    if (Array.isArray(original)) {
+      args.push(...['--non-interactive', '--offline'].filter((flag) => original.includes(flag)));
     }
   } catch {
     // The optional metadata is unavailable or malformed.
