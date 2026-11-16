@@ -15,19 +15,46 @@ export interface ITerminalWorkerChannel {
   ): void;
   close(): void;
 }
+export interface ITerminalWorkerSpawnOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  cols?: number;
+  rows?: number;
+  name?: string;
+  useConpty?: boolean;
+  encoding?: string | null;
+}
+
 export interface IPtyModule {
   spawn(
     file: string,
     args: string[] | string,
-    options: Parameters<typeof import('node-pty').spawn>[2],
+    options: ITerminalWorkerSpawnOptions,
   ): ITerminalWorkerPty;
+}
+
+const NODE_PTY_MODULE: string = 'node-pty';
+
+export async function loadDefaultPtyModule(
+  importer: (id: string) => Promise<unknown> = (id) => import(id),
+): Promise<IPtyModule> {
+  const loaded: unknown = await importer(NODE_PTY_MODULE);
+  if (
+    typeof loaded === 'object' &&
+    loaded !== null &&
+    'spawn' in loaded &&
+    typeof loaded.spawn === 'function'
+  ) {
+    return loaded as IPtyModule;
+  }
+  throw new Error('Invalid PTY module');
 }
 
 /** Importing this module in the API never imports or initializes native PTY code. */
 export function attachTerminalWorker(
   identity: ITerminalIdentity,
   channel: ITerminalWorkerChannel,
-  load: () => Promise<IPtyModule> = () => import('node-pty'),
+  load: () => Promise<IPtyModule> = loadDefaultPtyModule,
 ) {
   assertTerminalIdentity(identity);
   const worker = createTerminalWorker(identity, {

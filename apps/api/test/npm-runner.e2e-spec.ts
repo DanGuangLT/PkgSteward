@@ -47,6 +47,7 @@ import type {
   ITerminalWriter,
 } from '@/npm-runner/terminal/terminal-control';
 import {
+  canResolveNodePty,
   createNpmRunnerRuntime,
   NpmRunnerModule,
 } from '@/npm-runner/npm-runner.module';
@@ -762,6 +763,18 @@ describe('NpmRunner HTTP flow (real Nest, mocked IO)', () => {
     });
     expect(result.result).not.toContain('TEST_VALUE');
     expect(typeof runtime.launchTerminal).toBe('function');
+
+    expect(canResolveNodePty(() => 'C:\\TEST\\node-pty\\index.js')).toBe(true);
+    expect(
+      canResolveNodePty(() => {
+        throw new Error('Cannot find module');
+      }),
+    ).toBe(false);
+    const noTerminalRuntime = createNpmRunnerRuntime({
+      ...bindings,
+      terminalAvailable: false,
+    });
+    expect(typeof noTerminalRuntime.launchTerminal).toBe('undefined');
   });
 
   it('terminal HTTP flow: context -> start(terminal) -> ready gate -> claim/takeover -> output/input/ack/resize -> cancel', async () => {

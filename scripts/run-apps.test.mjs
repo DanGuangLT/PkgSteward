@@ -246,3 +246,101 @@ test('root dev never opens browser while start reports ready when both apps fini
   assert.equal(startResult.status, 5);
   assert.match(startResult.stdout, /Both apps are ready/);
 });
+
+test('root launcher installs missing app dependencies before running tasks and aborts if install fails', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'pkgsteward-run-install-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const folder of ['scripts', 'apps/api', 'apps/web']) {
+    mkdirSync(join(root, folder), { recursive: true });
+  }
+  const launcher = join(root, 'scripts', 'run-apps.mjs');
+  const cli = join(root, 'cli.cjs');
+  const eventsFile = join(root, 'events.log');
+  copyFileSync(new URL('./run-apps.mjs', import.meta.url), launcher);
+  writeFileSync(
+    cli,
+    [
+      "const { appendFileSync, mkdirSync, writeFileSync } = require('node:fs');",
+      "const { basename, join } = require('node:path');",
+      'const app = basename(process.cwd());',
+      'const args = process.argv.slice(2);',
+      'appendFileSync(process.env.TEST_EVENTS_FILE, `${app}:${args.join(" ")}\\n`);',
+      "if (args[0] === 'install') {",
+      "  if (process.env.TEST_FAIL_INSTALL === app) process.exit(9);",
+      "  mkdirSync(join(process.cwd(), 'node_modules', 'node-pty'), { recursive: true });",
+      "  writeFileSync(join(process.cwd(), 'node_modules', 'node-pty', 'package.json'), '{}');",
+      "  mkdirSync(join(process.cwd(), 'node_modules', '@xterm', 'xterm'), { recursive: true });",
+      "  writeFileSync(join(process.cwd(), 'node_modules', '@xterm', 'xterm', 'package.json'), '{}');",
+      '  process.exit(0);',
+      '}',
+      'process.exit(0);',
+    ].join('\n'),
+  );
+
+  writeFileSync(
+    join(root, 'apps', 'api', 'package.json'),
+    JSON.stringify({ dependencies: { 'node-pty': '1.1.0' } }),
+  );
+  writeFileSync(
+    join(root, 'apps', 'web', 'package.json'),
+    JSON.stringify({ dependencies: { '@xterm/xterm': '5.5.0' } }),
+  );
+
+  writeFileSync(eventsFile, '');
+  const firstRun = spawnSync(process.execPath, [launcher, 'build'], {
+    env: {
+      ...process.env,
+      npm_execpath: cli,
+      npm_config_user_agent: 'pnpm/11.0.0',
+      TEST_EVENTS_FILE: eventsFile,
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(firstRun.error, undefined);
+  assert.equal(firstRun.status, 0, firstRun.stderr);
+  assert.deepEqual(readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/), [
+    'api:install',
+    'web:install',
+    'api:run build',
+    'web:run build',
+  ]);
+
+  // Second run has node_modules/<pkg>/package.json already on disk: no install runs.
+  writeFileSync(eventsFile, '');
+  const secondRun = spawnSync(process.execPath, [launcher, 'build'], {
+    env: {
+      ...process.env,
+      npm_execpath: cli,
+      npm_config_user_agent: 'pnpm/11.0.0',
+      TEST_EVENTS_FILE: eventsFile,
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(secondRun.error, undefined);
+  assert.equal(secondRun.status, 0, secondRun.stderr);
+  assert.deepEqual(readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/), [
+    'api:run build',
+    'web:run build',
+  ]);
+
+  // Missing dependency whose install fails must stop before launching any app.
+  rmSync(join(root, 'apps', 'api', 'node_modules'), { recursive: true, force: true });
+  writeFileSync(eventsFile, '');
+  const failedRun = spawnSync(process.execPath, [launcher, 'dev'], {
+    env: {
+      ...process.env,
+      npm_execpath: cli,
+      npm_config_user_agent: 'npm/10.0.0',
+      TEST_EVENTS_FILE: eventsFile,
+      TEST_FAIL_INSTALL: 'api',
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(failedRun.error, undefined);
+  assert.equal(failedRun.status, 9);
+  assert.match(failedRun.stderr, /npm install failed in apps\/api/);
+  assert.deepEqual(readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/), ['api:install']);
+});

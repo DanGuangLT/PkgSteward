@@ -5,6 +5,7 @@
 // `build` builds them sequentially. `start` also opens the web UI in the default browser once both
 // apps are ready.
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -41,9 +42,11 @@ if (!['npm', 'pnpm', 'yarn'].includes(manager) || !cli) {
 // Call the same CLI without a shell: a JavaScript entry runs on the current Node binary.
 const isScript = ['.js', '.cjs', '.mjs'].includes(extname(cli).toLowerCase());
 const command = isScript ? process.execPath : cli;
+const installArgs = isScript ? [cli, 'install'] : ['install'];
 const runArgs = (script) => (isScript ? [cli, 'run', script] : ['run', script]);
 
 if (task.sequential) {
+  ensureInstalled(task.apps);
   runSequential(task.apps);
 } else {
   const startupTimeoutMs = Number(process.env.PKGSTEWARD_STARTUP_TIMEOUT_MS ?? 120_000);
@@ -51,7 +54,35 @@ if (task.sequential) {
     console.error('[run-apps] PKGSTEWARD_STARTUP_TIMEOUT_MS must be an integer from 1 to 2147483647.');
     process.exit(1);
   }
+  ensureInstalled(task.apps);
   runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER, startupTimeoutMs);
+}
+
+function hasMissingDependencies(appDir) {
+  const manifestPath = join(appDir, 'package.json');
+  if (!existsSync(manifestPath)) return false;
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const packages = [
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.devDependencies ?? {}),
+  ];
+  return packages.some(
+    (pkg) => !existsSync(join(appDir, 'node_modules', ...pkg.split('/'), 'package.json')),
+  );
+}
+
+function ensureInstalled(apps) {
+  for (const [app] of apps) {
+    const appDir = join(root, 'apps', app);
+    if (!hasMissingDependencies(appDir)) continue;
+    console.log(`\n[run-apps] ${manager} install in apps/${app}`);
+    const result = spawnSync(command, installArgs, { cwd: appDir, stdio: 'inherit' });
+    if (result.status !== 0) {
+      const reason = result.error ? `: ${result.error.message}` : ` (exit code ${result.status})`;
+      console.error(`[run-apps] ${manager} install failed in apps/${app}${reason}`);
+      process.exit(result.status || 1);
+    }
+  }
 }
 
 function runSequential(apps) {

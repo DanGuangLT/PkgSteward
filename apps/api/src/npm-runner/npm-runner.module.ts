@@ -63,6 +63,20 @@ export interface IRunnerRuntimeBindings {
     execPath: string;
     env: Readonly<NodeJS.ProcessEnv>;
   };
+  terminalAvailable?: boolean;
+}
+
+const NODE_PTY_MODULE: string = 'node-pty';
+
+export function canResolveNodePty(
+  resolve: (id: string) => string = (id) => require.resolve(id),
+): boolean {
+  try {
+    resolve(NODE_PTY_MODULE);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function createNpmRunnerRuntime(
@@ -80,6 +94,7 @@ export function createNpmRunnerRuntime(
   const env = Object.freeze({ ...host.env });
   const platform = host.platform === 'win32' ? 'win32' : 'posix';
   const processes = host.platform === 'win32' ? bindings.processes : null;
+  const terminalEnabled = bindings.terminalAvailable ?? canResolveNodePty();
   const roots = parseScanRootPaths(
     config.get<string>('SCAN_ROOT_PATHS'),
     platform,
@@ -182,22 +197,24 @@ export function createNpmRunnerRuntime(
         );
       return launchRun(command, childEnv, callbacks, { processes, clock });
     },
-    launchTerminal: (command, childEnv, callbacks, identity, initialSize) => {
-      if (!processes)
-        throw new AppException(
-          503,
-          'Runner process adapter unavailable',
-          'SERVICE_UNAVAILABLE',
-        );
-      return launchTerminalRun(
-        command,
-        childEnv,
-        callbacks,
-        { processes, clock },
-        identity,
-        initialSize,
-      );
-    },
+    launchTerminal: terminalEnabled
+      ? (command, childEnv, callbacks, identity, initialSize) => {
+          if (!processes)
+            throw new AppException(
+              503,
+              'Runner process adapter unavailable',
+              'SERVICE_UNAVAILABLE',
+            );
+          return launchTerminalRun(
+            command,
+            childEnv,
+            callbacks,
+            { processes, clock },
+            identity,
+            initialSize,
+          );
+        }
+      : undefined,
     now: () => new Date(),
     uuid: randomUUID,
     setTimer: (callback, ms) => setTimeout(callback, ms),

@@ -1,5 +1,11 @@
-import { attachTerminalWorker } from './terminal-worker-entry';
-import type { ITerminalWorkerChannel } from './terminal-worker-entry';
+import {
+  attachTerminalWorker,
+  loadDefaultPtyModule,
+} from './terminal-worker-entry';
+import type {
+  ITerminalWorkerChannel,
+  ITerminalWorkerSpawnOptions,
+} from './terminal-worker-entry';
 import type { ITerminalWorkerPty } from './terminal-worker';
 import type { WorkerTerminalFrame } from './terminal-protocol';
 
@@ -106,5 +112,25 @@ describe('terminal worker process entry', () => {
     receive({ ...initialization, file: '/relative.exe' });
     await flush();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  it('loads valid PTY module shapes and rejects invalid ones via loadDefaultPtyModule', async () => {
+    const options: ITerminalWorkerSpawnOptions = {
+      cwd: 'C:/TEST',
+      cols: 80,
+      rows: 24,
+      useConpty: true,
+    };
+    expect(options.useConpty).toBe(true);
+    const spawn = jest.fn();
+    await expect(
+      loadDefaultPtyModule(() => Promise.resolve({ spawn })),
+    ).resolves.toEqual({ spawn });
+    await expect(
+      loadDefaultPtyModule(() => Promise.resolve({})),
+    ).rejects.toThrow('Invalid PTY module');
+    await expect(
+      loadDefaultPtyModule(() => Promise.resolve(null)),
+    ).rejects.toThrow('Invalid PTY module');
   });
 });
