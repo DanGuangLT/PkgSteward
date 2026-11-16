@@ -379,7 +379,7 @@ describe('standalone npm10 install preload (actual transpiled module, mocked eff
     const createRequire = jest.fn(() => sdkImport);
     let isMainThread = true;
     const run = (
-      edit?: (descriptor: ReturnType<typeof descriptor>) => unknown,
+      edit?: (value: ReturnType<typeof descriptor>) => unknown,
       omitDescriptor = false,
     ) => {
       const value = descriptor();

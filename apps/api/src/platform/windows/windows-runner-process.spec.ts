@@ -99,7 +99,7 @@ describe('createWindowsRunnerProcess', () => {
     ok({ ...info(root, 1), creationTime: 'invalid' }),
     ok(info(root, 1), { ...info(root, 1), creationTime: child.creationTime }),
     { status: 'unknown', reason: 'timeout' },
-  ])(
+  ] satisfies ProcessSnapshotResult[])(
     'returns unknown for missing, ambiguous or unidentifiable root (%j)',
     async (result) => {
       snapshot.mockResolvedValue(result);
@@ -378,7 +378,7 @@ describe('createWindowsRunnerProcess', () => {
     { status: 'unknown', reason: 'timeout' },
     ok({ ...info(root, 1), creationTime: null }),
     ok(info(root, 1), { ...info(root, 1), creationTime: child.creationTime }),
-  ])(
+  ] satisfies ProcessSnapshotResult[])(
     'does not verify absence from an unknown/ambiguous observation (%j)',
     async (result) => {
       snapshot.mockResolvedValue(result);
