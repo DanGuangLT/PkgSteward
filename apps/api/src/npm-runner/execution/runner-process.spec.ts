@@ -41,10 +41,10 @@ function makeChild() {
     reject = no;
   });
   const events = new EventEmitter();
+  const processIdentity: { pid: number | undefined } = { pid: 10 };
   // Same shape as execa 10.2.1 (RT1): the subprocess has no on/once; native
   // ChildProcess events are reachable only through `nodeChildProcess`.
-  const child = Object.assign(promise, {
-    pid: 10,
+  const child = Object.assign(promise, processIdentity, {
     stdout: new TestOutput(),
     stderr: new TestOutput(),
     kill: jest.fn(() => true),

@@ -3,6 +3,7 @@ import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RequestMethod } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { Test } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
 import type { Response } from 'express';
 import { AppException } from '@/common/exceptions/app.exception';
 import { IS_DANGEROUS_OPERATION_KEY } from '@/common/decorators/metadata';
@@ -11,6 +12,9 @@ import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import type { INpmRunnerService } from '@/npm-runner/interfaces/npm-runner.service.interface';
 import type {
   IRunJob,
+  IRunLogPage,
+  IRunRequest,
+  IRunStart,
   IRunnerContext,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import {
@@ -70,16 +74,19 @@ const context = (): IRunnerContext => ({
 
 describe('NpmRunnerController contract', () => {
   let service: jest.Mocked<INpmRunnerService>;
+  let moduleRef: TestingModule;
   let controller: NpmRunnerController;
-  beforeEach(() => {
+  beforeEach(async () => {
     service = {
-      context: jest.fn(() => Promise.resolve(context())),
-      start: jest.fn(() =>
-        Promise.resolve({ jobId: id, requestId, status: 'running' as const }),
+      context: jest.fn<Promise<IRunnerContext>, [string]>(() =>
+        Promise.resolve(context()),
+      ),
+      start: jest.fn<Promise<IRunStart>, [IRunRequest]>(() =>
+        Promise.resolve({ jobId: id, requestId, status: 'running' }),
       ),
       latest: jest.fn(job),
-      get: jest.fn(job),
-      logs: jest.fn(() => ({
+      get: jest.fn<IRunJob, [string]>(job),
+      logs: jest.fn<IRunLogPage, [string, number]>(() => ({
         jobId: id,
         firstCursor: 0,
         nextCursor: 0,
@@ -88,12 +95,18 @@ describe('NpmRunnerController contract', () => {
         droppedBytes: 0,
         chunks: [],
       })),
-      cancel: jest.fn(() =>
-        Promise.resolve({ ...job(), status: 'stopping' as const }),
+      cancel: jest.fn<Promise<IRunJob>, [string]>(() =>
+        Promise.resolve({ ...job(), status: 'stopping' }),
       ),
     };
-    controller = new NpmRunnerController(service as NpmRunnerService);
+    moduleRef = await Test.createTestingModule({
+      controllers: [NpmRunnerController],
+      providers: [{ provide: NpmRunnerService, useValue: service }],
+    }).compile();
+    controller = moduleRef.get(NpmRunnerController);
   });
+
+  afterEach(() => moduleRef.close());
 
   it('wraps context/start/latest/get/logs in the unchanged envelope and Swagger entities', async () => {
     const read = await controller.context({ path });
