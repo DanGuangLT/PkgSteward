@@ -108,6 +108,9 @@ third-party list with `node scripts/third-party-notices.mjs` and commit `THIRD_P
 "Needs attention" section for licenses that are not plainly permissive. A release that bundles dependencies must
 ship their full license texts and any Apache-2.0 `NOTICE` files.
 
+On Windows, run `node scripts/third-party-notices.mjs --check` after installing both apps with pnpm
+to compare the current dependency list with `THIRD_PARTY_NOTICES.md` without changing the file.
+
 ## Commits and branches
 
 - Branch names: `feat/<short-description>`, `fix/…`, `docs/…`, `chore/…`.
