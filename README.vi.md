@@ -147,6 +147,9 @@ Lệnh ở thư mục gốc chạy cả hai ứng dụng; các lệnh còn lại
 
 ## Lệnh
 
+Dùng bản Node.js 24 mới để chạy bộ kiểm thử Jest của backend (`test` và `test:e2e`). Backend chạy
+được trên Node.js 22.18 trở lên.
+
 | Ứng dụng | Lệnh | Việc |
 |---|---|---|
 | Thư mục gốc | `pnpm install` | Cài cả hai ứng dụng |
