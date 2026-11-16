@@ -58,15 +58,15 @@ if (task.sequential) {
   runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER, startupTimeoutMs);
 }
 
-function hasMissingDependencies(appDir) {
+function findMissingDependency(appDir) {
   const manifestPath = join(appDir, 'package.json');
-  if (!existsSync(manifestPath)) return false;
+  if (!existsSync(manifestPath)) return undefined;
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const packages = [
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.devDependencies ?? {}),
   ];
-  return packages.some(
+  return packages.find(
     (pkg) => !existsSync(join(appDir, 'node_modules', ...pkg.split('/'), 'package.json')),
   );
 }
@@ -74,13 +74,18 @@ function hasMissingDependencies(appDir) {
 function ensureInstalled(apps) {
   for (const [app] of apps) {
     const appDir = join(root, 'apps', app);
-    if (!hasMissingDependencies(appDir)) continue;
+    if (!findMissingDependency(appDir)) continue;
     console.log(`\n[run-apps] ${manager} install in apps/${app}`);
     const result = spawnSync(command, installArgs, { cwd: appDir, stdio: 'inherit' });
     if (result.status !== 0) {
       const reason = result.error ? `: ${result.error.message}` : ` (exit code ${result.status})`;
       console.error(`[run-apps] ${manager} install failed in apps/${app}${reason}`);
       process.exit(result.status || 1);
+    }
+    const missing = findMissingDependency(appDir);
+    if (missing) {
+      console.error(`[run-apps] apps/${app}: ${missing} is still missing after ${manager} install.`);
+      process.exit(1);
     }
   }
 }
