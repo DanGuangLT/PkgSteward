@@ -100,6 +100,9 @@ modifies any file.
 
 For frontend changes, also run `pnpm test` in `apps/web/` to run the unit tests.
 
+For changes to the repository scripts, run `npm run test:scripts`, `pnpm test:scripts`, or
+`yarn test:scripts` from the repository root. This suite covers root installation, startup and notice generation.
+
 If you add, remove or update a production dependency, run `pnpm install` in both apps, then regenerate the
 third-party list with `node scripts/third-party-notices.mjs` and commit `THIRD_PARTY_NOTICES.md`. Check its
 "Needs attention" section for licenses that are not plainly permissive. A release that bundles dependencies must
