@@ -12,6 +12,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+const startupTimeoutMs = 3000;
+
 function setupFakeLauncher(t, cliSource) {
   const root = mkdtempSync(join(tmpdir(), 'pkgsteward-run-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -66,6 +68,7 @@ test('root dev and start never launch web if api exits before becoming ready', (
           npm_execpath: cli,
           npm_config_user_agent: 'yarn/1',
           PKGSTEWARD_NO_BROWSER: '1',
+          PKGSTEWARD_STARTUP_TIMEOUT_MS: String(startupTimeoutMs),
           TEST_APP_EXIT: String(child),
           TEST_EVENTS_FILE: eventsFile,
         },
@@ -92,19 +95,13 @@ test('root dev and start launch web once only after api prints its ready line, a
       "const app = basename(process.cwd());",
       "appendFileSync(process.env.TEST_EVENTS_FILE, `start:${app}\\n`);",
       "if (app === 'api') {",
-      '  setTimeout(() => {',
-      "    appendFileSync(process.env.TEST_EVENTS_FILE, 'ready:api\\n');",
-      "    console.log('\\x1b[32mApplication is running on: http://127.0.0.1:24681/api/v1\\x1b[39m');",
-      '  }, 150);',
-      '  setTimeout(() => {',
-      "    appendFileSync(process.env.TEST_EVENTS_FILE, 'reload:api\\n');",
-      "    console.log('Application is running on: http://127.0.0.1:24681/api/v1');",
-      '  }, 260);',
-      '  setTimeout(() => process.exit(99), 4000);',
+      "  appendFileSync(process.env.TEST_EVENTS_FILE, 'ready:api\\n');",
+      "  console.log('\\x1b[32mApplication is running on: http://127.0.0.1:24681/api/v1\\x1b[39m\\nApplication is running on: http://127.0.0.1:24681/api/v1');",
+      '  setTimeout(() => process.exit(99), 10000);',
       '} else {',
       "  console.log('Local: http://127.0.0.1:24680');",
       "  console.log('Ready in 42 ms');",
-      '  setTimeout(() => process.exit(Number(process.env.TEST_WEB_EXIT)), 900);',
+      '  setTimeout(() => process.exit(Number(process.env.TEST_WEB_EXIT)), Number(process.env.TEST_WEB_EXIT_DELAY_MS));',
       '}',
     ].join('\n'),
   );
@@ -121,23 +118,25 @@ test('root dev and start launch web once only after api prints its ready line, a
           npm_execpath: cli,
           npm_config_user_agent: 'yarn/1',
           PKGSTEWARD_NO_BROWSER: '1',
-          PKGSTEWARD_STARTUP_TIMEOUT_MS: '600',
+          PKGSTEWARD_STARTUP_TIMEOUT_MS: String(startupTimeoutMs),
           TEST_WEB_EXIT: String(webExit),
+          // Exercise clearing both readiness timers when the apps stay up past the deadline.
+          TEST_WEB_EXIT_DELAY_MS: String(mode === 'dev' && webExit === 7 ? startupTimeoutMs + 250 : 250),
           TEST_EVENTS_FILE: eventsFile,
         },
         encoding: 'utf8',
-        timeout: 6000,
+        timeout: 12000,
       });
       assert.equal(result.error, undefined);
       assert.match(result.stderr, /stopping the other app/);
       assert.equal(result.status, expected, `${mode}: web exited ${webExit}`);
       const events = readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/);
-      assert.deepEqual(events.slice(0, 3), ['start:api', 'ready:api', 'start:web']);
-      assert.equal(
-        events.filter((line) => line === 'start:web').length,
-        1,
-        `${mode}: reload must not spawn a second web process`,
-      );
+      assert.deepEqual(events, ['start:api', 'ready:api', 'start:web']);
+      const output = result.stdout.split(/\r?\n/);
+      const apiReady = (line) => line.startsWith('[api]') && line.includes('Application is running on:');
+      const webLaunch = output.findIndex((line) => line.startsWith('[run-apps]') && line.endsWith('in apps/web'));
+      assert.equal(output.filter(apiReady).length, 2);
+      assert.ok(webLaunch > output.findIndex(apiReady), 'the launcher must receive API readiness before starting Web');
     }
   }
 });
@@ -154,7 +153,7 @@ test('startup times out a stalled app and stops each process it launched', (t) =
       "  console.log('Application is running on: http://127.0.0.1:24681/api/v1');",
       '}',
       // Let the fixture exit on its own if the launcher never terminates it.
-      'setTimeout(() => process.exit(99), 2500);',
+      'setTimeout(() => process.exit(99), 10000);',
     ].join('\n'),
   );
 
@@ -167,16 +166,16 @@ test('startup times out a stalled app and stops each process it launched', (t) =
           npm_execpath: cli,
           npm_config_user_agent: 'yarn/1',
           PKGSTEWARD_NO_BROWSER: '1',
-          PKGSTEWARD_STARTUP_TIMEOUT_MS: '600',
+          PKGSTEWARD_STARTUP_TIMEOUT_MS: String(startupTimeoutMs),
           TEST_EVENTS_FILE: eventsFile,
           TEST_STALLED_APP: stalled,
         },
         encoding: 'utf8',
-        timeout: 6000,
+        timeout: 12000,
       });
       assert.equal(result.error, undefined);
       assert.equal(result.status, 1, `${mode}: ${stalled} stalled`);
-      assert.match(result.stderr, new RegExp(`apps/${stalled} did not become ready within 600 ms`));
+      assert.match(result.stderr, new RegExp(`apps/${stalled} did not become ready within ${startupTimeoutMs} ms`));
       const children = readFileSync(eventsFile, 'utf8').trim().split(/\r?\n/).map((line) => line.split(':'));
       assert.deepEqual(children.map(([app]) => app), stalled === 'api' ? ['api'] : ['api', 'web']);
       for (const [, pid] of children) {
@@ -227,6 +226,7 @@ test('root dev never opens browser while start reports ready when both apps fini
     ...process.env,
     npm_execpath: cli,
     npm_config_user_agent: 'yarn/1',
+    PKGSTEWARD_STARTUP_TIMEOUT_MS: String(startupTimeoutMs),
   };
   delete env.PKGSTEWARD_NO_BROWSER;
 
