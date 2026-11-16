@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   RUN_ACTIONS,
@@ -11,9 +11,19 @@ import type {
   IRunLogChunk,
   IRunLogPage,
   IRunStart,
+  IRunTerminalMeta,
   IRunnerContext,
   IRunnerScript,
+  ITerminalResizeResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  ITerminalOutputChunk,
+  ITerminalOutputPage,
+} from '@/npm-runner/terminal/terminal-buffer';
+import type {
+  ITerminalInputAck,
+  ITerminalWriter,
+} from '@/npm-runner/terminal/terminal-control';
 
 export class RunnerScriptEntity implements IRunnerScript {
   @ApiProperty() name!: string;
@@ -29,6 +39,8 @@ export class RunnerContextEntity implements IRunnerContext {
   manager!: IRunnerContext['manager'];
   @ApiProperty({ type: String, nullable: true }) version!: string | null;
   @ApiProperty() available!: boolean;
+  @ApiPropertyOptional({ type: Boolean })
+  terminalAvailable?: boolean;
   @ApiProperty({ type: String, enum: [...RUN_FAILURE_CODES], nullable: true })
   reason!: IRunnerContext['reason'];
   @ApiProperty({ type: [RunnerScriptEntity] })
@@ -36,6 +48,18 @@ export class RunnerContextEntity implements IRunnerContext {
   scripts!: RunnerScriptEntity[];
   @ApiProperty({ enum: [...RUN_WARNING_CODES], isArray: true })
   warnings!: IRunnerContext['warnings'];
+}
+export class RunTerminalMetaEntity implements IRunTerminalMeta {
+  @ApiProperty({ enum: ['pty'] }) mode!: 'pty';
+  @ApiProperty({ minimum: 1 }) generation!: number;
+  @ApiProperty() available!: boolean;
+  @ApiProperty() ready!: boolean;
+  @ApiProperty({ minimum: 0 }) firstCursor!: number;
+  @ApiProperty({ minimum: 0 }) endCursor!: number;
+  @ApiProperty({ minimum: 0 }) droppedBytes!: number;
+  @ApiProperty({ type: Number, nullable: true })
+  writerGeneration!: number | null;
+  @ApiProperty() inputBlocked!: boolean;
 }
 export class RunStartEntity implements IRunStart {
   @ApiProperty({ format: 'uuid' }) jobId!: string;
@@ -80,6 +104,9 @@ export class RunJobEntity extends RunStartEntity implements IRunJob {
   @ApiProperty({ minimum: 0 }) firstCursor!: number;
   @ApiProperty({ minimum: 0 }) endCursor!: number;
   @ApiProperty({ minimum: 0 }) droppedBytes!: number;
+  @ApiPropertyOptional({ type: () => RunTerminalMetaEntity, nullable: true })
+  @Type(() => RunTerminalMetaEntity)
+  terminal?: RunTerminalMetaEntity | null;
 }
 export class RunLogChunkEntity implements IRunLogChunk {
   @ApiProperty({ minimum: 0 }) seq!: number;
@@ -96,4 +123,40 @@ export class RunLogPageEntity implements IRunLogPage {
   @ApiProperty({ type: [RunLogChunkEntity] })
   @Type(() => RunLogChunkEntity)
   chunks!: RunLogChunkEntity[];
+}
+export class TerminalOutputChunkEntity implements ITerminalOutputChunk {
+  @ApiProperty({ minimum: 0 }) cursor!: number;
+  @ApiProperty({ minimum: 0 }) endCursor!: number;
+  @ApiProperty() text!: string;
+}
+export class TerminalOutputPageEntity implements ITerminalOutputPage {
+  @ApiProperty({ format: 'uuid' }) jobId!: string;
+  @ApiProperty({ minimum: 1 }) generation!: number;
+  @ApiProperty({ minimum: 0 }) firstCursor!: number;
+  @ApiProperty({ minimum: 0 }) nextCursor!: number;
+  @ApiProperty({ minimum: 0 }) endCursor!: number;
+  @ApiProperty() gap!: boolean;
+  @ApiProperty() truncated!: boolean;
+  @ApiProperty() parserReset!: boolean;
+  @ApiProperty({ minimum: 0 }) droppedBytes!: number;
+  @ApiProperty({ type: [TerminalOutputChunkEntity] })
+  @Type(() => TerminalOutputChunkEntity)
+  chunks!: TerminalOutputChunkEntity[];
+}
+export class TerminalWriterEntity implements ITerminalWriter {
+  @ApiProperty({ format: 'uuid' }) tabId!: string;
+  @ApiProperty({ format: 'uuid' }) token!: string;
+  @ApiProperty({ minimum: 1 }) writerGeneration!: number;
+}
+export class TerminalInputAckEntity implements ITerminalInputAck {
+  @ApiProperty({ format: 'uuid' }) jobId!: string;
+  @ApiProperty({ minimum: 1 }) generation!: number;
+  @ApiProperty({ minimum: 1 }) writerGeneration!: number;
+  @ApiProperty({ minimum: 1 }) sequence!: number;
+  @ApiProperty({ enum: ['pending', 'delivered', 'not_delivered', 'unknown'] })
+  status!: ITerminalInputAck['status'];
+  @ApiProperty({ minimum: 0 }) receivedAt!: number;
+}
+export class TerminalResizeResultEntity implements ITerminalResizeResult {
+  @ApiProperty() queued!: boolean;
 }

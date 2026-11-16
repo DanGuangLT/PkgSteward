@@ -2,6 +2,13 @@ import type { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto'
 import type { StartNpmRunDto } from '@/npm-runner/dto/start-npm-run.dto';
 import type { RunIdParamDto } from '@/npm-runner/dto/run-id-param.dto';
 import type { RunLogQueryDto } from '@/npm-runner/dto/run-log-query.dto';
+import type {
+  TerminalClaimDto,
+  TerminalInputAckDto,
+  TerminalInputDto,
+  TerminalOutputQueryDto,
+  TerminalResizeDto,
+} from '@/npm-runner/dto/terminal-run.dto';
 import type { Response } from 'express';
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import type {
@@ -9,7 +16,13 @@ import type {
   IRunLogPage,
   IRunStart,
   IRunnerContext,
+  ITerminalResizeResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
+import type {
+  ITerminalInputAck,
+  ITerminalWriter,
+} from '@/npm-runner/terminal/terminal-control';
 
 export interface INpmRunnerController {
   context(query: RunnerPathQueryDto): Promise<IApiResponse<IRunnerContext>>;
@@ -21,4 +34,24 @@ export interface INpmRunnerController {
     params: RunIdParamDto,
     response: Response,
   ): Promise<IApiResponse<IRunJob>>;
+  terminalOutput(
+    params: RunIdParamDto,
+    query: TerminalOutputQueryDto,
+  ): IApiResponse<ITerminalOutputPage>;
+  terminalClaim(
+    params: RunIdParamDto,
+    body: TerminalClaimDto,
+  ): IApiResponse<ITerminalWriter>;
+  terminalInput(
+    params: RunIdParamDto,
+    body: TerminalInputDto,
+  ): Promise<IApiResponse<ITerminalInputAck>>;
+  terminalInputAck(
+    params: RunIdParamDto,
+    body: TerminalInputAckDto,
+  ): IApiResponse<ITerminalInputAck>;
+  terminalResize(
+    params: RunIdParamDto,
+    body: TerminalResizeDto,
+  ): IApiResponse<ITerminalResizeResult>;
 }

@@ -37,6 +37,7 @@ import { parseScanRootPaths } from '@/config/environment/scan-roots';
 import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
 import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import { launchRun } from '@/npm-runner/execution/runner-process';
+import { launchTerminalRun } from '@/npm-runner/terminal/terminal-worker-process';
 import { NpmRunnerController } from '@/npm-runner/npm-runner.controller';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 
@@ -180,6 +181,22 @@ export function createNpmRunnerRuntime(
           'SERVICE_UNAVAILABLE',
         );
       return launchRun(command, childEnv, callbacks, { processes, clock });
+    },
+    launchTerminal: (command, childEnv, callbacks, identity, initialSize) => {
+      if (!processes)
+        throw new AppException(
+          503,
+          'Runner process adapter unavailable',
+          'SERVICE_UNAVAILABLE',
+        );
+      return launchTerminalRun(
+        command,
+        childEnv,
+        callbacks,
+        { processes, clock },
+        identity,
+        initialSize,
+      );
     },
     now: () => new Date(),
     uuid: randomUUID,

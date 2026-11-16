@@ -7,6 +7,14 @@ import type {
   IRunProcess,
   IRunProcessCallbacks,
 } from '@/npm-runner/execution/runner-process';
+import type {
+  ITerminalRunCallbacks,
+  ITerminalRunProcess,
+} from '@/npm-runner/terminal/terminal-worker-process';
+import type {
+  ITerminalIdentity,
+  ITerminalSize,
+} from '@/npm-runner/terminal/terminal-protocol';
 import type { IWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 
 export const NPM_RUNNER_RUNTIME = Symbol('NPM_RUNNER_RUNTIME');
@@ -39,6 +47,13 @@ export interface INpmRunnerRuntime {
     env: NodeJS.ProcessEnv,
     callbacks: IRunProcessCallbacks,
   ): IRunProcess;
+  launchTerminal?(
+    command: IRunnerCommand,
+    env: NodeJS.ProcessEnv,
+    callbacks: ITerminalRunCallbacks,
+    identity: ITerminalIdentity,
+    initialSize?: ITerminalSize,
+  ): ITerminalRunProcess;
   now(): Date;
   uuid(): string;
   setTimer(

@@ -16,6 +16,11 @@ import type {
   IRunnerContext,
   IRunnerInput,
   IRunnerInputDeps,
+  ITerminalClaimBody,
+  ITerminalInputAckBody,
+  ITerminalInputBody,
+  ITerminalResizeBody,
+  ITerminalResizeResult,
   RunFailureCode,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
@@ -35,6 +40,33 @@ import type {
   IRunProcess,
   IRunProcessExit,
 } from '@/npm-runner/execution/runner-process';
+import { TerminalOutputBuffer } from '@/npm-runner/terminal/terminal-buffer';
+import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
+import { TerminalControl } from '@/npm-runner/terminal/terminal-control';
+import type {
+  ITerminalInputAck,
+  ITerminalWriter,
+  TerminalControlState,
+} from '@/npm-runner/terminal/terminal-control';
+import {
+  assertTerminalIdentity,
+  terminalFailure,
+} from '@/npm-runner/terminal/terminal-protocol';
+import type {
+  ITerminalIdentity,
+  ITerminalSize,
+} from '@/npm-runner/terminal/terminal-protocol';
+
+interface ITerminalSession {
+  identity: ITerminalIdentity;
+  buffer: TerminalOutputBuffer;
+  control: TerminalControl | null;
+  ready: boolean;
+  knownEndCursor: number;
+  writerGeneration: number | null;
+  unresolved: { writerGeneration: number; sequence: number } | null;
+  controlState: TerminalControlState;
+}
 
 interface IActiveRun {
   job: IRunJob;
@@ -42,6 +74,7 @@ interface IActiveRun {
   token: symbol;
   controller: AbortController;
   logs: IRunLogStore;
+  terminal: ITerminalSession | null;
   process: IRunProcess | null;
   outcome: IRunProcessExit | null;
   preflight: Promise<void> | null;
@@ -92,6 +125,10 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       manager: input.manager,
       version: input.tool?.version ?? null,
       available: input.reason === null && input.tool !== null,
+      terminalAvailable:
+        this.runtime.input.platform === 'win32' &&
+        Boolean(this.runtime.processes) &&
+        typeof this.runtime.launchTerminal === 'function',
       reason: input.reason,
       scripts: input.manifest.scripts.map(({ name, command }) => ({
         name,
@@ -147,6 +184,16 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         'SERVICE_UNAVAILABLE',
       );
     }
+    if (
+      input.terminal === true &&
+      typeof this.runtime.launchTerminal !== 'function'
+    ) {
+      throw new AppException(
+        503,
+        'Interactive terminal runner is unavailable',
+        'SERVICE_UNAVAILABLE',
+      );
+    }
     // No await between the reader predicates, gate acquisition and reservation.
     const token = this.runtime.gate.tryEnter();
     if (token === null)
@@ -157,6 +204,20 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     try {
       const started = this.runtime.now();
       const jobId = this.runtime.uuid();
+      const terminalIdentity: ITerminalIdentity | null =
+        input.terminal === true ? { jobId, generation: 1 } : null;
+      const terminal: ITerminalSession | null = terminalIdentity
+        ? {
+            identity: terminalIdentity,
+            buffer: new TerminalOutputBuffer(terminalIdentity),
+            control: null,
+            ready: false,
+            knownEndCursor: 0,
+            writerGeneration: null,
+            unresolved: null,
+            controlState: 'running',
+          }
+        : null;
       const job: IRunJob = {
         jobId,
         requestId: input.requestId,
@@ -186,6 +247,21 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         firstCursor: 0,
         endCursor: 0,
         droppedBytes: 0,
+        ...(terminalIdentity
+          ? {
+              terminal: {
+                mode: 'pty',
+                generation: terminalIdentity.generation,
+                available: true,
+                ready: false,
+                firstCursor: 0,
+                endCursor: 0,
+                droppedBytes: 0,
+                writerGeneration: null,
+                inputBlocked: false,
+              },
+            }
+          : {}),
       };
       const logs = createRunLogStore({
         jobId,
@@ -202,6 +278,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         token,
         controller: new AbortController(),
         logs,
+        terminal,
         process: null,
         outcome: null,
         preflight: null,
@@ -268,6 +345,95 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return Promise.resolve(this.snapshot(active));
   }
 
+  terminalOutput(
+    id: string,
+    generation: number,
+    cursor: number,
+  ): ITerminalOutputPage {
+    const active = this.requireRun(id);
+    const terminal = active.terminal;
+    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
+    return terminal.buffer.read({ jobId: id, generation }, cursor);
+  }
+
+  claimTerminal(id: string, request: ITerminalClaimBody): ITerminalWriter {
+    const terminal = this.requireReadyTerminal(id, request);
+    const writer = terminal.control!.claim(
+      terminal.identity,
+      request.tabId,
+      request.takeover,
+    );
+    terminal.writerGeneration = writer.writerGeneration;
+    return writer;
+  }
+
+  async terminalInput(
+    id: string,
+    request: ITerminalInputBody,
+  ): Promise<ITerminalInputAck> {
+    const terminal = this.requireReadyTerminal(id, request);
+    const ack = await terminal.control!.input({
+      jobId: id,
+      generation: request.generation,
+      tabId: request.tabId,
+      token: request.token,
+      writerGeneration: request.writerGeneration,
+      sequence: request.sequence,
+      text: request.text,
+    });
+    if (
+      (ack.status === 'delivered' || ack.status === 'not_delivered') &&
+      terminal.unresolved?.writerGeneration === ack.writerGeneration &&
+      terminal.unresolved?.sequence === ack.sequence
+    ) {
+      terminal.unresolved = null;
+    }
+    return ack;
+  }
+
+  terminalInputAck(
+    id: string,
+    request: ITerminalInputAckBody,
+  ): ITerminalInputAck {
+    const active = this.requireRun(id);
+    const terminal = active.terminal;
+    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
+    assertTerminalIdentity(
+      { jobId: id, generation: request.generation },
+      terminal.identity,
+    );
+    if (request.requestId !== active.job.requestId)
+      terminalFailure(409, 'WRONG_JOB');
+    if (!terminal.control) terminalFailure(409, 'NOT_INITIALIZED');
+    return terminal.control.ack(
+      terminal.identity,
+      {
+        tabId: request.tabId,
+        token: request.token,
+        writerGeneration: request.writerGeneration,
+      },
+      request.sequence,
+    );
+  }
+
+  terminalResize(
+    id: string,
+    request: ITerminalResizeBody,
+  ): ITerminalResizeResult {
+    const terminal = this.requireReadyTerminal(id, request);
+    terminal.control!.resize({
+      jobId: id,
+      generation: request.generation,
+      tabId: request.tabId,
+      token: request.token,
+      writerGeneration: request.writerGeneration,
+      cols: request.cols,
+      rows: request.rows,
+    });
+    void terminal.control!.flushResize().catch(() => {});
+    return { queued: true };
+  }
+
   async onModuleDestroy(): Promise<void> {
     this.closed = true;
     const active = this.current;
@@ -307,9 +473,51 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return this.current;
   }
 
+  private requireReadyTerminal(
+    id: string,
+    request: { requestId: string; generation: number },
+  ): ITerminalSession {
+    const active = this.requireRun(id);
+    const terminal = active.terminal;
+    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
+    assertTerminalIdentity(
+      { jobId: id, generation: request.generation },
+      terminal.identity,
+    );
+    if (request.requestId !== active.job.requestId)
+      terminalFailure(409, 'WRONG_JOB');
+    if (active.job.status !== 'running') terminalFailure(409, 'NOT_RUNNING');
+    if (!terminal.ready || !terminal.control)
+      terminalFailure(409, 'NOT_INITIALIZED');
+    return terminal;
+  }
+
   private snapshot(active: IActiveRun): IRunJob {
     this.syncLogs(active);
+    this.syncTerminal(active);
     return structuredClone(active.job);
+  }
+
+  private syncTerminal(active: IActiveRun): void {
+    const terminal = active.terminal;
+    if (!terminal || !active.job.terminal) return;
+    const page = terminal.buffer.read(
+      terminal.identity,
+      terminal.knownEndCursor,
+    );
+    terminal.knownEndCursor = page.endCursor;
+    active.job.terminal = {
+      mode: 'pty',
+      generation: terminal.identity.generation,
+      available: true,
+      ready: terminal.ready,
+      firstCursor: page.firstCursor,
+      endCursor: page.endCursor,
+      droppedBytes: page.droppedBytes,
+      writerGeneration: terminal.writerGeneration,
+      inputBlocked:
+        terminal.unresolved !== null || terminal.controlState !== 'running',
+    };
   }
 
   private syncLogs(active: IActiveRun): void {
@@ -396,14 +604,108 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       this.inputMetadata(active, revalidated);
       active.job.phase = 'executing';
       try {
-        const process = this.runtime.launch(command, env, {
-          signal: deps.signal,
-          onOutput: (stream, bytes) => {
-            active.job.spawned = active.job.mayHaveChanged = true;
-            active.logs.append(stream, bytes);
-          },
-          onExit: (result) => this.acceptExit(active, result),
-        });
+        let process: IRunProcess;
+        if (active.terminal) {
+          if (typeof this.runtime.launchTerminal !== 'function') {
+            throw new AppException(
+              503,
+              'Interactive terminal runner is unavailable',
+              'SERVICE_UNAVAILABLE',
+            );
+          }
+          const terminal = active.terminal;
+          const initialSize: ITerminalSize = {
+            cols: active.request.cols ?? 80,
+            rows: active.request.rows ?? 24,
+          };
+          const terminalProcess = this.runtime.launchTerminal(
+            command,
+            env,
+            {
+              signal: deps.signal,
+              onOutput: (stream, bytes) => {
+                active.job.spawned = active.job.mayHaveChanged = true;
+                active.logs.append(stream, bytes);
+              },
+              onTerminalOutput: (text) => {
+                active.job.spawned = active.job.mayHaveChanged = true;
+                try {
+                  terminal.buffer.append(text);
+                } catch {
+                  /* Buffer closed or overflowed; ignore without disrupting process. */
+                }
+              },
+              onTerminalAck: (ack) => {
+                if (!terminal.control) return;
+                if (
+                  ack.status !== 'delivered' &&
+                  ack.status !== 'not_delivered'
+                )
+                  return;
+                try {
+                  terminal.control.reconcile(
+                    terminal.identity,
+                    ack.writerGeneration,
+                    ack.sequence,
+                    ack.status,
+                  );
+                  if (
+                    terminal.unresolved?.writerGeneration ===
+                      ack.writerGeneration &&
+                    terminal.unresolved?.sequence === ack.sequence
+                  ) {
+                    terminal.unresolved = null;
+                  }
+                } catch {
+                  /* Already reconciled or stale writer. */
+                }
+              },
+              onExit: (result) => this.acceptExit(active, result),
+            },
+            terminal.identity,
+            initialSize,
+          );
+          process = terminalProcess;
+          void terminalProcess.ready.then(
+            (ready) => {
+              if (
+                !ready ||
+                active.job.status !== 'running' ||
+                active.controller.signal.aborted ||
+                active.outcome ||
+                active.job.stopReason !== null
+              ) {
+                return;
+              }
+              terminal.ready = true;
+              terminal.control = new TerminalControl(terminal.identity, {
+                now: () => this.runtime.now().getTime(),
+                token: () => this.runtime.uuid(),
+                write: (frame) => {
+                  terminal.unresolved = {
+                    writerGeneration: frame.writerGeneration,
+                    sequence: frame.sequence,
+                  };
+                  return terminalProcess.write(frame);
+                },
+                resize: (size, writerGeneration) =>
+                  terminalProcess.resize(size, writerGeneration),
+              });
+            },
+            () => {
+              /* Failure handled via process.settled / onExit. */
+            },
+          );
+        } else {
+          process = this.runtime.launch(command, env, {
+            signal: deps.signal,
+            onOutput: (stream, bytes) => {
+              active.job.spawned = active.job.mayHaveChanged = true;
+              active.logs.append(stream, bytes);
+            },
+            onExit: (result) => this.acceptExit(active, result),
+          });
+        }
         active.process = process;
         if (process.pid !== null && process.pid > 0)
           active.job.spawned = active.job.mayHaveChanged = true;
@@ -460,6 +762,21 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       outcome.failureCode ?? (outcome.exitCode === 0 ? null : 'COMMAND_FAILED');
     if (outcome.outputTruncated)
       active.job.warningCodes.push('OUTPUT_TRUNCATED');
+    if (active.terminal) {
+      const lost =
+        outcome.termination !== 'verified' ||
+        (outcome.failureCode === 'COMMAND_FAILED' &&
+          outcome.exitCode === null &&
+          outcome.signal === null &&
+          !active.job.stopReason);
+      const nextState: TerminalControlState = lost ? 'worker_lost' : 'terminal';
+      active.terminal.controlState = nextState;
+      try {
+        active.terminal.control?.setState(nextState);
+      } catch {
+        /* Already transitioned. */
+      }
+    }
     if (active.preflightDone) this.queueFinalize(active, false);
   }
 
@@ -476,6 +793,14 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     active.job.stopReason ??= reason;
     active.job.status = 'stopping';
     active.job.phase = 'stopping';
+    if (active.terminal) {
+      active.terminal.controlState = 'stopping';
+      try {
+        active.terminal.control?.setState('stopping');
+      } catch {
+        /* Already transitioned. */
+      }
+    }
     this.clearDeadline(active);
     active.controller.abort();
     if (active.preflightDone)
@@ -543,11 +868,29 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     }
     if (!job.spawned) job.terminationVerified = true;
     this.classify(active);
+    if (active.terminal) {
+      const finalState: TerminalControlState =
+        job.status === 'termination_failed' ||
+        (active.outcome?.failureCode === 'COMMAND_FAILED' &&
+          active.outcome.exitCode === null &&
+          active.outcome.signal === null &&
+          !job.stopReason)
+          ? 'worker_lost'
+          : 'terminal';
+      active.terminal.controlState = finalState;
+      try {
+        active.terminal.control?.setState(finalState);
+      } catch {
+        /* Already transitioned. */
+      }
+    }
     if (!active.logsClosed) {
       active.logs.flush(true);
+      active.terminal?.buffer.finish();
       active.logsClosed = true;
     }
     this.syncLogs(active);
+    this.syncTerminal(active);
     if (job.spawned) {
       if (!active.refreshed) {
         try {

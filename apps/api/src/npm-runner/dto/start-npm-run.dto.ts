@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsUUID, Length, Matches, ValidateBy } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Length,
+  Matches,
+  Max,
+  Min,
+  ValidateBy,
+} from 'class-validator';
 import type { ValidationArguments } from 'class-validator';
 import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
 import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
@@ -7,6 +18,7 @@ import type {
   IRunRequest,
   RunAction,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import { TERMINAL_LIMITS } from '@/npm-runner/terminal/terminal-protocol';
 
 const actionField = (
   field: 'package' | 'script',
@@ -50,4 +62,31 @@ export class StartNpmRunDto extends RunnerPathQueryDto implements IRunRequest {
     validator: actionField('script', ['script']),
   })
   declare script?: string;
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Run command inside an interactive ConPTY terminal session',
+  })
+  @IsOptional()
+  @IsBoolean()
+  terminal?: boolean;
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: TERMINAL_LIMITS.colsMin,
+    maximum: TERMINAL_LIMITS.colsMax,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(TERMINAL_LIMITS.colsMin)
+  @Max(TERMINAL_LIMITS.colsMax)
+  cols?: number;
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: TERMINAL_LIMITS.rowsMin,
+    maximum: TERMINAL_LIMITS.rowsMax,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(TERMINAL_LIMITS.rowsMin)
+  @Max(TERMINAL_LIMITS.rowsMax)
+  rows?: number;
 }
