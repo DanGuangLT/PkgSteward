@@ -72,6 +72,8 @@ For a fresh install with Yarn Classic (`1.22.22`), use a current Node.js 24 rele
 dependencies can satisfy their Node.js requirements. Run `yarn install` at the root, then `yarn build` and
 `yarn start`, or use `yarn dev` for development.
 
+Use `yarn install --offline` at the repository root to install both apps using Yarn's local cache.
+
 Run the test suites from the repository root after installing with Yarn:
 
 ```bash

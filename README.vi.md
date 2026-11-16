@@ -62,6 +62,8 @@ Khi cài mới bằng Yarn Classic (`1.22.22`), dùng bản Node.js 24 mới đ�
 được tải về. Chạy `yarn install` ở thư mục gốc, sau đó chạy `yarn build` và `yarn start`, hoặc dùng
 `yarn dev` khi phát triển.
 
+Dùng `yarn install --offline` tại thư mục gốc để cài cả hai ứng dụng từ bộ nhớ đệm của Yarn.
+
 Sau khi cài bằng Yarn, chạy các bộ kiểm thử từ thư mục gốc:
 
 ```bash
