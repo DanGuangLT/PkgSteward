@@ -36,12 +36,13 @@ const PAIRS = [
 function parseBlocks(css) {
   const blocks = []
   const re = /([^{}]+)\{([^{}]*)\}/g
-  for (const [, selector, body] of css.matchAll(re)) {
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, " ")
+  for (const [, selector, body] of rules.matchAll(re)) {
     const vars = {}
     for (const [, name, value] of body.matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) {
       vars[name] = value.trim()
     }
-    blocks.push({ selector: selector.replace(/\/\*[\s\S]*?\*\//g, "").trim(), vars })
+    blocks.push({ selector: selector.trim(), vars })
   }
   return blocks
 }
@@ -62,17 +63,23 @@ function contrast(a, b) {
 }
 
 const isHex = (v) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v ?? "")
+const isDarkRule = ({ selector }) => /\.dark(?![\w-])/.test(selector)
 
 let failures = 0
 for (const file of readdirSync(THEMES_DIR).filter((f) => f.endsWith(".css"))) {
   const blocks = parseBlocks(readFileSync(join(THEMES_DIR, file), "utf8"))
-  const light = blocks.find((b) => !b.selector.includes(".dark"))?.vars ?? {}
-  const dark = blocks.find((b) => b.selector.includes(".dark"))?.vars ?? {}
+  const light = blocks.find((block) => !isDarkRule(block))?.vars ?? {}
+  const dark = blocks.find(isDarkRule)?.vars
 
   for (const [mode, vars] of [
     ["light", light],
-    ["dark", { ...light, ...dark }],
+    ["dark", dark && { ...light, ...dark }],
   ]) {
+    if (!vars) {
+      failures++
+      console.error(`${file}: thiếu khối màu cho chế độ tối (.dark).`)
+      continue
+    }
     console.log(`\n${file} — ${mode}`)
     for (const [fg, bg, min] of PAIRS) {
       const invalidTokens = [fg, bg].filter((token) => !isHex(vars[token]))
@@ -94,7 +101,7 @@ for (const file of readdirSync(THEMES_DIR).filter((f) => f.endsWith(".css"))) {
 }
 
 if (failures > 0) {
-  console.error(`\n${failures} cặp màu không đo được hoặc chưa đạt WCAG AA.`)
+  console.error(`\nCó ${failures} lỗi khi kiểm tra tương phản WCAG AA.`)
   process.exit(1)
 }
 console.log("\nTất cả cặp màu đạt WCAG AA.")
