@@ -2,7 +2,7 @@
 // Writes THIRD_PARTY_NOTICES.md at the repository root from `pnpm licenses list --prod --json`
 // of each app. Run from anywhere after installing both apps: node scripts/third-party-notices.mjs
 import { execSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -88,5 +88,25 @@ if (attention.length > 0) {
 }
 lines.push(...sections, '');
 
-writeFileSync(join(root, 'THIRD_PARTY_NOTICES.md'), lines.join('\n'));
-console.log(`THIRD_PARTY_NOTICES.md written (${attention.length} packages need attention).`);
+const noticePath = join(root, 'THIRD_PARTY_NOTICES.md');
+const content = lines.join('\n');
+
+if (process.argv.includes('--check', 2)) {
+  let current;
+  try {
+    current = readFileSync(noticePath, 'utf8').replaceAll('\r\n', '\n');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  if (current === content) {
+    console.log('THIRD_PARTY_NOTICES.md is up to date.');
+  } else {
+    const reason = current === undefined ? 'missing' : 'out of date';
+    console.error(`THIRD_PARTY_NOTICES.md is ${reason}. Run "node scripts/third-party-notices.mjs" on Windows to regenerate it.`);
+    process.exitCode = 1;
+  }
+} else {
+  writeFileSync(noticePath, content);
+  console.log(`THIRD_PARTY_NOTICES.md written (${attention.length} packages need attention).`);
+}
