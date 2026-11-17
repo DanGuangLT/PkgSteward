@@ -24,6 +24,7 @@ import type {
   RunFailureCode,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
+import { toComparable } from '@/common/utils/path.util';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -71,6 +72,7 @@ interface ITerminalSession {
 interface IActiveRun {
   job: IRunJob;
   request: IRunRequest;
+  fingerprint: string;
   token: symbol;
   controller: AbortController;
   logs: IRunLogStore;
@@ -125,6 +127,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       manager: input.manager,
       version: input.tool?.version ?? null,
       available: input.reason === null && input.tool !== null,
+      nativeConsoleAvailable: false,
+      recoveryHold: null,
       terminalAvailable:
         this.runtime.input.platform === 'win32' &&
         Boolean(this.runtime.processes) &&
@@ -147,8 +151,35 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         'SERVICE_UNAVAILABLE',
       );
     const retained = this.current;
-    if (retained?.job.requestId === input.requestId)
+    const consoleShell =
+      input.consoleShell === undefined ? 'cmd' : input.consoleShell;
+    if (consoleShell !== 'cmd' && consoleShell !== 'powershell')
+      throw new ValidationException('consoleShell must be cmd or powershell');
+    // Synchronous lexical comparison only; allowlist/realpath validation stays in preflight.
+    const fingerprint = JSON.stringify([
+      toComparable(input.path, this.runtime.input.platform),
+      input.action,
+      input.package ?? null,
+      input.script ?? null,
+      input.inputHash,
+      consoleShell,
+      input.terminal ?? false,
+      input.cols ?? 80,
+      input.rows ?? 24,
+    ]);
+    if (retained?.job.requestId === input.requestId) {
+      if (retained.fingerprint !== fingerprint)
+        throw new AppException(
+          409,
+          'Request ID was used with different input',
+          'CONFLICT',
+          {
+            reason: 'REQUEST_MISMATCH',
+            jobId: retained.job.jobId,
+          },
+        );
       return Promise.resolve(this.startSnapshot(retained.job));
+    }
     if (
       retained &&
       (retained.job.gateHeld ||
@@ -274,7 +305,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       });
       active = {
         job,
-        request: { ...input },
+        request: { ...input, consoleShell },
+        fingerprint,
         token,
         controller: new AbortController(),
         logs,

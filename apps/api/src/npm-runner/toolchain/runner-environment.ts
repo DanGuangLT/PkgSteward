@@ -7,6 +7,56 @@ import { SETTINGS_FILE_KEYS } from '@/config/environment/env.validation';
 import { isFullyQualifiedPath } from '@/common/utils/path.util';
 import * as semver from 'semver';
 
+export function buildInteractiveShellEnv(
+  osSnapshot: Readonly<NodeJS.ProcessEnv>,
+): NodeJS.ProcessEnv {
+  const denied = new Set<string>([
+    ...SETTINGS_FILE_KEYS,
+    'NODE_ENV',
+    'NODE_OPTIONS',
+    'CI',
+    'NO_COLOR',
+    'FORCE_COLOR',
+    'INIT_CWD',
+    'PNPM_SCRIPT_SRC_DIR',
+  ]);
+  const directories = new Set([
+    'USERPROFILE',
+    'APPDATA',
+    'LOCALAPPDATA',
+    'TEMP',
+    'TMP',
+    'SYSTEMROOT',
+  ]);
+  const env: NodeJS.ProcessEnv = Object.create(null) as NodeJS.ProcessEnv;
+  const seen = new Set<string>();
+  for (const [key, value] of Object.entries(osSnapshot)) {
+    const upper = key.toUpperCase();
+    if (
+      seen.has(upper) ||
+      denied.has(upper) ||
+      upper.startsWith('PKGSTEWARD_') ||
+      upper.startsWith('NODE_CHANNEL_') ||
+      upper.startsWith('NPM_') ||
+      upper.startsWith('PNPM_CONFIG_') ||
+      ['__PROTO__', 'CONSTRUCTOR', 'PROTOTYPE'].includes(upper) ||
+      typeof value !== 'string' ||
+      /[\0\r\n]/.test(value)
+    )
+      continue;
+    if (directories.has(upper) && !isFullyQualifiedPath(value, 'win32'))
+      continue;
+    seen.add(upper);
+    if (upper === 'PATH') {
+      env.PATH = value
+        .split(';')
+        .filter((entry) => isFullyQualifiedPath(entry, 'win32'))
+        .join(';');
+    } else env[key] = value;
+  }
+  return env;
+}
+
 // Action is explicit because A8 requires CI=1 for mutations only.
 export function buildRunnerEnvironment(
   osSnapshot: Readonly<NodeJS.ProcessEnv>,

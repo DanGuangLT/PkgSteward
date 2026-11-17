@@ -13,10 +13,14 @@ import {
 } from 'class-validator';
 import type { ValidationArguments } from 'class-validator';
 import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
-import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
+import {
+  CONSOLE_SHELLS,
+  RUN_ACTIONS,
+} from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   IRunRequest,
   RunAction,
+  ConsoleShell,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { TERMINAL_LIMITS } from '@/npm-runner/terminal/terminal-protocol';
 
@@ -44,6 +48,9 @@ export class StartNpmRunDto extends RunnerPathQueryDto implements IRunRequest {
   @IsUUID('4')
   @Length(36, 36)
   requestId!: string;
+  @ApiPropertyOptional({ enum: [...CONSOLE_SHELLS], default: 'cmd' })
+  @IsIn([...CONSOLE_SHELLS])
+  consoleShell?: ConsoleShell = 'cmd';
   @ApiPropertyOptional({
     description: 'Required only for install_one/update_one/uninstall_one',
   })

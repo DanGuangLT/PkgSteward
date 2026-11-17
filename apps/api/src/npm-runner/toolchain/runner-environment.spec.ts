@@ -1,5 +1,8 @@
 import 'reflect-metadata';
-import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
+import {
+  buildInteractiveShellEnv,
+  buildRunnerEnvironment,
+} from '@/npm-runner/toolchain/runner-environment';
 import {
   fsFixture,
   key,
@@ -21,6 +24,53 @@ import type {
 } from '@/npm-runner/execution/runner-process';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
+
+describe('interactive shell environment', () => {
+  it('keeps validated user OS state but removes automation and private launch state', () => {
+    const snapshot = Object.freeze({
+      Path: '.;C:\\Windows\\System32;%APPDATA%\\npm;D:\\Tools',
+      USERPROFILE: 'C:\\Users\\TEST',
+      APPDATA: 'C:\\Users\\TEST\\AppData',
+      LOCALAPPDATA: 'C:\\Users\\TEST\\Local',
+      TEMP: 'C:\\Temp',
+      TMP: 'C:\\Temp',
+      SystemRoot: 'C:\\Windows',
+      MY_TOKEN: 'TEST',
+      CI: 'true',
+      no_color: '1',
+      FORCE_COLOR: '0',
+      PORT: '24681',
+      NODE_OPTIONS: '--inspect',
+      node_channel_extra: '5',
+      PKGSTEWARD_PRIVATE: 'TEST',
+      npm_token: 'TEST',
+    });
+    const env = buildInteractiveShellEnv(snapshot);
+    expect(env).toEqual({
+      PATH: 'C:\\Windows\\System32;D:\\Tools',
+      USERPROFILE: 'C:\\Users\\TEST',
+      APPDATA: 'C:\\Users\\TEST\\AppData',
+      LOCALAPPDATA: 'C:\\Users\\TEST\\Local',
+      TEMP: 'C:\\Temp',
+      TMP: 'C:\\Temp',
+      SystemRoot: 'C:\\Windows',
+      MY_TOKEN: 'TEST',
+    });
+    expect(snapshot.CI).toBe('true');
+  });
+  it('drops invalid user directory values and duplicate casing without mutating input', () => {
+    expect(
+      buildInteractiveShellEnv({
+        USERPROFILE: 'relative',
+        TEMP: 'C:\\Temp\nBAD',
+        APPDATA: '%USERPROFILE%\\AppData',
+        SystemRoot: 'C:\\Windows',
+        PATH: 'C:\\Windows',
+        path: 'D:\\Other',
+      }),
+    ).toEqual({ SystemRoot: 'C:\\Windows', PATH: 'C:\\Windows' });
+  });
+});
 
 describe('runner child environment (A8)', () => {
   describe.each([

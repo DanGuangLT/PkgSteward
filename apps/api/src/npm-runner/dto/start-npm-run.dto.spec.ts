@@ -15,6 +15,19 @@ const errors = (body: Record<string, unknown>) =>
   validateSync(plainToInstance(StartNpmRunDto, body), options);
 
 describe('StartNpmRunDto admission boundary', () => {
+  it('defaults the native console shell to CMD and accepts only the enum', () => {
+    expect(
+      plainToInstance(StartNpmRunDto, { ...base, action: 'install_all' }),
+    ).toHaveProperty('consoleShell', 'cmd');
+    for (const consoleShell of ['cmd', 'powershell'])
+      expect(errors({ ...base, action: 'install_all', consoleShell })).toEqual(
+        [],
+      );
+    for (const consoleShell of [null, '', 'pwsh', 'CMD', 1, {}, 'C:\\cmd.exe'])
+      expect(
+        errors({ ...base, action: 'install_all', consoleShell }),
+      ).not.toEqual([]);
+  });
   it.each([
     { action: 'install_all' },
     { action: 'install_one', package: '@scope/pkg@1.2.3' },

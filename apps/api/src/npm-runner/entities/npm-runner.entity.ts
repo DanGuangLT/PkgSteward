@@ -5,6 +5,8 @@ import {
   RUN_FAILURE_CODES,
   RUN_STATUSES,
   RUN_WARNING_CODES,
+  CONSOLE_SHELLS,
+  NATIVE_SESSION_PHASES,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   IRunJob,
@@ -15,6 +17,9 @@ import type {
   IRunnerContext,
   IRunnerScript,
   ITerminalResizeResult,
+  INativeConsoleMeta,
+  IRunCommandResult,
+  IRunRecoveryHold,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   ITerminalOutputChunk,
@@ -30,6 +35,26 @@ export class RunnerScriptEntity implements IRunnerScript {
   @ApiProperty({ description: 'Inert declared script text' }) command!: string;
   @ApiProperty() eligible!: boolean;
 }
+export class RunCommandResultEntity implements IRunCommandResult {
+  @ApiProperty({ type: Number, nullable: true }) exitCode!: number | null;
+  @ApiProperty({ type: String, nullable: true }) signal!: string | null;
+}
+export class RunRecoveryHoldEntity implements IRunRecoveryHold {
+  @ApiProperty() active!: boolean;
+  @ApiProperty() reason!: string;
+  @ApiProperty() journalPath!: string;
+}
+export class NativeSessionMetaEntity implements INativeConsoleMeta {
+  @ApiProperty({ enum: [...CONSOLE_SHELLS] })
+  shell!: INativeConsoleMeta['shell'];
+  @ApiProperty({ minimum: 1 }) generation!: number;
+  @ApiProperty({ enum: [...NATIVE_SESSION_PHASES] })
+  phase!: INativeConsoleMeta['phase'];
+  @ApiProperty() available!: boolean;
+  @ApiProperty({ type: () => RunCommandResultEntity, nullable: true })
+  @Type(() => RunCommandResultEntity)
+  sessionResult!: RunCommandResultEntity | null;
+}
 export class RunnerContextEntity implements IRunnerContext {
   @ApiProperty() requestPath!: string;
   @ApiProperty() path!: string;
@@ -41,6 +66,11 @@ export class RunnerContextEntity implements IRunnerContext {
   @ApiProperty() available!: boolean;
   @ApiPropertyOptional({ type: Boolean })
   terminalAvailable?: boolean;
+  @ApiPropertyOptional({ type: Boolean })
+  nativeConsoleAvailable?: boolean;
+  @ApiPropertyOptional({ type: () => RunRecoveryHoldEntity, nullable: true })
+  @Type(() => RunRecoveryHoldEntity)
+  recoveryHold?: RunRecoveryHoldEntity | null;
   @ApiProperty({ type: String, enum: [...RUN_FAILURE_CODES], nullable: true })
   reason!: IRunnerContext['reason'];
   @ApiProperty({ type: [RunnerScriptEntity] })
@@ -107,6 +137,15 @@ export class RunJobEntity extends RunStartEntity implements IRunJob {
   @ApiPropertyOptional({ type: () => RunTerminalMetaEntity, nullable: true })
   @Type(() => RunTerminalMetaEntity)
   terminal?: RunTerminalMetaEntity | null;
+  @ApiPropertyOptional({ type: () => NativeSessionMetaEntity, nullable: true })
+  @Type(() => NativeSessionMetaEntity)
+  nativeSession?: NativeSessionMetaEntity | null;
+  @ApiPropertyOptional({ type: () => RunCommandResultEntity, nullable: true })
+  @Type(() => RunCommandResultEntity)
+  initialCommand?: RunCommandResultEntity | null;
+  @ApiPropertyOptional({ type: () => RunRecoveryHoldEntity, nullable: true })
+  @Type(() => RunRecoveryHoldEntity)
+  recoveryHold?: RunRecoveryHoldEntity | null;
 }
 export class RunLogChunkEntity implements IRunLogChunk {
   @ApiProperty({ minimum: 0 }) seq!: number;

@@ -214,13 +214,15 @@ describe('NpmRunnerService lifecycle', () => {
     expect(f.launch).toHaveBeenCalledTimes(1);
   });
 
-  it('replays the retained requestId even if payload differs, without rechecking readers/gate', async () => {
+  it('replays an identical canonical request without rechecking readers/gate', async () => {
     const f = fixture();
     const first = await f.service.start(requestBody());
     await flush();
     f.readers.hasRunningScan.mockReturnValue(true);
     await expect(
-      f.service.start(requestBody({ action: 'script', script: 'dev' })),
+      f.service.start(
+        requestBody({ path: root.toUpperCase() + '\\.', consoleShell: 'cmd' }),
+      ),
     ).resolves.toEqual(first);
     expect(f.enter).toHaveBeenCalledTimes(1);
     expect(f.launch).toHaveBeenCalledTimes(1);
@@ -229,6 +231,59 @@ describe('NpmRunnerService lifecycle', () => {
       jobId,
       status: 'completed',
     });
+  });
+
+  it.each([
+    { path: 'D:\\TEST\\other' },
+    { action: 'script' as const, script: 'dev' },
+    { package: 'alpha' },
+    { script: 'dev' },
+    { inputHash: 'b'.repeat(64) },
+    { consoleShell: 'powershell' as const },
+  ])('rejects changed retained request fingerprint: %p', async (change) => {
+    const f = fixture();
+    await f.service.start(requestBody());
+    await expect(f.service.start(requestBody(change))).rejects.toMatchObject({
+      statusCode: 409,
+      details: { reason: 'REQUEST_MISMATCH' },
+    });
+    expect(f.enter).toHaveBeenCalledTimes(1);
+  });
+
+  it('validates consoleShell even when called outside HTTP before acquiring the gate', async () => {
+    const f = fixture();
+    await expect(
+      f.service.start(requestBody({ consoleShell: 'pwsh' as never })),
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(f.gate.isBusy()).toBe(false);
+    expect(readRunnerInput).not.toHaveBeenCalled();
+  });
+
+  it('keeps reader predicates, gate and reservation synchronous before input IO', async () => {
+    const f = fixture();
+    const events: string[] = [];
+    for (const [name, reader] of Object.entries(f.readers))
+      reader.mockImplementation(() => {
+        events.push(name);
+        return false;
+      });
+    f.enter.mockImplementation(() => {
+      events.push('gate');
+      return Symbol('TEST lease');
+    });
+    jest.mocked(readRunnerInput).mockImplementation(() => {
+      events.push(f.service.latest().gateHeld ? 'reserved' : 'missing');
+      return Promise.resolve(runnerInput());
+    });
+    await f.service.start(requestBody());
+    expect(events.slice(0, 6)).toEqual([
+      'hasRunningScan',
+      'hasRunningMeasurement',
+      'hasRunningPreview',
+      'hasRunningAnalysis',
+      'gate',
+      'reserved',
+    ]);
   });
 
   it('replaces a released job and allows an evicted requestId as a new start (A3)', async () => {
