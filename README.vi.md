@@ -18,7 +18,13 @@ từng dự án) một cách an toàn.
 
 - **Chạy local, một người dùng:** không tài khoản, không xác thực, không database. Dữ liệu được đọc trực tiếp từ
   filesystem tại thời điểm gọi API.
-- **An toàn là trên hết:** mọi thao tác xoá hoặc ảnh hưởng toàn máy đều đi qua bước *xem trước → xác nhận*.
+- **An toàn là trên hết:** mọi thao tác xoá hoặc ảnh hưởng toàn máy đều đi qua bước *xem trước → xác nhận*; lệnh
+  dự án bên dưới chạy ngay sau một cú nhấp bên cạnh cảnh báo tin cậy cố định.
+- **Lệnh dự án:** chạy cài/cập nhật/gỡ gói hoặc một script khai báo sẵn từ trang chi tiết dự án bằng npm 10–12
+  hoặc pnpm 10–11 trong cửa sổ console Windows **CMD** hoặc **PowerShell** riêng biệt (mặc định `cmd`, cửa sổ vẫn mở
+  sau khi lệnh đầu kết thúc cho tới khi bạn đóng hoặc nhấn **Dừng**; package con trong workspace chỉ chạy được script).
+  Nếu phiên trước chưa đóng sạch hoặc backend bị tắt đột ngột, **khoá khôi phục (recovery hold)** sẽ chặn thao tác
+  mới cho tới khi bạn xác nhận dọn tiến trình và gỡ khoá.
 
 ## Gói global
 

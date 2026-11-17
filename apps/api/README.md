@@ -200,26 +200,29 @@ an automatic retry.
 
 | Endpoint | Result |
 |---|---|
-| `GET /api/v1/npm-runs/context?path=...` | `200` with manager/version, eligible scripts, warnings and `inputHash`; starts no process |
-| `POST /api/v1/npm-runs` | `{ path, action, inputHash, requestId, package?, script? }`; `202` with `{ jobId, requestId, status }`; the retained job's `requestId` returns that same job |
-| `GET /api/v1/npm-runs/latest` | `200` with the latest retained run |
-| `GET /api/v1/npm-runs/:id` | `200` with status, phase, actual exit code, failure/warnings and cleanup state; no filesystem work |
+| `GET /api/v1/npm-runs/context?path=...` | `200` with manager/version, eligible scripts, warnings, `nativeConsoleAvailable`, active `recoveryHold` and `inputHash`; starts no process |
+| `POST /api/v1/npm-runs` | `{ path, action, inputHash, requestId, consoleShell?, package?, script? }`; `202` with `{ jobId, requestId, status }`; the retained job's `requestId` returns that same job |
+| `GET /api/v1/npm-runs/latest` | `200` with the latest retained run, or `{ recoveryHold, job: null }` during startup recovery hold |
+| `POST /api/v1/npm-runs/recovery/clear` | `{ confirm: true }`; `200` with `{ cleared, recoveryHold }` after terminating tracked leftover processes, refreshing caches and clearing the recovery journal |
+| `GET /api/v1/npm-runs/:id` | `200` with status, phase, actual exit code, `initialCommand`, `nativeSession`, failure/warnings and cleanup state; no filesystem work |
 | `GET /api/v1/npm-runs/:id/logs?cursor=...` | `200` with a bounded output page and `nextCursor`; cursor defaults to `0` |
 | `POST /api/v1/npm-runs/:id/cancel` | No body; `202` while stopping or the lock is held, otherwise `200`; also retries unfinished cleanup without restarting the command |
 
 Responses use the standard envelope; successful responses send `Cache-Control: no-store`. Status/latest/log polling bypasses throttling;
-start/cancel remain rate limited. Paths must be fully qualified Windows paths, at most 32,767 characters, pass
+start/cancel/recovery-clear remain rate limited. Paths must be fully qualified Windows paths, at most 32,767 characters, pass
 the path guard and identify a currently scanned project. IDs and `requestId` are UUID v4; `inputHash` is the
-64-character lowercase hexadecimal value from context. Extra fields are rejected. `package` is required only
+64-character lowercase hexadecimal value from context; `consoleShell` accepts `'cmd'` (default) or `'powershell'`. Extra fields are rejected (`400 VALIDATION_ERROR`). `package` is required only
 for the three single-package actions; `script` only for `script`, and both must be omitted otherwise. A cursor
 is a nonnegative safe integer. Errors include `400 VALIDATION_ERROR`, `403 FORBIDDEN`, `404 NOT_FOUND`,
-`409 CONFLICT`, `429 RATE_LIMITED` and `503 SERVICE_UNAVAILABLE`.
+`409 CONFLICT`, `429 RATE_LIMITED`, `500 INTERNAL_SERVER_ERROR` and `503 SERVICE_UNAVAILABLE`.
 
 ### Commands and child environment
 
-The executable is the running backend's `node.exe`, followed by the verified npm/pnpm JavaScript entry point.
-The app never launches a `.cmd`, builds a shell command, or selects a program from the project folder; a fake
-project-local `npm.cmd` or `node.exe` is ignored. Scripts still use the package manager's own script shell.
+Project runs launch through signed Windows `node.exe` processes (`native-console-supervisor.js` → visible `native-console-entry.js` window bridge allocating a new Windows console attached to `'cmd'` (`cmd.exe /d`) or `'powershell'` (`powershell.exe -NoLogo -NoProfile`)).
+The initial command inside that window executes the running backend's `node.exe`, followed by the verified npm/pnpm JavaScript entry point.
+The app never launches a `.cmd`, builds a shell command string for initial execution, or selects a program from the project folder; a fake
+project-local `npm.cmd` or `node.exe` is ignored. Scripts still use the package manager's own script shell. After the initial command finishes,
+the native console remains open as an interactive shell with direct Windows console I/O until closed or cancelled.
 
 Each row below follows that entry point and the manager's fixed prefix:
 
@@ -251,7 +254,8 @@ package name without a version. Flags, version ranges, URLs, `file:`, git specs 
   `npm_config_verify_deps_before_run=false` and `npm_config_update_notifier=false`: it reads environment
   settings with the `npm_config_` prefix, so these override a project `.npmrc` outside a workspace too.
   Mutations force `CI=1`; scripts do not force
-  it and can inherit the user's value. stdin is closed for all actions.
+  it and can inherit the user's value. Native console runs attach standard streams directly to the allocated Windows
+  console window (`CONIN$` / `CONOUT$`).
 - **Configuration:** project `.npmrc` or pnpm workspace settings that select global mode, `prefix`, `location`,
   directory redirection or package-manager version management are refused with `CONFIG_UNSUPPORTED`.
   User credentials in the environment and user-level config still apply; user-level config is not inspected.
@@ -262,31 +266,31 @@ package name without a version. Flags, version ranges, URLs, `file:`, git specs 
 - **One run at a time, machine-wide:** the mutation lock blocks scans, size measurement, package analysis and
   file-operation previews/deletions with `409 CONFLICT`. Existing readers block a start with `READERS_RUNNING`.
   A second run returns `409` with `details: { reason: 'RUNNING', jobId, requestPath }`; the UI can follow it.
+  If a crash or unverified cleanup left `native-project-terminal-session.json` (or `.tmp`) in the data directory,
+  startup activates a **recovery hold** (`409 RECOVERY_HOLD`) holding the mutation lock until verified and cleared via
+  `POST /api/v1/npm-runs/recovery/clear` with `{ confirm: true }`.
   The lock stays held through process verification, project refresh and audit recording.
-- **Stop and timeout:** Stop uses `taskkill /T /F` on the tracked tree and requires two empty process snapshots
+- **Stop and timeout:** Stop uses `taskkill /T /F` on the tracked native supervisor/bridge/shell tree and requires two empty process snapshots
   to verify termination. Unconfirmed termination produces `termination_failed` and keeps the lock held; retry
-  cleanup through cancel. `NPM_COMMAND_TIMEOUT_MS` empty means no limit; a configured deadline produces
-  `timed_out`. When the root exits first, tracked children are stopped before completion. Windows ended
-  non-detached children when the backend itself was killed in trials; deliberately detached processes can
-  escape. After a backend crash, inspect and end leftover processes in Windows Task Manager.
+  cleanup through cancel. `NPM_COMMAND_TIMEOUT_MS` bounds the **initial command execution** (cleared once the
+  initial command finishes) and triggers bounded cleanup (`timed_out`), while an open interactive shell stays open
+  until manually closed or **Stop** is requested. When the backend shuts down, tracked sessions go through verified
+  cleanup or remain protected by the persisted recovery journal for startup recovery hold.
 - **Results and refresh:** statuses are `running`, `stopping`, `completed`, `failed`, `cancelled`, `timed_out`,
-  `termination_failed`. Inspect `exitCode`, `failureCode`, `terminationVerified`, `gateHeld`, `auditWritten`
+  `termination_failed`. Inspect `exitCode`, `initialCommand`, `nativeSession`, `failureCode`, `terminationVerified`, `gateHeld`, `auditWritten`
   and `refreshRequired`; exit code zero alone does not establish successful finalization or a clean audit.
-  After any spawned run, the project's scan entry is refreshed in place (lockfile, manager, activity time),
-  cached sizes are cleared and earlier package analysis becomes stale (`INPUT_CHANGED`). Refresh runner context
+  After any spawned run or cleared recovery hold, affected scan entries and cached sizes are refreshed/cleared
+  conservatively (and earlier package analysis across scanned projects is invalidated when an interactive shell may have modified other workspaces). Refresh runner context
   before another command. No automatic rescan, analysis, install or retry occurs; newly created project folders
   appear only after a manual scan.
-- **Retention:** only the latest run and its output live in memory. Backend restart loses runs and logs;
-  the audit log retains intent and result lines in `logs/dangerous-operations.jsonl` inside the data folder.
-- **Logs:** the backend retains the last 1 MiB / 4,096 chunks per run and serves pages of at most 64 KiB /
-  256 chunks by cursor. Older output is dropped with `OUTPUT_TRUNCATED` and a dropped byte count. ANSI/OSC
-  codes are stripped; invalid bytes become U+FFFD with `OUTPUT_ENCODING_LOSS`. Values following `password=`,
-  `token:`, `_authToken=` and `Authorization:`, plus URL credentials, are masked. Bare tokens printed by scripts
-  (for example, `npm_…`) are **not** masked; do not treat log filtering as a guarantee against secret disclosure.
+- **Retention:** only the latest run and bounded logs live in memory; active native session identity is journaled in
+  `native-project-terminal-session.json` inside `PKGSTEWARD_DATA_DIR`, and the audit log retains intent and result
+  lines in `logs/dangerous-operations.jsonl`.
 
 Failure/reason codes: `PROJECT_NOT_SCANNED`, `INPUT_CHANGED`, `WORKSPACE_LEAF`, `UNSUPPORTED_MANAGER`,
 `LOCKFILE_MISMATCH`, `TOOL_NOT_FOUND`, `TOOL_LAYOUT_UNSUPPORTED`, `TOOL_VERSION_MISMATCH`, `CONFIG_UNSUPPORTED`,
-`INVALID_PACKAGE_SPEC`, `SCRIPT_NOT_FOUND`, `SCRIPT_NAME_UNSUPPORTED`, `READERS_RUNNING`, `RUNNING`,
+`INVALID_PACKAGE_SPEC`, `SCRIPT_NOT_FOUND`, `SCRIPT_NAME_UNSUPPORTED`, `READERS_RUNNING`, `RUNNING`, `REQUEST_MISMATCH`,
+`NATIVE_CONSOLE_UNAVAILABLE`, `NATIVE_PROTOCOL_ERROR`, `SESSION_INTERRUPTED`, `RECOVERY_HOLD`,
 `SPAWN_FAILED`, `COMMAND_FAILED`, `CANCELLED`, `TIMED_OUT`, `SHUTDOWN`, `TERMINATION_UNCONFIRMED`,
 `AUDIT_WRITE_FAILED`, `CACHE_INVALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`.
 
