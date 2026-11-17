@@ -2,8 +2,11 @@
 // Chạy: pnpm i18n:check
 // - Key THIẾU: chỉ cảnh báo (app tự hiện bằng ngôn ngữ mặc định) — giúp dịch dần.
 // - Key THỪA hoặc sai cấu trúc so với bản mặc định: báo lỗi.
+// - Cú pháp ICU sai: báo lỗi kèm tên tệp và đường dẫn key.
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+
+import { parse } from "@formatjs/icu-messageformat-parser"
 
 import { defaultLocale, locales } from "../i18n/config.ts"
 
@@ -18,7 +21,14 @@ function catalogEntries(tree, file, prefix = "") {
   return Object.entries(tree).flatMap(([key, value]) => {
     const path = prefix ? `${prefix}.${key}` : key
     if (key.includes(".")) throw new Error(`${file} has an invalid key at "${path}". Message keys cannot contain dots.`)
-    if (typeof value === "string") return [[path, "message"]]
+    if (typeof value === "string") {
+      try {
+        parse(value)
+      } catch (error) {
+        throw new SyntaxError(`Invalid ICU message in messages/${file} at "${path}": ${error.message}`, { cause: error })
+      }
+      return [[path, "message"]]
+    }
     if (isMessageObject(value)) return [[path, "namespace"], ...catalogEntries(value, file, path)]
     throw new Error(`${file} has an invalid message at "${path}". Expected a string or a message object.`)
   })

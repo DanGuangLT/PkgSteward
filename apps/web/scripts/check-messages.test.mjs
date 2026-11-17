@@ -1,12 +1,14 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 
 function createFixture(t, vi = { section: { title: "Tiêu đề" } }) {
-  const root = mkdtempSync(join(tmpdir(), "pkgsteward-catalog-test-"))
+  // Keep the fixture under the app so the copied checker can resolve its dependencies.
+  const fixtureDir = join(import.meta.dirname, "..", "test-results")
+  mkdirSync(fixtureDir, { recursive: true })
+  const root = mkdtempSync(join(fixtureDir, "catalog-"))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const script = join(root, "scripts", "check-messages.mjs")
   const messages = join(root, "messages")
@@ -43,6 +45,28 @@ test("names the catalog with invalid JSON syntax", (t) => {
     assert.ok(result.stderr.includes("Invalid JSON in messages/" + malformedFile))
     assert.match(result.stderr, /Unexpected end of JSON input/)
   }
+})
+
+for (const file of ["vi.json", "en.json"]) {
+  test(`names the catalog and key with malformed ICU syntax in ${file}`, (t) => {
+    const valid = { section: { title: "Item count: {count}" } }
+    const invalid = { section: { title: "Item count: {count" } }
+    const check = createFixture(t, file === "vi.json" ? invalid : valid)
+    const result = check(file === "en.json" ? invalid : valid)
+    assert.equal(result.status, 1)
+    assert.ok(result.stderr.includes(`Invalid ICU message in messages/${file} at "section.title"`))
+  })
+}
+
+test("accepts valid ICU plurals, rich text, and quoted syntax characters", (t) => {
+  const messages = {
+    section: {
+      title: "{count, plural, one {<strong># item</strong>} other {<strong># items</strong>}} '{example}'",
+      manager: "Use '<name>@<exact version>'",
+    },
+  }
+  const result = createFixture(t, messages)(messages)
+  assert.equal(result.status, 0, result.stderr)
 })
 
 test("rejects translation values that are neither text nor a namespace", (t) => {
