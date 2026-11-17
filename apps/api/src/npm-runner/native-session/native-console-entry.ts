@@ -320,9 +320,26 @@ export function createNativeConsoleBridge(deps: INativeBridgeDeps): {
       }
     }),
   );
+  const openConsole = (primary: string, fallback: string): number => {
+    try {
+      return deps.fs.openSync(primary, 'r+');
+    } catch (error) {
+      const code =
+        error !== null && typeof error === 'object' && 'code' in error
+          ? error.code
+          : undefined;
+      // Node 22.18 appends a trailing backslash to \\.\CONIN$ inside path resolution; ConDrv is direct.
+      if (code !== 'UNKNOWN' && code !== 'EINVAL') throw error;
+      return deps.fs.openSync(fallback, 'r+');
+    }
+  };
   try {
-    for (const name of ['\\\\.\\CONIN$', '\\\\.\\CONOUT$']) {
-      const fd = deps.fs.openSync(name, 'r+');
+    const devices: readonly [string, string][] = [
+      ['\\\\.\\CONIN$', '\\\\.\\GLOBALROOT\\Device\\ConDrv\\CurrentIn'],
+      ['\\\\.\\CONOUT$', '\\\\.\\GLOBALROOT\\Device\\ConDrv\\CurrentOut'],
+    ];
+    for (const [primary, fallback] of devices) {
+      const fd = openConsole(primary, fallback);
       if (!Number.isSafeInteger(fd) || fd <= 2 || fds.has(fd))
         throw new Error('Invalid console descriptor');
       if (stopped) {

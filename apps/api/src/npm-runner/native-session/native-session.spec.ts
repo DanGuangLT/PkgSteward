@@ -68,7 +68,9 @@ function setup(overrides?: { beforeInit?: () => Promise<void> }) {
         }),
     ),
     descendants: jest.fn(
-      (...args: Parameters<IWindowsNativeConsole['descendants']>) => {
+      (
+        ...args: Parameters<IWindowsNativeConsole['descendants']>
+      ): ReturnType<IWindowsNativeConsole['descendants']> => {
         void args;
         return Promise.resolve({ status: 'ok', identities: [] });
       },
@@ -535,5 +537,164 @@ describe('native session coordinator barriers', () => {
       sessionOutcome: { exitCode: 0, signal: null },
     });
     expect(s.session.snapshot().phase).toBe('closed');
+  });
+  it('accepts fast initial-result arriving while initial CIM capture reports absent, while scanning initialPid rather than bridge', async () => {
+    const s = setup();
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+
+    let releaseInitialCapture!: () => void;
+    const gateCapture = new Promise<void>((resolve) => {
+      releaseInitialCapture = resolve;
+    });
+    s.platform.capture.mockImplementationOnce(async () => {
+      await gateCapture;
+      return { status: 'unknown' };
+    });
+    void s.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    await Promise.resolve();
+    void s.bridgeFrame({ type: 'initial-result', exitCode: 0, signal: null });
+    releaseInitialCapture();
+    await flush();
+
+    expect(s.platform.descendants).toHaveBeenCalledWith(
+      [
+        {
+          pid: 30,
+          creationTime: created,
+          executablePath: 'C:\\node\\node.exe',
+          parentPid: 20,
+        },
+      ],
+      [],
+    );
+    expect(s.session.snapshot()).toMatchObject({
+      phase: 'shell_starting',
+      initialRetired: true,
+      initialOutcome: { exitCode: 0, signal: null },
+    });
+    expect(s.child.send).toHaveBeenCalledWith({
+      ...identity,
+      type: 'open-shell-go',
+    });
+
+    await s.bridgeFrame({ type: 'shell-spawned', pid: 40 });
+    await s.bridgeFrame({ type: 'session-exit', exitCode: 0, signal: null });
+    expect(await s.session.settled).toMatchObject({
+      phase: 'closed',
+      termination: 'session_exit',
+      cleanupVerified: true,
+    });
+  });
+  it('cleans fast-exit orphan descendants of initialPid without killing bridge and includes initialSeed if stop preempts initial-result', async () => {
+    const orphan = {
+      pid: 31,
+      creationTime: created,
+      executablePath: 'C:\\child.exe',
+      parentPid: 30,
+    };
+    const s = setup();
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+
+    let releaseCapture!: () => void;
+    const gateCapture = new Promise<void>((resolve) => {
+      releaseCapture = resolve;
+    });
+    s.platform.capture.mockImplementationOnce(async () => {
+      await gateCapture;
+      return { status: 'unknown' };
+    });
+    s.platform.descendants.mockResolvedValueOnce({
+      status: 'ok',
+      identities: [orphan],
+    });
+    void s.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    await Promise.resolve();
+    void s.bridgeFrame({ type: 'initial-result', exitCode: 0, signal: null });
+    releaseCapture();
+    await flush();
+
+    expect(s.platform.stopTree).toHaveBeenCalledWith([], [orphan]);
+    expect(s.platform.verifyGone).toHaveBeenCalledWith([orphan]);
+    expect(s.child.send).toHaveBeenCalledWith({
+      ...identity,
+      type: 'open-shell-go',
+    });
+
+    // Stop preempting initial-result still scans unretired initialPid in verifyCleanup.
+    const s2 = setup();
+    await s2.session.start();
+    await s2.message({ type: 'supervisor-ready' });
+    await s2.message({ type: 'bridge-spawned', pid: 20 });
+    await s2.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    let releaseCapture2!: () => void;
+    const gateCapture2 = new Promise<void>((resolve) => {
+      releaseCapture2 = resolve;
+    });
+    s2.platform.capture.mockImplementationOnce(async () => {
+      await gateCapture2;
+      return { status: 'unknown' };
+    });
+    void s2.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    await Promise.resolve();
+    void s2.bridgeFrame({ type: 'initial-result', exitCode: 0, signal: null });
+    const stopPromise = s2.session.stop('user_stop');
+    releaseCapture2();
+    await stopPromise;
+
+    const firstCleanupSeeds = s2.platform.descendants.mock.calls[0]?.[0];
+    expect(firstCleanupSeeds).toContainEqual({
+      pid: 30,
+      creationTime: created,
+      executablePath: 'C:\\node\\node.exe',
+      parentPid: 20,
+    });
+  });
+  it('faults termination_unconfirmed on unknown descendants (e.g. PID reuse) and rejects duplicate bridge PID on initial-spawned immediately', async () => {
+    const s = setup();
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+
+    let releaseCapture!: () => void;
+    const gateCapture = new Promise<void>((resolve) => {
+      releaseCapture = resolve;
+    });
+    s.platform.capture.mockImplementationOnce(async () => {
+      await gateCapture;
+      return { status: 'unknown' };
+    });
+    s.platform.descendants.mockResolvedValueOnce({ status: 'unknown' });
+    void s.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    await Promise.resolve();
+    void s.bridgeFrame({ type: 'initial-result', exitCode: 0, signal: null });
+    releaseCapture();
+    await flush();
+
+    expect(await s.session.settled).toMatchObject({
+      phase: 'closed',
+      termination: 'termination_unconfirmed',
+    });
+    expect(s.child.send).not.toHaveBeenCalledWith({
+      ...identity,
+      type: 'open-shell-go',
+    });
+
+    const dup = setup();
+    await dup.session.start();
+    await dup.message({ type: 'supervisor-ready' });
+    await dup.message({ type: 'bridge-spawned', pid: 20 });
+    await dup.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    await dup.bridgeFrame({ type: 'initial-spawned', pid: 20 });
+    expect(await dup.session.settled).toMatchObject({
+      termination: 'protocol_error',
+    });
+    expect(dup.platform.capture).toHaveBeenCalledTimes(2);
   });
 });

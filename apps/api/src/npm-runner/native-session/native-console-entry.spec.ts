@@ -357,4 +357,119 @@ describe('native console bridge', () => {
     expect(send).not.toHaveBeenCalled();
     expect(spawnInitial).not.toHaveBeenCalled();
   });
+  it.each(['UNKNOWN', 'EINVAL'] as const)(
+    'falls back to GLOBALROOT ConDrv devices when \\\\.\\CONIN$ hits %s open error',
+    (errorCode) => {
+      const send = jest.fn();
+      const paths: string[] = [];
+      const custom = createNativeConsoleBridge({
+        identity,
+        pid: 20,
+        systemRoot: 'C:\\Windows',
+        parent: {
+          send,
+          onMessage: () => () => undefined,
+          onDisconnect: () => () => undefined,
+        },
+        registerSignal: () => () => undefined,
+        isatty: () => true,
+        fs: {
+          openSync: jest.fn((target: string) => {
+            paths.push(target);
+            if (target === '\\\\.\\CONIN$' || target === '\\\\.\\CONOUT$')
+              throw Object.assign(new Error(errorCode), { code: errorCode });
+            return target.endsWith('CurrentIn') ? 10 : 11;
+          }) as never,
+          closeSync: jest.fn(),
+        },
+        spawnInitial: jest.fn(),
+        spawnShell: jest.fn(),
+      });
+      expect(paths).toEqual([
+        '\\\\.\\CONIN$',
+        '\\\\.\\GLOBALROOT\\Device\\ConDrv\\CurrentIn',
+        '\\\\.\\CONOUT$',
+        '\\\\.\\GLOBALROOT\\Device\\ConDrv\\CurrentOut',
+      ]);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({
+        ...identity,
+        type: 'bridge-ready',
+        pid: 20,
+      });
+      void custom;
+    },
+  );
+  it.each(['ENOENT', 'EACCES', null] as const)(
+    'fails closed with CONSOLE_UNAVAILABLE without ConDrv fallback on %s',
+    async (errorCode) => {
+      const send = jest.fn();
+      const paths: string[] = [];
+      const custom = createNativeConsoleBridge({
+        identity,
+        pid: 20,
+        systemRoot: 'C:\\Windows',
+        parent: {
+          send,
+          onMessage: () => () => undefined,
+          onDisconnect: () => () => undefined,
+        },
+        registerSignal: () => () => undefined,
+        isatty: () => true,
+        fs: {
+          openSync: jest.fn((target: string) => {
+            paths.push(target);
+            throw errorCode
+              ? Object.assign(new Error(errorCode), { code: errorCode })
+              : new Error('unexpected-error-without-code');
+          }) as never,
+          closeSync: jest.fn(),
+        },
+        spawnInitial: jest.fn(),
+        spawnShell: jest.fn(),
+      });
+      await custom.settled;
+      expect(paths).toEqual(['\\\\.\\CONIN$']);
+      expect(send).toHaveBeenCalledWith({
+        ...identity,
+        type: 'bridge-error',
+        code: 'CONSOLE_UNAVAILABLE',
+        message: 'Native console bridge failed',
+      });
+    },
+  );
+  it('closes CONIN$ and fails closed when CONOUT$ returns stdio fd <= 2 or duplicate fd', async () => {
+    for (const badSecondFd of [2, 10]) {
+      const send = jest.fn();
+      const closeSync = jest.fn();
+      const custom = createNativeConsoleBridge({
+        identity,
+        pid: 20,
+        systemRoot: 'C:\\Windows',
+        parent: {
+          send,
+          onMessage: () => () => undefined,
+          onDisconnect: () => () => undefined,
+        },
+        registerSignal: () => () => undefined,
+        isatty: () => true,
+        fs: {
+          openSync: jest.fn((target: string) =>
+            target === '\\\\.\\CONIN$' ? 10 : badSecondFd,
+          ) as never,
+          closeSync,
+        },
+        spawnInitial: jest.fn(),
+        spawnShell: jest.fn(),
+      });
+      await custom.settled;
+      expect(closeSync).toHaveBeenCalledWith(10);
+      expect(send).toHaveBeenCalledWith({
+        ...identity,
+        type: 'bridge-error',
+        code: 'CONSOLE_UNAVAILABLE',
+        message: 'Native console bridge failed',
+      });
+    }
+  });
 });

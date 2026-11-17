@@ -173,6 +173,8 @@ export function createNativeSession(
   let spawnBridgeSent = false;
   let initSent = false;
   let shellGoSent = false;
+  let initialPid: number | null = null;
+  let initialResultSeen = false;
   let cleanupRunning = false;
   let queue = Promise.resolve();
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -239,6 +241,32 @@ export function createNativeSession(
       ).values(),
     ];
   };
+  const unretiredInitialSeed = (): INativeProcessIdentity | null => {
+    if (
+      initialPid === null ||
+      state.identities.initial ||
+      state.initialRetired ||
+      !state.identities.bridge
+    )
+      return null;
+    // Scan dead initialPid rather than bridge so bridge's Windows conhost.exe stays alive.
+    return {
+      pid: initialPid,
+      creationTime: state.identities.bridge.creationTime,
+      executablePath: initFrame.initialFile,
+      parentPid: state.identities.bridge.pid,
+    };
+  };
+  const assertUniquePid = (pid: number) => {
+    if (
+      Object.entries(state.identities).some(
+        ([ownedRole, owned]) =>
+          !(ownedRole === 'initial' && state.initialRetired) &&
+          owned.pid === pid,
+      )
+    )
+      fault('protocol_error');
+  };
   const capture = async (
     role: keyof INativeSessionSnapshot['identities'],
     pid: number,
@@ -247,14 +275,7 @@ export function createNativeSession(
   ) => {
     const result = await deps.platform.capture(pid, file, parentPid);
     if (result.status !== 'ok') fault('start_failed');
-    if (
-      Object.entries(state.identities).some(
-        ([ownedRole, owned]) =>
-          !(ownedRole === 'initial' && state.initialRetired) &&
-          owned.pid === result.identity.pid,
-      )
-    )
-      fault('protocol_error');
+    assertUniquePid(result.identity.pid);
     state.identities[role] = result.identity;
   };
   const send = (frame: NativeCoordinatorCommand) => {
@@ -267,8 +288,13 @@ export function createNativeSession(
   const verifyCleanup = async (): Promise<boolean> => {
     try {
       const supervisor = state.identities.supervisor;
+      const initialSeed = unretiredInitialSeed();
       const tree = await deps.platform.descendants(
-        [...(supervisor ? [supervisor] : []), ...liveSeeds()],
+        [
+          ...(supervisor ? [supervisor] : []),
+          ...liveSeeds(),
+          ...(initialSeed ? [initialSeed] : []),
+        ],
         state.tracked,
       );
       if (tree.status !== 'ok') return false;
@@ -449,25 +475,38 @@ export function createNativeSession(
         bridgeReady = true;
         await maybeInit();
         return;
-      case 'initial-spawned':
-        if (!initSent || state.identities.initial || !state.identities.bridge)
+      case 'initial-spawned': {
+        if (
+          !initSent ||
+          initialPid !== null ||
+          state.identities.initial ||
+          !state.identities.bridge
+        )
           fault('protocol_error');
+        assertUniquePid(frame.pid);
+        initialPid = frame.pid;
         try {
           deps.callbacks?.onInitialSpawned?.(frame.pid);
         } catch {
           /* observer isolated */
         }
-        await capture(
-          'initial',
+        const captured = await deps.platform.capture(
           frame.pid,
           initFrame.initialFile,
           state.identities.bridge.pid,
         );
+        if (captured.status === 'ok') {
+          assertUniquePid(captured.identity.pid);
+          state.identities.initial = captured.identity;
+        } else if (!initialResultSeen) {
+          fault('start_failed');
+        }
         state.phase = 'initial_running';
         await persist();
         return;
+      }
       case 'initial-result': {
-        if (!initSent || !state.identities.initial || state.initialOutcome)
+        if (!initSent || initialPid === null || state.initialOutcome)
           fault('protocol_error');
         clearInitial();
         state.initialOutcome = {
@@ -478,17 +517,23 @@ export function createNativeSession(
         await persist();
         if (stopped) return;
         const initial = state.identities.initial;
-        const tree = await deps.platform.descendants([initial], []);
+        const seed = initial ?? unretiredInitialSeed();
+        if (!seed) fault('protocol_error');
+        const tree = await deps.platform.descendants([seed], []);
         if (tree.status !== 'ok') fault('termination_unconfirmed');
         // Children left by the initial command cannot overlap the manual prompt.
         state.tracked = tree.identities;
         await persist();
         if (stopped) return;
+        const stopTargets = initial ? [initial] : [];
+        const verifyTargets = initial
+          ? [initial, ...tree.identities]
+          : tree.identities;
         if (
-          (await deps.platform.stopTree([initial], tree.identities)) !==
+          verifyTargets.length > 0 &&
+          ((await deps.platform.stopTree(stopTargets, tree.identities)) !==
             'attempted' ||
-          (await deps.platform.verifyGone([initial, ...tree.identities])) !==
-            'verified'
+            (await deps.platform.verifyGone(verifyTargets)) !== 'verified')
         )
           fault('termination_unconfirmed');
         state.initialRetired = true;
@@ -658,6 +703,11 @@ export function createNativeSession(
               );
             return;
           }
+          if (
+            frame.type === 'bridge-frame' &&
+            frame.payload.type === 'initial-result'
+          )
+            initialResultSeen = true;
           void enqueue(() => handle(frame));
         }),
       );
