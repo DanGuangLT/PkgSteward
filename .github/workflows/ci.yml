@@ -261,6 +261,7 @@ jobs:
           # Invoke Yarn directly so its lifecycle scripts use Yarn for both apps.
           $yarn = Join-Path $env:RUNNER_TEMP 'yarn-classic/node_modules/yarn/bin/yarn.js'
           node $yarn --version
+          node $yarn test:scripts
           node $yarn install --non-interactive
           node $yarn build
           node $yarn --cwd apps/web test
