@@ -29,6 +29,7 @@ import { plainToInstance } from 'class-transformer';
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { DangerousOperation } from '@/common/decorators/metadata';
 import { PollingEndpoint } from '@/common/decorators/throttle.decorator';
+import { ClearRecoveryHoldDto } from '@/npm-runner/dto/clear-recovery-hold.dto';
 import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
 import { StartNpmRunDto } from '@/npm-runner/dto/start-npm-run.dto';
 import { RunIdParamDto } from '@/npm-runner/dto/run-id-param.dto';
@@ -41,10 +42,13 @@ import {
   TerminalResizeDto,
 } from '@/npm-runner/dto/terminal-run.dto';
 import {
+  RecoveryClearResultEntity,
   RunnerContextEntity,
   RunStartEntity,
   RunJobEntity,
+  RunLatestHoldEntity,
   RunLogPageEntity,
+  RunRecoveryHoldEntity,
   RunTerminalMetaEntity,
   TerminalInputAckEntity,
   TerminalOutputChunkEntity,
@@ -52,6 +56,10 @@ import {
   TerminalResizeResultEntity,
   TerminalWriterEntity,
 } from '@/npm-runner/entities/npm-runner.entity';
+import type {
+  IRecoveryClearResult,
+  RunLatestResult,
+} from '@/npm-runner/interfaces/npm-runner.types';
 import type { INpmRunnerController } from '@/npm-runner/interfaces/npm-runner.controller.interface';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 
@@ -84,6 +92,9 @@ const errorEnvelope = (statusCode: number, code: string) => ({
   RunnerContextEntity,
   RunStartEntity,
   RunJobEntity,
+  RunLatestHoldEntity,
+  RunRecoveryHoldEntity,
+  RecoveryClearResultEntity,
   RunLogPageEntity,
   RunTerminalMetaEntity,
   TerminalOutputChunkEntity,
@@ -103,7 +114,15 @@ const errorEnvelope = (statusCode: number, code: string) => ({
       details: {
         type: 'object',
         properties: {
-          reason: { type: 'string', enum: ['RUNNING', 'READERS_RUNNING'] },
+          reason: {
+            type: 'string',
+            enum: [
+              'RUNNING',
+              'READERS_RUNNING',
+              'RECOVERY_HOLD',
+              'REQUEST_MISMATCH',
+            ],
+          },
           jobId: { type: 'string', format: 'uuid' },
           requestPath: { type: 'string' },
         },
@@ -160,13 +179,39 @@ export class NpmRunnerController implements INpmRunnerController {
   @Get('latest')
   @PollingEndpoint()
   @Header('Cache-Control', 'no-store')
-  @ApiOperation({ summary: 'Read the latest retained run' })
+  @ApiOperation({ summary: 'Read the latest retained run or recovery hold' })
   @ApiOkResponse({ schema: envelope(RunJobEntity, 200) })
-  latest(): IApiResponse<RunJobEntity> {
+  latest(): IApiResponse<RunLatestResult> {
+    const result = this.service.latest();
     return {
       statusCode: 200,
       message: 'Latest command run retrieved successfully',
-      data: plainToInstance(RunJobEntity, this.service.latest()),
+      data:
+        'job' in result && result.job === null
+          ? plainToInstance(RunLatestHoldEntity, result)
+          : plainToInstance(RunJobEntity, result),
+    };
+  }
+
+  @Post('recovery/clear')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @DangerousOperation()
+  @ApiOperation({
+    summary:
+      'Clear an abandoned or corrupt native terminal recovery hold after explicit verification',
+  })
+  @ApiOkResponse({ schema: envelope(RecoveryClearResultEntity, 200) })
+  async clearRecovery(
+    @Body() body: ClearRecoveryHoldDto,
+  ): Promise<IApiResponse<IRecoveryClearResult>> {
+    return {
+      statusCode: 200,
+      message: 'Native recovery hold cleared successfully',
+      data: plainToInstance(
+        RecoveryClearResultEntity,
+        await this.service.clearRecovery(body),
+      ),
     };
   }
 

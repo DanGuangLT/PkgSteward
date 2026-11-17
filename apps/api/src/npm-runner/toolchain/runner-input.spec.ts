@@ -15,6 +15,7 @@ import {
   tool,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
 import type {
+  IRunJob,
   IRunRequest,
   IRunnerInput,
   IRunnerInputDeps,
@@ -1085,11 +1086,11 @@ describe('npm10 real input → gate → audit → revalidation → launch pipeli
     const finish = async () => {
       for (
         let turn = 0;
-        turn < 20 && service.latest()?.phase !== 'done';
+        turn < 20 && (service.latest() as IRunJob)?.phase !== 'done';
         turn++
       )
         await new Promise<void>((done) => setImmediate(done));
-      expect(service.latest()?.phase).toBe('done');
+      expect((service.latest() as IRunJob)?.phase).toBe('done');
     };
     return { ...f, runtime, service, finish };
   };

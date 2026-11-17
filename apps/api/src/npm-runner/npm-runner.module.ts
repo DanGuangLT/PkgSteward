@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
+import { AppPathsModule } from '@/core/app-paths/app-paths.module';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { MutationGateModule } from '@/core/mutation-gate/mutation-gate.module';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -26,10 +28,19 @@ import {
   NPM_RUNNER_RUNTIME,
 } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type {
+  INativeRecoveryRuntime,
   INativeRunnerRuntime,
   INpmRunnerRuntime,
 } from '@/npm-runner/interfaces/npm-runner.runtime';
-import type { IRunnerFs } from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  IRunRecoveryHold,
+  IRunnerFs,
+  RunFailureCode,
+} from '@/npm-runner/interfaces/npm-runner.types';
+import {
+  createNativeRecoveryStore,
+  createNodeRecoveryFs,
+} from '@/npm-runner/native-session/native-recovery';
 import type { IRunJob } from '@/npm-runner/interfaces/npm-runner.types';
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
 import {
@@ -89,6 +100,7 @@ export interface IRunnerRuntimeBindings {
   };
   terminalAvailable?: boolean;
   native?: INativeRuntimeBindings;
+  recovery?: INativeRecoveryRuntime;
 }
 
 const NODE_PTY_MODULE: string = 'node-pty';
@@ -282,6 +294,33 @@ export function createNpmRunnerRuntime(
     audit: {
       writeIntent: (job) => writeAudit(job, 'intent'),
       writeResult: (job) => writeAudit(job, 'result'),
+      writeRecoveryIntent: (operationId, hold: Readonly<IRunRecoveryHold>) =>
+        audit.append({
+          operation: 'npm-runner.recovery-clear',
+          operationId,
+          phase: 'intent',
+          targets: [hold.journalPath],
+          method: 'recovery:clear',
+          risk: { level: 'high', codes: [] },
+          result: 'pending',
+          errorCode: null,
+        }),
+      writeRecoveryResult: (
+        operationId,
+        hold: Readonly<IRunRecoveryHold>,
+        outcome,
+        errorCode: RunFailureCode | null = null,
+      ) =>
+        audit.append({
+          operation: 'npm-runner.recovery-clear',
+          operationId,
+          phase: 'result',
+          targets: [hold.journalPath],
+          method: 'recovery:clear',
+          risk: { level: 'high', codes: [] },
+          result: outcome,
+          errorCode,
+        }),
     },
     invalidation: {
       refreshProject: (path) => scanner.refreshProject(path),
@@ -304,6 +343,7 @@ export function createNpmRunnerRuntime(
           }),
         }
       : {}),
+    ...(bindings.recovery ? { recovery: bindings.recovery } : {}),
     launch: (command, childEnv, callbacks) => {
       if (!processes)
         throw new AppException(
@@ -340,6 +380,7 @@ export function createNpmRunnerRuntime(
 
 @Module({
   imports: [
+    AppPathsModule,
     ScannerModule,
     DiskUsageModule,
     FileOpsModule,
@@ -370,6 +411,8 @@ export function createNpmRunnerRuntime(
       inject: [
         NPM_RUNNER_FS,
         NPM_RUNNER_PROCESS,
+        PROCESS_SNAPSHOT,
+        AppPathsService,
         ScannerService,
         DiskUsageService,
         FileOpsService,
@@ -382,6 +425,8 @@ export function createNpmRunnerRuntime(
       useFactory: (
         fs: IRunnerFs,
         processes: IWindowsRunnerProcess | null,
+        snapshot: IProcessSnapshot,
+        appPaths: AppPathsService,
         scanner: ScannerService,
         disk: DiskUsageService,
         fileOps: FileOpsService,
@@ -390,19 +435,53 @@ export function createNpmRunnerRuntime(
         audit: AuditLogService,
         guard: PathGuardService,
         config: ConfigService,
-      ) =>
-        createNpmRunnerRuntime({
+      ) => {
+        const platform = process.platform === 'win32' ? 'win32' : 'posix';
+        const recoveryConsole = createWindowsNativeConsole({
+          fs,
+          snapshot,
+          processes: processes ?? {
+            capture: () => Promise.resolve({ status: 'unknown' }),
+            descendants: () => Promise.resolve({ status: 'unknown' }),
+            stopTree: () => Promise.resolve('unconfirmed'),
+            verifyGone: () => Promise.resolve('unconfirmed'),
+          },
+          platform: process.platform,
+          execPath: process.execPath,
+          systemRoot: process.env.SystemRoot,
+          appInstallDir: appPaths.appInstallDir,
+        });
+        const recovery = createNativeRecoveryStore({
+          dataDir: appPaths.dataDir,
+          platform,
+          fs: createNodeRecoveryFs(),
+          console: recoveryConsole,
+        });
+        return createNpmRunnerRuntime({
           fs,
           processes,
           scanner,
           disk,
           fileOps,
-          projects,
+          projects: {
+            hasRunningAnalysis: () => projects.hasRunningAnalysis(),
+            invalidateAfterMutation: (path) =>
+              projects.invalidateAfterMutation(path),
+            invalidateAllAfterMutation: () =>
+              projects.invalidateAllAfterMutation(),
+          },
           gate,
           audit,
           guard,
           config,
-        }),
+          native: {
+            appInstallDir: appPaths.appInstallDir,
+            snapshot,
+            persist: (sessionSnapshot) => recovery.persist(sessionSnapshot),
+          },
+          recovery,
+        });
+      },
     },
   ],
   exports: [NpmRunnerService],

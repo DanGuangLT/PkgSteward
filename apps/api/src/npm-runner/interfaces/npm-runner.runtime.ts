@@ -1,9 +1,15 @@
 import type {
   IRunJob,
+  IRunRecoveryHold,
   IRunnerCommand,
   IRunnerInputDeps,
   NativeShell,
+  RunFailureCode,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  INativeRecoveryClearCheck,
+  INativeRecoveryStartup,
+} from '@/npm-runner/native-session/native-recovery';
 import type {
   IRunProcess,
   IRunProcessCallbacks,
@@ -49,6 +55,12 @@ export interface INativeRunnerRuntime {
   preflight(shell: NativeShell): Promise<NativePreflightResult>;
   createSession(input: INativeSessionStartInput): INativeSession;
 }
+export interface INativeRecoveryRuntime {
+  readonly journalPath: string;
+  evaluateOnStartup(): Promise<INativeRecoveryStartup>;
+  verifyClearable(): Promise<INativeRecoveryClearCheck>;
+  removeMarkers(identity?: INativeSessionIdentity): Promise<void>;
+}
 // Structural seams keep the runner independent of existing services' implementations.
 export interface INpmRunnerRuntime {
   input: IRunnerInputDeps;
@@ -65,6 +77,16 @@ export interface INpmRunnerRuntime {
   audit: {
     writeIntent(job: Readonly<IRunJob>): Promise<void>;
     writeResult(job: Readonly<IRunJob>): Promise<void>;
+    writeRecoveryIntent?(
+      operationId: string,
+      hold: Readonly<IRunRecoveryHold>,
+    ): Promise<void>;
+    writeRecoveryResult?(
+      operationId: string,
+      hold: Readonly<IRunRecoveryHold>,
+      outcome: 'cleared' | 'blocked' | 'failed',
+      errorCode?: RunFailureCode | null,
+    ): Promise<void>;
   };
   invalidation: {
     refreshProject(path: string): Promise<void>;
@@ -85,6 +107,7 @@ export interface INpmRunnerRuntime {
     initialSize?: ITerminalSize,
   ): ITerminalRunProcess;
   native?: INativeRunnerRuntime;
+  recovery?: INativeRecoveryRuntime;
   now(): Date;
   uuid(): string;
   setTimer(

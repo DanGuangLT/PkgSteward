@@ -911,4 +911,21 @@ describe('ProjectsService read-only job lifecycle', () => {
     await expect(task).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
     expect(f.analyze).not.toHaveBeenCalled();
   });
+
+  it('invalidates any retained analysis regardless of project path on invalidateAllAfterMutation', async () => {
+    const f = fixture();
+    expect(() => f.service.invalidateAllAfterMutation()).not.toThrow();
+
+    const started = await f.service.start({ path: REQUEST });
+    f.pending.resolve(complete());
+    await flush();
+    f.service.invalidateAfterMutation('d:\\PROJECTS\\unrelated');
+    expect(f.service.get(started.jobId).stale).toBe(false);
+
+    f.service.invalidateAllAfterMutation();
+    expect(f.service.get(started.jobId)).toMatchObject({
+      stale: true,
+      warningCodes: ['INPUT_CHANGED'],
+    });
+  });
 });

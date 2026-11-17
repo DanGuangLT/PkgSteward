@@ -31,6 +31,10 @@ import type {
   INativeConsolePreflight,
   NativePreflightResult,
 } from '@/platform/windows/windows-native-console';
+import type {
+  INativeRecoveryClearCheck,
+  INativeRecoveryStartup,
+} from '@/npm-runner/native-session/native-recovery';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -283,7 +287,9 @@ describe('NpmRunnerService lifecycle', () => {
       return Symbol('TEST lease');
     });
     jest.mocked(readRunnerInput).mockImplementation(() => {
-      events.push(f.service.latest().gateHeld ? 'reserved' : 'missing');
+      events.push(
+        (f.service.latest() as IRunJob).gateHeld ? 'reserved' : 'missing',
+      );
       return Promise.resolve(runnerInput());
     });
     await f.service.start(requestBody());
@@ -436,7 +442,9 @@ describe('NpmRunnerService lifecycle', () => {
       .mockRejectedValue(new Error('TEST SECRET path/password'));
     await f.service.start(requestBody());
     await flush();
-    expect(f.service.latest().failureCode).toBe('INTERNAL_SERVER_ERROR');
+    expect((f.service.latest() as IRunJob).failureCode).toBe(
+      'INTERNAL_SERVER_ERROR',
+    );
     expect(JSON.stringify(f.service.latest())).not.toContain('TEST SECRET');
     expect(JSON.stringify(f.service.latest())).not.toContain('password');
   });
@@ -445,7 +453,7 @@ describe('NpmRunnerService lifecycle', () => {
     const f = fixture();
     await f.service.start(requestBody({ inputHash: 'b'.repeat(64) }));
     await flush();
-    expect(f.service.latest().failureCode).toBe('INPUT_CHANGED');
+    expect((f.service.latest() as IRunJob).failureCode).toBe('INPUT_CHANGED');
     expect(f.writeIntent).not.toHaveBeenCalled();
     expect(f.launch).not.toHaveBeenCalled();
   });
@@ -556,7 +564,7 @@ describe('NpmRunnerService lifecycle', () => {
         exitCode: exit.exitCode,
         signal: exit.signal,
       });
-      expect(f.service.latest().gateHeld).toBe(
+      expect((f.service.latest() as IRunJob).gateHeld).toBe(
         exit.termination === 'unconfirmed',
       );
       expect(f.refreshProject).toHaveBeenCalledTimes(
@@ -593,7 +601,7 @@ describe('NpmRunnerService lifecycle', () => {
     await f.service.cancel(jobId);
     await jest.advanceTimersByTimeAsync(1000);
     expect(f.stop).toHaveBeenCalledTimes(1);
-    expect(f.service.latest().stopReason).toBe('cancel');
+    expect((f.service.latest() as IRunJob).stopReason).toBe('cancel');
     stop.resolve('verified');
     await f.exit(success({ exitCode: null, signal: 'SIGTERM' }));
     expect(f.service.latest()).toMatchObject({
@@ -854,7 +862,7 @@ describe('NpmRunnerService lifecycle', () => {
     job.path = 'TEST tampered';
     const logs = f.service.logs(jobId, 0);
     logs.chunks[0].text = 'TEST changed';
-    expect(f.service.latest().path).toBe(root);
+    expect((f.service.latest() as IRunJob).path).toBe(root);
     expect(f.service.get(jobId).warningCodes).not.toContain('OUTPUT_TRUNCATED');
     expect(f.service.logs(jobId, 0).chunks[0].text).toBe('TEST hello\n');
     expect(f.service.latest()).toMatchObject({
@@ -892,7 +900,9 @@ describe('NpmRunnerService lifecycle', () => {
     await flush();
     f.output('stdout', Buffer.from('TEST partial'));
     await f.exit(success({ outputTruncated: true }));
-    expect(f.service.latest().warningCodes).toContain('OUTPUT_TRUNCATED');
+    expect((f.service.latest() as IRunJob).warningCodes).toContain(
+      'OUTPUT_TRUNCATED',
+    );
     expect(
       f.service
         .logs(jobId, 0)
@@ -942,7 +952,7 @@ describe('NpmRunnerService lifecycle', () => {
     await shutdown;
     expect(f.gate.isBusy()).toBe(true);
     expect(f.leave).not.toHaveBeenCalled();
-    expect(f.service.latest().terminationVerified).toBe(false);
+    expect((f.service.latest() as IRunJob).terminationVerified).toBe(false);
   });
 });
 
@@ -1784,5 +1794,274 @@ describe('NpmRunnerService terminal lifecycle', () => {
       cleanupVerified: true,
     });
     expect(nf.service.get(jobId).nativeSession?.phase).toBe('closed');
+  });
+
+  function recoveryFixture(startup?: {
+    active: boolean;
+    reason?: string;
+    journalPath?: string;
+  }) {
+    const nf = nativeFixture();
+    const journalPath = 'D:\\TEST\\data\\native-project-terminal-session.json';
+    const writeRecoveryIntent = jest.fn(() => Promise.resolve());
+    const writeRecoveryResult = jest.fn(() => Promise.resolve());
+    nf.runtime.audit.writeRecoveryIntent = writeRecoveryIntent;
+    nf.runtime.audit.writeRecoveryResult = writeRecoveryResult;
+    const evaluateOnStartup = jest.fn<Promise<INativeRecoveryStartup>, []>(() =>
+      Promise.resolve(
+        startup?.active
+          ? {
+              active: true,
+              reason: startup.reason ?? 'UNRESOLVED_NATIVE_SESSION',
+              journalPath: startup.journalPath ?? journalPath,
+              hold: {
+                active: true,
+                reason: startup.reason ?? 'UNRESOLVED_NATIVE_SESSION',
+                journalPath: startup.journalPath ?? journalPath,
+              },
+              snapshot: null,
+            }
+          : { active: false, hold: null, snapshot: null },
+      ),
+    );
+    const verifyClearable = jest.fn<Promise<INativeRecoveryClearCheck>, []>(
+      () => Promise.resolve({ clearable: true, reason: null, snapshot: null }),
+    );
+    const removeMarkers = jest.fn(() => Promise.resolve());
+    nf.runtime.recovery = {
+      journalPath,
+      evaluateOnStartup,
+      verifyClearable,
+      removeMarkers,
+    };
+    const service = new NpmRunnerService(nf.runtime);
+    return {
+      ...nf,
+      service,
+      journalPath,
+      writeRecoveryIntent,
+      writeRecoveryResult,
+      evaluateOnStartup,
+      verifyClearable,
+      removeMarkers,
+    };
+  }
+
+  it('acquires MutationGate on startup hold before admission, exposes hold on context/latest/409, and clears safely', async () => {
+    const rf = recoveryFixture({
+      active: true,
+      reason: 'CORRUPT_OR_PARTIAL_JOURNAL',
+    });
+    // Reject before onModuleInit completes
+    await expect(rf.service.start(requestBody())).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'RECOVERY_HOLD' },
+    });
+
+    await rf.service.onModuleInit();
+    expect(rf.enter).toHaveBeenCalledTimes(1);
+    expect(rf.gate.isBusy()).toBe(true);
+
+    await expect(rf.service.context(root)).resolves.toMatchObject({
+      recoveryHold: {
+        active: true,
+        reason: 'CORRUPT_OR_PARTIAL_JOURNAL',
+        journalPath: rf.journalPath,
+      },
+    });
+    expect(rf.service.latest()).toEqual({
+      recoveryHold: {
+        active: true,
+        reason: 'CORRUPT_OR_PARTIAL_JOURNAL',
+        journalPath: rf.journalPath,
+      },
+      job: null,
+    });
+    await expect(rf.service.start(requestBody())).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: {
+        reason: 'RECOVERY_HOLD',
+        recoveryHold: { active: true },
+      },
+    });
+
+    // Clear blocked when processes still active
+    rf.verifyClearable.mockResolvedValueOnce({
+      clearable: false,
+      reason: 'PROCESSES_STILL_ACTIVE',
+      snapshot: null,
+    });
+    await expect(
+      rf.service.clearRecovery({ confirm: true }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'RECOVERY_HOLD' },
+    });
+    expect(rf.gate.isBusy()).toBe(true);
+    expect(rf.removeMarkers).not.toHaveBeenCalled();
+
+    // Clear blocked on invalidation failure
+    rf.staleAllAnalyses.mockImplementationOnce(() => {
+      throw new Error('stale fail');
+    });
+    await expect(
+      rf.service.clearRecovery({ confirm: true }),
+    ).rejects.toMatchObject({
+      details: { reason: 'CACHE_INVALIDATION_FAILED' },
+    });
+    expect(rf.gate.isBusy()).toBe(true);
+    expect(rf.removeMarkers).not.toHaveBeenCalled();
+
+    // Clear blocked on marker removal failure
+    rf.removeMarkers.mockRejectedValueOnce(new Error('unlink EPERM'));
+    await expect(rf.service.clearRecovery({ confirm: true })).rejects.toThrow();
+    expect(rf.gate.isBusy()).toBe(true);
+
+    // Clear succeeds when all checks pass
+    await expect(rf.service.clearRecovery({ confirm: true })).resolves.toEqual({
+      cleared: true,
+      recoveryHold: null,
+    });
+    expect(rf.gate.isBusy()).toBe(false);
+    expect(rf.writeRecoveryIntent).toHaveBeenCalled();
+    expect(rf.writeRecoveryResult).toHaveBeenCalled();
+    expect(rf.clearDiskUsage).toHaveBeenCalled();
+    expect(rf.staleAllAnalyses).toHaveBeenCalled();
+    expect(() => rf.service.latest()).toThrow(NotFoundException);
+    await expect(rf.service.start(requestBody())).resolves.toMatchObject({
+      jobId,
+      status: 'running',
+    });
+  });
+
+  it('removes journal only after native cleanup + invalidation + result audit and holds gate if removal fails', async () => {
+    const rf = recoveryFixture({ active: false });
+    await rf.service.onModuleInit();
+    expect(rf.gate.isBusy()).toBe(false);
+
+    rf.removeMarkers.mockRejectedValueOnce(new Error('unlink EPERM'));
+    await rf.service.start(requestBody());
+    await flush();
+    const input = rf.getSessionInput();
+    input.callbacks.onInitSent?.();
+    input.callbacks.onInitialSpawned?.(30);
+    input.callbacks.onInitialOutcome?.({ exitCode: 0, signal: null });
+    rf.emitState('shell_running');
+    await rf.settleNative({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    expect(rf.writeResult).toHaveBeenCalledTimes(1);
+    expect(rf.removeMarkers).toHaveBeenCalledTimes(1);
+    expect(rf.gate.isBusy()).toBe(true);
+    expect(rf.service.get(jobId)).toMatchObject({
+      gateHeld: true,
+      failureCode: 'RECOVERY_HOLD',
+      recoveryHold: {
+        active: true,
+        reason: 'JOURNAL_REMOVAL_FAILED',
+      },
+    });
+    expect(rf.leave).not.toHaveBeenCalled();
+
+    await expect(rf.service.clearRecovery({ confirm: true })).resolves.toEqual({
+      cleared: true,
+      recoveryHold: null,
+    });
+    expect(rf.gate.isBusy()).toBe(false);
+    expect(rf.service.get(jobId).gateHeld).toBe(false);
+  });
+
+  it('persists launching before native spawn, blocks concurrent clear, and keeps recovery hold across cancel/shutdown', async () => {
+    // preflightNative aborts cleanly if createSession fails or journal_failed settles before spawn
+    const failPersist = recoveryFixture({ active: false });
+    await failPersist.service.onModuleInit();
+    await failPersist.service.start(requestBody());
+    await flush();
+    await failPersist.settleNative({
+      phase: 'lost',
+      termination: 'journal_failed',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(failPersist.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      spawned: false,
+      gateHeld: false,
+    });
+
+    // Startup non-AppException with busy gate fails closed and leaves recoveryReady=false
+    const failGate = recoveryFixture({ active: true });
+    failGate.evaluateOnStartup.mockRejectedValueOnce(new Error('boom'));
+    failGate.enter.mockReturnValueOnce(null);
+    await expect(failGate.service.onModuleInit()).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      statusCode: 500,
+    });
+    await expect(failGate.service.start(requestBody())).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'RECOVERY_HOLD' },
+    });
+
+    // Concurrent clearRecovery and audit failure paths
+    const conc = recoveryFixture({ active: true });
+    await conc.service.onModuleInit();
+    conc.writeRecoveryIntent.mockRejectedValueOnce(new Error('audit down'));
+    await expect(
+      conc.service.clearRecovery({ confirm: true }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'AUDIT_WRITE_FAILED' },
+    });
+
+    const blockVerify = deferred<{
+      clearable: boolean;
+      reason: null;
+      snapshot: null;
+    }>();
+    conc.verifyClearable.mockReturnValueOnce(blockVerify.promise);
+    const firstClear = conc.service.clearRecovery({ confirm: true });
+    await expect(
+      conc.service.clearRecovery({ confirm: true }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'RECOVERY_HOLD' },
+    });
+    conc.writeRecoveryResult.mockRejectedValueOnce(
+      new Error('audit result down'),
+    );
+    blockVerify.resolve({ clearable: true, reason: null, snapshot: null });
+    await expect(firstClear).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'AUDIT_WRITE_FAILED' },
+    });
+    expect(conc.removeMarkers).not.toHaveBeenCalled();
+    expect(conc.gate.isBusy()).toBe(true);
+
+    // JOURNAL_REMOVAL_FAILED during finalize must NOT be retried by cancel(id) or onModuleDestroy()
+    const holdCancel = recoveryFixture({ active: false });
+    await holdCancel.service.onModuleInit();
+    holdCancel.removeMarkers.mockRejectedValueOnce(new Error('unlink EPERM'));
+    await holdCancel.service.start(requestBody());
+    await flush();
+    await holdCancel.settleNative({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    expect(holdCancel.removeMarkers).toHaveBeenCalledTimes(1);
+    const cancelledSnap = await holdCancel.service.cancel(jobId);
+    await holdCancel.service.onModuleDestroy();
+    await flush();
+    expect(cancelledSnap.failureCode).toBe('RECOVERY_HOLD');
+    expect(cancelledSnap.gateHeld).toBe(true);
+    expect(holdCancel.removeMarkers).toHaveBeenCalledTimes(1);
+    expect(holdCancel.gate.isBusy()).toBe(true);
   });
 });

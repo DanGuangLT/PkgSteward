@@ -118,6 +118,22 @@ describe('createNpmRunnerRuntime native staging wiring', () => {
     });
     runtime.invalidation.staleAllAnalyses?.();
     expect(f.invalidateAllAfterMutation).toHaveBeenCalledTimes(1);
+    await runtime.audit.writeRecoveryIntent?.('op-1', {
+      active: true,
+      reason: 'UNRESOLVED_NATIVE_SESSION',
+      journalPath: 'D:\\TEST\\data\\native-project-terminal-session.json',
+    });
+    await runtime.audit.writeRecoveryResult?.(
+      'op-1',
+      {
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath: 'D:\\TEST\\data\\native-project-terminal-session.json',
+      },
+      'cleared',
+      null,
+    );
+    expect(f.bindings.audit.append).toHaveBeenCalledTimes(2);
     void root;
   });
 

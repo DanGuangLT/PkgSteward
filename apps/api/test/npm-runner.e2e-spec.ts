@@ -23,6 +23,7 @@ import { TransformInterceptor } from '@/common/interceptors/transform.intercepto
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { createHostOriginMiddleware } from '@/common/middleware/host-origin.middleware';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -101,10 +102,17 @@ jest.mock('node:fs/promises', () => {
 @Module({
   providers: [
     { provide: ConfigService, useValue: new ConfigService() },
+    {
+      provide: AppPathsService,
+      useValue: {
+        dataDir: 'D:\\TEST\\data',
+        appInstallDir: 'D:\\TEST\\api',
+      },
+    },
     { provide: PathGuardService, useValue: {} },
     { provide: AuditLogService, useValue: {} },
   ],
-  exports: [ConfigService, PathGuardService, AuditLogService],
+  exports: [ConfigService, AppPathsService, PathGuardService, AuditLogService],
 })
 class RunnerTestAdaptersModule {}
 
@@ -220,11 +228,14 @@ function fixture() {
     audit: {
       writeIntent: () => Promise.resolve(),
       writeResult: () => Promise.resolve(),
+      writeRecoveryIntent: () => Promise.resolve(),
+      writeRecoveryResult: () => Promise.resolve(),
     },
     invalidation: {
       refreshProject,
       clearDiskUsage: clearCache,
       staleAnalysis: invalidateAfterMutation,
+      staleAllAnalyses: () => invalidateAfterMutation(root),
     },
     launch,
     launchTerminal,
@@ -983,5 +994,85 @@ describe('NpmRunner HTTP flow (real Nest, mocked IO)', () => {
         text: 'after-cancel',
       })
       .expect(409);
+  });
+
+  it('exposes startup recoveryHold on context/latest/409 and validates POST /npm-runs/recovery/clear', async () => {
+    const journalPath = 'D:\\TEST\\data\\native-project-terminal-session.json';
+    f.runtime.recovery = {
+      journalPath,
+      evaluateOnStartup: jest.fn().mockResolvedValue({
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath,
+        hold: {
+          active: true,
+          reason: 'UNRESOLVED_NATIVE_SESSION',
+          journalPath,
+        },
+        snapshot: null,
+      }),
+      verifyClearable: jest.fn().mockResolvedValue({
+        clearable: true,
+        reason: null,
+        snapshot: null,
+      }),
+      removeMarkers: jest.fn().mockResolvedValue(undefined),
+    };
+    const app = await open(100);
+
+    const ctx = await getContext(app);
+    expect(ctx.recoveryHold).toEqual({
+      active: true,
+      reason: 'UNRESOLVED_NATIVE_SESSION',
+      journalPath,
+    });
+
+    const latestHold = await request(app.getHttpServer())
+      .get('/api/v1/npm-runs/latest')
+      .expect(200);
+    expect((latestHold.body as { data: unknown }).data).toEqual({
+      recoveryHold: {
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath,
+      },
+      job: null,
+    });
+
+    const startBlocked = await request(app.getHttpServer())
+      .post('/api/v1/npm-runs')
+      .send({
+        path: root,
+        action: 'install_all',
+        inputHash: ctx.inputHash,
+        requestId,
+      })
+      .expect(409);
+    expect(
+      (startBlocked.body as { details: { reason: string } }).details.reason,
+    ).toBe('RECOVERY_HOLD');
+
+    await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: false })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: true, extra: 'blocked' })
+      .expect(400);
+
+    const cleared = await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: true })
+      .expect(200);
+    expect(cleared.headers['cache-control']).toBe('no-store');
+    expect((cleared.body as { data: unknown }).data).toEqual({
+      cleared: true,
+      recoveryHold: null,
+    });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/npm-runs/latest')
+      .expect(404);
   });
 });

@@ -91,6 +91,18 @@ export interface IRunRecoveryHold {
   reason: string;
   journalPath: string;
 }
+export interface IRunLatestHold {
+  recoveryHold: IRunRecoveryHold;
+  job: null;
+}
+export type RunLatestResult = IRunJob | IRunLatestHold;
+export interface IRecoveryClearRequest {
+  confirm: true;
+}
+export interface IRecoveryClearResult {
+  cleared: boolean;
+  recoveryHold: IRunRecoveryHold | null;
+}
 export interface INativeConsoleMeta {
   shell: ConsoleShell;
   generation: number;

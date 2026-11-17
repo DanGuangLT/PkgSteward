@@ -1,4 +1,6 @@
 import type {
+  IRecoveryClearRequest,
+  IRecoveryClearResult,
   IRunJob,
   IRunLogPage,
   IRunRequest,
@@ -9,6 +11,7 @@ import type {
   ITerminalInputBody,
   ITerminalResizeBody,
   ITerminalResizeResult,
+  RunLatestResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
 import type {
@@ -19,7 +22,8 @@ import type {
 export interface INpmRunnerService {
   context(path: string): Promise<IRunnerContext>;
   start(input: IRunRequest): Promise<IRunStart>;
-  latest(): IRunJob;
+  latest(): RunLatestResult;
+  clearRecovery(body: IRecoveryClearRequest): Promise<IRecoveryClearResult>;
   get(id: string): IRunJob;
   logs(id: string, cursor: number): IRunLogPage;
   cancel(id: string): Promise<IRunJob>;

@@ -221,6 +221,16 @@ export class ProjectsService implements IProjectsService, OnModuleDestroy {
     if (!active || this.comparable(active.job.path) !== this.comparable(path)) {
       return;
     }
+    this.invalidateActive(active);
+  }
+
+  invalidateAllAfterMutation(): void {
+    const active = this.current;
+    if (!active) return;
+    this.invalidateActive(active);
+  }
+
+  private invalidateActive(active: IActiveAnalysis): void {
     active.job.stale = true;
     active.job.warningCodes = [
       ...new Set([...active.job.warningCodes, 'INPUT_CHANGED' as const]),

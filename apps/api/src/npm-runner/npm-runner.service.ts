@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   AppException,
   NotFoundException,
@@ -9,8 +9,11 @@ import type { INpmRunnerService } from '@/npm-runner/interfaces/npm-runner.servi
 import { NPM_RUNNER_RUNTIME } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type {
+  IRecoveryClearRequest,
+  IRecoveryClearResult,
   IRunJob,
   IRunLogPage,
+  IRunRecoveryHold,
   IRunRequest,
   IRunStart,
   IRunnerContext,
@@ -23,6 +26,7 @@ import type {
   ITerminalResizeResult,
   NativeSessionPhase,
   RunFailureCode,
+  RunLatestResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
 import { toComparable } from '@/common/utils/path.util';
@@ -154,13 +158,82 @@ const auditState = (job: IRunJob): string =>
   });
 
 @Injectable()
-export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
+export class NpmRunnerService
+  implements INpmRunnerService, OnModuleInit, OnModuleDestroy
+{
   private current: IActiveRun | null = null;
   private closed = false;
+  private recoveryHold: IRunRecoveryHold | null = null;
+  private recoveryHoldToken: symbol | null = null;
+  private recoveryReady: boolean;
+  private clearingRecoveryInFlight = false;
 
   constructor(
     @Inject(NPM_RUNNER_RUNTIME) private readonly runtime: INpmRunnerRuntime,
-  ) {}
+  ) {
+    this.recoveryReady = this.runtime.recovery === undefined;
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (!this.runtime.recovery) {
+      this.recoveryReady = true;
+      return;
+    }
+    let gateAcquisitionFailed = false;
+    try {
+      const startup = await this.runtime.recovery.evaluateOnStartup();
+      if (startup.active) {
+        this.recoveryHold = startup.hold
+          ? { ...startup.hold }
+          : {
+              active: true,
+              reason: startup.reason ?? 'UNRESOLVED_NATIVE_SESSION',
+              journalPath:
+                startup.journalPath ?? this.runtime.recovery.journalPath,
+            };
+        if (!this.recoveryHoldToken) {
+          const token = this.runtime.gate.tryEnter();
+          if (!token) {
+            gateAcquisitionFailed = true;
+            throw new AppException(
+              500,
+              'Failed to acquire startup recovery hold gate',
+              'INTERNAL_SERVER_ERROR',
+            );
+          }
+          this.recoveryHoldToken = token;
+        }
+      } else {
+        this.recoveryHold = null;
+      }
+    } catch (error) {
+      if (!this.recoveryHold) {
+        this.recoveryHold = {
+          active: true,
+          reason: 'CORRUPT_OR_PARTIAL_JOURNAL',
+          journalPath: this.runtime.recovery.journalPath,
+        };
+      }
+      if (!this.recoveryHoldToken) {
+        const token = this.runtime.gate.tryEnter();
+        if (!token) {
+          gateAcquisitionFailed = true;
+          if (error instanceof AppException) throw error;
+          throw new AppException(
+            500,
+            'Failed to acquire startup recovery hold gate',
+            'INTERNAL_SERVER_ERROR',
+          );
+        }
+        this.recoveryHoldToken = token;
+      }
+      if (error instanceof AppException) throw error;
+    } finally {
+      if (!gateAcquisitionFailed) {
+        this.recoveryReady = true;
+      }
+    }
+  }
 
   async context(path: string): Promise<IRunnerContext> {
     const [input, nativeConsoleAvailable] = await Promise.all([
@@ -182,7 +255,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       version: input.tool?.version ?? null,
       available: input.reason === null && input.tool !== null,
       nativeConsoleAvailable,
-      recoveryHold: null,
+      recoveryHold: this.recoveryHold ? { ...this.recoveryHold } : null,
       terminalAvailable:
         this.runtime.input.platform === 'win32' &&
         Boolean(this.runtime.processes) &&
@@ -204,6 +277,24 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         'Runner is shutting down',
         'SERVICE_UNAVAILABLE',
       );
+    if (!this.recoveryReady || this.recoveryHold?.active) {
+      const hold: IRunRecoveryHold = this.recoveryHold
+        ? { ...this.recoveryHold }
+        : {
+            active: true,
+            reason: 'RECOVERY_LOADING',
+            journalPath: this.runtime.recovery?.journalPath ?? '',
+          };
+      throw new AppException(
+        409,
+        'Native terminal recovery hold is active',
+        'CONFLICT',
+        {
+          reason: 'RECOVERY_HOLD',
+          recoveryHold: hold,
+        },
+      );
+    }
     const retained = this.current;
     const consoleShell =
       input.consoleShell === undefined ? 'cmd' : input.consoleShell;
@@ -411,9 +502,156 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return Promise.resolve(accepted);
   }
 
-  latest(): IRunJob {
-    if (!this.current) throw new NotFoundException('Latest command run');
-    return this.snapshot(this.current);
+  latest(): RunLatestResult {
+    if (this.current) return this.snapshot(this.current);
+    if (this.recoveryHold?.active) {
+      return { recoveryHold: { ...this.recoveryHold }, job: null };
+    }
+    throw new NotFoundException('Latest command run');
+  }
+
+  async clearRecovery(
+    body: IRecoveryClearRequest,
+  ): Promise<IRecoveryClearResult> {
+    if (this.closed)
+      throw new AppException(
+        503,
+        'Runner is shutting down',
+        'SERVICE_UNAVAILABLE',
+      );
+    if (body.confirm !== true)
+      throw new ValidationException('confirm must be true');
+    if (
+      this.current &&
+      (this.current.job.status === 'running' ||
+        this.current.job.status === 'stopping' ||
+        (this.current.job.gateHeld &&
+          this.current.token !== this.recoveryHoldToken))
+    ) {
+      throw new AppException(
+        409,
+        'A command run is already active',
+        'CONFLICT',
+        {
+          reason: 'RUNNING',
+          jobId: this.current.job.jobId,
+          requestPath: this.current.job.requestPath,
+        },
+      );
+    }
+    if (this.clearingRecoveryInFlight) {
+      throw new AppException(
+        409,
+        'Recovery clear is already in progress',
+        'CONFLICT',
+        {
+          reason: 'RECOVERY_HOLD',
+          recoveryHold: this.recoveryHold
+            ? { ...this.recoveryHold }
+            : {
+                active: true,
+                reason: 'UNRESOLVED_NATIVE_SESSION',
+                journalPath: this.runtime.recovery?.journalPath ?? '',
+              },
+        },
+      );
+    }
+    const hold = this.recoveryHold;
+    if (!hold?.active || !this.runtime.recovery) {
+      return { cleared: false, recoveryHold: null };
+    }
+    this.clearingRecoveryInFlight = true;
+    try {
+      if (
+        !this.runtime.audit.writeRecoveryIntent ||
+        !this.runtime.audit.writeRecoveryResult
+      ) {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      const operationId = this.runtime.uuid();
+      try {
+        await this.runtime.audit.writeRecoveryIntent(operationId, hold);
+      } catch {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      const check = await this.runtime.recovery.verifyClearable();
+      if (!check.clearable) {
+        try {
+          await this.runtime.audit.writeRecoveryResult(
+            operationId,
+            hold,
+            'blocked',
+            'RECOVERY_HOLD',
+          );
+        } catch {
+          /* keep primary RECOVERY_HOLD conflict */
+        }
+        throw new AppException(
+          409,
+          'Native console processes may still be active; close them before clearing recovery hold',
+          'CONFLICT',
+          {
+            reason: 'RECOVERY_HOLD',
+            recoveryHold: { ...hold },
+          },
+        );
+      }
+      try {
+        this.runtime.invalidation.clearDiskUsage();
+        if (this.runtime.invalidation.staleAllAnalyses) {
+          this.runtime.invalidation.staleAllAnalyses();
+        } else if (this.current) {
+          this.runtime.invalidation.staleAnalysis(this.current.job.path);
+        }
+      } catch {
+        try {
+          await this.runtime.audit.writeRecoveryResult(
+            operationId,
+            hold,
+            'failed',
+            'CACHE_INVALIDATION_FAILED',
+          );
+        } catch {
+          /* preserve CACHE_INVALIDATION_FAILED */
+        }
+        throw runnerFailure('CACHE_INVALIDATION_FAILED');
+      }
+      try {
+        await this.runtime.audit.writeRecoveryResult(
+          operationId,
+          hold,
+          'cleared',
+          null,
+        );
+      } catch {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      try {
+        await this.runtime.recovery.removeMarkers();
+      } catch {
+        this.recoveryHold = {
+          active: true,
+          reason: 'JOURNAL_REMOVAL_FAILED',
+          journalPath: this.runtime.recovery.journalPath,
+        };
+        throw new AppException(
+          500,
+          'Failed to remove native recovery journal marker',
+          'INTERNAL_SERVER_ERROR',
+        );
+      }
+      const token = this.recoveryHoldToken;
+      this.recoveryHold = null;
+      this.recoveryHoldToken = null;
+      if (token) this.runtime.gate.leave(token);
+      if (this.current && this.current.token === token) {
+        this.current.job.gateHeld = false;
+        this.current.job.recoveryHold = null;
+      }
+      return { cleared: true, recoveryHold: null };
+    } finally {
+      this.clearingRecoveryInFlight = false;
+    }
   }
 
   get(id: string): IRunJob {
@@ -436,7 +674,13 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
 
   async cancel(id: string): Promise<IRunJob> {
     const active = this.requireRun(id);
-    if (!active.job.gateHeld || active.work)
+    if (
+      !active.job.gateHeld ||
+      active.work ||
+      this.recoveryHold?.active ||
+      active.token === this.recoveryHoldToken ||
+      active.job.failureCode === 'RECOVERY_HOLD'
+    )
       return Promise.resolve(this.snapshot(active));
     if (active.job.phase === 'done') {
       active.job.status = 'stopping';
@@ -545,6 +789,13 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     const active = this.current;
     if (!active || !active.job.gateHeld) return;
     if (!active.work) {
+      if (
+        this.recoveryHold?.active ||
+        active.token === this.recoveryHoldToken ||
+        active.job.failureCode === 'RECOVERY_HOLD'
+      ) {
+        return;
+      }
       if (active.job.phase === 'done')
         this.queueFinalize(
           active,
@@ -602,6 +853,15 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
   private snapshot(active: IActiveRun): IRunJob {
     this.syncLogs(active);
     this.syncTerminal(active);
+    if (
+      active.useNative ||
+      this.recoveryHold !== null ||
+      this.runtime.recovery !== undefined
+    ) {
+      active.job.recoveryHold = this.recoveryHold
+        ? { ...this.recoveryHold }
+        : null;
+    }
     return structuredClone(active.job);
   }
 
@@ -1370,8 +1630,29 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       ? job.terminationVerified
       : !job.spawned || job.terminationVerified;
     if (terminationOk && !invalidationFailed && job.auditWritten) {
-      this.runtime.gate.leave(active.token);
-      job.gateHeld = false;
+      if (active.useNative && this.runtime.recovery) {
+        try {
+          await this.runtime.recovery.removeMarkers({
+            jobId: job.jobId,
+            generation: 1,
+          });
+          this.runtime.gate.leave(active.token);
+          job.gateHeld = false;
+        } catch {
+          this.recoveryHold = {
+            active: true,
+            reason: 'JOURNAL_REMOVAL_FAILED',
+            journalPath: this.runtime.recovery.journalPath,
+          };
+          this.recoveryHoldToken = active.token;
+          job.recoveryHold = { ...this.recoveryHold };
+          job.failureCode = 'RECOVERY_HOLD';
+          if (job.status === 'completed') job.status = 'failed';
+        }
+      } else {
+        this.runtime.gate.leave(active.token);
+        job.gateHeld = false;
+      }
     }
     job.phase = 'done';
     job.finishedAt = this.runtime.now().toISOString();

@@ -9,7 +9,9 @@ import {
   NATIVE_SESSION_PHASES,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import type {
+  IRecoveryClearResult,
   IRunJob,
+  IRunLatestHold,
   IRunLogChunk,
   IRunLogPage,
   IRunStart,
@@ -43,6 +45,19 @@ export class RunRecoveryHoldEntity implements IRunRecoveryHold {
   @ApiProperty() active!: boolean;
   @ApiProperty() reason!: string;
   @ApiProperty() journalPath!: string;
+}
+export class RunLatestHoldEntity implements IRunLatestHold {
+  @ApiProperty({ type: () => RunRecoveryHoldEntity })
+  @Type(() => RunRecoveryHoldEntity)
+  recoveryHold!: RunRecoveryHoldEntity;
+  @ApiProperty({ type: () => RunJobEntity, nullable: true })
+  job!: null;
+}
+export class RecoveryClearResultEntity implements IRecoveryClearResult {
+  @ApiProperty() cleared!: boolean;
+  @ApiProperty({ type: () => RunRecoveryHoldEntity, nullable: true })
+  @Type(() => RunRecoveryHoldEntity)
+  recoveryHold!: RunRecoveryHoldEntity | null;
 }
 export class NativeSessionMetaEntity implements INativeConsoleMeta {
   @ApiProperty({ enum: [...CONSOLE_SHELLS] })

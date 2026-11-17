@@ -17,6 +17,7 @@ import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
 import type * as MutationGate from '@/core/mutation-gate/mutation-gate.service';
 import type * as RunnerService from '@/npm-runner/npm-runner.service';
 import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
+import type { IRunJob } from '@/npm-runner/interfaces/npm-runner.types';
 import type {
   IRunProcess,
   IRunProcessCallbacks,
@@ -440,7 +441,7 @@ describe('npm 12 config failure remains a normal failed runner job', () => {
       action: 'install_all',
     });
     for (let turn = 0; turn < 1000; turn++) {
-      if (service.latest()?.phase === 'done') break;
+      if ((service.latest() as IRunJob)?.phase === 'done') break;
       await Promise.resolve();
     }
     expect(service.latest()).toMatchObject({
