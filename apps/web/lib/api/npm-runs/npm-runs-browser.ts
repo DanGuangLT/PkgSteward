@@ -2,10 +2,13 @@ import { npmRunsPaths } from "./npm-runs-paths.ts"
 import { requestApi } from "../request.ts"
 import { unwrapApiData } from "../response.ts"
 import type {
+  RecoveryClearRequest,
+  RecoveryClearResult,
   RunnerContext,
   RunRequest,
   RunStart,
   RunJob,
+  RunLatestResult,
   RunLogPage,
   TerminalClaimRequest,
   TerminalInputAck,
@@ -25,8 +28,13 @@ export async function startBrowserNpmRun(input: RunRequest, signal?: AbortSignal
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
   }, null))
 }
-export async function getBrowserLatestNpmRun(signal?: AbortSignal): Promise<RunJob> {
-  return unwrapApiData(await requestApi<RunJob>(`/api${npmRunsPaths.latest}`, { method: "GET", signal }))
+export async function getBrowserLatestNpmRun(signal?: AbortSignal): Promise<RunLatestResult> {
+  return unwrapApiData(await requestApi<RunLatestResult>(`/api${npmRunsPaths.latest}`, { method: "GET", signal }))
+}
+export async function clearBrowserRecoveryHold(input: RecoveryClearRequest, signal?: AbortSignal): Promise<RecoveryClearResult> {
+  return unwrapApiData(await requestApi<RecoveryClearResult>(`/api${npmRunsPaths.recoveryClear}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
+  }, null))
 }
 export async function pollBrowserNpmRun(id: string, signal?: AbortSignal): Promise<RunJob> {
   return unwrapApiData(await requestApi<RunJob>(`/api${npmRunsPaths.job(id)}`, { method: "GET", signal }))

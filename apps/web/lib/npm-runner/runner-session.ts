@@ -1,5 +1,13 @@
 import { ApiError } from "../api/response.ts"
-import { initialRunnerState, isRunActive, runnerError, runnerEligibility, runnerFollowHref, buildRunRequest } from "./runner-policy.ts"
+import {
+  buildRunRequest,
+  initialRunnerState,
+  isLatestRecoveryHold,
+  isRunActive,
+  runnerEligibility,
+  runnerError,
+  runnerFollowHref,
+} from "./runner-policy.ts"
 import { initialRunnerLogs, mergeRunnerLogs, needsLogDrain } from "./runner-log-view.ts"
 import {
   clampTerminalSize,
@@ -10,7 +18,10 @@ import {
   needsTerminalOutputDrain,
 } from "./terminal-session.ts"
 import type {
+  RecoveryClearRequest,
+  RecoveryClearResult,
   RunJob,
+  RunLatestResult,
   RunLogPage,
   RunRequest,
   RunStart,
@@ -32,7 +43,8 @@ const RESIZE_COALESCE_MS = 60
 export interface RunnerApi {
   context(path: string, signal: AbortSignal): Promise<RunnerContext>
   start(input: RunRequest, signal: AbortSignal): Promise<RunStart>
-  latest(signal: AbortSignal): Promise<RunJob>
+  latest(signal: AbortSignal): Promise<RunLatestResult>
+  clearRecovery?(input: RecoveryClearRequest, signal: AbortSignal): Promise<RecoveryClearResult>
   get(id: string, signal: AbortSignal): Promise<RunJob>
   logs(id: string, cursor: number, signal: AbortSignal): Promise<RunLogPage>
   cancel(id: string, signal: AbortSignal): Promise<RunJob>
@@ -162,7 +174,19 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   }
   function receiveJob(job: RunJob) {
     const terminal = syncTerminalMeta(state.terminal, job)
-    publish({ ...state, job, terminal, cancelPending: false, cancelUnknown: false, error: null, pollError: null })
+    const nextHold = job.recoveryHold !== undefined
+      ? (job.recoveryHold?.active ? job.recoveryHold : null)
+      : state.recoveryHold
+    publish({
+      ...state,
+      job,
+      recoveryHold: nextHold,
+      terminal,
+      cancelPending: false,
+      cancelUnknown: false,
+      error: null,
+      pollError: null,
+    })
     if (job.spawned && job.status !== "running" && job.status !== "stopping" && !mutated.has(job.jobId)) {
       mutated.add(job.jobId)
       // Context refresh is local metadata only. The caller refreshes its server
@@ -256,7 +280,10 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
       const context = await api.context(requestPath, controller.signal)
       if (!active(controller, generation) || contextRequest !== controller) return
       if (context.requestPath !== requestPath) throw new ApiError(502, "Unexpected context response.", "INVALID_RESPONSE")
-      publish({ ...state, context, contextError: null })
+      const nextHold = context.recoveryHold !== undefined
+        ? (context.recoveryHold?.active ? context.recoveryHold : null)
+        : state.recoveryHold
+      publish({ ...state, context, recoveryHold: nextHold, contextError: null })
     } catch (cause) {
       if (active(controller, generation) && contextRequest === controller) {
         publish({ ...state, context: null, contextError: runnerError(cause).code })
@@ -289,8 +316,22 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     latestRequest = controller
     publish({ ...state, refreshing: true })
     try {
-      const job = await api.latest(controller.signal)
+      const latest = await api.latest(controller.signal)
       if (!active(controller, generation)) return
+      if (isLatestRecoveryHold(latest)) {
+        const nextHold = latest.recoveryHold.active ? latest.recoveryHold : null
+        publish({
+          ...state,
+          recoveryHold: nextHold,
+          job: nextHold && state.job?.recoveryHold?.active === false ? null : state.job,
+          error: state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING" ? null : state.error,
+        })
+        return
+      }
+      const job = latest
+      if (job.recoveryHold?.active) {
+        publish({ ...state, recoveryHold: job.recoveryHold })
+      }
       if (requestId) {
         if (job.requestId === requestId && job.requestPath === requestPath) track(job)
         // A different retained job is no evidence about our ambiguous POST.
@@ -298,13 +339,19 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
         if (job.requestPath === requestPath) track(job)
         else publish({ ...state, error: { code: "RUNNING", statusCode: 409,
           conflict: { reason: "RUNNING", jobId: job.jobId, requestPath: job.requestPath } } })
-      } else if (state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING") {
-        publish({ ...state, error: null })
+      } else if (state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING" || state.error?.code === "RECOVERY_HOLD") {
+        publish({ ...state, error: null, recoveryHold: state.context?.recoveryHold?.active ? state.context.recoveryHold : null })
       }
     } catch (cause) {
       if (active(controller, generation)) {
         const error = runnerError(cause)
-        if (error.statusCode === 404 && !requestId) publish({ ...state, error: null })
+        if (error.statusCode === 404 && !requestId) {
+          publish({
+            ...state,
+            recoveryHold: state.context?.recoveryHold?.active ? state.context.recoveryHold : null,
+            error: null,
+          })
+        }
         else if (!requestId) publish({ ...state, error })
       }
     } finally {
@@ -320,10 +367,7 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
   async function start(selection: RunnerSelection): Promise<void> {
     if (disposed || commandRequest || runnerEligibility(state, selection) || !state.context) return
     const requestId = uuid()
-    const input = buildRunRequest(state.context, selection, requestId, {
-      cols: state.terminal.cols,
-      rows: state.terminal.rows,
-    })
+    const input = buildRunRequest(state.context, selection, requestId)
     const generation = invalidate()
     publish({ ...state, phase: "starting", generation, requestId, jobId: null, job: null,
       logs: initialRunnerLogs(), terminal: resetTerminal(), startUnknown: false, cancelUnknown: false, error: null, pollError: null })
@@ -338,12 +382,54 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
       if (active(controller, generation) && commandRequest === controller) {
         const error = runnerError(cause)
         const startUnknown = error.statusCode === undefined || error.statusCode >= 500
-        publish({ ...state, phase: "idle", error, startUnknown })
+        publish({
+          ...state,
+          phase: "idle",
+          error,
+          recoveryHold: error.recoveryHold?.active ? error.recoveryHold : state.recoveryHold,
+          startUnknown,
+        })
         if (startUnknown) { pendingRecovery = true; await recoverLatest() }
       }
     } finally {
       if (commandRequest === controller) commandRequest = null
       if (active(controller, generation)) void poll()
+    }
+  }
+  async function clearRecovery(): Promise<void> {
+    if (disposed || commandRequest || state.clearPending || !api.clearRecovery) return
+    const controller = new AbortController()
+    const generation = state.generation
+    commandRequest = controller
+    publish({ ...state, clearPending: true, error: null })
+    try {
+      const result = await api.clearRecovery({ confirm: true }, controller.signal)
+      if (!active(controller, generation) || commandRequest !== controller) return
+      const nextHold = result.recoveryHold?.active ? result.recoveryHold : null
+      const nextContext = state.context && nextHold === null && state.context.recoveryHold?.active
+        ? { ...state.context, recoveryHold: null }
+        : state.context
+      const nextJob = state.job && nextHold === null && state.job.recoveryHold?.active
+        ? { ...state.job, gateHeld: false, recoveryHold: null }
+        : state.job
+      publish({ ...state, clearPending: false, recoveryHold: nextHold, context: nextContext, job: nextJob, error: null })
+      if (result.cleared) {
+        if (state.requestPath) pendingContext = true
+        pendingRecovery = true
+        await Promise.all([refreshContext(), recoverLatest()])
+      }
+    } catch (cause) {
+      if (active(controller, generation) && commandRequest === controller) {
+        const error = runnerError(cause)
+        publish({
+          ...state,
+          clearPending: false,
+          recoveryHold: error.recoveryHold?.active ? error.recoveryHold : state.recoveryHold,
+          error,
+        })
+      }
+    } finally {
+      if (commandRequest === controller) commandRequest = null
     }
   }
   async function cancel(): Promise<void> {
@@ -424,10 +510,16 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     pendingContext = false
     const busy = hasBusyRun()
     const nextError = busy ? state.error : (state.error?.code === "RUNNING" ? null : state.error)
+    const nextHold = context !== null
+      ? (context.recoveryHold !== undefined
+          ? (context.recoveryHold?.active ? context.recoveryHold : (state.job?.recoveryHold?.active ? state.job.recoveryHold : null))
+          : state.recoveryHold)
+      : state.recoveryHold
     publish({
       ...state,
       context,
       requestPath: nextRequestPath,
+      recoveryHold: nextHold,
       contextError: null,
       error: nextError,
     })
@@ -839,7 +931,7 @@ export function createRunnerSession({ api, clock, visibility, onChange, onMutate
     invalidate()
     unsubscribe()
   }
-  return { start, cancel, retryPoll, refresh, syncProjectContext, claimTerminal, sendTerminalInput,
+  return { start, cancel, clearRecovery, retryPoll, refresh, syncProjectContext, claimTerminal, sendTerminalInput,
     reconcileTerminalInput, resizeTerminal, clearTerminalOutput, dismissCompletedJob,
     follow: () => state.error?.conflict ? runnerFollowHref(state.error.conflict) : null,
     dispose, getSnapshot: () => state }

@@ -87,6 +87,48 @@
     "retryPoll": "Retry reading status and logs",
     "follow": "Follow the active command",
     "jumpToLatest": "Jump to latest",
+    "dismiss": "Dismiss",
+    "shells": {
+      "label": "Console window",
+      "cmd": "Command Prompt (cmd)",
+      "powershell": "Windows PowerShell"
+    },
+    "native": {
+      "dockTitle": "Native console session",
+      "shell": "Active console shell",
+      "initialCommand": "Initial command result",
+      "consoleState": "Console window status",
+      "consoleExit": "Console exit result",
+      "exitValue": "Exit code {code}",
+      "signalValue": "Signal {signal}",
+      "runningKeepOpen": "The initial command may complete while your console window remains open. Close the console window or click Stop when finished."
+    },
+    "nativePhases": {
+      "starting": "Starting native console",
+      "initial_running": "Running initial command",
+      "initial_finished": "Initial command finished; console open",
+      "shell_open": "Interactive console open",
+      "stopping": "Stopping native console",
+      "closed": "Console window closed",
+      "lost": "Native console connection lost"
+    },
+    "recovery": {
+      "title": "Native console recovery hold active",
+      "journalPath": "Session journal",
+      "clearAction": "Clear recovery hold",
+      "clearing": "Checking processes…",
+      "dialogTitle": "Clear recovery hold?",
+      "dialogDescription": "PkgSteward will verify that no recorded native console or command processes remain active, invalidate cached project data and clear the journal hold. Only continue after closing any open native console windows from the previous session.",
+      "dialogConfirm": "Verify and clear hold",
+      "reasons": {
+        "UNRESOLVED_NATIVE_SESSION": "A previous native console session was still recorded as unresolved when the backend started.",
+        "CORRUPT_OR_PARTIAL_JOURNAL": "A corrupt or incomplete native console journal marker was found at startup.",
+        "UNFINALIZED_JOURNAL": "The previous native console journal closed without final completion checks.",
+        "UNSAFE_JOURNAL": "An unsafe native console journal marker blocked startup until verified and cleared.",
+        "JOURNAL_REMOVAL_FAILED": "The backend could not remove the native console session journal marker after completion.",
+        "DEFAULT": "The runner mutation gate is held for recovery verification."
+      }
+    },
     "actions": {
       "install_all": "Install all dependencies",
       "install_one": "Install one package",
@@ -157,7 +199,7 @@
       "pollPaused": "Status or log reading paused after an error. Refresh or retry reading manually.",
       "mayHaveChanged": "The project may have changed even if the command failed or was stopped. Earlier analysis may be stale.",
       "gateHeld": "This command holds the machine-wide mutation lock: scanning, size measurement, analysis, deletion previews and other mutations are blocked. Use Stop or retry process cleanup when available.",
-      "refreshRequired": "Updating project data after the command did not finish. Check the failure code; success is unconfirmed."
+      "refreshRequired": "Updating project data after the command did not finish or requires a manual refresh. Refresh context and project details to view updated state."
     },
     "logs": {
       "title": "Command logs",
@@ -183,6 +225,11 @@
       "SCRIPT_NAME_UNSUPPORTED": "Choose a script with a supported name.",
       "READERS_RUNNING": "A scan, size measurement, analysis or deletion preview is running. Wait for it to finish, then refresh context and status.",
       "RUNNING": "A command is active or process cleanup is unfinished. Wait, follow it or request a stop.",
+      "REQUEST_MISMATCH": "This request ID was already used with different command parameters. Refresh status before starting a new request.",
+      "NATIVE_CONSOLE_UNAVAILABLE": "The selected Windows native console could not be started or initialized.",
+      "NATIVE_PROTOCOL_ERROR": "The native console supervisor returned an unexpected protocol message.",
+      "SESSION_INTERRUPTED": "The native console session ended before normal completion could be confirmed.",
+      "RECOVERY_HOLD": "A native console recovery hold is active and blocks new runs and machine-wide mutations until verified and cleared.",
       "SPAWN_FAILED": "The command process could not be started.",
       "COMMAND_FAILED": "The command failed. Check its logs and actual exit code.",
       "CANCELLED": "The command was stopped on request.",

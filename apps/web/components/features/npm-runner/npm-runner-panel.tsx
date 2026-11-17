@@ -5,16 +5,16 @@ import Link from "next/link"
 import { useRef, useState } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
+import { NativeSessionDetails, RecoveryHoldBanner } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
-import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
-import { TERMINAL_DOCK_STATE_KEY, terminalDockCodec, type TerminalDockMode } from "@/components/features/npm-runner/terminal-dock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useNavigationContinuity, useViewState } from "@/hooks/use-navigation-continuity"
 import type { useNpmRunner } from "@/hooks/use-npm-runner"
+import type { ConsoleShell } from "@/lib/api/types"
 import { runnerDisplay } from "@/lib/npm-runner/runner-display"
-import { isRunActive, runnerFollowHref, type RunnerSelection } from "@/lib/npm-runner/runner-policy"
-import { appendReturnContext } from "@/lib/ui/navigation-targets"
+import { isRunActive, normalizeConsoleShell, runnerFollowHref, type RunnerSelection } from "@/lib/npm-runner/runner-policy"
+import { appendReturnContext, makeViewStateKey, runnerShellCodec } from "@/lib/ui/navigation-targets"
 import { revealRegion } from "@/lib/ui/reveal-region"
 import type messages from "@/messages/vi.json"
 
@@ -25,10 +25,15 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const t = useTranslations("npmRunner")
   const format = useFormatter()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
-  const [dockMode, setDockMode] = useViewState<TerminalDockMode>(TERMINAL_DOCK_STATE_KEY, terminalDockCodec, "expanded")
-  const [selection, setSelection] = useState<RunnerSelection>({ action: "install_all" })
-  const statusRef = useRef<HTMLDivElement>(null)
   const { state } = controller
+  const [shellChoice, setShellChoice] = useViewState<ConsoleShell>(
+    makeViewStateKey("npmRunner:consoleShell", controller.requestPath ?? state.requestPath ?? ""),
+    runnerShellCodec,
+    "cmd",
+  )
+  const [actionSelection, setActionSelection] = useState<Omit<RunnerSelection, "consoleShell">>({ action: "install_all" })
+  const selection: RunnerSelection = { ...actionSelection, consoleShell: shellChoice }
+  const statusRef = useRef<HTMLDivElement>(null)
   const display = runnerDisplay(state, selection, contextError)
   const job = state.job
   const runningOtherPath = job && isRunActive(job) && job.requestPath !== state.requestPath ? job.requestPath : null
@@ -41,9 +46,6 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const href = conflictHref
     ? appendReturnContext(conflictHref, { returnTo: hydrated ? currentUrl : undefined, originId: hydrated ? entryId : null })
     : null
-  const hasDockContent = Boolean(
-    state.phase !== "idle" || job || state.terminal.output.chunks.length > 0 || state.logs.chunks.length > 0,
-  )
   const Icon = display.status === "success" ? CheckIcon
     : ["idle", "starting", "running", "stopping"].includes(display.status) ? CircleIcon : AlertTriangleIcon
   const warningCodes = [...new Set([...(state.context?.warnings ?? []), ...(job?.warningCodes ?? [])])]
@@ -54,7 +56,24 @@ export function NpmRunnerPanel({ controller, contextError }: {
 
   return <section className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6" aria-label={t("title")}>
     <h2 className="text-heading-lg">{t("title")}</h2>
-    <NpmRunnerForm context={state.context} selection={selection} onChange={setSelection} blockedReason={display.blockedReason}
+    {state.recoveryHold?.active ? (
+      <RecoveryHoldBanner
+        hold={state.recoveryHold}
+        clearPending={state.clearPending}
+        onClear={controller.clearRecovery}
+      />
+    ) : null}
+    <NpmRunnerForm
+      context={state.context}
+      selection={selection}
+      shellDisabled={display.shellDisabled}
+      onChange={next => {
+        if (next.consoleShell !== undefined) {
+          setShellChoice(normalizeConsoleShell(next.consoleShell))
+        }
+        setActionSelection({ action: next.action, package: next.package, script: next.script })
+      }}
+      blockedReason={display.blockedReason}
       onRun={() => {
         // Nút Chạy bị vô hiệu khi lệnh chạy: đưa focus xuống trạng thái để bàn phím không rơi về đầu trang.
         revealRegion(statusRef.current, { reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches })
@@ -72,12 +91,10 @@ export function NpmRunnerPanel({ controller, contextError }: {
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
       {display.canCancel ? <Button type="button" variant="secondary" disabled={state.cancelPending || state.cancelUnknown}
         className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.cancel() }}>{t(display.cancelLabel)}</Button> : null}
-      <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting"}
+      <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
         className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button> : null}
-      {hasDockContent && dockMode === "collapsed" ? <Button type="button" variant="secondary"
-        className="h-auto min-h-10 whitespace-normal" onClick={() => setDockMode("expanded")}>{t("terminal.openDock")}</Button> : null}
     </div>
     {state.startUnknown ? <p className="text-body-sm">{t("outcome.startUnknown")}</p> : null}
     {state.cancelUnknown ? <p className="text-body-sm">{t("outcome.cancelUnknown")}</p> : null}
@@ -102,6 +119,9 @@ export function NpmRunnerPanel({ controller, contextError }: {
       <p>{t("outcome.startedAt")} <time dateTime={job.startedAt}>{format.dateTime(new Date(job.startedAt), { dateStyle: "medium", timeStyle: "short" })}</time></p>
       {job.finishedAt ? <p>{t("outcome.finishedAt")} <time dateTime={job.finishedAt}>{format.dateTime(new Date(job.finishedAt), { dateStyle: "medium", timeStyle: "short" })}</time></p> : null}
       {job.failureCode ? <p>{errorMessage(job.failureCode)}</p> : null}
+      {job.nativeSession ? (
+        <NativeSessionDetails nativeSession={job.nativeSession} initialCommand={job.initialCommand ?? null} />
+      ) : null}
       {job.mayHaveChanged ? <p>{t("outcome.mayHaveChanged")}</p> : null}
       {job.gateHeld ? <p>{t("outcome.gateHeld")}</p> : null}
       {job.refreshRequired ? <p>{t("outcome.refreshRequired")}</p> : null}
@@ -110,6 +130,5 @@ export function NpmRunnerPanel({ controller, contextError }: {
       const key = `warnings.${code}` as `warnings.${keyof typeof messages.npmRunner.warnings}`
       return <li key={code}><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t.has(key) ? t(key) : t("errors.UNKNOWN")}</li>
     })}</ul> : null}
-    <NpmRunnerLog logs={state.logs} />
   </section>
 }

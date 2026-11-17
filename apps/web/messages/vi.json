@@ -87,6 +87,48 @@
     "retryPoll": "Thử đọc trạng thái và log lại",
     "follow": "Theo dõi lệnh đang chạy",
     "jumpToLatest": "Đến log mới nhất",
+    "dismiss": "Ẩn kết quả",
+    "shells": {
+      "label": "Cửa sổ console",
+      "cmd": "Command Prompt (cmd)",
+      "powershell": "Windows PowerShell"
+    },
+    "native": {
+      "dockTitle": "Phiên console gốc",
+      "shell": "Shell đang chạy",
+      "initialCommand": "Kết quả lệnh ban đầu",
+      "consoleState": "Trạng thái cửa sổ console",
+      "consoleExit": "Kết quả thoát console",
+      "exitValue": "Mã thoát {code}",
+      "signalValue": "Tín hiệu {signal}",
+      "runningKeepOpen": "Lệnh ban đầu có thể kết thúc trong khi cửa sổ console vẫn mở để bạn thao tác tiếp. Đóng cửa sổ console hoặc nhấn Dừng khi xong."
+    },
+    "nativePhases": {
+      "starting": "Đang khởi tạo console gốc",
+      "initial_running": "Đang chạy lệnh ban đầu",
+      "initial_finished": "Lệnh ban đầu đã xong; console đang mở",
+      "shell_open": "Cửa sổ console đang mở",
+      "stopping": "Đang dừng console gốc",
+      "closed": "Cửa sổ console đã đóng",
+      "lost": "Mất kết nối phiên console gốc"
+    },
+    "recovery": {
+      "title": "Đang giữ khoá khôi phục phiên console gốc",
+      "journalPath": "Tệp nhật ký phiên",
+      "clearAction": "Xoá giữ khoá khôi phục",
+      "clearing": "Đang kiểm tra tiến trình…",
+      "dialogTitle": "Xoá giữ khoá khôi phục?",
+      "dialogDescription": "PkgSteward sẽ kiểm tra chắc chắn không còn tiến trình console hoặc lệnh trước đó đang chạy, đánh dấu dữ liệu dự án cần làm mới và xoá tệp nhật ký giữ khoá. Chỉ tiếp tục sau khi bạn đã đóng mọi cửa sổ console của phiên trước.",
+      "dialogConfirm": "Kiểm tra và xoá khoá",
+      "reasons": {
+        "UNRESOLVED_NATIVE_SESSION": "Phiên console gốc trước đó vẫn chưa hoàn tất dọn dẹp khi backend khởi động.",
+        "CORRUPT_OR_PARTIAL_JOURNAL": "Phát hiện tệp nhật ký phiên console bị hỏng hoặc ghi dở khi khởi động.",
+        "UNFINALIZED_JOURNAL": "Tệp nhật ký phiên console trước đó đã đóng nhưng chưa hoàn tất bước kết thúc.",
+        "UNSAFE_JOURNAL": "Phát hiện tệp nhật ký phiên console không an toàn nên backend tạm giữ khoá cho tới khi kiểm tra xong.",
+        "JOURNAL_REMOVAL_FAILED": "Backend không thể xoá tệp nhật ký phiên console sau khi lệnh kết thúc.",
+        "DEFAULT": "Khoá thay đổi toàn máy đang được giữ để kiểm tra khôi phục."
+      }
+    },
     "actions": {
       "install_all": "Cài toàn bộ phụ thuộc",
       "install_one": "Cài một package",
@@ -157,7 +199,7 @@
       "pollPaused": "Đã tạm ngừng đọc trạng thái hoặc log do lỗi. Làm mới hoặc thử đọc lại theo yêu cầu.",
       "mayHaveChanged": "Dự án có thể đã thay đổi, kể cả khi lệnh thất bại hoặc bị dừng. Kết quả phân tích cũ có thể không còn phù hợp.",
       "gateHeld": "Lệnh đang giữ khoá thay đổi toàn máy: chặn quét, đo dung lượng, phân tích, xem trước xoá và thao tác thay đổi khác. Dùng Dừng hoặc thử dọn tiến trình lại khi có thể.",
-      "refreshRequired": "Chưa hoàn tất cập nhật dữ liệu dự án sau lệnh. Xem mã lỗi; chưa thể xác nhận thành công."
+      "refreshRequired": "Chưa hoàn tất cập nhật dữ liệu dự án hoặc cần làm mới thủ công sau lệnh. Hãy làm mới ngữ cảnh và chi tiết dự án để xem trạng thái mới nhất."
     },
     "logs": {
       "title": "Log lệnh",
@@ -183,6 +225,11 @@
       "SCRIPT_NAME_UNSUPPORTED": "Hãy chọn một script có tên được hỗ trợ.",
       "READERS_RUNNING": "Đang quét, đo dung lượng, phân tích hoặc xem trước xoá. Chờ hoàn tất rồi làm mới ngữ cảnh và trạng thái.",
       "RUNNING": "Đang có lệnh chạy hoặc chưa hoàn tất dọn tiến trình. Chờ, theo dõi lệnh đó hoặc yêu cầu dừng.",
+      "REQUEST_MISMATCH": "Mã yêu cầu này đã được dùng với tham số lệnh khác. Hãy làm mới trạng thái trước khi chạy lệnh mới.",
+      "NATIVE_CONSOLE_UNAVAILABLE": "Không thể khởi chạy hoặc thiết lập cửa sổ console Windows đã chọn.",
+      "NATIVE_PROTOCOL_ERROR": "Tiến trình điều phối console gốc trả về thông điệp giao thức không hợp lệ.",
+      "SESSION_INTERRUPTED": "Phiên console gốc kết thúc trước khi xác nhận hoàn tất bình thường.",
+      "RECOVERY_HOLD": "Đang giữ khoá khôi phục phiên console gốc, chặn chạy lệnh và thao tác thay đổi toàn máy cho tới khi kiểm tra và xoá khoá.",
       "SPAWN_FAILED": "Không khởi tạo được tiến trình lệnh.",
       "COMMAND_FAILED": "Lệnh thất bại. Xem log và mã thoát thực tế.",
       "CANCELLED": "Lệnh đã được dừng theo yêu cầu.",

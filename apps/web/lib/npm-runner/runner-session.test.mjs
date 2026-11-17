@@ -21,7 +21,7 @@ function deferred() {
 function harness(t) {
   let now = 0, serial = 0, visible = true
   const requests = [], timers = new Map(), listeners = new Set(), changes = [], mutations = []
-  const api = Object.fromEntries(["context", "start", "latest", "get", "logs", "cancel"].map(method => [method, (...args) => {
+  const api = Object.fromEntries(["context", "start", "latest", "clearRecovery", "get", "logs", "cancel"].map(method => [method, (...args) => {
     const pending = deferred()
     requests.push({ method, args, ...pending })
     return pending.promise
@@ -49,7 +49,7 @@ test("one explicit UUID/POST and parallel status/log cycle; timer begins only af
   await h.start()
   void h.session.start({ action: "install_all" })
   assert.equal(h.all("start").length, 1)
-  assert.deepEqual(h.last("start").args[0], { path, action: "install_all", requestId, inputHash: "a".repeat(64) })
+  assert.deepEqual(h.last("start").args[0], { path, action: "install_all", consoleShell: "cmd", requestId, inputHash: "a".repeat(64) })
   assert.equal(h.all("get").length, 1)
   assert.equal(h.all("logs").length, 1)
   h.last("get").resolve(job())
@@ -445,9 +445,8 @@ test("terminal session polls terminalOutput and drains trailing output after com
 
   h.session.resizeTerminal(100, 32)
   const startP = h.session.start({ action: "install_all" })
-  assert.equal(h.last("start").args[0].terminal, true)
-  assert.equal(h.last("start").args[0].cols, 100)
-  assert.equal(h.last("start").args[0].rows, 32)
+  assert.equal(h.last("start").args[0].consoleShell, "cmd")
+  assert.equal(h.last("start").args[0].terminal, undefined)
   h.last("start").resolve({
     jobId: "00000000-0000-4000-8000-000000000901",
     requestId: h.last("start").args[0].requestId,
@@ -675,4 +674,47 @@ test("syncProjectContext preserves active terminal run and Stop capability acros
   }))
   await cancelP
   assert.equal(h.session.getSnapshot().phase, "idle")
+})
+
+test("native session preserves consoleShell, handles latest recoveryHold union without job, and requires explicit clear", async t => {
+  const h = harness(t)
+  const hold = { active: true, reason: "UNRESOLVED_NATIVE_SESSION", journalPath: "D:\\TEST\\journal.json" }
+  const ready = h.session.refresh(context())
+  h.last("latest").resolve({ recoveryHold: hold, job: null })
+  await ready
+  assert.deepEqual(h.session.getSnapshot().recoveryHold, hold)
+  assert.equal(h.session.getSnapshot().job, null)
+
+  // Starting must stay blocked under active recovery hold
+  await h.session.start({ action: "install_all", consoleShell: "powershell" })
+  assert.equal(h.all("start").length, 0)
+
+  // Clear failure retains hold and does not resend
+  const failClear = h.session.clearRecovery()
+  assert.deepEqual(h.last("clearRecovery").args[0], { confirm: true })
+  h.last("clearRecovery").reject(new ApiError(409, "TEST active", "CONFLICT", { reason: "RECOVERY_HOLD", recoveryHold: hold }))
+  await failClear
+  assert.deepEqual(h.session.getSnapshot().recoveryHold, hold)
+  assert.equal(h.session.getSnapshot().error?.code, "RECOVERY_HOLD")
+  assert.equal(h.all("clearRecovery").length, 1)
+
+  // Clear success refreshes context/latest and never auto-starts a command,
+  // even when context already had recoveryHold and latest settles 404 before context refresh finishes.
+  h.session.syncProjectContext(context({ recoveryHold: hold }), path)
+  const okClear = h.session.clearRecovery()
+  h.last("clearRecovery").resolve({ cleared: true, recoveryHold: null })
+  await flush()
+  h.last("latest")?.reject(new ApiError(404, "NONE", "NOT_FOUND"))
+  await flush()
+  assert.equal(h.session.getSnapshot().recoveryHold, null)
+  h.last("context")?.resolve(context({ recoveryHold: null }))
+  await okClear
+  assert.equal(h.session.getSnapshot().recoveryHold, null)
+  assert.equal(h.all("start").length, 0)
+
+  // Explicit start with PowerShell sends consoleShell: "powershell" only
+  const psStart = h.session.start({ action: "install_all", consoleShell: "powershell" })
+  assert.equal(h.last("start").args[0].consoleShell, "powershell")
+  h.last("start").resolve({ jobId: id, requestId, status: "running" })
+  await psStart
 })

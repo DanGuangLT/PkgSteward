@@ -4,10 +4,13 @@ import { apiFetchEnvelope } from "@/lib/api/client"
 import { npmRunsPaths } from "@/lib/api/npm-runs/npm-runs-paths"
 import type {
   ApiResponse,
+  RecoveryClearRequest,
+  RecoveryClearResult,
   RunnerContext,
   RunRequest,
   RunStart,
   RunJob,
+  RunLatestResult,
   RunLogPage,
   TerminalClaimRequest,
   TerminalInputAck,
@@ -27,8 +30,13 @@ export function startNpmRun(input: RunRequest): Promise<ApiResponse<RunStart>> {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
   }, null)
 }
-export function getLatestNpmRun(signal?: AbortSignal): Promise<ApiResponse<RunJob>> {
-  return apiFetchEnvelope<RunJob>(npmRunsPaths.latest, { method: "GET", signal })
+export function getLatestNpmRun(signal?: AbortSignal): Promise<ApiResponse<RunLatestResult>> {
+  return apiFetchEnvelope<RunLatestResult>(npmRunsPaths.latest, { method: "GET", signal })
+}
+export function clearRecoveryHold(input: RecoveryClearRequest): Promise<ApiResponse<RecoveryClearResult>> {
+  return apiFetchEnvelope<RecoveryClearResult>(npmRunsPaths.recoveryClear, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  }, null)
 }
 export function getNpmRun(id: string, signal?: AbortSignal): Promise<ApiResponse<RunJob>> {
   return apiFetchEnvelope<RunJob>(npmRunsPaths.job(id), { method: "GET", signal })

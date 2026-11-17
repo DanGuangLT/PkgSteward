@@ -9,6 +9,7 @@ test("runner URLs preserve local paths, encode ids and validate safe cursors", (
   assert.equal(new URL(npmRunsPaths.context(path), "http://localhost").searchParams.get("path"), path)
   assert.equal(npmRunsPaths.start, "/npm-runs")
   assert.equal(npmRunsPaths.latest, "/npm-runs/latest")
+  assert.equal(npmRunsPaths.recoveryClear, "/npm-runs/recovery/clear")
   assert.equal(npmRunsPaths.job(id), `/npm-runs/${id}`)
   assert.equal(npmRunsPaths.cancel("TEST/#?"), `/npm-runs/${encodeURIComponent("TEST/#?")}/cancel`)
   for (const cursor of [0, 42, Number.MAX_SAFE_INTEGER]) {

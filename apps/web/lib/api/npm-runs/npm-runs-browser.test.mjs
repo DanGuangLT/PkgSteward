@@ -4,6 +4,7 @@ import {
   getBrowserRunnerContext,
   startBrowserNpmRun,
   getBrowserLatestNpmRun,
+  clearBrowserRecoveryHold,
   pollBrowserNpmRun,
   getBrowserNpmRunLogs,
   cancelBrowserNpmRun,
@@ -101,4 +102,23 @@ test("five terminal browser calls use same origin, no-store, abort signals and e
   assert.deepEqual(JSON.parse(requests[2].init.body), inputBody)
   assert.deepEqual(JSON.parse(requests[3].init.body), ackBody)
   assert.deepEqual(JSON.parse(requests[4].init.body), resizeBody)
+})
+
+test("clearBrowserRecoveryHold sends exact confirm body once and handles latest recovery hold union", async t => {
+  const requests = []
+  const holdPayload = { recoveryHold: { active: true, reason: "UNRESOLVED_NATIVE_SESSION", journalPath: "D:\\TEST\\journal.json" }, job: null }
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    requests.push({ url, init })
+    if (String(url).endsWith("/latest")) {
+      return Response.json({ statusCode: 200, message: "TEST", data: holdPayload }, { status: 200 })
+    }
+    return Response.json({ statusCode: 200, message: "TEST", data: { cleared: true, recoveryHold: null } }, { status: 200 })
+  })
+  const controller = new AbortController()
+  assert.deepEqual(await getBrowserLatestNpmRun(controller.signal), holdPayload)
+  assert.deepEqual(await clearBrowserRecoveryHold({ confirm: true }, controller.signal), { cleared: true, recoveryHold: null })
+  assert.equal(new URL(requests[1].url, "http://localhost").pathname, "/api/npm-runs/recovery/clear")
+  assert.equal(requests[1].init.method, "POST")
+  assert.equal(requests[1].init.cache, "no-store")
+  assert.deepEqual(JSON.parse(requests[1].init.body), { confirm: true })
 })

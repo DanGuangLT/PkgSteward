@@ -14,6 +14,7 @@ import {
 import {
   cancelBrowserNpmRun,
   claimBrowserNpmRunTerminal,
+  clearBrowserRecoveryHold,
   getBrowserLatestNpmRun,
   getBrowserNpmRunLogs,
   getBrowserNpmRunTerminalInputAck,
@@ -33,6 +34,7 @@ export interface NpmRunnerContextValue {
   state: RunnerState
   start: (selection: RunnerSelection) => Promise<void>
   cancel: () => Promise<void>
+  clearRecovery: () => Promise<void>
   retryPoll: () => void
   refresh: () => Promise<void>
   follow: () => string | null
@@ -59,6 +61,7 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
         context: getBrowserRunnerContext,
         start: startBrowserNpmRun,
         latest: getBrowserLatestNpmRun,
+        clearRecovery: clearBrowserRecoveryHold,
         get: pollBrowserNpmRun,
         logs: getBrowserNpmRunLogs,
         cancel: cancelBrowserNpmRun,
@@ -96,6 +99,7 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback((selection: RunnerSelection) => session.current?.start(selection) ?? Promise.resolve(), [])
   const cancel = useCallback(() => session.current?.cancel() ?? Promise.resolve(), [])
+  const clearRecovery = useCallback(() => session.current?.clearRecovery() ?? Promise.resolve(), [])
   const retryPoll = useCallback(() => { session.current?.retryPoll() }, [])
   const refresh = useCallback(() => session.current?.refresh() ?? Promise.resolve(), [])
   const follow = useCallback(() => session.current?.follow() ?? null, [])
@@ -117,6 +121,7 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
     state,
     start,
     cancel,
+    clearRecovery,
     retryPoll,
     refresh,
     follow,
@@ -132,6 +137,7 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
     state,
     start,
     cancel,
+    clearRecovery,
     retryPoll,
     refresh,
     follow,

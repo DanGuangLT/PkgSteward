@@ -18,9 +18,11 @@ export function useNpmRunner(context: RunnerContext | null, requestPath: string,
   }, [context, dock, requestPath])
 
   return {
+    requestPath,
     state: dock.state,
     start: dock.start,
     cancel: dock.cancel,
+    clearRecovery: dock.clearRecovery,
     retryPoll: dock.retryPoll,
     refresh: dock.refresh,
     follow: dock.follow,

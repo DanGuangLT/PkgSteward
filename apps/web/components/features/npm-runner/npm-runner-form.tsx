@@ -8,17 +8,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { RunnerContext } from "@/lib/api/types"
+import type { ConsoleShell, RunnerContext } from "@/lib/api/types"
 import { runnerUsesPackage } from "@/lib/npm-runner/runner-display"
-import type { RunnerSelection } from "@/lib/npm-runner/runner-policy"
+import { CONSOLE_SHELLS, normalizeConsoleShell, type RunnerSelection } from "@/lib/npm-runner/runner-policy"
 import type messages from "@/messages/vi.json"
 
 const actions = ["install_all", "install_one", "update_all", "update_one", "uninstall_one", "script"] as const
 
-export function NpmRunnerForm({ context, selection, blockedReason, onChange, onRun, children }: {
+export function NpmRunnerForm({ context, selection, blockedReason, shellDisabled = false, onChange, onRun, children }: {
   context: RunnerContext | null
   selection: RunnerSelection
   blockedReason: string | null
+  shellDisabled?: boolean
   onChange(selection: RunnerSelection): void
   onRun(): void
   children: ReactNode
@@ -27,6 +28,7 @@ export function NpmRunnerForm({ context, selection, blockedReason, onChange, onR
   const id = useId()
   const errorKey = `errors.${blockedReason}` as `errors.${keyof typeof messages.npmRunner.errors}`
   const selectedScript = context?.scripts.findIndex(script => script.name === selection.script) ?? -1
+  const currentShell = normalizeConsoleShell(selection.consoleShell)
   return (
     <form className="min-w-0 space-y-4" onSubmit={event => { event.preventDefault(); if (!blockedReason) onRun() }}>
       <dl className="grid min-w-0 gap-3 text-body-sm sm:grid-cols-2 [overflow-wrap:anywhere]">
@@ -38,10 +40,31 @@ export function NpmRunnerForm({ context, selection, blockedReason, onChange, onR
         <div className="min-w-0 space-y-2 lg:flex-1">
           <Label htmlFor={`${id}-action`}>{t("form.action")}</Label>
           <Select value={selection.action} onValueChange={action => {
-            if (actions.some(value => value === action)) onChange({ action: action as RunnerSelection["action"] })
+            if (actions.some(value => value === action)) {
+              onChange({ action: action as RunnerSelection["action"], consoleShell: currentShell })
+            }
           }}>
             <SelectTrigger id={`${id}-action`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
             <SelectContent position="popper" className="max-w-(--radix-select-trigger-width)">{actions.map(action => <SelectItem key={action} value={action}>{t(`actions.${action}`)}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-2 lg:flex-1">
+          <Label htmlFor={`${id}-shell`}>{t("shells.label")}</Label>
+          <Select
+            value={currentShell}
+            disabled={shellDisabled}
+            onValueChange={shell => {
+              if (CONSOLE_SHELLS.some(value => value === shell)) {
+                onChange({ ...selection, consoleShell: shell as ConsoleShell })
+              }
+            }}
+          >
+            <SelectTrigger id={`${id}-shell`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+            <SelectContent position="popper" className="max-w-(--radix-select-trigger-width)">
+              {CONSOLE_SHELLS.map(shell => (
+                <SelectItem key={shell} value={shell}>{t(`shells.${shell}`)}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
         {runnerUsesPackage(selection.action) ? (

@@ -6,7 +6,7 @@ import {
   NAV_STORAGE_KEY,
   createNavigationStore,
 } from "./navigation-store.ts"
-import { createTextCodec, makeViewStateKey } from "./navigation-targets.ts"
+import { createTextCodec, makeViewStateKey, runnerShellCodec } from "./navigation-targets.ts"
 
 function memoryStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -147,4 +147,22 @@ test("per-entry scroll isolation and one-shot pending return scroll work across 
   store.setPendingReturnScroll("/?q=next", "entry-1")
   assert.equal(store.consumePendingReturnScroll("/?q=next"), "entry-1")
   assert.equal(store.consumePendingReturnScroll("/?q=next"), null)
+})
+
+test("per-project runnerShellCodec persists valid cmd/powershell choices and rejects invalid values", () => {
+  const storage = memoryStorage({
+    [NAV_STORAGE_KEY]: JSON.stringify({
+      v: 1,
+      entries: {
+        [makeViewStateKey("npmRunner:consoleShell", "D:\\TEST\\bad")]: { v: 1, t: 10, d: "pwsh" },
+      },
+      scrolls: {},
+    }),
+  })
+  const store = createNavigationStore({ storage })
+  store.hydrate()
+  assert.equal(store.readViewState(makeViewStateKey("npmRunner:consoleShell", "D:\\TEST\\bad"), runnerShellCodec), null)
+  store.writeViewState(makeViewStateKey("npmRunner:consoleShell", "D:\\TEST\\p1"), runnerShellCodec, "powershell")
+  assert.equal(store.readViewState(makeViewStateKey("npmRunner:consoleShell", "D:\\TEST\\p1"), runnerShellCodec), "powershell")
+  assert.equal(store.readViewState(makeViewStateKey("npmRunner:consoleShell", "D:\\TEST\\p2"), runnerShellCodec), null)
 })

@@ -1,7 +1,16 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ApiError } from "../api/response.ts"
-import { initialRunnerState, isRunActive, isRunSuccessful, runnerError, runnerEligibility, buildRunRequest, runnerFollowHref } from "./runner-policy.ts"
+import {
+  initialRunnerState,
+  isRunActive,
+  isRunSuccessful,
+  normalizeConsoleShell,
+  runnerError,
+  runnerEligibility,
+  buildRunRequest,
+  runnerFollowHref,
+} from "./runner-policy.ts"
 
 // TEST data; không phải yêu cầu nghiệp vụ.
 const context = { path: "D:\\TEST", requestPath: "D:\\TEST-alias", inputHash: "a".repeat(64), available: true,
@@ -29,8 +38,14 @@ test("eligibility exposes availability, busy and uncertainty without inventing m
 })
 
 test("payloads include only action-specific fields and validate conservative package/script grammar", () => {
-  const base = { path: context.requestPath, inputHash: context.inputHash, requestId }
+  const base = { path: context.requestPath, inputHash: context.inputHash, requestId, consoleShell: "cmd" }
   for (const action of ["install_all", "update_all"]) assert.deepEqual(buildRunRequest(context, { action, package: "ignored", script: "ignored" }, requestId), { ...base, action })
+  assert.deepEqual(buildRunRequest(context, { action: "install_all", consoleShell: "powershell" }, requestId), { ...base, action: "install_all", consoleShell: "powershell" })
+  assert.equal(normalizeConsoleShell("powershell"), "powershell")
+  for (const bad of [undefined, null, "", "pwsh", "bash", "C:\\Windows\\System32\\cmd.exe"]) {
+    assert.equal(normalizeConsoleShell(bad), "cmd")
+  }
+  assert.equal(buildRunRequest(context, { action: "install_all", consoleShell: "bash" }, requestId).consoleShell, "cmd")
   for (const spec of ["alpha", "@scope/pkg", "alpha@latest", "@scope/pkg@1.2.3-beta.1+build"]) {
     assert.equal(buildRunRequest(context, { action: "install_one", package: spec }, requestId).package, spec)
   }
@@ -63,4 +78,16 @@ test("exit zero does not hide audit/cache/termination failure", () => {
   for (const patch of [{ status: "failed" }, { failureCode: "AUDIT_WRITE_FAILED" }, { auditWritten: false }, { gateHeld: true }, { terminationVerified: false }, { refreshRequired: true }, { exitCode: null }]) {
     assert.equal(isRunSuccessful({ ...clean, ...patch }), false)
   }
+})
+
+test("recoveryHold blocks Run without a job and extracts recovery details without auto fallback", () => {
+  const hold = { active: true, reason: "UNRESOLVED_NATIVE_SESSION", journalPath: "D:\\TEST\\journal.json" }
+  const heldState = { ...initialRunnerState(context), recoveryHold: hold, job: null }
+  assert.equal(runnerEligibility(heldState, { action: "install_all", consoleShell: "powershell" }), "RECOVERY_HOLD")
+  const conflict = runnerError(new ApiError(409, "TEST hold", "CONFLICT", { reason: "RECOVERY_HOLD", recoveryHold: hold }))
+  assert.equal(conflict.code, "RECOVERY_HOLD")
+  assert.deepEqual(conflict.recoveryHold, hold)
+  assert.equal(runnerEligibility({ ...initialRunnerState(context), error: conflict }, { action: "install_all" }), "RECOVERY_HOLD")
+  const mismatch = runnerError(new ApiError(409, "TEST mismatch", "CONFLICT", { reason: "REQUEST_MISMATCH", jobId: requestId }))
+  assert.equal(mismatch.code, "REQUEST_MISMATCH")
 })

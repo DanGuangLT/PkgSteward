@@ -269,10 +269,36 @@ export type RunFailureCode =
   | "PROJECT_NOT_SCANNED" | "INPUT_CHANGED" | "WORKSPACE_LEAF" | "UNSUPPORTED_MANAGER"
   | "LOCKFILE_MISMATCH" | "TOOL_NOT_FOUND" | "TOOL_LAYOUT_UNSUPPORTED" | "TOOL_VERSION_MISMATCH"
   | "CONFIG_UNSUPPORTED" | "INVALID_PACKAGE_SPEC" | "SCRIPT_NOT_FOUND" | "SCRIPT_NAME_UNSUPPORTED"
-  | "READERS_RUNNING" | "RUNNING" | "SPAWN_FAILED" | "COMMAND_FAILED" | "CANCELLED" | "TIMED_OUT"
+  | "READERS_RUNNING" | "RUNNING" | "REQUEST_MISMATCH"
+  | "NATIVE_CONSOLE_UNAVAILABLE" | "NATIVE_PROTOCOL_ERROR" | "SESSION_INTERRUPTED" | "RECOVERY_HOLD"
+  | "SPAWN_FAILED" | "COMMAND_FAILED" | "CANCELLED" | "TIMED_OUT"
   | "SHUTDOWN" | "TERMINATION_UNCONFIRMED" | "AUDIT_WRITE_FAILED" | "CACHE_INVALIDATION_FAILED" | "INTERNAL_SERVER_ERROR"
 export type RunWarningCode = "NO_LOCKFILE" | "PACKAGE_MANAGER_PIN_DIFFERS" | "OUTPUT_TRUNCATED"
   | "OUTPUT_ENCODING_LOSS" | "LOGS_MAY_CONTAIN_SECRETS" | "PROJECT_CODE_EXECUTION" | "PATH_RACE_RESIDUAL"
+
+export type ConsoleShell = "cmd" | "powershell"
+export type NativeSessionPhase =
+  | "starting"
+  | "initial_running"
+  | "initial_finished"
+  | "shell_open"
+  | "stopping"
+  | "closed"
+  | "lost"
+
+export interface RunCommandResult { exitCode: number | null; signal: string | null }
+export interface RunRecoveryHold { active: boolean; reason: string; journalPath: string }
+export interface RunLatestHold { recoveryHold: RunRecoveryHold; job: null }
+export type RunLatestResult = RunJob | RunLatestHold
+export interface RecoveryClearRequest { confirm: true }
+export interface RecoveryClearResult { cleared: boolean; recoveryHold: RunRecoveryHold | null }
+export interface NativeConsoleMeta {
+  shell: ConsoleShell
+  generation: number
+  phase: NativeSessionPhase
+  available: boolean
+  sessionResult: RunCommandResult | null
+}
 
 export type TerminalDeliveryStatus = "delivered" | "not_delivered" | "unknown"
 export type TerminalAckStatus = TerminalDeliveryStatus | "pending"
@@ -284,6 +310,7 @@ export interface RunRequest {
   requestId: string
   package?: string
   script?: string
+  consoleShell?: ConsoleShell
   terminal?: boolean
   cols?: number
   rows?: number
@@ -299,6 +326,8 @@ export interface RunnerContext {
   version: string | null
   available: boolean
   terminalAvailable?: boolean
+  nativeConsoleAvailable?: boolean
+  recoveryHold?: RunRecoveryHold | null
   reason: RunFailureCode | null
   scripts: RunnerScript[]
   warnings: RunWarningCode[]
@@ -341,6 +370,9 @@ export interface RunJob extends RunStart {
   endCursor: number
   droppedBytes: number
   terminal?: RunTerminalMeta | null
+  nativeSession?: NativeConsoleMeta | null
+  initialCommand?: RunCommandResult | null
+  recoveryHold?: RunRecoveryHold | null
 }
 export interface TerminalOutputChunk { cursor: number; endCursor: number; text: string }
 export interface TerminalOutputPage {

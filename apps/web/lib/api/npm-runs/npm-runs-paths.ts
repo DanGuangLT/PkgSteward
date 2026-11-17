@@ -2,6 +2,7 @@ export const npmRunsPaths = {
   context: (path: string): string => `/npm-runs/context?${new URLSearchParams({ path })}`,
   start: "/npm-runs",
   latest: "/npm-runs/latest",
+  recoveryClear: "/npm-runs/recovery/clear",
   job: (id: string): string => `/npm-runs/${encodeURIComponent(id)}`,
   cancel: (id: string): string => `/npm-runs/${encodeURIComponent(id)}/cancel`,
   logs(id: string, cursor = 0): string {
