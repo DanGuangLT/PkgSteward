@@ -90,4 +90,8 @@ test("recoveryHold blocks Run without a job and extracts recovery details withou
   assert.equal(runnerEligibility({ ...initialRunnerState(context), error: conflict }, { action: "install_all" }), "RECOVERY_HOLD")
   const mismatch = runnerError(new ApiError(409, "TEST mismatch", "CONFLICT", { reason: "REQUEST_MISMATCH", jobId: requestId }))
   assert.equal(mismatch.code, "REQUEST_MISMATCH")
+  assert.equal(
+    runnerEligibility({ ...initialRunnerState({ ...context, nativeConsoleAvailable: false }) }, { action: "install_all" }),
+    "NATIVE_CONSOLE_UNAVAILABLE",
+  )
 })

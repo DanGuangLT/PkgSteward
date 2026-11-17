@@ -993,9 +993,13 @@ describe('NpmRunnerService native console & recovery lifecycle', () => {
       void reason;
       return settled.promise;
     });
+    const retryCleanup = jest.fn<Promise<INativeSessionResult>, []>(
+      () => settled.promise,
+    );
     const session: INativeSession = {
       start: startSession,
       stop: stopSession,
+      retryCleanup,
       settled: settled.promise,
       snapshot: () => ({
         schema: 1,
@@ -1061,6 +1065,7 @@ describe('NpmRunnerService native console & recovery lifecycle', () => {
       createSession,
       startSession,
       stopSession,
+      retryCleanup,
       settled,
       getSessionInput: () => sessionInput!,
       emitState,
@@ -1750,5 +1755,45 @@ describe('NpmRunnerService native console & recovery lifecycle', () => {
     expect(cancelledSnap.gateHeld).toBe(true);
     expect(holdCancel.removeMarkers).toHaveBeenCalledTimes(1);
     expect(holdCancel.gate.isBusy()).toBe(true);
+
+    // Native termination_failed retries cleanup via cancel(id), invalidates, removes journal, and releases gate
+    const retryFx = recoveryFixture({ active: false });
+    await retryFx.service.onModuleInit();
+    await retryFx.service.start(requestBody());
+    await flush();
+    retryFx.retryCleanup.mockResolvedValueOnce({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    retryFx.emitState('shell_running');
+    await retryFx.settleNative({
+      phase: 'lost',
+      termination: 'termination_unconfirmed',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: false,
+    });
+    expect(retryFx.service.get(jobId)).toMatchObject({
+      status: 'termination_failed',
+      failureCode: 'TERMINATION_UNCONFIRMED',
+      terminationVerified: false,
+      gateHeld: true,
+    });
+    await retryFx.service.cancel(jobId);
+    await flush();
+    expect(retryFx.retryCleanup).toHaveBeenCalledTimes(1);
+    expect(retryFx.service.get(jobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      terminationVerified: true,
+      gateHeld: false,
+      auditWritten: true,
+      nativeSession: { phase: 'closed' },
+    });
+    expect(retryFx.removeMarkers).toHaveBeenCalledTimes(1);
+    expect(retryFx.gate.isBusy()).toBe(false);
   });
 });

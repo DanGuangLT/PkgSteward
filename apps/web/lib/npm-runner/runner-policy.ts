@@ -140,6 +140,7 @@ export function runnerEligibility(state: RunnerState, selection: RunnerSelection
   if (state.refreshing) return "REFRESHING"
   if (!state.context) return state.contextError ?? "PROJECT_NOT_SCANNED"
   if (!state.context.available || state.context.reason) return state.context.reason ?? "UNKNOWN"
+  if (state.context.nativeConsoleAvailable === false) return "NATIVE_CONSOLE_UNAVAILABLE"
   return selectionError(state.context, selection)
 }
 export function buildRunRequest(

@@ -482,4 +482,58 @@ describe('native session coordinator barriers', () => {
       cleanupVerified: true,
     });
   });
+  it('supports retryCleanup after unconfirmed cleanup and handles fast session-exit during shell capture', async () => {
+    const s = setup();
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    await s.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    await s.bridgeFrame({
+      type: 'initial-result',
+      exitCode: 0,
+      signal: null,
+    });
+
+    let releaseCapture!: () => void;
+    const pendingCapture = new Promise<void>((resolve) => {
+      releaseCapture = resolve;
+    });
+    s.platform.capture.mockImplementationOnce(async (pid, file, parentPid) => {
+      await pendingCapture;
+      return {
+        status: 'ok' as const,
+        identity: {
+          pid,
+          creationTime: String(pid * 100),
+          executablePath: file,
+          parentPid,
+        },
+      };
+    });
+    void s.bridgeFrame({ type: 'shell-spawned', pid: 40 });
+    await Promise.resolve();
+    void s.bridgeFrame({ type: 'session-exit', exitCode: 0, signal: null });
+    s.platform.verifyGone
+      .mockResolvedValueOnce('present')
+      .mockResolvedValueOnce('verified');
+
+    releaseCapture();
+    const first = await s.session.settled;
+    expect(first).toMatchObject({
+      phase: 'lost',
+      termination: 'termination_unconfirmed',
+      cleanupVerified: false,
+      sessionOutcome: { exitCode: 0, signal: null },
+    });
+
+    const retried = await s.session.retryCleanup!();
+    expect(retried).toMatchObject({
+      phase: 'closed',
+      termination: 'session_exit',
+      cleanupVerified: true,
+      sessionOutcome: { exitCode: 0, signal: null },
+    });
+    expect(s.session.snapshot().phase).toBe('closed');
+  });
 });

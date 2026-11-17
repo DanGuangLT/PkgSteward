@@ -113,6 +113,7 @@ export interface INativeSessionDeps {
 export interface INativeSession {
   start(): Promise<void>;
   stop(reason: NativeTermination): Promise<INativeSessionResult>;
+  retryCleanup?(): Promise<INativeSessionResult>;
   settled: Promise<INativeSessionResult>;
   snapshot(): INativeSessionSnapshot;
 }
@@ -262,11 +263,64 @@ export function createNativeSession(
     if (!child) fault('start_failed');
     child.send(frame);
   };
+  let originalTermination: NativeTermination | null = null;
+  const verifyCleanup = async (): Promise<boolean> => {
+    try {
+      const supervisor = state.identities.supervisor;
+      const tree = await deps.platform.descendants(
+        [...(supervisor ? [supervisor] : []), ...liveSeeds()],
+        state.tracked,
+      );
+      if (tree.status !== 'ok') return false;
+      state.tracked = tree.identities;
+      try {
+        await persist();
+      } catch {
+        /* no launch/go allowed after this point */
+      }
+      const attempt = await deps.platform.stopTree(liveSeeds(), state.tracked);
+      return (
+        (!child || !!supervisor) &&
+        attempt === 'attempted' &&
+        (await deps.platform.verifyGone(allOwned())) === 'verified'
+      );
+    } catch {
+      return false;
+    }
+  };
+  const applyCleanupOutcome = async (
+    base: NativeTermination,
+    verified: boolean,
+  ): Promise<INativeSessionResult> => {
+    state.phase = verified && !journalFailed ? 'closed' : 'lost';
+    state.termination =
+      !verified && base === 'session_exit' ? 'termination_unconfirmed' : base;
+    try {
+      await persist();
+    } catch {
+      state.phase = 'lost';
+    }
+    return {
+      phase: state.phase === 'closed' ? 'closed' : 'lost',
+      termination: journalFailed ? 'journal_failed' : state.termination,
+      cleanupVerified: verified,
+      initialOutcome: state.initialOutcome ? { ...state.initialOutcome } : null,
+      sessionOutcome: state.sessionOutcome ? { ...state.sessionOutcome } : null,
+    };
+  };
   const finish = async (reason: NativeTermination) => {
     if (finished || cleanupRunning) return;
     cleanupRunning = true;
     stopped = true;
-    state.termination ??= reason;
+    const rawTermination = state.termination ?? reason;
+    const base =
+      rawTermination === 'window_closed' &&
+      state.sessionOutcome &&
+      state.identities.shell
+        ? 'session_exit'
+        : rawTermination;
+    originalTermination ??= base;
+    state.termination = base;
     state.phase = 'stopping';
     clearHandshake();
     clearInitial();
@@ -286,40 +340,8 @@ export function createNativeSession(
     } catch {
       /* already closed */
     }
-    let verified: boolean;
-    try {
-      const supervisor = state.identities.supervisor;
-      const tree = await deps.platform.descendants(
-        [...(supervisor ? [supervisor] : []), ...liveSeeds()],
-        state.tracked,
-      );
-      if (tree.status === 'ok') {
-        state.tracked = tree.identities;
-        try {
-          await persist();
-        } catch {
-          /* no launch/go allowed after this point */
-        }
-        const attempt = await deps.platform.stopTree(
-          liveSeeds(),
-          state.tracked,
-        );
-        verified =
-          (!child || !!supervisor) &&
-          attempt === 'attempted' &&
-          (await deps.platform.verifyGone(allOwned())) === 'verified';
-      } else verified = false;
-    } catch {
-      verified = false;
-    }
-    state.phase = verified && !journalFailed ? 'closed' : 'lost';
-    if (!verified && state.termination === 'session_exit')
-      state.termination = 'termination_unconfirmed';
-    try {
-      await persist();
-    } catch {
-      state.phase = 'lost';
-    }
+    const verified = await verifyCleanup();
+    const result = await applyCleanupOutcome(originalTermination, verified);
     finished = true;
     for (const remove of removers.splice(0)) {
       try {
@@ -328,13 +350,6 @@ export function createNativeSession(
         /* listener already removed */
       }
     }
-    const result: INativeSessionResult = {
-      phase: state.phase === 'closed' ? 'closed' : 'lost',
-      termination: journalFailed ? 'journal_failed' : state.termination,
-      cleanupVerified: verified,
-      initialOutcome: state.initialOutcome ? { ...state.initialOutcome } : null,
-      sessionOutcome: state.sessionOutcome ? { ...state.sessionOutcome } : null,
-    };
     // No asynchronous writer remains: every message/persist uses the same queue.
     try {
       deps.callbacks?.onSettled?.(result);
@@ -670,5 +685,21 @@ export function createNativeSession(
       await maybeSpawnBridge();
     });
   };
-  return { start, stop, settled, snapshot };
+  let retryQueue: Promise<INativeSessionResult> | null = null;
+  const retryCleanup = (): Promise<INativeSessionResult> => {
+    const base = retryQueue ?? settled;
+    const next = base.then(async () => {
+      try {
+        child?.disconnect();
+      } catch {
+        /* already closed */
+      }
+      const verified = await verifyCleanup();
+      const term = originalTermination ?? state.termination ?? 'user_stop';
+      return applyCleanupOutcome(term, verified);
+    });
+    retryQueue = next;
+    return next;
+  };
+  return { start, stop, retryCleanup, settled, snapshot };
 }

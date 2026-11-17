@@ -606,7 +606,8 @@ export class NpmRunnerService
       active.job.phase = 'stopping';
       this.queueFinalize(
         active,
-        active.job.spawned && !active.job.terminationVerified,
+        (active.useNative ? active.nativeLaunched : active.job.spawned) &&
+          !active.job.terminationVerified,
       );
     } else {
       this.requestStop(active, 'cancel');
@@ -629,7 +630,8 @@ export class NpmRunnerService
       if (active.job.phase === 'done')
         this.queueFinalize(
           active,
-          active.job.spawned && !active.job.terminationVerified,
+          (active.useNative ? active.nativeLaunched : active.job.spawned) &&
+            !active.job.terminationVerified,
         );
       else this.requestStop(active, 'shutdown');
     }
@@ -1201,6 +1203,32 @@ export class NpmRunnerService
     job.phase = 'finalizing';
     this.clearDeadline(active);
     if (active.useNative) {
+      if (
+        stop &&
+        active.native?.retryCleanup &&
+        active.nativeLaunched &&
+        !job.terminationVerified
+      ) {
+        try {
+          const retried = await active.native.retryCleanup();
+          active.nativeResult = retried;
+          if (job.nativeSession) {
+            job.nativeSession = {
+              ...job.nativeSession,
+              phase: retried.phase,
+            };
+          }
+          job.terminationVerified =
+            retried.cleanupVerified &&
+            retried.termination !== 'termination_unconfirmed';
+        } catch {
+          job.terminationVerified = false;
+        }
+        if (job.terminationVerified) {
+          // Mutations may have continued after an earlier unconfirmed cleanup.
+          active.refreshed = active.diskCleared = active.analysisStaled = false;
+        }
+      }
       if (!active.nativeLaunched) job.terminationVerified = true;
       this.classifyNative(active);
     } else {
