@@ -21,6 +21,7 @@ import type {
   ITerminalInputBody,
   ITerminalResizeBody,
   ITerminalResizeResult,
+  NativeSessionPhase,
   RunFailureCode,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
@@ -33,7 +34,10 @@ import {
   buildRunCommand,
   isRunnerScriptName,
 } from '@/npm-runner/execution/runner-command';
-import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
+import {
+  buildInteractiveShellEnv,
+  buildRunnerEnvironment,
+} from '@/npm-runner/toolchain/runner-environment';
 import { runnerFailure } from '@/npm-runner/toolchain/runner-tool';
 import { createRunLogStore } from '@/npm-runner/execution/runner-logs';
 import type { IRunLogStore } from '@/npm-runner/execution/runner-logs';
@@ -41,6 +45,14 @@ import type {
   IRunProcess,
   IRunProcessExit,
 } from '@/npm-runner/execution/runner-process';
+import type { INativeExitOutcome } from '@/npm-runner/native-session/native-console-supervisor';
+import type { INativeInitCommand } from '@/npm-runner/native-session/native-protocol';
+import type {
+  INativeSession,
+  INativeSessionResult,
+  INativeSessionSnapshot,
+  NativeSessionPhase as InternalNativePhase,
+} from '@/npm-runner/native-session/native-session';
 import { TerminalOutputBuffer } from '@/npm-runner/terminal/terminal-buffer';
 import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
 import { TerminalControl } from '@/npm-runner/terminal/terminal-control';
@@ -77,6 +89,12 @@ interface IActiveRun {
   controller: AbortController;
   logs: IRunLogStore;
   terminal: ITerminalSession | null;
+  useNative: boolean;
+  native: INativeSession | null;
+  nativeLaunched: boolean;
+  nativeResult: INativeSessionResult | null;
+  initialOutcome: INativeExitOutcome | null;
+  observedShellOpen: boolean;
   process: IRunProcess | null;
   outcome: IRunProcessExit | null;
   preflight: Promise<void> | null;
@@ -93,6 +111,37 @@ interface IActiveRun {
 }
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
+const NATIVE_PHASE_RANK: Readonly<Record<NativeSessionPhase, number>> = {
+  starting: 0,
+  initial_running: 1,
+  initial_finished: 2,
+  shell_open: 3,
+  stopping: 4,
+  closed: 5,
+  lost: 5,
+};
+const mapNativePhase = (phase: InternalNativePhase): NativeSessionPhase => {
+  switch (phase) {
+    case 'launching':
+    case 'supervisor_ready':
+    case 'bridge_starting':
+    case 'bridge_ready':
+      return 'starting';
+    case 'initial_running':
+      return 'initial_running';
+    case 'initial_finished':
+    case 'shell_starting':
+      return 'initial_finished';
+    case 'shell_running':
+      return 'shell_open';
+    case 'stopping':
+      return 'stopping';
+    case 'closed':
+      return 'closed';
+    case 'lost':
+      return 'lost';
+  }
+};
 const auditState = (job: IRunJob): string =>
   JSON.stringify({
     status: job.status,
@@ -114,11 +163,16 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
   ) {}
 
   async context(path: string): Promise<IRunnerContext> {
-    const input = await readRunnerInput(
-      path,
-      this.runtime.input.getScanSnapshot(),
-      this.runtime.input,
-    );
+    const [input, nativeConsoleAvailable] = await Promise.all([
+      readRunnerInput(
+        path,
+        this.runtime.input.getScanSnapshot(),
+        this.runtime.input,
+      ),
+      this.runtime.native
+        ? this.runtime.native.capability()
+        : Promise.resolve(false),
+    ]);
     return {
       requestPath: input.requestPath,
       path: input.path,
@@ -127,7 +181,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       manager: input.manager,
       version: input.tool?.version ?? null,
       available: input.reason === null && input.tool !== null,
-      nativeConsoleAvailable: false,
+      nativeConsoleAvailable,
       recoveryHold: null,
       terminalAvailable:
         this.runtime.input.platform === 'win32' &&
@@ -235,6 +289,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     try {
       const started = this.runtime.now();
       const jobId = this.runtime.uuid();
+      const useNative =
+        input.terminal !== true && this.runtime.native !== undefined;
       const terminalIdentity: ITerminalIdentity | null =
         input.terminal === true ? { jobId, generation: 1 } : null;
       const terminal: ITerminalSession | null = terminalIdentity
@@ -278,6 +334,18 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         firstCursor: 0,
         endCursor: 0,
         droppedBytes: 0,
+        ...(useNative
+          ? {
+              nativeSession: {
+                shell: consoleShell,
+                generation: 1,
+                phase: 'starting' as const,
+                available: true,
+                sessionResult: null,
+              },
+              initialCommand: null,
+            }
+          : {}),
         ...(terminalIdentity
           ? {
               terminal: {
@@ -311,6 +379,12 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         controller: new AbortController(),
         logs,
         terminal,
+        useNative,
+        native: null,
+        nativeLaunched: false,
+        nativeResult: null,
+        initialOutcome: null,
+        observedShellOpen: false,
         process: null,
         outcome: null,
         preflight: null,
@@ -326,7 +400,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         lastAudit: null,
       };
       this.current = active;
-      this.armDeadline(active);
+      if (!useNative) this.armDeadline(active);
     } catch (error) {
       this.current = retained;
       this.runtime.gate.leave(token);
@@ -481,6 +555,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     let budget: ReturnType<typeof setTimeout> | undefined;
     const completion = async () => {
       await active.preflight;
+      await active.native?.settled;
       await active.work;
     };
     try {
@@ -600,6 +675,129 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     ];
   }
 
+  private extractFailureCode(error: unknown): RunFailureCode {
+    const details: unknown =
+      error !== null && typeof error === 'object' && 'details' in error
+        ? error.details
+        : undefined;
+    const reason =
+      details !== null && typeof details === 'object' && 'reason' in details
+        ? details.reason
+        : undefined;
+    return (
+      RUN_FAILURE_CODES.find((code) => code === reason) ??
+      'INTERNAL_SERVER_ERROR'
+    );
+  }
+
+  private async preflightNative(
+    active: IActiveRun,
+    deps: IRunnerInputDeps,
+    command: ReturnType<typeof buildRunCommand>,
+    env: NodeJS.ProcessEnv,
+    initialInput: IRunnerInput,
+  ): Promise<void> {
+    const native = this.runtime.native!;
+    const shell = active.request.consoleShell ?? 'cmd';
+    const nativePreflight = await native.preflight(shell);
+    deps.signal.throwIfAborted();
+    if (nativePreflight.status !== 'ok') {
+      if (active.job.nativeSession) active.job.nativeSession.available = false;
+      throw runnerFailure('NATIVE_CONSOLE_UNAVAILABLE');
+    }
+    const shellEnv = buildInteractiveShellEnv(this.runtime.env);
+    let currentInput = await revalidateRunnerInput(
+      initialInput,
+      active.request.inputHash,
+      deps,
+    );
+    deps.signal.throwIfAborted();
+    this.inputMetadata(active, currentInput);
+    const init: INativeInitCommand = {
+      jobId: active.job.jobId,
+      generation: 1,
+      type: 'init',
+      initialFile: command.file,
+      initialArgs: [...command.args],
+      cwd: currentInput.path,
+      env,
+      shell: nativePreflight.value.shell,
+      shellFile: nativePreflight.value.shellFile,
+      shellArgs: [...nativePreflight.value.shellArgs],
+      shellEnv,
+    };
+    const session = native.createSession({
+      identity: { jobId: active.job.jobId, generation: 1 },
+      fingerprint: active.fingerprint,
+      preflight: nativePreflight.value,
+      init,
+      initialTimeoutMs: this.runtime.timeoutMs,
+      writeIntent: async () => {
+        try {
+          await this.runtime.audit.writeIntent(this.snapshot(active));
+        } catch {
+          active.runFailure ??= 'AUDIT_WRITE_FAILED';
+          throw runnerFailure('AUDIT_WRITE_FAILED');
+        }
+      },
+      beforeInit: async () => {
+        try {
+          deps.signal.throwIfAborted();
+          const latest = await revalidateRunnerInput(
+            currentInput,
+            active.request.inputHash,
+            deps,
+          );
+          deps.signal.throwIfAborted();
+          this.inputMetadata(active, latest);
+          currentInput = latest;
+        } catch (error: unknown) {
+          if (!active.job.stopReason && !active.runFailure)
+            active.runFailure = this.extractFailureCode(error);
+          throw error;
+        }
+      },
+      callbacks: {
+        onState: (snap) => this.acceptNativeState(active, snap),
+        onInitSent: () => {
+          active.job.mayHaveChanged = true;
+        },
+        onInitialSpawned: () => {
+          active.job.spawned = true;
+          active.job.mayHaveChanged = true;
+        },
+        onInitialOutcome: (outcome) =>
+          this.acceptNativeInitialOutcome(active, outcome),
+        onSettled: (result) => this.acceptNativeSettled(active, result),
+      },
+    });
+    active.native = session;
+    active.job.phase = active.job.stopReason ? 'stopping' : 'executing';
+    void session.settled.then(
+      (result) => this.acceptNativeSettled(active, result),
+      () =>
+        this.acceptNativeSettled(active, {
+          phase: 'lost',
+          termination: 'start_failed',
+          initialOutcome: active.initialOutcome,
+          sessionOutcome: null,
+          cleanupVerified: false,
+        }),
+    );
+    if (active.job.stopReason !== null || deps.signal.aborted) {
+      const stopReason =
+        active.job.stopReason === 'shutdown'
+          ? 'parent_exit'
+          : active.job.stopReason === 'timeout'
+            ? 'initial_timeout'
+            : 'user_stop';
+      void session.stop(stopReason);
+    } else {
+      active.nativeLaunched = true;
+      void session.start();
+    }
+  }
+
   private async preflight(active: IActiveRun): Promise<void> {
     const deps: IRunnerInputDeps = {
       ...this.runtime.input,
@@ -621,6 +819,10 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         command.manager,
         active.request.action,
       );
+      if (active.useNative) {
+        await this.preflightNative(active, deps, command, env, input);
+        return;
+      }
       try {
         await this.runtime.audit.writeIntent(this.snapshot(active));
       } catch {
@@ -759,27 +961,109 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       }
     } catch (error: unknown) {
       if (!active.job.stopReason) {
-        const details: unknown =
-          error !== null && typeof error === 'object' && 'details' in error
-            ? error.details
-            : undefined;
-        const reason =
-          details !== null && typeof details === 'object' && 'reason' in details
-            ? details.reason
-            : undefined;
-        active.runFailure =
-          RUN_FAILURE_CODES.find((code) => code === reason) ??
-          'INTERNAL_SERVER_ERROR';
+        active.runFailure = this.extractFailureCode(error);
       }
     } finally {
       active.preflightDone = true;
-      if (!active.process || active.outcome || active.job.stopReason) {
+      if (active.useNative) {
+        if (
+          (!active.native || active.nativeResult) &&
+          !active.work &&
+          (active.nativeResult ||
+            active.runFailure !== null ||
+            active.job.stopReason !== null)
+        ) {
+          this.queueFinalize(active, false);
+        }
+      } else if (!active.process || active.outcome || active.job.stopReason) {
         this.queueFinalize(
           active,
           active.job.stopReason !== null && active.process !== null,
         );
       }
     }
+  }
+
+  private acceptNativeState(
+    active: IActiveRun,
+    snap: INativeSessionSnapshot,
+  ): void {
+    if (snap.phase === 'shell_running') active.observedShellOpen = true;
+    if (snap.identities.initial) {
+      active.job.spawned = true;
+      active.job.mayHaveChanged = true;
+    }
+    if (snap.initialOutcome) {
+      active.initialOutcome = { ...snap.initialOutcome };
+      active.job.initialCommand = { ...snap.initialOutcome };
+      active.job.exitCode = snap.initialOutcome.exitCode;
+      active.job.signal = snap.initialOutcome.signal;
+    }
+    if (active.job.nativeSession && !active.nativeResult) {
+      const nextPhase = mapNativePhase(snap.phase);
+      const currentPhase = active.job.nativeSession.phase;
+      if (
+        NATIVE_PHASE_RANK[nextPhase] > NATIVE_PHASE_RANK[currentPhase] &&
+        (!active.job.stopReason || NATIVE_PHASE_RANK[nextPhase] >= 4)
+      ) {
+        active.job.nativeSession.phase = nextPhase;
+      }
+      if (snap.sessionOutcome)
+        active.job.nativeSession.sessionResult = { ...snap.sessionOutcome };
+    }
+  }
+
+  private acceptNativeInitialOutcome(
+    active: IActiveRun,
+    outcome: INativeExitOutcome,
+  ): void {
+    active.initialOutcome = { ...outcome };
+    active.job.initialCommand = { ...outcome };
+    active.job.exitCode = outcome.exitCode;
+    active.job.signal = outcome.signal;
+    if (
+      active.job.nativeSession &&
+      !active.nativeResult &&
+      (active.job.nativeSession.phase === 'starting' ||
+        active.job.nativeSession.phase === 'initial_running')
+    ) {
+      active.job.nativeSession.phase = 'initial_finished';
+    }
+    if (outcome.exitCode !== 0 || outcome.signal !== null)
+      active.runFailure ??= 'COMMAND_FAILED';
+  }
+
+  private acceptNativeSettled(
+    active: IActiveRun,
+    result: INativeSessionResult,
+  ): void {
+    if (active.nativeResult) return;
+    active.nativeResult = result;
+    const job = active.job;
+    if (result.initialOutcome) {
+      active.initialOutcome = { ...result.initialOutcome };
+      job.initialCommand = { ...result.initialOutcome };
+      job.exitCode = result.initialOutcome.exitCode;
+      job.signal = result.initialOutcome.signal;
+      if (
+        result.initialOutcome.exitCode !== 0 ||
+        result.initialOutcome.signal !== null
+      ) {
+        active.runFailure ??= 'COMMAND_FAILED';
+      }
+    }
+    if (job.nativeSession) {
+      job.nativeSession.phase = result.phase;
+      job.nativeSession.sessionResult = result.sessionOutcome
+        ? { ...result.sessionOutcome }
+        : null;
+    }
+    if (result.termination === 'initial_timeout') job.stopReason ??= 'timeout';
+    else if (result.termination === 'user_stop') job.stopReason ??= 'cancel';
+    else if (result.termination === 'parent_exit')
+      job.stopReason ??= 'shutdown';
+    job.terminationVerified = result.cleanupVerified;
+    if (active.preflightDone) this.queueFinalize(active, false);
   }
 
   private acceptExit(active: IActiveRun, outcome: IRunProcessExit): void {
@@ -819,12 +1103,16 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     if (
       active.job.phase === 'done' ||
       active.job.phase === 'finalizing' ||
-      active.work
+      active.work ||
+      (active.job.phase === 'stopping' && active.native !== null)
     )
       return;
     active.job.stopReason ??= reason;
     active.job.status = 'stopping';
     active.job.phase = 'stopping';
+    if (active.job.nativeSession && !active.nativeResult) {
+      active.job.nativeSession.phase = 'stopping';
+    }
     if (active.terminal) {
       active.terminal.controlState = 'stopping';
       try {
@@ -835,6 +1123,16 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     }
     this.clearDeadline(active);
     active.controller.abort();
+    if (active.native) {
+      void active.native.stop(
+        reason === 'shutdown'
+          ? 'parent_exit'
+          : reason === 'timeout'
+            ? 'initial_timeout'
+            : 'user_stop',
+      );
+      return;
+    }
     if (active.preflightDone)
       this.queueFinalize(active, active.process !== null);
   }
@@ -847,7 +1145,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         // Fail closed; never release an unacknowledged cleanup or expose raw errors.
         active.job.failureCode = 'INTERNAL_SERVER_ERROR';
         active.job.status =
-          active.job.spawned && !active.job.terminationVerified
+          (active.job.spawned || active.nativeLaunched) &&
+          !active.job.terminationVerified
             ? 'termination_failed'
             : 'failed';
         active.job.auditWritten = false;
@@ -858,6 +1157,90 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       .finally(() => {
         active.work = null;
       });
+  }
+
+  private classifyNative(active: IActiveRun): void {
+    const job = active.job;
+    const result = active.nativeResult;
+    if (
+      !job.terminationVerified ||
+      result?.termination === 'termination_unconfirmed'
+    ) {
+      job.status = 'termination_failed';
+      job.failureCode = 'TERMINATION_UNCONFIRMED';
+      return;
+    }
+    if (
+      job.stopReason ||
+      result?.termination === 'user_stop' ||
+      result?.termination === 'initial_timeout' ||
+      result?.termination === 'parent_exit'
+    ) {
+      const reason =
+        job.stopReason ??
+        (result?.termination === 'initial_timeout'
+          ? 'timeout'
+          : result?.termination === 'parent_exit'
+            ? 'shutdown'
+            : 'cancel');
+      job.stopReason = reason;
+      job.status = reason === 'timeout' ? 'timed_out' : 'cancelled';
+      job.failureCode =
+        reason === 'timeout'
+          ? 'TIMED_OUT'
+          : reason === 'shutdown'
+            ? 'SHUTDOWN'
+            : 'CANCELLED';
+      return;
+    }
+    if (!result) {
+      job.status = 'failed';
+      job.failureCode = active.runFailure ?? 'INTERNAL_SERVER_ERROR';
+      return;
+    }
+    switch (result.termination) {
+      case 'protocol_error':
+        job.status = 'failed';
+        job.failureCode = 'NATIVE_PROTOCOL_ERROR';
+        return;
+      case 'handshake_timeout':
+        job.status = 'timed_out';
+        job.failureCode = 'TIMED_OUT';
+        return;
+      case 'ipc_lost':
+        job.status = 'failed';
+        job.failureCode = 'SESSION_INTERRUPTED';
+        return;
+      case 'journal_failed':
+        job.status = 'failed';
+        job.failureCode = 'INTERNAL_SERVER_ERROR';
+        return;
+      case 'start_failed':
+        job.status = 'failed';
+        job.failureCode = active.runFailure ?? 'SPAWN_FAILED';
+        return;
+      case 'window_closed':
+      case 'session_exit': {
+        const outcome = result.initialOutcome ?? active.initialOutcome;
+        if (
+          !active.observedShellOpen ||
+          result.phase !== 'closed' ||
+          !outcome
+        ) {
+          job.status = 'failed';
+          job.failureCode = 'SESSION_INTERRUPTED';
+          return;
+        }
+        if (outcome.exitCode === 0 && outcome.signal === null) {
+          job.status = 'completed';
+          job.failureCode = null;
+        } else {
+          job.status = 'failed';
+          job.failureCode = active.runFailure ?? 'COMMAND_FAILED';
+        }
+        return;
+      }
+    }
   }
 
   private classify(active: IActiveRun): void {
@@ -886,20 +1269,25 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     const job = active.job;
     job.phase = 'finalizing';
     this.clearDeadline(active);
-    if (stop && active.process && !job.terminationVerified) {
-      try {
-        const verified = await active.process.stop();
-        job.terminationVerified = verified === 'verified';
-      } catch {
-        job.terminationVerified = false;
+    if (active.useNative) {
+      if (!active.nativeLaunched) job.terminationVerified = true;
+      this.classifyNative(active);
+    } else {
+      if (stop && active.process && !job.terminationVerified) {
+        try {
+          const verified = await active.process.stop();
+          job.terminationVerified = verified === 'verified';
+        } catch {
+          job.terminationVerified = false;
+        }
+        if (job.terminationVerified) {
+          // Mutations may have continued after an earlier unconfirmed stop.
+          active.refreshed = active.diskCleared = active.analysisStaled = false;
+        }
       }
-      if (job.terminationVerified) {
-        // Mutations may have continued after an earlier unconfirmed stop.
-        active.refreshed = active.diskCleared = active.analysisStaled = false;
-      }
+      if (!job.spawned) job.terminationVerified = true;
+      this.classify(active);
     }
-    if (!job.spawned) job.terminationVerified = true;
-    this.classify(active);
     if (active.terminal) {
       const finalState: TerminalControlState =
         job.status === 'termination_failed' ||
@@ -923,7 +1311,10 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     }
     this.syncLogs(active);
     this.syncTerminal(active);
-    if (job.spawned) {
+    const needsInvalidation = active.useNative
+      ? job.mayHaveChanged || active.observedShellOpen
+      : job.spawned;
+    if (needsInvalidation) {
       if (!active.refreshed) {
         try {
           await this.runtime.invalidation.refreshProject(job.path);
@@ -942,17 +1333,24 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       }
       if (!active.analysisStaled) {
         try {
-          this.runtime.invalidation.staleAnalysis(job.path);
+          if (active.useNative && this.runtime.invalidation.staleAllAnalyses) {
+            this.runtime.invalidation.staleAllAnalyses();
+          } else {
+            this.runtime.invalidation.staleAnalysis(job.path);
+          }
           active.analysisStaled = true;
         } catch {
           /* Audit the incomplete cleanup. */
         }
       }
     }
-    job.refreshRequired =
-      job.spawned &&
+    const invalidationFailed =
+      needsInvalidation &&
       !(active.refreshed && active.diskCleared && active.analysisStaled);
-    if (job.refreshRequired && job.failureCode === null) {
+    job.refreshRequired = active.useNative
+      ? needsInvalidation
+      : invalidationFailed;
+    if (invalidationFailed && job.failureCode === null) {
       job.failureCode = 'CACHE_INVALIDATION_FAILED';
       job.status = 'failed';
     }
@@ -968,11 +1366,10 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         if (job.status === 'completed') job.status = 'failed';
       }
     }
-    if (
-      (!job.spawned || job.terminationVerified) &&
-      !job.refreshRequired &&
-      job.auditWritten
-    ) {
+    const terminationOk = active.useNative
+      ? job.terminationVerified
+      : !job.spawned || job.terminationVerified;
+    if (terminationOk && !invalidationFailed && job.auditWritten) {
       this.runtime.gate.leave(active.token);
       job.gateHeld = false;
     }

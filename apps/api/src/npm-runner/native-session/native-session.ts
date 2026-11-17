@@ -87,6 +87,8 @@ export interface INativeSessionOptions {
 }
 export interface INativeSessionCallbacks {
   onState?(snapshot: INativeSessionSnapshot): void;
+  onInitSent?(): void;
+  onInitialSpawned?(pid: number): void;
   onInitialOutcome?(outcome: INativeExitOutcome): void;
   onSettled?(result: INativeSessionResult): void;
 }
@@ -95,6 +97,8 @@ export interface INativeSessionDeps {
   spawn: NativeNodeSpawn;
   /** Service owns the intent audit; rejection must prevent every launch. */
   writeIntent(): Promise<void>;
+  /** Optional pre-init revalidation after bridge handshake, before sending init. */
+  beforeInit?(): Promise<void>;
   /** Resolves only after a durable write. No environment/typed commands supplied. */
   persist(snapshot: INativeSessionSnapshot): Promise<void>;
   callbacks?: INativeSessionCallbacks;
@@ -398,6 +402,10 @@ export function createNativeSession(
     if (!(await deps.platform.revalidate(options.preflight)))
       fault('start_failed');
     if (stopped) return;
+    if (deps.beforeInit) {
+      await deps.beforeInit();
+      if (stopped) return;
+    }
     initSent = true;
     clearHandshake();
     // Timer is armed at the actual send, after every durable barrier.
@@ -406,6 +414,11 @@ export function createNativeSession(
         void stop('initial_timeout');
       }, options.initialTimeoutMs);
     send(initFrame);
+    try {
+      deps.callbacks?.onInitSent?.();
+    } catch {
+      /* observer isolated */
+    }
   };
   const handleBridge = async (frame: NativeBridgeFrame) => {
     if (stopped) return;
@@ -424,6 +437,11 @@ export function createNativeSession(
       case 'initial-spawned':
         if (!initSent || state.identities.initial || !state.identities.bridge)
           fault('protocol_error');
+        try {
+          deps.callbacks?.onInitialSpawned?.(frame.pid);
+        } catch {
+          /* observer isolated */
+        }
         await capture(
           'initial',
           frame.pid,

@@ -20,6 +20,17 @@ import type {
   ITerminalSize,
   TerminalDeliveryStatus,
 } from '@/npm-runner/terminal/terminal-protocol';
+import type {
+  INativeSession,
+  INativeSessionResult,
+  INativeSessionSnapshot,
+  NativeTermination,
+} from '@/npm-runner/native-session/native-session';
+import type { INativeSessionStartInput } from '@/npm-runner/interfaces/npm-runner.runtime';
+import type {
+  INativeConsolePreflight,
+  NativePreflightResult,
+} from '@/platform/windows/windows-native-console';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -1255,5 +1266,523 @@ describe('NpmRunnerService terminal lifecycle', () => {
       status: 'cancelled',
       gateHeld: false,
     });
+  });
+
+  function nativeFixture() {
+    const f = fixture();
+    const staleAllAnalyses = jest.fn<void, []>(() => undefined);
+    f.runtime.invalidation.staleAllAnalyses = staleAllAnalyses;
+    const preflightValue = (
+      shell: 'cmd' | 'powershell',
+    ): INativeConsolePreflight => ({
+      execPath: 'C:\\node\\node.exe',
+      supervisorFile:
+        'C:\\api\\dist\\npm-runner\\native-session\\native-console-supervisor.js',
+      bridgeFile:
+        'C:\\api\\dist\\npm-runner\\native-session\\native-console-entry.js',
+      shell,
+      shellFile:
+        shell === 'powershell'
+          ? 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+          : 'C:\\Windows\\System32\\cmd.exe',
+      shellArgs: shell === 'powershell' ? ['-NoLogo', '-NoProfile'] : ['/d'],
+      systemRoot: 'C:\\Windows',
+      files: [],
+    });
+    let sessionInput: INativeSessionStartInput | undefined;
+    const settled = deferred<INativeSessionResult>();
+    const startSession = jest.fn(() => Promise.resolve());
+    const stopSession = jest.fn((reason: NativeTermination) => {
+      void reason;
+      return settled.promise;
+    });
+    const session: INativeSession = {
+      start: startSession,
+      stop: stopSession,
+      settled: settled.promise,
+      snapshot: () => ({
+        schema: 1,
+        jobId,
+        generation: 1,
+        fingerprint: sessionInput?.fingerprint ?? '',
+        phase: 'launching',
+        entries: {
+          execPath: 'C:\\node\\node.exe',
+          supervisorFile:
+            'C:\\api\\dist\\npm-runner\\native-session\\native-console-supervisor.js',
+          bridgeFile:
+            'C:\\api\\dist\\npm-runner\\native-session\\native-console-entry.js',
+          shellFile: 'C:\\Windows\\System32\\cmd.exe',
+        },
+        identities: {},
+        tracked: [],
+        initialRetired: false,
+        initialOutcome: null,
+        sessionOutcome: null,
+        termination: null,
+      }),
+    };
+    const capability = jest.fn(() => Promise.resolve(true));
+    const preflight = jest.fn<
+      Promise<NativePreflightResult>,
+      ['cmd' | 'powershell']
+    >((shell) =>
+      Promise.resolve({
+        status: 'ok',
+        value: preflightValue(shell),
+      }),
+    );
+    const createSession = jest.fn((input: INativeSessionStartInput) => {
+      sessionInput = input;
+      return session;
+    });
+    f.runtime.native = {
+      capability,
+      preflight,
+      createSession,
+    };
+    const emitState = (
+      phase: INativeSessionSnapshot['phase'],
+      extra: Partial<INativeSessionSnapshot> = {},
+    ) => {
+      sessionInput?.callbacks.onState?.({
+        ...session.snapshot(),
+        phase,
+        ...extra,
+      });
+    };
+    const settleNative = async (result: INativeSessionResult) => {
+      settled.resolve(result);
+      sessionInput?.callbacks.onSettled?.(result);
+      await flush();
+    };
+    return {
+      ...f,
+      staleAllAnalyses,
+      capability,
+      preflight,
+      createSession,
+      startSession,
+      stopSession,
+      settled,
+      getSessionInput: () => sessionInput!,
+      emitState,
+      settleNative,
+    };
+  }
+
+  it('reports nativeConsoleAvailable from runtime.native.capability and rejects unavailable shell without fallback', async () => {
+    const plain = fixture();
+    await expect(plain.service.context(root)).resolves.toMatchObject({
+      nativeConsoleAvailable: false,
+    });
+
+    const nf = nativeFixture();
+    await expect(nf.service.context(root)).resolves.toMatchObject({
+      nativeConsoleAvailable: true,
+    });
+
+    nf.preflight.mockResolvedValueOnce({ status: 'unavailable' });
+    await nf.service.start(requestBody({ consoleShell: 'powershell' }));
+    await flush();
+    expect(nf.createSession).not.toHaveBeenCalled();
+    expect(nf.launch).not.toHaveBeenCalled();
+    expect(nf.writeIntent).not.toHaveBeenCalled();
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'NATIVE_CONSOLE_UNAVAILABLE',
+      gateHeld: false,
+      nativeSession: {
+        shell: 'powershell',
+        available: false,
+      },
+    });
+  });
+
+  it('keeps initial outcome distinct from open shell lifetime, does not arm service deadline, and invalidates conservatively on close', async () => {
+    const nf = nativeFixture();
+    nf.runtime.timeoutMs = 30_000;
+    await nf.service.start(requestBody({ consoleShell: 'powershell' }));
+    await flush();
+
+    // Service must not arm a whole-session deadline timer that could kill an idle manual prompt.
+    expect(nf.setTimer).not.toHaveBeenCalled();
+    const input = nf.getSessionInput();
+    expect(input.initialTimeoutMs).toBe(30_000);
+    expect(input.init.shell).toBe('powershell');
+
+    await input.writeIntent();
+    expect(nf.writeIntent).toHaveBeenCalledTimes(1);
+    input.callbacks.onInitSent?.();
+    input.callbacks.onInitialSpawned?.(30);
+    nf.emitState('initial_running');
+    input.callbacks.onInitialOutcome?.({ exitCode: 0, signal: null });
+    await flush();
+
+    // Initial finished with 0, but shell is not done yet: job stays running and gate stays held.
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'running',
+      gateHeld: true,
+      spawned: true,
+      mayHaveChanged: true,
+      exitCode: 0,
+      initialCommand: { exitCode: 0, signal: null },
+      nativeSession: {
+        shell: 'powershell',
+        phase: 'initial_finished',
+      },
+    });
+    expect(nf.leave).not.toHaveBeenCalled();
+
+    nf.emitState('shell_running');
+    expect(nf.service.get(jobId).nativeSession?.phase).toBe('shell_open');
+
+    // Duplicate onSettled + settled.then delivery must finalize only once.
+    await nf.settleNative({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      gateHeld: false,
+      terminationVerified: true,
+      refreshRequired: true,
+      auditWritten: true,
+      initialCommand: { exitCode: 0, signal: null },
+      nativeSession: {
+        shell: 'powershell',
+        phase: 'closed',
+        sessionResult: { exitCode: 0, signal: null },
+      },
+    });
+    expect(nf.staleAllAnalyses).toHaveBeenCalledTimes(1);
+    expect(nf.clearDiskUsage).toHaveBeenCalledTimes(1);
+    expect(nf.refreshProject).toHaveBeenCalledTimes(1);
+    expect(nf.writeResult).toHaveBeenCalledTimes(1);
+    expect(nf.leave).toHaveBeenCalledTimes(1);
+  });
+
+  it('never lets a normal shell exit 0 mask a failed initial command and preserves initial failure on cancel', async () => {
+    const nf = nativeFixture();
+    await nf.service.start(requestBody());
+    await flush();
+    const input = nf.getSessionInput();
+    input.callbacks.onInitSent?.();
+    input.callbacks.onInitialSpawned?.(30);
+    input.callbacks.onInitialOutcome?.({ exitCode: 7, signal: null });
+    nf.emitState('shell_running');
+    await nf.settleNative({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 7, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'COMMAND_FAILED',
+      exitCode: 7,
+      initialCommand: { exitCode: 7, signal: null },
+      nativeSession: {
+        phase: 'closed',
+        sessionResult: { exitCode: 0, signal: null },
+      },
+      gateHeld: false,
+    });
+
+    const nf2 = nativeFixture();
+    nf2.uuid.mockReturnValue(nextJobId);
+    await nf2.service.start(requestBody({ requestId: nextRequestId }));
+    await flush();
+    const input2 = nf2.getSessionInput();
+    input2.callbacks.onInitSent?.();
+    input2.callbacks.onInitialSpawned?.(31);
+    input2.callbacks.onInitialOutcome?.({ exitCode: 5, signal: null });
+    nf2.emitState('shell_running');
+    await nf2.service.cancel(nextJobId);
+    await nf2.service.cancel(nextJobId);
+    expect(nf2.stopSession).toHaveBeenCalledTimes(1);
+    expect(nf2.stopSession).toHaveBeenCalledWith('user_stop');
+    await nf2.settleNative({
+      phase: 'closed',
+      termination: 'user_stop',
+      initialOutcome: { exitCode: 5, signal: null },
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(nf2.service.get(nextJobId)).toMatchObject({
+      status: 'cancelled',
+      failureCode: 'CANCELLED',
+      stopReason: 'cancel',
+      exitCode: 5,
+      initialCommand: { exitCode: 5, signal: null },
+      gateHeld: false,
+    });
+  });
+
+  it('distinguishes X close before shell_open (SESSION_INTERRUPTED) from verified X close during shell_open', async () => {
+    const beforeShell = nativeFixture();
+    await beforeShell.service.start(requestBody());
+    await flush();
+    const in1 = beforeShell.getSessionInput();
+    in1.callbacks.onInitSent?.();
+    in1.callbacks.onInitialSpawned?.(30);
+    in1.callbacks.onInitialOutcome?.({ exitCode: 0, signal: null });
+    // Note: shell_running was never observed even though initialOutcome was 0.
+    await beforeShell.settleNative({
+      phase: 'closed',
+      termination: 'window_closed',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(beforeShell.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'SESSION_INTERRUPTED',
+      terminationVerified: true,
+      gateHeld: false,
+    });
+
+    const duringShell = nativeFixture();
+    duringShell.uuid.mockReturnValue(nextJobId);
+    await duringShell.service.start(requestBody({ requestId: nextRequestId }));
+    await flush();
+    const in2 = duringShell.getSessionInput();
+    in2.callbacks.onInitSent?.();
+    in2.callbacks.onInitialSpawned?.(31);
+    in2.callbacks.onInitialOutcome?.({ exitCode: 0, signal: null });
+    duringShell.emitState('shell_running');
+    await duringShell.settleNative({
+      phase: 'closed',
+      termination: 'window_closed',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(duringShell.service.get(nextJobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      terminationVerified: true,
+      gateHeld: false,
+      nativeSession: { phase: 'closed' },
+    });
+  });
+
+  it('preserves INPUT_CHANGED in beforeInit, holds gate on unconfirmed cleanup even when !spawned, and awaits native cleanup on destroy', async () => {
+    const changed = nativeFixture();
+    await changed.service.start(requestBody());
+    await flush();
+    jest.mocked(revalidateRunnerInput).mockRejectedValueOnce(
+      new AppException(409, 'Input changed', 'CONFLICT', {
+        reason: 'INPUT_CHANGED',
+      }),
+    );
+    await expect(changed.getSessionInput().beforeInit?.()).rejects.toThrow();
+    await changed.settleNative({
+      phase: 'closed',
+      termination: 'start_failed',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(changed.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'INPUT_CHANGED',
+      spawned: false,
+      mayHaveChanged: false,
+      gateHeld: false,
+    });
+
+    const unconfirmed = nativeFixture();
+    unconfirmed.uuid.mockReturnValue(nextJobId);
+    await unconfirmed.service.start(requestBody({ requestId: nextRequestId }));
+    await flush();
+    const in2 = unconfirmed.getSessionInput();
+    in2.callbacks.onInitSent?.();
+    in2.callbacks.onInitialSpawned?.(44);
+    await unconfirmed.settleNative({
+      phase: 'lost',
+      termination: 'start_failed',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: false,
+    });
+    expect(unconfirmed.service.get(nextJobId)).toMatchObject({
+      status: 'termination_failed',
+      failureCode: 'TERMINATION_UNCONFIRMED',
+      spawned: true,
+      mayHaveChanged: true,
+      terminationVerified: false,
+      gateHeld: true,
+      nativeSession: { phase: 'lost' },
+    });
+    expect(unconfirmed.leave).not.toHaveBeenCalled();
+
+    // Even if initial never spawned, unconfirmed supervisor/bridge cleanup must hold gate.
+    const helperLost = nativeFixture();
+    await helperLost.service.start(requestBody());
+    await flush();
+    await helperLost.settleNative({
+      phase: 'lost',
+      termination: 'start_failed',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: false,
+    });
+    expect(helperLost.service.get(jobId)).toMatchObject({
+      status: 'termination_failed',
+      failureCode: 'TERMINATION_UNCONFIRMED',
+      spawned: false,
+      terminationVerified: false,
+      gateHeld: true,
+    });
+
+    // Shutdown must await native.settled and finalization work.
+    const shuttingDown = nativeFixture();
+    await shuttingDown.service.start(requestBody());
+    await flush();
+    let destroyResolved = false;
+    const destroyPromise = shuttingDown.service.onModuleDestroy().then(() => {
+      destroyResolved = true;
+    });
+    await flush();
+    expect(shuttingDown.stopSession).toHaveBeenCalledWith('parent_exit');
+    expect(destroyResolved).toBe(false);
+    await shuttingDown.settleNative({
+      phase: 'closed',
+      termination: 'parent_exit',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    await destroyPromise;
+    expect(destroyResolved).toBe(true);
+    expect(shuttingDown.service.get(jobId)).toMatchObject({
+      status: 'cancelled',
+      failureCode: 'SHUTDOWN',
+      gateHeld: false,
+    });
+  });
+
+  it('holds gate when conservative whole-analysis invalidation fails and releases on retry', async () => {
+    const nf = nativeFixture();
+    nf.staleAllAnalyses.mockImplementationOnce(() => {
+      throw new Error('stale fail');
+    });
+    await nf.service.start(requestBody());
+    await flush();
+    const input = nf.getSessionInput();
+    input.callbacks.onInitSent?.();
+    input.callbacks.onInitialSpawned?.(30);
+    input.callbacks.onInitialOutcome?.({ exitCode: 0, signal: null });
+    nf.emitState('shell_running');
+    await nf.settleNative({
+      phase: 'closed',
+      termination: 'session_exit',
+      initialOutcome: { exitCode: 0, signal: null },
+      sessionOutcome: { exitCode: 0, signal: null },
+      cleanupVerified: true,
+    });
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'CACHE_INVALIDATION_FAILED',
+      refreshRequired: true,
+      gateHeld: true,
+    });
+    expect(nf.leave).not.toHaveBeenCalled();
+    await nf.service.cancel(jobId);
+    await flush();
+    expect(nf.service.get(jobId)).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      refreshRequired: true,
+      gateHeld: false,
+    });
+    expect(nf.leave).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts cleanly before createSession on preflight cancel and maps protocol/handshake/ipc/intent failures truthfully', async () => {
+    const cancelled = nativeFixture();
+    const hold = deferred<{ status: 'unavailable' }>();
+    cancelled.preflight.mockReturnValueOnce(hold.promise);
+    await cancelled.service.start(requestBody());
+    await flush();
+    await cancelled.service.cancel(jobId);
+    hold.resolve({ status: 'unavailable' });
+    await flush();
+    expect(cancelled.createSession).not.toHaveBeenCalled();
+    expect(cancelled.service.get(jobId)).toMatchObject({
+      status: 'cancelled',
+      failureCode: 'CANCELLED',
+      gateHeld: false,
+    });
+
+    const intentFail = nativeFixture();
+    intentFail.writeIntent.mockRejectedValueOnce(new Error('audit disk full'));
+    await intentFail.service.start(requestBody());
+    await flush();
+    await expect(intentFail.getSessionInput().writeIntent()).rejects.toThrow();
+    await intentFail.settleNative({
+      phase: 'closed',
+      termination: 'start_failed',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(intentFail.service.get(jobId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'AUDIT_WRITE_FAILED',
+      spawned: false,
+      mayHaveChanged: false,
+      gateHeld: false,
+    });
+
+    for (const [termination, status, failureCode, stopReason] of [
+      ['protocol_error', 'failed', 'NATIVE_PROTOCOL_ERROR', null],
+      ['handshake_timeout', 'timed_out', 'TIMED_OUT', null],
+      ['initial_timeout', 'timed_out', 'TIMED_OUT', 'timeout'],
+      ['ipc_lost', 'failed', 'SESSION_INTERRUPTED', null],
+    ] as const) {
+      const nf = nativeFixture();
+      await nf.service.start(requestBody());
+      await flush();
+      await nf.settleNative({
+        phase: 'closed',
+        termination,
+        initialOutcome: null,
+        sessionOutcome: null,
+        cleanupVerified: true,
+      });
+      expect(nf.service.get(jobId)).toMatchObject({
+        status,
+        failureCode,
+        stopReason,
+        gateHeld: false,
+      });
+    }
+  });
+
+  it('keeps nativeSession.phase monotonic when in-flight onState arrives after cancel', async () => {
+    const nf = nativeFixture();
+    await nf.service.start(requestBody());
+    await flush();
+    nf.emitState('initial_running');
+    expect(nf.service.get(jobId).nativeSession?.phase).toBe('initial_running');
+    await nf.service.cancel(jobId);
+    expect(nf.service.get(jobId).nativeSession?.phase).toBe('stopping');
+    nf.emitState('shell_running');
+    expect(nf.service.get(jobId).nativeSession?.phase).toBe('stopping');
+    await nf.settleNative({
+      phase: 'closed',
+      termination: 'user_stop',
+      initialOutcome: null,
+      sessionOutcome: null,
+      cleanupVerified: true,
+    });
+    expect(nf.service.get(jobId).nativeSession?.phase).toBe('closed');
   });
 });

@@ -3,7 +3,10 @@ import {
   type INativeSessionSnapshot,
 } from './native-session';
 import type { INativeChild } from './native-console-supervisor';
-import type { IWindowsNativeConsole } from '../../platform/windows/windows-native-console';
+import type {
+  IWindowsNativeConsole,
+  NativeIdentityResult,
+} from '../../platform/windows/windows-native-console';
 
 const identity = {
   jobId: '11111111-1111-4111-8111-111111111111',
@@ -13,7 +16,7 @@ const created = '2026-11-17T00:00:00.000Z';
 const flush = async () => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
-function setup() {
+function setup(overrides?: { beforeInit?: () => Promise<void> }) {
   let receive!: (raw: unknown) => void;
   let disconnect!: () => void;
   let exit!: (code: number | null, signal: string | null) => void;
@@ -53,11 +56,16 @@ function setup() {
   };
   const platform = {
     revalidate: jest.fn().mockResolvedValue(true),
-    capture: jest.fn((pid: number, executablePath: string, parentPid: number) =>
-      Promise.resolve({
-        status: 'ok',
-        identity: { pid, executablePath, parentPid, creationTime: created },
-      }),
+    capture: jest.fn(
+      (
+        pid: number,
+        executablePath: string,
+        parentPid: number,
+      ): Promise<NativeIdentityResult> =>
+        Promise.resolve({
+          status: 'ok',
+          identity: { pid, executablePath, parentPid, creationTime: created },
+        }),
     ),
     descendants: jest.fn(
       (...args: Parameters<IWindowsNativeConsole['descendants']>) => {
@@ -76,6 +84,8 @@ function setup() {
   });
   const callbacks = {
     onState: jest.fn(),
+    onInitSent: jest.fn(),
+    onInitialSpawned: jest.fn(),
     onInitialOutcome: jest.fn(),
     onSettled: jest.fn(() => {
       order.push('settled');
@@ -94,6 +104,7 @@ function setup() {
         order.push('intent');
         return Promise.resolve();
       }),
+      ...(overrides?.beforeInit ? { beforeInit: overrides.beforeInit } : {}),
       persist,
       callbacks,
       onProcessExit: (fn) => {
@@ -404,5 +415,71 @@ describe('native session coordinator barriers', () => {
     expect(
       s.child.send.mock.calls.some(([frame]) => frame.type === 'open-shell-go'),
     ).toBe(false);
+  });
+  it('stops before sending init or arming initial timer when beforeInit rejects', async () => {
+    const beforeInit = jest
+      .fn<Promise<void>, []>()
+      .mockRejectedValueOnce(new Error('INPUT_CHANGED'));
+    const s = setup({ beforeInit });
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    expect(beforeInit).toHaveBeenCalledTimes(1);
+    expect(await s.session.settled).toMatchObject({
+      phase: 'closed',
+      termination: 'start_failed',
+      cleanupVerified: true,
+      initialOutcome: null,
+    });
+    expect(
+      s.child.send.mock.calls.some(
+        ([frame]) => frame.type === 'init' || frame.type === 'open-shell-go',
+      ),
+    ).toBe(false);
+    expect(s.timers.some((entry) => entry.ms === 30_000)).toBe(false);
+    expect(s.callbacks.onInitSent).not.toHaveBeenCalled();
+  });
+  it('does not send init if user stops while beforeInit is pending', async () => {
+    let release!: () => void;
+    const beforeInit = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const s = setup({ beforeInit });
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    const readyPromise = s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    await flush();
+    expect(beforeInit).toHaveBeenCalledTimes(1);
+    const stopPromise = s.session.stop('user_stop');
+    release();
+    await readyPromise;
+    expect(await stopPromise).toMatchObject({
+      termination: 'user_stop',
+      cleanupVerified: true,
+    });
+    expect(
+      s.child.send.mock.calls.some(([frame]) => frame.type === 'init'),
+    ).toBe(false);
+    expect(s.callbacks.onInitSent).not.toHaveBeenCalled();
+  });
+  it('notifies onInitSent and onInitialSpawned even when initial identity capture fails unknown', async () => {
+    const s = setup();
+    await s.session.start();
+    await s.message({ type: 'supervisor-ready' });
+    await s.message({ type: 'bridge-spawned', pid: 20 });
+    await s.bridgeFrame({ type: 'bridge-ready', pid: 20 });
+    expect(s.callbacks.onInitSent).toHaveBeenCalledTimes(1);
+    s.platform.capture.mockResolvedValueOnce({ status: 'unknown' });
+    await s.bridgeFrame({ type: 'initial-spawned', pid: 30 });
+    expect(s.callbacks.onInitialSpawned).toHaveBeenCalledWith(30);
+    expect(await s.session.settled).toMatchObject({
+      termination: 'start_failed',
+      cleanupVerified: true,
+    });
   });
 });

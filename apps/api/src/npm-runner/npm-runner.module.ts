@@ -25,7 +25,10 @@ import {
   NPM_RUNNER_PROCESS,
   NPM_RUNNER_RUNTIME,
 } from '@/npm-runner/interfaces/npm-runner.runtime';
-import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
+import type {
+  INativeRunnerRuntime,
+  INpmRunnerRuntime,
+} from '@/npm-runner/interfaces/npm-runner.runtime';
 import type { IRunnerFs } from '@/npm-runner/interfaces/npm-runner.types';
 import type { IRunJob } from '@/npm-runner/interfaces/npm-runner.types';
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
@@ -38,8 +41,27 @@ import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
 import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import { launchRun } from '@/npm-runner/execution/runner-process';
 import { launchTerminalRun } from '@/npm-runner/terminal/terminal-worker-process';
+import { createWindowsNativeConsole } from '@/platform/windows/windows-native-console';
+import {
+  createNativeSession,
+  type INativeSessionSnapshot,
+} from '@/npm-runner/native-session/native-session';
+import {
+  spawnNativeNode,
+  type NativeNodeSpawn,
+} from '@/npm-runner/native-session/native-console-supervisor';
 import { NpmRunnerController } from '@/npm-runner/npm-runner.controller';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
+
+export interface INativeRuntimeBindings {
+  appInstallDir: string;
+  snapshot: IProcessSnapshot;
+  persist(snapshot: INativeSessionSnapshot): Promise<void>;
+  spawn?: NativeNodeSpawn;
+  apiPid?: number;
+  onProcessExit?: (listener: () => void) => () => void;
+  handshakeTimeoutMs?: number;
+}
 
 export interface IRunnerRuntimeBindings {
   fs: IRunnerFs;
@@ -53,7 +75,9 @@ export interface IRunnerRuntimeBindings {
   projects: Pick<
     ProjectsService,
     'hasRunningAnalysis' | 'invalidateAfterMutation'
-  >;
+  > & {
+    invalidateAllAfterMutation?: () => void;
+  };
   gate: Pick<MutationGateService, 'tryEnter' | 'leave'>;
   audit: Pick<AuditLogService, 'append'>;
   guard: Pick<PathGuardService, 'assertAllowed'>;
@@ -64,6 +88,7 @@ export interface IRunnerRuntimeBindings {
     env: Readonly<NodeJS.ProcessEnv>;
   };
   terminalAvailable?: boolean;
+  native?: INativeRuntimeBindings;
 }
 
 const NODE_PTY_MODULE: string = 'node-pty';
@@ -77,6 +102,81 @@ export function canResolveNodePty(
   } catch {
     return false;
   }
+}
+
+const defaultOnProcessExit = (listener: () => void): (() => void) => {
+  process.on('exit', listener);
+  return () => {
+    process.off('exit', listener);
+  };
+};
+
+export function createNativeRunnerAdapter(deps: {
+  fs: IRunnerFs;
+  processes: IWindowsRunnerProcess | null;
+  platform: string;
+  execPath: string;
+  systemRoot: string | undefined;
+  clock: {
+    setTimeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
+    clearTimeout(handle: unknown): void;
+  };
+  native: INativeRuntimeBindings;
+}): INativeRunnerRuntime {
+  const nativeConsole =
+    deps.platform === 'win32' && deps.processes
+      ? createWindowsNativeConsole({
+          fs: deps.fs,
+          snapshot: deps.native.snapshot,
+          processes: deps.processes,
+          platform: deps.platform,
+          execPath: deps.execPath,
+          systemRoot: deps.systemRoot,
+          appInstallDir: deps.native.appInstallDir,
+        })
+      : null;
+  return {
+    capability: () =>
+      nativeConsole ? nativeConsole.capability() : Promise.resolve(false),
+    preflight: (shell) =>
+      nativeConsole
+        ? nativeConsole.preflight(shell)
+        : Promise.resolve({ status: 'unavailable' }),
+    createSession: (input) => {
+      if (!nativeConsole)
+        throw new AppException(
+          503,
+          'Runner process adapter unavailable',
+          'SERVICE_UNAVAILABLE',
+        );
+      const native = deps.native;
+      return createNativeSession(
+        {
+          platform: nativeConsole,
+          spawn: native.spawn ?? spawnNativeNode,
+          writeIntent: () => input.writeIntent(),
+          ...(input.beforeInit
+            ? { beforeInit: () => input.beforeInit!() }
+            : {}),
+          persist: (snapshot) => native.persist(snapshot),
+          callbacks: input.callbacks,
+          onProcessExit: native.onProcessExit ?? defaultOnProcessExit,
+          setTimer: (callback, ms) => deps.clock.setTimeout(callback, ms),
+          clearTimer: (handle) => deps.clock.clearTimeout(handle),
+        },
+        {
+          identity: input.identity,
+          fingerprint: input.fingerprint,
+          apiPid: deps.native.apiPid ?? process.pid,
+          preflight: input.preflight,
+          init: input.init,
+          initialTimeoutMs: input.initialTimeoutMs,
+          handshakeTimeoutMs:
+            input.handshakeTimeoutMs ?? deps.native.handshakeTimeoutMs,
+        },
+      );
+    },
+  };
 }
 
 export function createNpmRunnerRuntime(
@@ -187,7 +287,23 @@ export function createNpmRunnerRuntime(
       refreshProject: (path) => scanner.refreshProject(path),
       clearDiskUsage: () => disk.clearCache(),
       staleAnalysis: (path) => projects.invalidateAfterMutation(path),
+      ...(projects.invalidateAllAfterMutation
+        ? { staleAllAnalyses: () => projects.invalidateAllAfterMutation!() }
+        : {}),
     },
+    ...(bindings.native
+      ? {
+          native: createNativeRunnerAdapter({
+            fs,
+            processes,
+            platform: host.platform,
+            execPath,
+            systemRoot: host.env.SystemRoot,
+            clock,
+            native: bindings.native,
+          }),
+        }
+      : {}),
     launch: (command, childEnv, callbacks) => {
       if (!processes)
         throw new AppException(
