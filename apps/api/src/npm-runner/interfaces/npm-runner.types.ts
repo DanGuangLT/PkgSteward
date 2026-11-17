@@ -42,6 +42,11 @@ export const RUN_FAILURE_CODES = [
   'SCRIPT_NAME_UNSUPPORTED',
   'READERS_RUNNING',
   'RUNNING',
+  'REQUEST_MISMATCH',
+  'NATIVE_CONSOLE_UNAVAILABLE',
+  'NATIVE_PROTOCOL_ERROR',
+  'SESSION_INTERRUPTED',
+  'RECOVERY_HOLD',
   'SPAWN_FAILED',
   'COMMAND_FAILED',
   'CANCELLED',
@@ -64,6 +69,47 @@ export const RUN_WARNING_CODES = [
 ] as const;
 export type RunWarningCode = (typeof RUN_WARNING_CODES)[number];
 export type RunnerManager = Extract<ProjectManager, 'npm' | 'pnpm'>;
+export const CONSOLE_SHELLS = ['cmd', 'powershell'] as const;
+export type NativeShell = (typeof CONSOLE_SHELLS)[number];
+export type ConsoleShell = NativeShell;
+export const NATIVE_SESSION_PHASES = [
+  'starting',
+  'initial_running',
+  'initial_finished',
+  'shell_open',
+  'stopping',
+  'closed',
+  'lost',
+] as const;
+export type NativeSessionPhase = (typeof NATIVE_SESSION_PHASES)[number];
+export interface IRunCommandResult {
+  exitCode: number | null;
+  signal: string | null;
+}
+export interface IRunRecoveryHold {
+  active: boolean;
+  reason: string;
+  journalPath: string;
+}
+export interface IRunLatestHold {
+  recoveryHold: IRunRecoveryHold;
+  job: null;
+}
+export type RunLatestResult = IRunJob | IRunLatestHold;
+export interface IRecoveryClearRequest {
+  confirm: true;
+}
+export interface IRecoveryClearResult {
+  cleared: boolean;
+  recoveryHold: IRunRecoveryHold | null;
+}
+export interface INativeConsoleMeta {
+  shell: ConsoleShell;
+  generation: number;
+  phase: NativeSessionPhase;
+  available: boolean;
+  sessionResult: IRunCommandResult | null;
+}
 
 export interface IRunRequest {
   path: string;
@@ -72,9 +118,7 @@ export interface IRunRequest {
   requestId: string;
   package?: string;
   script?: string;
-  terminal?: boolean;
-  cols?: number;
-  rows?: number;
+  consoleShell?: ConsoleShell;
 }
 export interface IRunStart {
   jobId: string;
@@ -94,47 +138,11 @@ export interface IRunnerContext {
   manager: ProjectManager;
   version: string | null;
   available: boolean;
-  terminalAvailable?: boolean;
+  nativeConsoleAvailable?: boolean;
+  recoveryHold?: IRunRecoveryHold | null;
   reason: RunFailureCode | null;
   scripts: IRunnerScript[];
   warnings: RunWarningCode[];
-}
-export interface IRunTerminalMeta {
-  mode: 'pty';
-  generation: number;
-  available: boolean;
-  ready: boolean;
-  firstCursor: number;
-  endCursor: number;
-  droppedBytes: number;
-  writerGeneration: number | null;
-  inputBlocked: boolean;
-}
-export interface ITerminalClaimBody {
-  requestId: string;
-  generation: number;
-  tabId: string;
-  takeover: boolean;
-}
-export interface ITerminalWriterBody {
-  requestId: string;
-  generation: number;
-  tabId: string;
-  token: string;
-  writerGeneration: number;
-}
-export interface ITerminalInputAckBody extends ITerminalWriterBody {
-  sequence: number;
-}
-export interface ITerminalInputBody extends ITerminalInputAckBody {
-  text: string;
-}
-export interface ITerminalResizeBody extends ITerminalWriterBody {
-  cols: number;
-  rows: number;
-}
-export interface ITerminalResizeResult {
-  queued: boolean;
 }
 export interface IRunJob extends IRunStart {
   requestPath: string;
@@ -162,7 +170,9 @@ export interface IRunJob extends IRunStart {
   firstCursor: number;
   endCursor: number;
   droppedBytes: number;
-  terminal?: IRunTerminalMeta | null;
+  nativeSession?: INativeConsoleMeta | null;
+  initialCommand?: IRunCommandResult | null;
+  recoveryHold?: IRunRecoveryHold | null;
 }
 export interface IRunLogChunk {
   seq: number;

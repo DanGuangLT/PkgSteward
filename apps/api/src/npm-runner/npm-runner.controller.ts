@@ -29,29 +29,24 @@ import { plainToInstance } from 'class-transformer';
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { DangerousOperation } from '@/common/decorators/metadata';
 import { PollingEndpoint } from '@/common/decorators/throttle.decorator';
+import { ClearRecoveryHoldDto } from '@/npm-runner/dto/clear-recovery-hold.dto';
 import { RunnerPathQueryDto } from '@/npm-runner/dto/runner-path-query.dto';
 import { StartNpmRunDto } from '@/npm-runner/dto/start-npm-run.dto';
 import { RunIdParamDto } from '@/npm-runner/dto/run-id-param.dto';
 import { RunLogQueryDto } from '@/npm-runner/dto/run-log-query.dto';
 import {
-  TerminalClaimDto,
-  TerminalInputAckDto,
-  TerminalInputDto,
-  TerminalOutputQueryDto,
-  TerminalResizeDto,
-} from '@/npm-runner/dto/terminal-run.dto';
-import {
+  RecoveryClearResultEntity,
   RunnerContextEntity,
   RunStartEntity,
   RunJobEntity,
+  RunLatestHoldEntity,
   RunLogPageEntity,
-  RunTerminalMetaEntity,
-  TerminalInputAckEntity,
-  TerminalOutputChunkEntity,
-  TerminalOutputPageEntity,
-  TerminalResizeResultEntity,
-  TerminalWriterEntity,
+  RunRecoveryHoldEntity,
 } from '@/npm-runner/entities/npm-runner.entity';
+import type {
+  IRecoveryClearResult,
+  RunLatestResult,
+} from '@/npm-runner/interfaces/npm-runner.types';
 import type { INpmRunnerController } from '@/npm-runner/interfaces/npm-runner.controller.interface';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
 
@@ -84,13 +79,10 @@ const errorEnvelope = (statusCode: number, code: string) => ({
   RunnerContextEntity,
   RunStartEntity,
   RunJobEntity,
+  RunLatestHoldEntity,
+  RunRecoveryHoldEntity,
+  RecoveryClearResultEntity,
   RunLogPageEntity,
-  RunTerminalMetaEntity,
-  TerminalOutputChunkEntity,
-  TerminalOutputPageEntity,
-  TerminalWriterEntity,
-  TerminalInputAckEntity,
-  TerminalResizeResultEntity,
 )
 @ApiBadRequestResponse({ schema: errorEnvelope(400, 'VALIDATION_ERROR') })
 @ApiForbiddenResponse({ schema: errorEnvelope(403, 'FORBIDDEN') })
@@ -103,7 +95,15 @@ const errorEnvelope = (statusCode: number, code: string) => ({
       details: {
         type: 'object',
         properties: {
-          reason: { type: 'string', enum: ['RUNNING', 'READERS_RUNNING'] },
+          reason: {
+            type: 'string',
+            enum: [
+              'RUNNING',
+              'READERS_RUNNING',
+              'RECOVERY_HOLD',
+              'REQUEST_MISMATCH',
+            ],
+          },
           jobId: { type: 'string', format: 'uuid' },
           requestPath: { type: 'string' },
         },
@@ -160,13 +160,39 @@ export class NpmRunnerController implements INpmRunnerController {
   @Get('latest')
   @PollingEndpoint()
   @Header('Cache-Control', 'no-store')
-  @ApiOperation({ summary: 'Read the latest retained run' })
+  @ApiOperation({ summary: 'Read the latest retained run or recovery hold' })
   @ApiOkResponse({ schema: envelope(RunJobEntity, 200) })
-  latest(): IApiResponse<RunJobEntity> {
+  latest(): IApiResponse<RunLatestResult> {
+    const result = this.service.latest();
     return {
       statusCode: 200,
       message: 'Latest command run retrieved successfully',
-      data: plainToInstance(RunJobEntity, this.service.latest()),
+      data:
+        'job' in result && result.job === null
+          ? plainToInstance(RunLatestHoldEntity, result)
+          : plainToInstance(RunJobEntity, result),
+    };
+  }
+
+  @Post('recovery/clear')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @DangerousOperation()
+  @ApiOperation({
+    summary:
+      'Clear an abandoned or corrupt native terminal recovery hold after explicit verification',
+  })
+  @ApiOkResponse({ schema: envelope(RecoveryClearResultEntity, 200) })
+  async clearRecovery(
+    @Body() body: ClearRecoveryHoldDto,
+  ): Promise<IApiResponse<IRecoveryClearResult>> {
+    return {
+      statusCode: 200,
+      message: 'Native recovery hold cleared successfully',
+      data: plainToInstance(
+        RecoveryClearResultEntity,
+        await this.service.clearRecovery(body),
+      ),
     };
   }
 
@@ -223,113 +249,6 @@ export class NpmRunnerController implements INpmRunnerController {
       statusCode,
       message: 'Command cancellation processed successfully',
       data: plainToInstance(RunJobEntity, job),
-    };
-  }
-
-  @Get(':id/terminal-output')
-  @PollingEndpoint()
-  @Header('Cache-Control', 'no-store')
-  @ApiOperation({
-    summary:
-      'Read a bounded terminal output page by generation and UTF-8 cursor',
-  })
-  @ApiOkResponse({ schema: envelope(TerminalOutputPageEntity, 200) })
-  terminalOutput(
-    @Param() params: RunIdParamDto,
-    @Query() query: TerminalOutputQueryDto,
-  ): IApiResponse<TerminalOutputPageEntity> {
-    return {
-      statusCode: 200,
-      message: 'Terminal output retrieved successfully',
-      data: plainToInstance(
-        TerminalOutputPageEntity,
-        this.service.terminalOutput(params.id, query.generation, query.cursor),
-      ),
-    };
-  }
-
-  @Post(':id/terminal-claim')
-  @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
-  @ApiOperation({
-    summary: 'Claim or explicitly take over the single active terminal writer',
-  })
-  @ApiOkResponse({ schema: envelope(TerminalWriterEntity, 200) })
-  terminalClaim(
-    @Param() params: RunIdParamDto,
-    @Body() body: TerminalClaimDto,
-  ): IApiResponse<TerminalWriterEntity> {
-    return {
-      statusCode: 200,
-      message: 'Terminal writer claimed successfully',
-      data: plainToInstance(
-        TerminalWriterEntity,
-        this.service.claimTerminal(params.id, body),
-      ),
-    };
-  }
-
-  @Post(':id/terminal-input')
-  @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
-  @DangerousOperation()
-  @ApiOperation({
-    summary: 'Send one sequenced interactive terminal input chunk',
-  })
-  @ApiOkResponse({ schema: envelope(TerminalInputAckEntity, 200) })
-  async terminalInput(
-    @Param() params: RunIdParamDto,
-    @Body() body: TerminalInputDto,
-  ): Promise<IApiResponse<TerminalInputAckEntity>> {
-    return {
-      statusCode: 200,
-      message: 'Terminal input processed successfully',
-      data: plainToInstance(
-        TerminalInputAckEntity,
-        await this.service.terminalInput(params.id, body),
-      ),
-    };
-  }
-
-  @Post(':id/terminal-input-ack')
-  @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
-  @ApiOperation({
-    summary: 'Read an existing terminal input receipt without re-sending input',
-  })
-  @ApiOkResponse({ schema: envelope(TerminalInputAckEntity, 200) })
-  terminalInputAck(
-    @Param() params: RunIdParamDto,
-    @Body() body: TerminalInputAckDto,
-  ): IApiResponse<TerminalInputAckEntity> {
-    return {
-      statusCode: 200,
-      message: 'Terminal input receipt retrieved successfully',
-      data: plainToInstance(
-        TerminalInputAckEntity,
-        this.service.terminalInputAck(params.id, body),
-      ),
-    };
-  }
-
-  @Post(':id/terminal-resize')
-  @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
-  @ApiOperation({
-    summary: 'Queue a coalesced interactive terminal resize request',
-  })
-  @ApiOkResponse({ schema: envelope(TerminalResizeResultEntity, 200) })
-  terminalResize(
-    @Param() params: RunIdParamDto,
-    @Body() body: TerminalResizeDto,
-  ): IApiResponse<TerminalResizeResultEntity> {
-    return {
-      statusCode: 200,
-      message: 'Terminal resize queued successfully',
-      data: plainToInstance(
-        TerminalResizeResultEntity,
-        this.service.terminalResize(params.id, body),
-      ),
     };
   }
 }

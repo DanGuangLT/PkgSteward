@@ -11,4 +11,5 @@ export interface IProjectsService {
   cancel(jobId: string): IProjectAnalysisJob;
   hasRunningAnalysis(): boolean;
   invalidateAfterMutation(path: string): void;
+  invalidateAllAfterMutation(): void;
 }

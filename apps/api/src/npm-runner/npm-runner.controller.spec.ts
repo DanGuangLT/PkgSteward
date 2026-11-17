@@ -11,31 +11,22 @@ import { POLLING_ENDPOINT_KEY } from '@/common/decorators/throttle.decorator';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 import type { INpmRunnerService } from '@/npm-runner/interfaces/npm-runner.service.interface';
 import type {
+  IRecoveryClearRequest,
+  IRecoveryClearResult,
   IRunJob,
   IRunLogPage,
   IRunRequest,
   IRunStart,
   IRunnerContext,
-  ITerminalClaimBody,
-  ITerminalInputAckBody,
-  ITerminalInputBody,
-  ITerminalResizeBody,
-  ITerminalResizeResult,
+  RunLatestResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
-import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
-import type {
-  ITerminalInputAck,
-  ITerminalWriter,
-} from '@/npm-runner/terminal/terminal-control';
 import {
+  RecoveryClearResultEntity,
   RunJobEntity,
+  RunLatestHoldEntity,
   RunnerContextEntity,
   RunLogPageEntity,
   RunStartEntity,
-  TerminalInputAckEntity,
-  TerminalOutputPageEntity,
-  TerminalResizeResultEntity,
-  TerminalWriterEntity,
 } from '@/npm-runner/entities/npm-runner.entity';
 import { NpmRunnerController } from '@/npm-runner/npm-runner.controller';
 import { NpmRunnerService } from '@/npm-runner/npm-runner.service';
@@ -98,7 +89,11 @@ describe('NpmRunnerController contract', () => {
       start: jest.fn<Promise<IRunStart>, [IRunRequest]>(() =>
         Promise.resolve({ jobId: id, requestId, status: 'running' }),
       ),
-      latest: jest.fn(job),
+      latest: jest.fn<RunLatestResult, []>(job),
+      clearRecovery: jest.fn<
+        Promise<IRecoveryClearResult>,
+        [IRecoveryClearRequest]
+      >(() => Promise.resolve({ cleared: true, recoveryHold: null })),
       get: jest.fn<IRunJob, [string]>(job),
       logs: jest.fn<IRunLogPage, [string, number]>(() => ({
         jobId: id,
@@ -112,55 +107,6 @@ describe('NpmRunnerController contract', () => {
       cancel: jest.fn<Promise<IRunJob>, [string]>(() =>
         Promise.resolve({ ...job(), status: 'stopping' }),
       ),
-      terminalOutput: jest.fn<ITerminalOutputPage, [string, number, number]>(
-        () => ({
-          jobId: id,
-          generation: 1,
-          firstCursor: 0,
-          nextCursor: 0,
-          endCursor: 0,
-          gap: false,
-          truncated: false,
-          parserReset: false,
-          droppedBytes: 0,
-          chunks: [],
-        }),
-      ),
-      claimTerminal: jest.fn<ITerminalWriter, [string, ITerminalClaimBody]>(
-        () => ({
-          tabId: requestId,
-          token: requestId,
-          writerGeneration: 1,
-        }),
-      ),
-      terminalInput: jest.fn<
-        Promise<ITerminalInputAck>,
-        [string, ITerminalInputBody]
-      >(() =>
-        Promise.resolve({
-          jobId: id,
-          generation: 1,
-          writerGeneration: 1,
-          sequence: 1,
-          status: 'delivered',
-          receivedAt: 1000,
-        }),
-      ),
-      terminalInputAck: jest.fn<
-        ITerminalInputAck,
-        [string, ITerminalInputAckBody]
-      >(() => ({
-        jobId: id,
-        generation: 1,
-        writerGeneration: 1,
-        sequence: 1,
-        status: 'delivered',
-        receivedAt: 1000,
-      })),
-      terminalResize: jest.fn<
-        ITerminalResizeResult,
-        [string, ITerminalResizeBody]
-      >(() => ({ queued: true })),
     };
     moduleRef = await Test.createTestingModule({
       controllers: [NpmRunnerController],
@@ -194,58 +140,20 @@ describe('NpmRunnerController contract', () => {
     );
     expect(service.logs.mock.calls[0]).toEqual([id, 12]);
     expect(controller.get({ id }).data).not.toHaveProperty('chunks');
-    expect(
-      controller.terminalOutput({ id }, { generation: 1, cursor: 0 }).data,
-    ).toBeInstanceOf(TerminalOutputPageEntity);
-    expect(
-      controller.terminalClaim(
-        { id },
-        { requestId, generation: 1, tabId: requestId, takeover: false },
-      ).data,
-    ).toBeInstanceOf(TerminalWriterEntity);
-    expect(
-      (
-        await controller.terminalInput(
-          { id },
-          {
-            requestId,
-            generation: 1,
-            tabId: requestId,
-            token: requestId,
-            writerGeneration: 1,
-            sequence: 1,
-            text: 'y\r',
-          },
-        )
-      ).data,
-    ).toBeInstanceOf(TerminalInputAckEntity);
-    expect(
-      controller.terminalInputAck(
-        { id },
-        {
-          requestId,
-          generation: 1,
-          tabId: requestId,
-          token: requestId,
-          writerGeneration: 1,
-          sequence: 1,
-        },
-      ).data,
-    ).toBeInstanceOf(TerminalInputAckEntity);
-    expect(
-      controller.terminalResize(
-        { id },
-        {
-          requestId,
-          generation: 1,
-          tabId: requestId,
-          token: requestId,
-          writerGeneration: 1,
-          cols: 80,
-          rows: 24,
-        },
-      ).data,
-    ).toBeInstanceOf(TerminalResizeResultEntity);
+
+    service.latest.mockReturnValue({
+      recoveryHold: {
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath: 'D:\\TEST\\data\\native-project-terminal-session.json',
+      },
+      job: null,
+    });
+    expect(controller.latest().data).toBeInstanceOf(RunLatestHoldEntity);
+
+    const clearResult = await controller.clearRecovery({ confirm: true });
+    expect(clearResult.statusCode).toBe(200);
+    expect(clearResult.data).toBeInstanceOf(RecoveryClearResultEntity);
   });
 
   it.each([
@@ -291,14 +199,10 @@ describe('NpmRunnerController contract', () => {
       'context',
       'start',
       'latest',
+      'clearRecovery',
       'get',
       'logs',
       'cancel',
-      'terminalOutput',
-      'terminalClaim',
-      'terminalInput',
-      'terminalInputAck',
-      'terminalResize',
     ] as const) {
       const descriptor = Object.getOwnPropertyDescriptor(
         NpmRunnerController.prototype,
@@ -307,27 +211,20 @@ describe('NpmRunnerController contract', () => {
       const handler: unknown = descriptor?.value;
       if (typeof handler !== 'function')
         throw new Error(`Missing ${name} handler`);
-      const polls = ['latest', 'get', 'logs', 'terminalOutput'].includes(name);
+      const polls = ['latest', 'get', 'logs'].includes(name);
       expect(Reflect.getMetadata(POLLING_ENDPOINT_KEY, handler)).toBe(
         polls ? true : undefined,
       );
       expect(
         Boolean(Reflect.getMetadata(IS_DANGEROUS_OPERATION_KEY, handler)),
-      ).toBe(['start', 'cancel', 'terminalInput'].includes(name));
+      ).toBe(['start', 'clearRecovery', 'cancel'].includes(name));
       for (const throttle of THROTTLER_NAMES) {
         expect(Reflect.getMetadata(`THROTTLER:SKIP${throttle}`, handler)).toBe(
           polls ? true : undefined,
         );
       }
       expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(
-        [
-          'start',
-          'cancel',
-          'terminalClaim',
-          'terminalInput',
-          'terminalInputAck',
-          'terminalResize',
-        ].includes(name)
+        ['start', 'clearRecovery', 'cancel'].includes(name)
           ? RequestMethod.POST
           : RequestMethod.GET,
       );
@@ -350,15 +247,12 @@ describe('NpmRunnerController contract', () => {
         app,
         new DocumentBuilder().build(),
       );
-      expect(Object.keys(doc.paths)).toHaveLength(11);
+      expect(Object.keys(doc.paths)).toHaveLength(7);
       for (const [route, item] of Object.entries(doc.paths)) {
         const isPost =
           route === '/npm-runs' ||
-          route.endsWith('/cancel') ||
-          route.endsWith('/terminal-claim') ||
-          route.endsWith('/terminal-input') ||
-          route.endsWith('/terminal-input-ack') ||
-          route.endsWith('/terminal-resize');
+          route.endsWith('/recovery/clear') ||
+          route.endsWith('/cancel');
         const operation = isPost ? item.post : item.get;
         expect(operation?.summary).toBeTruthy();
         expect(operation?.responses['400']).toBeDefined();
@@ -392,12 +286,9 @@ describe('NpmRunnerController contract', () => {
         'RunStartEntity',
         'RunJobEntity',
         'RunLogPageEntity',
-        'RunTerminalMetaEntity',
-        'TerminalOutputChunkEntity',
-        'TerminalOutputPageEntity',
-        'TerminalWriterEntity',
-        'TerminalInputAckEntity',
-        'TerminalResizeResultEntity',
+        'RunRecoveryHoldEntity',
+        'RunLatestHoldEntity',
+        'RecoveryClearResultEntity',
       ]) {
         expect(doc.components?.schemas?.[entity]).toBeDefined();
       }

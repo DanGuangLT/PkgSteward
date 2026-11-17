@@ -3,8 +3,8 @@ import { Geist_Mono, Inter } from "next/font/google"
 import { NextIntlClientProvider } from "next-intl"
 import { getLocale, getTranslations } from "next-intl/server"
 
+import { NativeSessionStatus } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerProvider } from "@/components/features/npm-runner/npm-runner-provider"
-import { TerminalDock } from "@/components/features/npm-runner/terminal-dock"
 import { TopNav } from "@/components/layout/top-nav"
 import { ThemeProvider } from "@/components/theme/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
@@ -63,7 +63,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                   <main id="main-content" className="flex flex-1 flex-col">
                     {children}
                   </main>
-                  <TerminalDock />
+                  <NativeSessionStatus />
                   <Toaster />
                 </NpmRunnerProvider>
               </NavigationContinuityProvider>

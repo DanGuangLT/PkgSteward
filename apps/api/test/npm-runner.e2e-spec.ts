@@ -23,6 +23,7 @@ import { TransformInterceptor } from '@/common/interceptors/transform.intercepto
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { createHostOriginMiddleware } from '@/common/middleware/host-origin.middleware';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -39,15 +40,8 @@ import type {
   IRunLogPage,
   IRunStart,
   IRunnerContext,
-  ITerminalResizeResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
-import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
-import type {
-  ITerminalInputAck,
-  ITerminalWriter,
-} from '@/npm-runner/terminal/terminal-control';
 import {
-  canResolveNodePty,
   createNpmRunnerRuntime,
   NpmRunnerModule,
 } from '@/npm-runner/npm-runner.module';
@@ -57,12 +51,6 @@ import type {
   IRunProcessCallbacks,
   IRunProcessExit,
 } from '@/npm-runner/execution/runner-process';
-import type { ITerminalRunCallbacks } from '@/npm-runner/terminal/terminal-worker-process';
-import type {
-  ITerminalInputFrame,
-  ITerminalSize,
-  TerminalDeliveryStatus,
-} from '@/npm-runner/terminal/terminal-protocol';
 import { resolveRunnerTool } from '@/npm-runner/toolchain/runner-tool';
 import {
   fsFixture,
@@ -101,10 +89,17 @@ jest.mock('node:fs/promises', () => {
 @Module({
   providers: [
     { provide: ConfigService, useValue: new ConfigService() },
+    {
+      provide: AppPathsService,
+      useValue: {
+        dataDir: 'D:\\TEST\\data',
+        appInstallDir: 'D:\\TEST\\api',
+      },
+    },
     { provide: PathGuardService, useValue: {} },
     { provide: AuditLogService, useValue: {} },
   ],
-  exports: [ConfigService, PathGuardService, AuditLogService],
+  exports: [ConfigService, AppPathsService, PathGuardService, AuditLogService],
 })
 class RunnerTestAdaptersModule {}
 
@@ -131,11 +126,6 @@ function fixture() {
     resolveRunnerTool(manager, input.snapshot, input.fs);
   const gate = new MutationGateService();
   let callbacks: IRunProcessCallbacks | undefined;
-  let terminalCallbacks: ITerminalRunCallbacks | undefined;
-  let resolveReady!: (ready: boolean) => void;
-  const ready = new Promise<boolean>((resolve) => {
-    resolveReady = resolve;
-  });
   let complete!: (exit: IRunProcessExit) => void;
   const settled = new Promise<IRunProcessExit>((resolve) => {
     complete = resolve;
@@ -151,7 +141,6 @@ function fixture() {
     };
     complete(exit);
     callbacks?.onExit(exit);
-    terminalCallbacks?.onExit(exit);
   };
   const stop = jest.fn(() => {
     finish({ exitCode: null, signal: 'SIGTERM' });
@@ -163,32 +152,6 @@ function fixture() {
   >((_c, _e, listener) => {
     callbacks = listener;
     return { pid: 123, settled, stop };
-  });
-  const terminalWrites: ITerminalInputFrame[] = [];
-  const terminalResizes: { size: ITerminalSize; wg: number }[] = [];
-  const terminalWrite = jest.fn(
-    (frame: ITerminalInputFrame): Promise<TerminalDeliveryStatus> => {
-      terminalWrites.push(frame);
-      return Promise.resolve('delivered');
-    },
-  );
-  const terminalResize = jest.fn((size: ITerminalSize, wg: number) => {
-    terminalResizes.push({ size, wg });
-    return Promise.resolve();
-  });
-  const launchTerminal = jest.fn<
-    ReturnType<NonNullable<INpmRunnerRuntime['launchTerminal']>>,
-    Parameters<NonNullable<INpmRunnerRuntime['launchTerminal']>>
-  >((_c, _e, listener) => {
-    terminalCallbacks = listener;
-    return {
-      pid: 456,
-      ready,
-      settled,
-      stop,
-      write: terminalWrite,
-      resize: terminalResize,
-    };
   });
   let deadline: (() => void) | undefined;
   let clockOffsetMs = 0;
@@ -220,14 +183,16 @@ function fixture() {
     audit: {
       writeIntent: () => Promise.resolve(),
       writeResult: () => Promise.resolve(),
+      writeRecoveryIntent: () => Promise.resolve(),
+      writeRecoveryResult: () => Promise.resolve(),
     },
     invalidation: {
       refreshProject,
       clearDiskUsage: clearCache,
       staleAnalysis: invalidateAfterMutation,
+      staleAllAnalyses: () => invalidateAfterMutation(root),
     },
     launch,
-    launchTerminal,
     now: () => new Date(Date.now() + clockOffsetMs),
     uuid: () => id,
     setTimer: (callback, ms) => {
@@ -240,25 +205,14 @@ function fixture() {
     if (!callbacks) throw new Error('TEST no fake child');
     callbacks.onOutput('stdout', bytes);
   };
-  const terminalOutput = (text: string) => {
-    if (!terminalCallbacks) throw new Error('TEST no fake terminal child');
-    terminalCallbacks.onTerminalOutput?.(text);
-    terminalCallbacks.onOutput('stdout', Buffer.from(text, 'utf8'));
-  };
   return {
     input,
     gate,
     runtime,
     launch,
-    launchTerminal,
-    resolveReady,
-    terminalWrite,
-    terminalWrites,
-    terminalResizes,
     stop,
     finish,
     output,
-    terminalOutput,
     audit,
     refreshProject,
     clearCache,
@@ -762,38 +716,12 @@ describe('NpmRunner HTTP flow (real Nest, mocked IO)', () => {
       refreshRequired: false,
     });
     expect(result.result).not.toContain('TEST_VALUE');
-    expect(typeof runtime.launchTerminal).toBe('function');
-
-    expect(canResolveNodePty(() => 'C:\\TEST\\node-pty\\index.js')).toBe(true);
-    expect(
-      canResolveNodePty(() => {
-        throw new Error('Cannot find module');
-      }),
-    ).toBe(false);
-    const noTerminalRuntime = createNpmRunnerRuntime({
-      ...bindings,
-      terminalAvailable: false,
-    });
-    expect(typeof noTerminalRuntime.launchTerminal).toBe('undefined');
   });
 
-  it('terminal HTTP flow: context -> start(terminal) -> ready gate -> claim/takeover -> output/input/ack/resize -> cancel', async () => {
-    let uuidSeq = 0;
-    const token1 = '00000000-0000-4000-8000-000000000041';
-    const token2 = '00000000-0000-4000-8000-000000000042';
-    const tab1 = '00000000-0000-4000-8000-000000000051';
-    const tab2 = '00000000-0000-4000-8000-000000000052';
-    f.runtime.uuid = () => {
-      uuidSeq++;
-      if (uuidSeq === 1) return id;
-      return uuidSeq === 2 ? token1 : token2;
-    };
-
+  it('rejects retired terminal fields on start and returns 404 for retired terminal endpoints', async () => {
     const app = await open(100);
     const context = await getContext(app);
-    expect(context.terminalAvailable).toBe(true);
-
-    const startRes = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post('/api/v1/npm-runs')
       .send({
         path: root,
@@ -801,187 +729,94 @@ describe('NpmRunner HTTP flow (real Nest, mocked IO)', () => {
         inputHash: context.inputHash,
         requestId,
         terminal: true,
-        cols: 100,
-        rows: 30,
       })
-      .expect(202);
-    expect((startRes.body as IApiResponse<IRunStart>).data?.jobId).toBe(id);
-    await tick();
-
-    // Claim rejected before ready
-    const preReadyClaim = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
-      .send({ requestId, generation: 1, tabId: tab1, takeover: false })
-      .expect(409);
-    expect(
-      (preReadyClaim.body as { details: { terminalCode: string } }).details
-        .terminalCode,
-    ).toBe('NOT_INITIALIZED');
-
-    f.resolveReady(true);
-    await tick();
-    expect((await poll(app)).terminal).toMatchObject({
-      mode: 'pty',
-      generation: 1,
-      available: true,
-      ready: true,
-      writerGeneration: null,
-      inputBlocked: false,
-    });
-
-    // Claim tab1; competing tab2 fails with WRITER_HELD; takeover transfers to tab2
-    const claim1 = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
-      .send({ requestId, generation: 1, tabId: tab1, takeover: false })
-      .expect(200);
-    const writer1 = (claim1.body as IApiResponse<ITerminalWriter>).data!;
-    expect(writer1).toEqual({
-      tabId: tab1,
-      token: token1,
-      writerGeneration: 1,
-    });
-
-    const conflictClaim = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
-      .send({ requestId, generation: 1, tabId: tab2, takeover: false })
-      .expect(409);
-    expect(
-      (conflictClaim.body as { details: { terminalCode: string } }).details
-        .terminalCode,
-    ).toBe('WRITER_HELD');
-
-    const claim2 = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
-      .send({ requestId, generation: 1, tabId: tab2, takeover: true })
-      .expect(200);
-    const writer2 = (claim2.body as IApiResponse<ITerminalWriter>).data!;
-    expect(writer2).toEqual({
-      tabId: tab2,
-      token: token2,
-      writerGeneration: 2,
-    });
-
-    // Output polling (no-store, unthrottled)
-    f.terminalOutput('prompt> ');
-    const outRes = await request(app.getHttpServer())
-      .get(`/api/v1/npm-runs/${id}/terminal-output`)
-      .query({ generation: 1, cursor: 0 })
-      .expect(200);
-    expect(outRes.headers['cache-control']).toBe('no-store');
-    const outPage = (outRes.body as IApiResponse<ITerminalOutputPage>).data!;
-    expect(outPage.chunks[0].text).toBe('prompt> ');
-    expect(outPage.nextCursor).toBe(8);
-
-    // Input delivery + read-only ack + resize
-    const inputRes = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-input`)
-      .send({
-        requestId,
-        generation: 1,
-        tabId: tab2,
-        token: writer2.token,
-        writerGeneration: 2,
-        sequence: 1,
-        text: 'SECRET_HTTP_INPUT\r',
-      })
-      .expect(200);
-    expect(
-      (inputRes.body as IApiResponse<ITerminalInputAck>).data,
-    ).toMatchObject({
-      jobId: id,
-      generation: 1,
-      writerGeneration: 2,
-      sequence: 1,
-      status: 'delivered',
-    });
-
-    const ackRes = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-input-ack`)
-      .send({
-        requestId,
-        generation: 1,
-        tabId: tab2,
-        token: writer2.token,
-        writerGeneration: 2,
-        sequence: 1,
-      })
-      .expect(200);
-    expect((ackRes.body as IApiResponse<ITerminalInputAck>).data?.status).toBe(
-      'delivered',
-    );
-
-    const resizeRes = await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-resize`)
-      .send({
-        requestId,
-        generation: 1,
-        tabId: tab2,
-        token: writer2.token,
-        writerGeneration: 2,
-        cols: 120,
-        rows: 40,
-      })
-      .expect(200);
-    expect(
-      (resizeRes.body as IApiResponse<ITerminalResizeResult>).data,
-    ).toEqual({ queued: true });
-    await tick();
-    expect(f.terminalResizes).toEqual([
-      { size: { cols: 120, rows: 40 }, wg: 2 },
-    ]);
-
-    // Reject invalid DTOs (400) and stale writer (409)
-    await request(app.getHttpServer())
-      .get(`/api/v1/npm-runs/${id}/terminal-output`)
-      .query({ generation: 0, cursor: 0 })
       .expect(400);
     await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-input`)
-      .send({
-        requestId,
-        generation: 1,
-        tabId: tab1,
-        token: writer1.token,
-        writerGeneration: 1,
-        sequence: 1,
-        text: 'stale',
-      })
-      .expect(409);
-
-    // Cancel and verify final read-only access
+      .get(`/api/v1/npm-runs/${id}/terminal-output`)
+      .expect(404);
     await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/cancel`)
+      .post(`/api/v1/npm-runs/${id}/terminal-claim`)
       .send({})
-      .expect(202);
-    await tick();
-    const finalJob = await poll(app);
-    expect(finalJob.status).toBe('cancelled');
-    expect(finalJob.terminal?.inputBlocked).toBe(true);
-    expect(JSON.stringify(finalJob)).not.toContain('SECRET_HTTP_INPUT');
-    expect(JSON.stringify(finalJob)).not.toContain(writer2.token);
+      .expect(404);
+  });
 
-    await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-input-ack`)
-      .send({
-        requestId,
-        generation: 1,
-        tabId: tab2,
-        token: writer2.token,
-        writerGeneration: 2,
-        sequence: 1,
-      })
+  it('exposes startup recoveryHold on context/latest/409 and validates POST /npm-runs/recovery/clear', async () => {
+    const journalPath = 'D:\\TEST\\data\\native-project-terminal-session.json';
+    f.runtime.recovery = {
+      journalPath,
+      evaluateOnStartup: jest.fn().mockResolvedValue({
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath,
+        hold: {
+          active: true,
+          reason: 'UNRESOLVED_NATIVE_SESSION',
+          journalPath,
+        },
+        snapshot: null,
+      }),
+      verifyClearable: jest.fn().mockResolvedValue({
+        clearable: true,
+        reason: null,
+        snapshot: null,
+      }),
+      removeMarkers: jest.fn().mockResolvedValue(undefined),
+    };
+    const app = await open(100);
+
+    const ctx = await getContext(app);
+    expect(ctx.recoveryHold).toEqual({
+      active: true,
+      reason: 'UNRESOLVED_NATIVE_SESSION',
+      journalPath,
+    });
+
+    const latestHold = await request(app.getHttpServer())
+      .get('/api/v1/npm-runs/latest')
       .expect(200);
-    await request(app.getHttpServer())
-      .post(`/api/v1/npm-runs/${id}/terminal-input`)
+    expect((latestHold.body as { data: unknown }).data).toEqual({
+      recoveryHold: {
+        active: true,
+        reason: 'UNRESOLVED_NATIVE_SESSION',
+        journalPath,
+      },
+      job: null,
+    });
+
+    const startBlocked = await request(app.getHttpServer())
+      .post('/api/v1/npm-runs')
       .send({
+        path: root,
+        action: 'install_all',
+        inputHash: ctx.inputHash,
         requestId,
-        generation: 1,
-        tabId: tab2,
-        token: writer2.token,
-        writerGeneration: 2,
-        sequence: 2,
-        text: 'after-cancel',
       })
       .expect(409);
+    expect(
+      (startBlocked.body as { details: { reason: string } }).details.reason,
+    ).toBe('RECOVERY_HOLD');
+
+    await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: false })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: true, extra: 'blocked' })
+      .expect(400);
+
+    const cleared = await request(app.getHttpServer())
+      .post('/api/v1/npm-runs/recovery/clear')
+      .send({ confirm: true })
+      .expect(200);
+    expect(cleared.headers['cache-control']).toBe('no-store');
+    expect((cleared.body as { data: unknown }).data).toEqual({
+      cleared: true,
+      recoveryHold: null,
+    });
+
+    await request(app.getHttpServer())
+      .get('/api/v1/npm-runs/latest')
+      .expect(404);
   });
 });

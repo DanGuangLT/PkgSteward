@@ -1,25 +1,58 @@
 import type {
   IRunJob,
+  IRunRecoveryHold,
   IRunnerCommand,
   IRunnerInputDeps,
+  NativeShell,
+  RunFailureCode,
 } from '@/npm-runner/interfaces/npm-runner.types';
+import type {
+  INativeRecoveryClearCheck,
+  INativeRecoveryStartup,
+} from '@/npm-runner/native-session/native-recovery';
 import type {
   IRunProcess,
   IRunProcessCallbacks,
 } from '@/npm-runner/execution/runner-process';
 import type {
-  ITerminalRunCallbacks,
-  ITerminalRunProcess,
-} from '@/npm-runner/terminal/terminal-worker-process';
+  INativeInitCommand,
+  INativeSessionIdentity,
+} from '@/npm-runner/native-session/native-protocol';
 import type {
-  ITerminalIdentity,
-  ITerminalSize,
-} from '@/npm-runner/terminal/terminal-protocol';
+  INativeSession,
+  INativeSessionCallbacks,
+} from '@/npm-runner/native-session/native-session';
+import type {
+  INativeConsolePreflight,
+  NativePreflightResult,
+} from '@/platform/windows/windows-native-console';
 import type { IWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 
 export const NPM_RUNNER_RUNTIME = Symbol('NPM_RUNNER_RUNTIME');
 export const NPM_RUNNER_FS = Symbol('NPM_RUNNER_FS');
 export const NPM_RUNNER_PROCESS = Symbol('NPM_RUNNER_PROCESS');
+export interface INativeSessionStartInput {
+  identity: INativeSessionIdentity;
+  fingerprint: string;
+  preflight: INativeConsolePreflight;
+  init: INativeInitCommand;
+  initialTimeoutMs?: number;
+  handshakeTimeoutMs?: number;
+  writeIntent(): Promise<void>;
+  beforeInit?(): Promise<void>;
+  callbacks: INativeSessionCallbacks;
+}
+export interface INativeRunnerRuntime {
+  capability(): Promise<boolean>;
+  preflight(shell: NativeShell): Promise<NativePreflightResult>;
+  createSession(input: INativeSessionStartInput): INativeSession;
+}
+export interface INativeRecoveryRuntime {
+  readonly journalPath: string;
+  evaluateOnStartup(): Promise<INativeRecoveryStartup>;
+  verifyClearable(): Promise<INativeRecoveryClearCheck>;
+  removeMarkers(identity?: INativeSessionIdentity): Promise<void>;
+}
 // Structural seams keep the runner independent of existing services' implementations.
 export interface INpmRunnerRuntime {
   input: IRunnerInputDeps;
@@ -36,24 +69,30 @@ export interface INpmRunnerRuntime {
   audit: {
     writeIntent(job: Readonly<IRunJob>): Promise<void>;
     writeResult(job: Readonly<IRunJob>): Promise<void>;
+    writeRecoveryIntent?(
+      operationId: string,
+      hold: Readonly<IRunRecoveryHold>,
+    ): Promise<void>;
+    writeRecoveryResult?(
+      operationId: string,
+      hold: Readonly<IRunRecoveryHold>,
+      outcome: 'cleared' | 'blocked' | 'failed',
+      errorCode?: RunFailureCode | null,
+    ): Promise<void>;
   };
   invalidation: {
     refreshProject(path: string): Promise<void>;
     clearDiskUsage(): void;
     staleAnalysis(path: string): void;
+    staleAllAnalyses?(): void;
   };
   launch(
     command: IRunnerCommand,
     env: NodeJS.ProcessEnv,
     callbacks: IRunProcessCallbacks,
   ): IRunProcess;
-  launchTerminal?(
-    command: IRunnerCommand,
-    env: NodeJS.ProcessEnv,
-    callbacks: ITerminalRunCallbacks,
-    identity: ITerminalIdentity,
-    initialSize?: ITerminalSize,
-  ): ITerminalRunProcess;
+  native?: INativeRunnerRuntime;
+  recovery?: INativeRecoveryRuntime;
   now(): Date;
   uuid(): string;
   setTimer(

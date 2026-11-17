@@ -1,4 +1,4 @@
-import type { DiskView } from "@/lib/api/types"
+import type { ConsoleShell, DiskView } from "@/lib/api/types"
 import {
   DEFAULT_PROJECT_FILTERS,
   PROJECT_ACTIVITY_OPTIONS,
@@ -417,6 +417,9 @@ export function formatProjectListUrl(
 export const PROJECT_DETAIL_TABS = ["overview", "files", "disk"] as const
 export type ProjectDetailTab = typeof PROJECT_DETAIL_TABS[number]
 export const projectDetailTabCodec = createEnumCodec<ProjectDetailTab>(1, PROJECT_DETAIL_TABS)
+
+export const RUNNER_SHELL_OPTIONS = ["cmd", "powershell"] as const
+export const runnerShellCodec = createEnumCodec<ConsoleShell>(1, RUNNER_SHELL_OPTIONS)
 
 export const diskUsagePrefsCodec: ViewStateCodec<DiskUsagePrefsState> = {
   version: 1,

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   AppException,
   NotFoundException,
@@ -9,21 +9,22 @@ import type { INpmRunnerService } from '@/npm-runner/interfaces/npm-runner.servi
 import { NPM_RUNNER_RUNTIME } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type { INpmRunnerRuntime } from '@/npm-runner/interfaces/npm-runner.runtime';
 import type {
+  IRecoveryClearRequest,
+  IRecoveryClearResult,
   IRunJob,
   IRunLogPage,
+  IRunRecoveryHold,
   IRunRequest,
   IRunStart,
   IRunnerContext,
   IRunnerInput,
   IRunnerInputDeps,
-  ITerminalClaimBody,
-  ITerminalInputAckBody,
-  ITerminalInputBody,
-  ITerminalResizeBody,
-  ITerminalResizeResult,
+  NativeSessionPhase,
   RunFailureCode,
+  RunLatestResult,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { RUN_FAILURE_CODES } from '@/npm-runner/interfaces/npm-runner.types';
+import { toComparable } from '@/common/utils/path.util';
 import {
   readRunnerInput,
   revalidateRunnerInput,
@@ -32,7 +33,10 @@ import {
   buildRunCommand,
   isRunnerScriptName,
 } from '@/npm-runner/execution/runner-command';
-import { buildRunnerEnvironment } from '@/npm-runner/toolchain/runner-environment';
+import {
+  buildInteractiveShellEnv,
+  buildRunnerEnvironment,
+} from '@/npm-runner/toolchain/runner-environment';
 import { runnerFailure } from '@/npm-runner/toolchain/runner-tool';
 import { createRunLogStore } from '@/npm-runner/execution/runner-logs';
 import type { IRunLogStore } from '@/npm-runner/execution/runner-logs';
@@ -40,41 +44,28 @@ import type {
   IRunProcess,
   IRunProcessExit,
 } from '@/npm-runner/execution/runner-process';
-import { TerminalOutputBuffer } from '@/npm-runner/terminal/terminal-buffer';
-import type { ITerminalOutputPage } from '@/npm-runner/terminal/terminal-buffer';
-import { TerminalControl } from '@/npm-runner/terminal/terminal-control';
+import type { INativeExitOutcome } from '@/npm-runner/native-session/native-console-supervisor';
+import type { INativeInitCommand } from '@/npm-runner/native-session/native-protocol';
 import type {
-  ITerminalInputAck,
-  ITerminalWriter,
-  TerminalControlState,
-} from '@/npm-runner/terminal/terminal-control';
-import {
-  assertTerminalIdentity,
-  terminalFailure,
-} from '@/npm-runner/terminal/terminal-protocol';
-import type {
-  ITerminalIdentity,
-  ITerminalSize,
-} from '@/npm-runner/terminal/terminal-protocol';
-
-interface ITerminalSession {
-  identity: ITerminalIdentity;
-  buffer: TerminalOutputBuffer;
-  control: TerminalControl | null;
-  ready: boolean;
-  knownEndCursor: number;
-  writerGeneration: number | null;
-  unresolved: { writerGeneration: number; sequence: number } | null;
-  controlState: TerminalControlState;
-}
+  INativeSession,
+  INativeSessionResult,
+  INativeSessionSnapshot,
+  NativeSessionPhase as InternalNativePhase,
+} from '@/npm-runner/native-session/native-session';
 
 interface IActiveRun {
   job: IRunJob;
   request: IRunRequest;
+  fingerprint: string;
   token: symbol;
   controller: AbortController;
   logs: IRunLogStore;
-  terminal: ITerminalSession | null;
+  useNative: boolean;
+  native: INativeSession | null;
+  nativeLaunched: boolean;
+  nativeResult: INativeSessionResult | null;
+  initialOutcome: INativeExitOutcome | null;
+  observedShellOpen: boolean;
   process: IRunProcess | null;
   outcome: IRunProcessExit | null;
   preflight: Promise<void> | null;
@@ -91,6 +82,37 @@ interface IActiveRun {
 }
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
+const NATIVE_PHASE_RANK: Readonly<Record<NativeSessionPhase, number>> = {
+  starting: 0,
+  initial_running: 1,
+  initial_finished: 2,
+  shell_open: 3,
+  stopping: 4,
+  closed: 5,
+  lost: 5,
+};
+const mapNativePhase = (phase: InternalNativePhase): NativeSessionPhase => {
+  switch (phase) {
+    case 'launching':
+    case 'supervisor_ready':
+    case 'bridge_starting':
+    case 'bridge_ready':
+      return 'starting';
+    case 'initial_running':
+      return 'initial_running';
+    case 'initial_finished':
+    case 'shell_starting':
+      return 'initial_finished';
+    case 'shell_running':
+      return 'shell_open';
+    case 'stopping':
+      return 'stopping';
+    case 'closed':
+      return 'closed';
+    case 'lost':
+      return 'lost';
+  }
+};
 const auditState = (job: IRunJob): string =>
   JSON.stringify({
     status: job.status,
@@ -103,20 +125,94 @@ const auditState = (job: IRunJob): string =>
   });
 
 @Injectable()
-export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
+export class NpmRunnerService
+  implements INpmRunnerService, OnModuleInit, OnModuleDestroy
+{
   private current: IActiveRun | null = null;
   private closed = false;
+  private recoveryHold: IRunRecoveryHold | null = null;
+  private recoveryHoldToken: symbol | null = null;
+  private recoveryReady: boolean;
+  private clearingRecoveryInFlight = false;
 
   constructor(
     @Inject(NPM_RUNNER_RUNTIME) private readonly runtime: INpmRunnerRuntime,
-  ) {}
+  ) {
+    this.recoveryReady = this.runtime.recovery === undefined;
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (!this.runtime.recovery) {
+      this.recoveryReady = true;
+      return;
+    }
+    let gateAcquisitionFailed = false;
+    try {
+      const startup = await this.runtime.recovery.evaluateOnStartup();
+      if (startup.active) {
+        this.recoveryHold = startup.hold
+          ? { ...startup.hold }
+          : {
+              active: true,
+              reason: startup.reason ?? 'UNRESOLVED_NATIVE_SESSION',
+              journalPath:
+                startup.journalPath ?? this.runtime.recovery.journalPath,
+            };
+        if (!this.recoveryHoldToken) {
+          const token = this.runtime.gate.tryEnter();
+          if (!token) {
+            gateAcquisitionFailed = true;
+            throw new AppException(
+              500,
+              'Failed to acquire startup recovery hold gate',
+              'INTERNAL_SERVER_ERROR',
+            );
+          }
+          this.recoveryHoldToken = token;
+        }
+      } else {
+        this.recoveryHold = null;
+      }
+    } catch (error) {
+      if (!this.recoveryHold) {
+        this.recoveryHold = {
+          active: true,
+          reason: 'CORRUPT_OR_PARTIAL_JOURNAL',
+          journalPath: this.runtime.recovery.journalPath,
+        };
+      }
+      if (!this.recoveryHoldToken) {
+        const token = this.runtime.gate.tryEnter();
+        if (!token) {
+          gateAcquisitionFailed = true;
+          if (error instanceof AppException) throw error;
+          throw new AppException(
+            500,
+            'Failed to acquire startup recovery hold gate',
+            'INTERNAL_SERVER_ERROR',
+          );
+        }
+        this.recoveryHoldToken = token;
+      }
+      if (error instanceof AppException) throw error;
+    } finally {
+      if (!gateAcquisitionFailed) {
+        this.recoveryReady = true;
+      }
+    }
+  }
 
   async context(path: string): Promise<IRunnerContext> {
-    const input = await readRunnerInput(
-      path,
-      this.runtime.input.getScanSnapshot(),
-      this.runtime.input,
-    );
+    const [input, nativeConsoleAvailable] = await Promise.all([
+      readRunnerInput(
+        path,
+        this.runtime.input.getScanSnapshot(),
+        this.runtime.input,
+      ),
+      this.runtime.native
+        ? this.runtime.native.capability()
+        : Promise.resolve(false),
+    ]);
     return {
       requestPath: input.requestPath,
       path: input.path,
@@ -125,10 +221,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       manager: input.manager,
       version: input.tool?.version ?? null,
       available: input.reason === null && input.tool !== null,
-      terminalAvailable:
-        this.runtime.input.platform === 'win32' &&
-        Boolean(this.runtime.processes) &&
-        typeof this.runtime.launchTerminal === 'function',
+      nativeConsoleAvailable,
+      recoveryHold: this.recoveryHold ? { ...this.recoveryHold } : null,
       reason: input.reason,
       scripts: input.manifest.scripts.map(({ name, command }) => ({
         name,
@@ -146,9 +240,51 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         'Runner is shutting down',
         'SERVICE_UNAVAILABLE',
       );
+    if (!this.recoveryReady || this.recoveryHold?.active) {
+      const hold: IRunRecoveryHold = this.recoveryHold
+        ? { ...this.recoveryHold }
+        : {
+            active: true,
+            reason: 'RECOVERY_LOADING',
+            journalPath: this.runtime.recovery?.journalPath ?? '',
+          };
+      throw new AppException(
+        409,
+        'Native terminal recovery hold is active',
+        'CONFLICT',
+        {
+          reason: 'RECOVERY_HOLD',
+          recoveryHold: hold,
+        },
+      );
+    }
     const retained = this.current;
-    if (retained?.job.requestId === input.requestId)
+    const consoleShell =
+      input.consoleShell === undefined ? 'cmd' : input.consoleShell;
+    if (consoleShell !== 'cmd' && consoleShell !== 'powershell')
+      throw new ValidationException('consoleShell must be cmd or powershell');
+    // Synchronous lexical comparison only; allowlist/realpath validation stays in preflight.
+    const fingerprint = JSON.stringify([
+      toComparable(input.path, this.runtime.input.platform),
+      input.action,
+      input.package ?? null,
+      input.script ?? null,
+      input.inputHash,
+      consoleShell,
+    ]);
+    if (retained?.job.requestId === input.requestId) {
+      if (retained.fingerprint !== fingerprint)
+        throw new AppException(
+          409,
+          'Request ID was used with different input',
+          'CONFLICT',
+          {
+            reason: 'REQUEST_MISMATCH',
+            jobId: retained.job.jobId,
+          },
+        );
       return Promise.resolve(this.startSnapshot(retained.job));
+    }
     if (
       retained &&
       (retained.job.gateHeld ||
@@ -184,16 +320,6 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         'SERVICE_UNAVAILABLE',
       );
     }
-    if (
-      input.terminal === true &&
-      typeof this.runtime.launchTerminal !== 'function'
-    ) {
-      throw new AppException(
-        503,
-        'Interactive terminal runner is unavailable',
-        'SERVICE_UNAVAILABLE',
-      );
-    }
     // No await between the reader predicates, gate acquisition and reservation.
     const token = this.runtime.gate.tryEnter();
     if (token === null)
@@ -204,20 +330,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     try {
       const started = this.runtime.now();
       const jobId = this.runtime.uuid();
-      const terminalIdentity: ITerminalIdentity | null =
-        input.terminal === true ? { jobId, generation: 1 } : null;
-      const terminal: ITerminalSession | null = terminalIdentity
-        ? {
-            identity: terminalIdentity,
-            buffer: new TerminalOutputBuffer(terminalIdentity),
-            control: null,
-            ready: false,
-            knownEndCursor: 0,
-            writerGeneration: null,
-            unresolved: null,
-            controlState: 'running',
-          }
-        : null;
+      const useNative = this.runtime.native !== undefined;
       const job: IRunJob = {
         jobId,
         requestId: input.requestId,
@@ -247,19 +360,16 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         firstCursor: 0,
         endCursor: 0,
         droppedBytes: 0,
-        ...(terminalIdentity
+        ...(useNative
           ? {
-              terminal: {
-                mode: 'pty',
-                generation: terminalIdentity.generation,
+              nativeSession: {
+                shell: consoleShell,
+                generation: 1,
+                phase: 'starting' as const,
                 available: true,
-                ready: false,
-                firstCursor: 0,
-                endCursor: 0,
-                droppedBytes: 0,
-                writerGeneration: null,
-                inputBlocked: false,
+                sessionResult: null,
               },
+              initialCommand: null,
             }
           : {}),
       };
@@ -274,11 +384,17 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       });
       active = {
         job,
-        request: { ...input },
+        request: { ...input, consoleShell },
+        fingerprint,
         token,
         controller: new AbortController(),
         logs,
-        terminal,
+        useNative,
+        native: null,
+        nativeLaunched: false,
+        nativeResult: null,
+        initialOutcome: null,
+        observedShellOpen: false,
         process: null,
         outcome: null,
         preflight: null,
@@ -294,7 +410,7 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         lastAudit: null,
       };
       this.current = active;
-      this.armDeadline(active);
+      if (!useNative) this.armDeadline(active);
     } catch (error) {
       this.current = retained;
       this.runtime.gate.leave(token);
@@ -305,9 +421,156 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return Promise.resolve(accepted);
   }
 
-  latest(): IRunJob {
-    if (!this.current) throw new NotFoundException('Latest command run');
-    return this.snapshot(this.current);
+  latest(): RunLatestResult {
+    if (this.current) return this.snapshot(this.current);
+    if (this.recoveryHold?.active) {
+      return { recoveryHold: { ...this.recoveryHold }, job: null };
+    }
+    throw new NotFoundException('Latest command run');
+  }
+
+  async clearRecovery(
+    body: IRecoveryClearRequest,
+  ): Promise<IRecoveryClearResult> {
+    if (this.closed)
+      throw new AppException(
+        503,
+        'Runner is shutting down',
+        'SERVICE_UNAVAILABLE',
+      );
+    if (body.confirm !== true)
+      throw new ValidationException('confirm must be true');
+    if (
+      this.current &&
+      (this.current.job.status === 'running' ||
+        this.current.job.status === 'stopping' ||
+        (this.current.job.gateHeld &&
+          this.current.token !== this.recoveryHoldToken))
+    ) {
+      throw new AppException(
+        409,
+        'A command run is already active',
+        'CONFLICT',
+        {
+          reason: 'RUNNING',
+          jobId: this.current.job.jobId,
+          requestPath: this.current.job.requestPath,
+        },
+      );
+    }
+    if (this.clearingRecoveryInFlight) {
+      throw new AppException(
+        409,
+        'Recovery clear is already in progress',
+        'CONFLICT',
+        {
+          reason: 'RECOVERY_HOLD',
+          recoveryHold: this.recoveryHold
+            ? { ...this.recoveryHold }
+            : {
+                active: true,
+                reason: 'UNRESOLVED_NATIVE_SESSION',
+                journalPath: this.runtime.recovery?.journalPath ?? '',
+              },
+        },
+      );
+    }
+    const hold = this.recoveryHold;
+    if (!hold?.active || !this.runtime.recovery) {
+      return { cleared: false, recoveryHold: null };
+    }
+    this.clearingRecoveryInFlight = true;
+    try {
+      if (
+        !this.runtime.audit.writeRecoveryIntent ||
+        !this.runtime.audit.writeRecoveryResult
+      ) {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      const operationId = this.runtime.uuid();
+      try {
+        await this.runtime.audit.writeRecoveryIntent(operationId, hold);
+      } catch {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      const check = await this.runtime.recovery.verifyClearable();
+      if (!check.clearable) {
+        try {
+          await this.runtime.audit.writeRecoveryResult(
+            operationId,
+            hold,
+            'blocked',
+            'RECOVERY_HOLD',
+          );
+        } catch {
+          /* keep primary RECOVERY_HOLD conflict */
+        }
+        throw new AppException(
+          409,
+          'Native console processes may still be active; close them before clearing recovery hold',
+          'CONFLICT',
+          {
+            reason: 'RECOVERY_HOLD',
+            recoveryHold: { ...hold },
+          },
+        );
+      }
+      try {
+        this.runtime.invalidation.clearDiskUsage();
+        if (this.runtime.invalidation.staleAllAnalyses) {
+          this.runtime.invalidation.staleAllAnalyses();
+        } else if (this.current) {
+          this.runtime.invalidation.staleAnalysis(this.current.job.path);
+        }
+      } catch {
+        try {
+          await this.runtime.audit.writeRecoveryResult(
+            operationId,
+            hold,
+            'failed',
+            'CACHE_INVALIDATION_FAILED',
+          );
+        } catch {
+          /* preserve CACHE_INVALIDATION_FAILED */
+        }
+        throw runnerFailure('CACHE_INVALIDATION_FAILED');
+      }
+      try {
+        await this.runtime.audit.writeRecoveryResult(
+          operationId,
+          hold,
+          'cleared',
+          null,
+        );
+      } catch {
+        throw runnerFailure('AUDIT_WRITE_FAILED');
+      }
+      try {
+        await this.runtime.recovery.removeMarkers();
+      } catch {
+        this.recoveryHold = {
+          active: true,
+          reason: 'JOURNAL_REMOVAL_FAILED',
+          journalPath: this.runtime.recovery.journalPath,
+        };
+        throw new AppException(
+          500,
+          'Failed to remove native recovery journal marker',
+          'INTERNAL_SERVER_ERROR',
+        );
+      }
+      const token = this.recoveryHoldToken;
+      this.recoveryHold = null;
+      this.recoveryHoldToken = null;
+      if (token) this.runtime.gate.leave(token);
+      if (this.current && this.current.token === token) {
+        this.current.job.gateHeld = false;
+        this.current.job.recoveryHold = null;
+      }
+      return { cleared: true, recoveryHold: null };
+    } finally {
+      this.clearingRecoveryInFlight = false;
+    }
   }
 
   get(id: string): IRunJob {
@@ -330,14 +593,21 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
 
   async cancel(id: string): Promise<IRunJob> {
     const active = this.requireRun(id);
-    if (!active.job.gateHeld || active.work)
+    if (
+      !active.job.gateHeld ||
+      active.work ||
+      this.recoveryHold?.active ||
+      active.token === this.recoveryHoldToken ||
+      active.job.failureCode === 'RECOVERY_HOLD'
+    )
       return Promise.resolve(this.snapshot(active));
     if (active.job.phase === 'done') {
       active.job.status = 'stopping';
       active.job.phase = 'stopping';
       this.queueFinalize(
         active,
-        active.job.spawned && !active.job.terminationVerified,
+        (active.useNative ? active.nativeLaunched : active.job.spawned) &&
+          !active.job.terminationVerified,
       );
     } else {
       this.requestStop(active, 'cancel');
@@ -345,110 +615,30 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return Promise.resolve(this.snapshot(active));
   }
 
-  terminalOutput(
-    id: string,
-    generation: number,
-    cursor: number,
-  ): ITerminalOutputPage {
-    const active = this.requireRun(id);
-    const terminal = active.terminal;
-    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
-    return terminal.buffer.read({ jobId: id, generation }, cursor);
-  }
-
-  claimTerminal(id: string, request: ITerminalClaimBody): ITerminalWriter {
-    const terminal = this.requireReadyTerminal(id, request);
-    const writer = terminal.control!.claim(
-      terminal.identity,
-      request.tabId,
-      request.takeover,
-    );
-    terminal.writerGeneration = writer.writerGeneration;
-    return writer;
-  }
-
-  async terminalInput(
-    id: string,
-    request: ITerminalInputBody,
-  ): Promise<ITerminalInputAck> {
-    const terminal = this.requireReadyTerminal(id, request);
-    const ack = await terminal.control!.input({
-      jobId: id,
-      generation: request.generation,
-      tabId: request.tabId,
-      token: request.token,
-      writerGeneration: request.writerGeneration,
-      sequence: request.sequence,
-      text: request.text,
-    });
-    if (
-      (ack.status === 'delivered' || ack.status === 'not_delivered') &&
-      terminal.unresolved?.writerGeneration === ack.writerGeneration &&
-      terminal.unresolved?.sequence === ack.sequence
-    ) {
-      terminal.unresolved = null;
-    }
-    return ack;
-  }
-
-  terminalInputAck(
-    id: string,
-    request: ITerminalInputAckBody,
-  ): ITerminalInputAck {
-    const active = this.requireRun(id);
-    const terminal = active.terminal;
-    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
-    assertTerminalIdentity(
-      { jobId: id, generation: request.generation },
-      terminal.identity,
-    );
-    if (request.requestId !== active.job.requestId)
-      terminalFailure(409, 'WRONG_JOB');
-    if (!terminal.control) terminalFailure(409, 'NOT_INITIALIZED');
-    return terminal.control.ack(
-      terminal.identity,
-      {
-        tabId: request.tabId,
-        token: request.token,
-        writerGeneration: request.writerGeneration,
-      },
-      request.sequence,
-    );
-  }
-
-  terminalResize(
-    id: string,
-    request: ITerminalResizeBody,
-  ): ITerminalResizeResult {
-    const terminal = this.requireReadyTerminal(id, request);
-    terminal.control!.resize({
-      jobId: id,
-      generation: request.generation,
-      tabId: request.tabId,
-      token: request.token,
-      writerGeneration: request.writerGeneration,
-      cols: request.cols,
-      rows: request.rows,
-    });
-    void terminal.control!.flushResize().catch(() => {});
-    return { queued: true };
-  }
-
   async onModuleDestroy(): Promise<void> {
     this.closed = true;
     const active = this.current;
     if (!active || !active.job.gateHeld) return;
     if (!active.work) {
+      if (
+        this.recoveryHold?.active ||
+        active.token === this.recoveryHoldToken ||
+        active.job.failureCode === 'RECOVERY_HOLD'
+      ) {
+        return;
+      }
       if (active.job.phase === 'done')
         this.queueFinalize(
           active,
-          active.job.spawned && !active.job.terminationVerified,
+          (active.useNative ? active.nativeLaunched : active.job.spawned) &&
+            !active.job.terminationVerified,
         );
       else this.requestStop(active, 'shutdown');
     }
     let budget: ReturnType<typeof setTimeout> | undefined;
     const completion = async () => {
       await active.preflight;
+      await active.native?.settled;
       await active.work;
     };
     try {
@@ -473,51 +663,18 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     return this.current;
   }
 
-  private requireReadyTerminal(
-    id: string,
-    request: { requestId: string; generation: number },
-  ): ITerminalSession {
-    const active = this.requireRun(id);
-    const terminal = active.terminal;
-    if (!terminal) terminalFailure(409, 'NOT_INITIALIZED');
-    assertTerminalIdentity(
-      { jobId: id, generation: request.generation },
-      terminal.identity,
-    );
-    if (request.requestId !== active.job.requestId)
-      terminalFailure(409, 'WRONG_JOB');
-    if (active.job.status !== 'running') terminalFailure(409, 'NOT_RUNNING');
-    if (!terminal.ready || !terminal.control)
-      terminalFailure(409, 'NOT_INITIALIZED');
-    return terminal;
-  }
-
   private snapshot(active: IActiveRun): IRunJob {
     this.syncLogs(active);
-    this.syncTerminal(active);
+    if (
+      active.useNative ||
+      this.recoveryHold !== null ||
+      this.runtime.recovery !== undefined
+    ) {
+      active.job.recoveryHold = this.recoveryHold
+        ? { ...this.recoveryHold }
+        : null;
+    }
     return structuredClone(active.job);
-  }
-
-  private syncTerminal(active: IActiveRun): void {
-    const terminal = active.terminal;
-    if (!terminal || !active.job.terminal) return;
-    const page = terminal.buffer.read(
-      terminal.identity,
-      terminal.knownEndCursor,
-    );
-    terminal.knownEndCursor = page.endCursor;
-    active.job.terminal = {
-      mode: 'pty',
-      generation: terminal.identity.generation,
-      available: true,
-      ready: terminal.ready,
-      firstCursor: page.firstCursor,
-      endCursor: page.endCursor,
-      droppedBytes: page.droppedBytes,
-      writerGeneration: terminal.writerGeneration,
-      inputBlocked:
-        terminal.unresolved !== null || terminal.controlState !== 'running',
-    };
   }
 
   private syncLogs(active: IActiveRun): void {
@@ -568,6 +725,129 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     ];
   }
 
+  private extractFailureCode(error: unknown): RunFailureCode {
+    const details: unknown =
+      error !== null && typeof error === 'object' && 'details' in error
+        ? error.details
+        : undefined;
+    const reason =
+      details !== null && typeof details === 'object' && 'reason' in details
+        ? details.reason
+        : undefined;
+    return (
+      RUN_FAILURE_CODES.find((code) => code === reason) ??
+      'INTERNAL_SERVER_ERROR'
+    );
+  }
+
+  private async preflightNative(
+    active: IActiveRun,
+    deps: IRunnerInputDeps,
+    command: ReturnType<typeof buildRunCommand>,
+    env: NodeJS.ProcessEnv,
+    initialInput: IRunnerInput,
+  ): Promise<void> {
+    const native = this.runtime.native!;
+    const shell = active.request.consoleShell ?? 'cmd';
+    const nativePreflight = await native.preflight(shell);
+    deps.signal.throwIfAborted();
+    if (nativePreflight.status !== 'ok') {
+      if (active.job.nativeSession) active.job.nativeSession.available = false;
+      throw runnerFailure('NATIVE_CONSOLE_UNAVAILABLE');
+    }
+    const shellEnv = buildInteractiveShellEnv(this.runtime.env);
+    let currentInput = await revalidateRunnerInput(
+      initialInput,
+      active.request.inputHash,
+      deps,
+    );
+    deps.signal.throwIfAborted();
+    this.inputMetadata(active, currentInput);
+    const init: INativeInitCommand = {
+      jobId: active.job.jobId,
+      generation: 1,
+      type: 'init',
+      initialFile: command.file,
+      initialArgs: [...command.args],
+      cwd: currentInput.path,
+      env,
+      shell: nativePreflight.value.shell,
+      shellFile: nativePreflight.value.shellFile,
+      shellArgs: [...nativePreflight.value.shellArgs],
+      shellEnv,
+    };
+    const session = native.createSession({
+      identity: { jobId: active.job.jobId, generation: 1 },
+      fingerprint: active.fingerprint,
+      preflight: nativePreflight.value,
+      init,
+      initialTimeoutMs: this.runtime.timeoutMs,
+      writeIntent: async () => {
+        try {
+          await this.runtime.audit.writeIntent(this.snapshot(active));
+        } catch {
+          active.runFailure ??= 'AUDIT_WRITE_FAILED';
+          throw runnerFailure('AUDIT_WRITE_FAILED');
+        }
+      },
+      beforeInit: async () => {
+        try {
+          deps.signal.throwIfAborted();
+          const latest = await revalidateRunnerInput(
+            currentInput,
+            active.request.inputHash,
+            deps,
+          );
+          deps.signal.throwIfAborted();
+          this.inputMetadata(active, latest);
+          currentInput = latest;
+        } catch (error: unknown) {
+          if (!active.job.stopReason && !active.runFailure)
+            active.runFailure = this.extractFailureCode(error);
+          throw error;
+        }
+      },
+      callbacks: {
+        onState: (snap) => this.acceptNativeState(active, snap),
+        onInitSent: () => {
+          active.job.mayHaveChanged = true;
+        },
+        onInitialSpawned: () => {
+          active.job.spawned = true;
+          active.job.mayHaveChanged = true;
+        },
+        onInitialOutcome: (outcome) =>
+          this.acceptNativeInitialOutcome(active, outcome),
+        onSettled: (result) => this.acceptNativeSettled(active, result),
+      },
+    });
+    active.native = session;
+    active.job.phase = active.job.stopReason ? 'stopping' : 'executing';
+    void session.settled.then(
+      (result) => this.acceptNativeSettled(active, result),
+      () =>
+        this.acceptNativeSettled(active, {
+          phase: 'lost',
+          termination: 'start_failed',
+          initialOutcome: active.initialOutcome,
+          sessionOutcome: null,
+          cleanupVerified: false,
+        }),
+    );
+    if (active.job.stopReason !== null || deps.signal.aborted) {
+      const stopReason =
+        active.job.stopReason === 'shutdown'
+          ? 'parent_exit'
+          : active.job.stopReason === 'timeout'
+            ? 'initial_timeout'
+            : 'user_stop';
+      void session.stop(stopReason);
+    } else {
+      active.nativeLaunched = true;
+      void session.start();
+    }
+  }
+
   private async preflight(active: IActiveRun): Promise<void> {
     const deps: IRunnerInputDeps = {
       ...this.runtime.input,
@@ -589,6 +869,10 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         command.manager,
         active.request.action,
       );
+      if (active.useNative) {
+        await this.preflightNative(active, deps, command, env, input);
+        return;
+      }
       try {
         await this.runtime.audit.writeIntent(this.snapshot(active));
       } catch {
@@ -604,108 +888,14 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       this.inputMetadata(active, revalidated);
       active.job.phase = 'executing';
       try {
-        let process: IRunProcess;
-        if (active.terminal) {
-          if (typeof this.runtime.launchTerminal !== 'function') {
-            throw new AppException(
-              503,
-              'Interactive terminal runner is unavailable',
-              'SERVICE_UNAVAILABLE',
-            );
-          }
-          const terminal = active.terminal;
-          const initialSize: ITerminalSize = {
-            cols: active.request.cols ?? 80,
-            rows: active.request.rows ?? 24,
-          };
-          const terminalProcess = this.runtime.launchTerminal(
-            command,
-            env,
-            {
-              signal: deps.signal,
-              onOutput: (stream, bytes) => {
-                active.job.spawned = active.job.mayHaveChanged = true;
-                active.logs.append(stream, bytes);
-              },
-              onTerminalOutput: (text) => {
-                active.job.spawned = active.job.mayHaveChanged = true;
-                try {
-                  terminal.buffer.append(text);
-                } catch {
-                  /* Buffer closed or overflowed; ignore without disrupting process. */
-                }
-              },
-              onTerminalAck: (ack) => {
-                if (!terminal.control) return;
-                if (
-                  ack.status !== 'delivered' &&
-                  ack.status !== 'not_delivered'
-                )
-                  return;
-                try {
-                  terminal.control.reconcile(
-                    terminal.identity,
-                    ack.writerGeneration,
-                    ack.sequence,
-                    ack.status,
-                  );
-                  if (
-                    terminal.unresolved?.writerGeneration ===
-                      ack.writerGeneration &&
-                    terminal.unresolved?.sequence === ack.sequence
-                  ) {
-                    terminal.unresolved = null;
-                  }
-                } catch {
-                  /* Already reconciled or stale writer. */
-                }
-              },
-              onExit: (result) => this.acceptExit(active, result),
-            },
-            terminal.identity,
-            initialSize,
-          );
-          process = terminalProcess;
-          void terminalProcess.ready.then(
-            (ready) => {
-              if (
-                !ready ||
-                active.job.status !== 'running' ||
-                active.controller.signal.aborted ||
-                active.outcome ||
-                active.job.stopReason !== null
-              ) {
-                return;
-              }
-              terminal.ready = true;
-              terminal.control = new TerminalControl(terminal.identity, {
-                now: () => this.runtime.now().getTime(),
-                token: () => this.runtime.uuid(),
-                write: (frame) => {
-                  terminal.unresolved = {
-                    writerGeneration: frame.writerGeneration,
-                    sequence: frame.sequence,
-                  };
-                  return terminalProcess.write(frame);
-                },
-                resize: (size, writerGeneration) =>
-                  terminalProcess.resize(size, writerGeneration),
-              });
-            },
-            () => {
-              /* Failure handled via process.settled / onExit. */
-            },
-          );
-        } else {
-          process = this.runtime.launch(command, env, {
-            signal: deps.signal,
-            onOutput: (stream, bytes) => {
-              active.job.spawned = active.job.mayHaveChanged = true;
-              active.logs.append(stream, bytes);
-            },
-            onExit: (result) => this.acceptExit(active, result),
-          });
-        }
+        const process: IRunProcess = this.runtime.launch(command, env, {
+          signal: deps.signal,
+          onOutput: (stream, bytes) => {
+            active.job.spawned = active.job.mayHaveChanged = true;
+            active.logs.append(stream, bytes);
+          },
+          onExit: (result) => this.acceptExit(active, result),
+        });
         active.process = process;
         if (process.pid !== null && process.pid > 0)
           active.job.spawned = active.job.mayHaveChanged = true;
@@ -727,27 +917,109 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       }
     } catch (error: unknown) {
       if (!active.job.stopReason) {
-        const details: unknown =
-          error !== null && typeof error === 'object' && 'details' in error
-            ? error.details
-            : undefined;
-        const reason =
-          details !== null && typeof details === 'object' && 'reason' in details
-            ? details.reason
-            : undefined;
-        active.runFailure =
-          RUN_FAILURE_CODES.find((code) => code === reason) ??
-          'INTERNAL_SERVER_ERROR';
+        active.runFailure = this.extractFailureCode(error);
       }
     } finally {
       active.preflightDone = true;
-      if (!active.process || active.outcome || active.job.stopReason) {
+      if (active.useNative) {
+        if (
+          (!active.native || active.nativeResult) &&
+          !active.work &&
+          (active.nativeResult ||
+            active.runFailure !== null ||
+            active.job.stopReason !== null)
+        ) {
+          this.queueFinalize(active, false);
+        }
+      } else if (!active.process || active.outcome || active.job.stopReason) {
         this.queueFinalize(
           active,
           active.job.stopReason !== null && active.process !== null,
         );
       }
     }
+  }
+
+  private acceptNativeState(
+    active: IActiveRun,
+    snap: INativeSessionSnapshot,
+  ): void {
+    if (snap.phase === 'shell_running') active.observedShellOpen = true;
+    if (snap.identities.initial) {
+      active.job.spawned = true;
+      active.job.mayHaveChanged = true;
+    }
+    if (snap.initialOutcome) {
+      active.initialOutcome = { ...snap.initialOutcome };
+      active.job.initialCommand = { ...snap.initialOutcome };
+      active.job.exitCode = snap.initialOutcome.exitCode;
+      active.job.signal = snap.initialOutcome.signal;
+    }
+    if (active.job.nativeSession && !active.nativeResult) {
+      const nextPhase = mapNativePhase(snap.phase);
+      const currentPhase = active.job.nativeSession.phase;
+      if (
+        NATIVE_PHASE_RANK[nextPhase] > NATIVE_PHASE_RANK[currentPhase] &&
+        (!active.job.stopReason || NATIVE_PHASE_RANK[nextPhase] >= 4)
+      ) {
+        active.job.nativeSession.phase = nextPhase;
+      }
+      if (snap.sessionOutcome)
+        active.job.nativeSession.sessionResult = { ...snap.sessionOutcome };
+    }
+  }
+
+  private acceptNativeInitialOutcome(
+    active: IActiveRun,
+    outcome: INativeExitOutcome,
+  ): void {
+    active.initialOutcome = { ...outcome };
+    active.job.initialCommand = { ...outcome };
+    active.job.exitCode = outcome.exitCode;
+    active.job.signal = outcome.signal;
+    if (
+      active.job.nativeSession &&
+      !active.nativeResult &&
+      (active.job.nativeSession.phase === 'starting' ||
+        active.job.nativeSession.phase === 'initial_running')
+    ) {
+      active.job.nativeSession.phase = 'initial_finished';
+    }
+    if (outcome.exitCode !== 0 || outcome.signal !== null)
+      active.runFailure ??= 'COMMAND_FAILED';
+  }
+
+  private acceptNativeSettled(
+    active: IActiveRun,
+    result: INativeSessionResult,
+  ): void {
+    if (active.nativeResult) return;
+    active.nativeResult = result;
+    const job = active.job;
+    if (result.initialOutcome) {
+      active.initialOutcome = { ...result.initialOutcome };
+      job.initialCommand = { ...result.initialOutcome };
+      job.exitCode = result.initialOutcome.exitCode;
+      job.signal = result.initialOutcome.signal;
+      if (
+        result.initialOutcome.exitCode !== 0 ||
+        result.initialOutcome.signal !== null
+      ) {
+        active.runFailure ??= 'COMMAND_FAILED';
+      }
+    }
+    if (job.nativeSession) {
+      job.nativeSession.phase = result.phase;
+      job.nativeSession.sessionResult = result.sessionOutcome
+        ? { ...result.sessionOutcome }
+        : null;
+    }
+    if (result.termination === 'initial_timeout') job.stopReason ??= 'timeout';
+    else if (result.termination === 'user_stop') job.stopReason ??= 'cancel';
+    else if (result.termination === 'parent_exit')
+      job.stopReason ??= 'shutdown';
+    job.terminationVerified = result.cleanupVerified;
+    if (active.preflightDone) this.queueFinalize(active, false);
   }
 
   private acceptExit(active: IActiveRun, outcome: IRunProcessExit): void {
@@ -762,21 +1034,6 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       outcome.failureCode ?? (outcome.exitCode === 0 ? null : 'COMMAND_FAILED');
     if (outcome.outputTruncated)
       active.job.warningCodes.push('OUTPUT_TRUNCATED');
-    if (active.terminal) {
-      const lost =
-        outcome.termination !== 'verified' ||
-        (outcome.failureCode === 'COMMAND_FAILED' &&
-          outcome.exitCode === null &&
-          outcome.signal === null &&
-          !active.job.stopReason);
-      const nextState: TerminalControlState = lost ? 'worker_lost' : 'terminal';
-      active.terminal.controlState = nextState;
-      try {
-        active.terminal.control?.setState(nextState);
-      } catch {
-        /* Already transitioned. */
-      }
-    }
     if (active.preflightDone) this.queueFinalize(active, false);
   }
 
@@ -787,22 +1044,28 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     if (
       active.job.phase === 'done' ||
       active.job.phase === 'finalizing' ||
-      active.work
+      active.work ||
+      (active.job.phase === 'stopping' && active.native !== null)
     )
       return;
     active.job.stopReason ??= reason;
     active.job.status = 'stopping';
     active.job.phase = 'stopping';
-    if (active.terminal) {
-      active.terminal.controlState = 'stopping';
-      try {
-        active.terminal.control?.setState('stopping');
-      } catch {
-        /* Already transitioned. */
-      }
+    if (active.job.nativeSession && !active.nativeResult) {
+      active.job.nativeSession.phase = 'stopping';
     }
     this.clearDeadline(active);
     active.controller.abort();
+    if (active.native) {
+      void active.native.stop(
+        reason === 'shutdown'
+          ? 'parent_exit'
+          : reason === 'timeout'
+            ? 'initial_timeout'
+            : 'user_stop',
+      );
+      return;
+    }
     if (active.preflightDone)
       this.queueFinalize(active, active.process !== null);
   }
@@ -815,7 +1078,8 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         // Fail closed; never release an unacknowledged cleanup or expose raw errors.
         active.job.failureCode = 'INTERNAL_SERVER_ERROR';
         active.job.status =
-          active.job.spawned && !active.job.terminationVerified
+          (active.job.spawned || active.nativeLaunched) &&
+          !active.job.terminationVerified
             ? 'termination_failed'
             : 'failed';
         active.job.auditWritten = false;
@@ -826,6 +1090,90 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       .finally(() => {
         active.work = null;
       });
+  }
+
+  private classifyNative(active: IActiveRun): void {
+    const job = active.job;
+    const result = active.nativeResult;
+    if (
+      !job.terminationVerified ||
+      result?.termination === 'termination_unconfirmed'
+    ) {
+      job.status = 'termination_failed';
+      job.failureCode = 'TERMINATION_UNCONFIRMED';
+      return;
+    }
+    if (
+      job.stopReason ||
+      result?.termination === 'user_stop' ||
+      result?.termination === 'initial_timeout' ||
+      result?.termination === 'parent_exit'
+    ) {
+      const reason =
+        job.stopReason ??
+        (result?.termination === 'initial_timeout'
+          ? 'timeout'
+          : result?.termination === 'parent_exit'
+            ? 'shutdown'
+            : 'cancel');
+      job.stopReason = reason;
+      job.status = reason === 'timeout' ? 'timed_out' : 'cancelled';
+      job.failureCode =
+        reason === 'timeout'
+          ? 'TIMED_OUT'
+          : reason === 'shutdown'
+            ? 'SHUTDOWN'
+            : 'CANCELLED';
+      return;
+    }
+    if (!result) {
+      job.status = 'failed';
+      job.failureCode = active.runFailure ?? 'INTERNAL_SERVER_ERROR';
+      return;
+    }
+    switch (result.termination) {
+      case 'protocol_error':
+        job.status = 'failed';
+        job.failureCode = 'NATIVE_PROTOCOL_ERROR';
+        return;
+      case 'handshake_timeout':
+        job.status = 'timed_out';
+        job.failureCode = 'TIMED_OUT';
+        return;
+      case 'ipc_lost':
+        job.status = 'failed';
+        job.failureCode = 'SESSION_INTERRUPTED';
+        return;
+      case 'journal_failed':
+        job.status = 'failed';
+        job.failureCode = 'INTERNAL_SERVER_ERROR';
+        return;
+      case 'start_failed':
+        job.status = 'failed';
+        job.failureCode = active.runFailure ?? 'SPAWN_FAILED';
+        return;
+      case 'window_closed':
+      case 'session_exit': {
+        const outcome = result.initialOutcome ?? active.initialOutcome;
+        if (
+          !active.observedShellOpen ||
+          result.phase !== 'closed' ||
+          !outcome
+        ) {
+          job.status = 'failed';
+          job.failureCode = 'SESSION_INTERRUPTED';
+          return;
+        }
+        if (outcome.exitCode === 0 && outcome.signal === null) {
+          job.status = 'completed';
+          job.failureCode = null;
+        } else {
+          job.status = 'failed';
+          job.failureCode = active.runFailure ?? 'COMMAND_FAILED';
+        }
+        return;
+      }
+    }
   }
 
   private classify(active: IActiveRun): void {
@@ -854,44 +1202,60 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
     const job = active.job;
     job.phase = 'finalizing';
     this.clearDeadline(active);
-    if (stop && active.process && !job.terminationVerified) {
-      try {
-        const verified = await active.process.stop();
-        job.terminationVerified = verified === 'verified';
-      } catch {
-        job.terminationVerified = false;
+    if (active.useNative) {
+      if (
+        stop &&
+        active.native?.retryCleanup &&
+        active.nativeLaunched &&
+        !job.terminationVerified
+      ) {
+        try {
+          const retried = await active.native.retryCleanup();
+          active.nativeResult = retried;
+          if (job.nativeSession) {
+            job.nativeSession = {
+              ...job.nativeSession,
+              phase: retried.phase,
+            };
+          }
+          job.terminationVerified =
+            retried.cleanupVerified &&
+            retried.termination !== 'termination_unconfirmed';
+        } catch {
+          job.terminationVerified = false;
+        }
+        if (job.terminationVerified) {
+          // Mutations may have continued after an earlier unconfirmed cleanup.
+          active.refreshed = active.diskCleared = active.analysisStaled = false;
+        }
       }
-      if (job.terminationVerified) {
-        // Mutations may have continued after an earlier unconfirmed stop.
-        active.refreshed = active.diskCleared = active.analysisStaled = false;
+      if (!active.nativeLaunched) job.terminationVerified = true;
+      this.classifyNative(active);
+    } else {
+      if (stop && active.process && !job.terminationVerified) {
+        try {
+          const verified = await active.process.stop();
+          job.terminationVerified = verified === 'verified';
+        } catch {
+          job.terminationVerified = false;
+        }
+        if (job.terminationVerified) {
+          // Mutations may have continued after an earlier unconfirmed stop.
+          active.refreshed = active.diskCleared = active.analysisStaled = false;
+        }
       }
-    }
-    if (!job.spawned) job.terminationVerified = true;
-    this.classify(active);
-    if (active.terminal) {
-      const finalState: TerminalControlState =
-        job.status === 'termination_failed' ||
-        (active.outcome?.failureCode === 'COMMAND_FAILED' &&
-          active.outcome.exitCode === null &&
-          active.outcome.signal === null &&
-          !job.stopReason)
-          ? 'worker_lost'
-          : 'terminal';
-      active.terminal.controlState = finalState;
-      try {
-        active.terminal.control?.setState(finalState);
-      } catch {
-        /* Already transitioned. */
-      }
+      if (!job.spawned) job.terminationVerified = true;
+      this.classify(active);
     }
     if (!active.logsClosed) {
       active.logs.flush(true);
-      active.terminal?.buffer.finish();
       active.logsClosed = true;
     }
     this.syncLogs(active);
-    this.syncTerminal(active);
-    if (job.spawned) {
+    const needsInvalidation = active.useNative
+      ? job.mayHaveChanged || active.observedShellOpen
+      : job.spawned;
+    if (needsInvalidation) {
       if (!active.refreshed) {
         try {
           await this.runtime.invalidation.refreshProject(job.path);
@@ -910,17 +1274,24 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
       }
       if (!active.analysisStaled) {
         try {
-          this.runtime.invalidation.staleAnalysis(job.path);
+          if (active.useNative && this.runtime.invalidation.staleAllAnalyses) {
+            this.runtime.invalidation.staleAllAnalyses();
+          } else {
+            this.runtime.invalidation.staleAnalysis(job.path);
+          }
           active.analysisStaled = true;
         } catch {
           /* Audit the incomplete cleanup. */
         }
       }
     }
-    job.refreshRequired =
-      job.spawned &&
+    const invalidationFailed =
+      needsInvalidation &&
       !(active.refreshed && active.diskCleared && active.analysisStaled);
-    if (job.refreshRequired && job.failureCode === null) {
+    job.refreshRequired = active.useNative
+      ? needsInvalidation
+      : invalidationFailed;
+    if (invalidationFailed && job.failureCode === null) {
       job.failureCode = 'CACHE_INVALIDATION_FAILED';
       job.status = 'failed';
     }
@@ -936,13 +1307,33 @@ export class NpmRunnerService implements INpmRunnerService, OnModuleDestroy {
         if (job.status === 'completed') job.status = 'failed';
       }
     }
-    if (
-      (!job.spawned || job.terminationVerified) &&
-      !job.refreshRequired &&
-      job.auditWritten
-    ) {
-      this.runtime.gate.leave(active.token);
-      job.gateHeld = false;
+    const terminationOk = active.useNative
+      ? job.terminationVerified
+      : !job.spawned || job.terminationVerified;
+    if (terminationOk && !invalidationFailed && job.auditWritten) {
+      if (active.useNative && this.runtime.recovery) {
+        try {
+          await this.runtime.recovery.removeMarkers({
+            jobId: job.jobId,
+            generation: 1,
+          });
+          this.runtime.gate.leave(active.token);
+          job.gateHeld = false;
+        } catch {
+          this.recoveryHold = {
+            active: true,
+            reason: 'JOURNAL_REMOVAL_FAILED',
+            journalPath: this.runtime.recovery.journalPath,
+          };
+          this.recoveryHoldToken = active.token;
+          job.recoveryHold = { ...this.recoveryHold };
+          job.failureCode = 'RECOVERY_HOLD';
+          if (job.status === 'completed') job.status = 'failed';
+        }
+      } else {
+        this.runtime.gate.leave(active.token);
+        job.gateHeld = false;
+      }
     }
     job.phase = 'done';
     job.finishedAt = this.runtime.now().toISOString();

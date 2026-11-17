@@ -70,45 +70,23 @@ test("six handlers await params and preserve envelope/status/details/no-store on
   }
 })
 
-test("five terminal route handlers await params, validate query/json, and preserve envelope and no-store", async t => {
-  const routes = await Promise.all([
-    "[id]/terminal-output/",
-    "[id]/terminal-claim/",
-    "[id]/terminal-input/",
-    "[id]/terminal-input-ack/",
-    "[id]/terminal-resize/",
-  ].map(loadRoute))
-  const request = (tail, init) => new Request(`http://localhost/api/npm-runs${tail}`, init)
-  const tabId = "00000000-0000-4000-8000-000000000011"
-  const token = "00000000-0000-4000-8000-000000000012"
-  const claimBody = { requestId: id, generation: 1, tabId, takeover: false }
-  const inputBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, sequence: 1, text: "y\r" }
-  const ackBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, sequence: 1 }
-  const resizeBody = { requestId: id, generation: 1, tabId, token, writerGeneration: 1, cols: 120, rows: 30 }
-  const calls = [
-    () => routes[0].GET(request(`/${id}/terminal-output?generation=1&cursor=16`), params),
-    () => routes[1].POST(request(`/${id}/terminal-claim`, { method: "POST", body: JSON.stringify(claimBody) }), params),
-    () => routes[2].POST(request(`/${id}/terminal-input`, { method: "POST", body: JSON.stringify(inputBody) }), params),
-    () => routes[3].POST(request(`/${id}/terminal-input-ack`, { method: "POST", body: JSON.stringify(ackBody) }), params),
-    () => routes[4].POST(request(`/${id}/terminal-resize`, { method: "POST", body: JSON.stringify(resizeBody) }), params),
-  ]
-  for (const call of calls) {
-    const envelope = { statusCode: 200, message: "TEST", code: "SUCCESS", data: { ok: true }, timestamp: "TEST" }
-    t.mock.method(globalThis, "fetch", async () => Response.json(envelope, { status: 200 }))
-    const response = await call()
-    assert.equal(response.status, 200)
-    assert.equal(response.headers.get("Cache-Control"), "no-store")
-    assert.deepEqual(await response.json(), envelope)
-    t.mock.method(globalThis, "fetch", async () => Response.json({ statusCode: 409, message: "TEST", code: "CONFLICT", details: { terminalCode: "WRITER_HELD" } }, { status: 409 }))
-    const conflict = await call()
-    assert.equal(conflict.status, 409)
-    assert.deepEqual((await conflict.json()).details, { terminalCode: "WRITER_HELD" })
-  }
-  t.mock.method(globalThis, "fetch", async () => assert.fail("invalid request must not reach BE"))
-  for (const query of ["", "generation=0&cursor=0", "generation=1&cursor=-1", "generation=1&cursor=0&extra=1", "generation=1&generation=2&cursor=0"]) {
-    assert.equal((await routes[0].GET(request(`/${id}/terminal-output?${query}`), params)).status, 400)
-  }
-  for (let i = 1; i < routes.length; i++) {
-    assert.equal((await routes[i].POST(request(`/${id}/terminal`, { method: "POST", body: "{" }), params)).status, 400)
-  }
+test("recovery/clear handler validates JSON body and preserves envelope, status and no-store", async t => {
+  const clearRoute = await loadRoute("recovery/clear/")
+  const envelope = { statusCode: 200, message: "TEST", code: "SUCCESS", data: { cleared: true, recoveryHold: null }, timestamp: "TEST" }
+  t.mock.method(globalThis, "fetch", async () => Response.json(envelope, { status: 200 }))
+  const ok = await clearRoute.POST(new Request("http://localhost/api/npm-runs/recovery/clear", {
+    method: "POST",
+    body: JSON.stringify({ confirm: true }),
+  }))
+  assert.equal(ok.status, 200)
+  assert.equal(ok.headers.get("Cache-Control"), "no-store")
+  assert.deepEqual(await ok.json(), envelope)
+
+  t.mock.method(globalThis, "fetch", async () => assert.fail("malformed JSON must not reach BE"))
+  const bad = await clearRoute.POST(new Request("http://localhost/api/npm-runs/recovery/clear", {
+    method: "POST",
+    body: "{",
+  }))
+  assert.equal(bad.status, 400)
+  assert.equal(bad.headers.get("Cache-Control"), "no-store")
 })

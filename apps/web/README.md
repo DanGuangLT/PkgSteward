@@ -128,14 +128,16 @@ until explicit cancellation or the optional configured deadline. There is no def
 ## Run project commands
 
 The project detail page (`/projects?path=...`) also has a separate **Run project commands** panel with the
-installed tool version and canonical target path. The local-detail fields described above remain read-only;
+installed tool version, canonical target path, and **Console window** selector (`Command Prompt (cmd)` by default
+or `Windows PowerShell`). The local-detail fields described above remain read-only;
 this panel provides **Run** for install all, install one package, update all, update one, uninstall one, or one
-declared script. Selecting **Run** starts immediately in one click, without a confirmation dialog. Opening or
-refreshing the page never starts a command.
+declared script. Selecting **Run** starts immediately in one click, without a confirmation dialog, and opens a
+dedicated native Windows console window where the initial npm/pnpm command runs before leaving the interactive shell
+open until you close it or select **Stop**. Opening or refreshing the page never starts a command.
 
-**Only run projects you trust.** Commands execute project and lifecycle code with your user rights and no
-sandbox. `.npmrc`, pnpmfile and plugins may execute code or affect tool behavior. Commands may use the network,
-shared stores and files outside the project; logs may reveal secrets despite filtering. There is no rollback,
+**Only run projects you trust.** Commands and follow-up commands you type in the opened Windows console execute
+with your user rights and no sandbox. `.npmrc`, pnpmfile and plugins may execute code or affect tool behavior.
+Commands may use the network, shared stores and files outside the project. There is no rollback,
 and stopping or failure can leave partial changes. Stop may miss processes that escape the tracked tree.
 Replacing the project folder through a junction swap at the exact moment of launch is not fully prevented.
 
@@ -156,33 +158,37 @@ allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail 
   must match the installed major; other differences warn. Workspace roots allow all actions, members scripts
   only. Install one accepts a package name with an optional exact version or dist-tag; update/uninstall accept
   a name only. Ranges, URLs, paths and command flags are unavailable. Scripts come from `package.json` and use
-  supported declared names; there is no arbitrary command input.
-- **Tracking and conflicts:** only one command runs at a time, machine-wide. It blocks scans, size measurements,
-  package analysis and file-operation previews/deletions. A conflict with a running command offers
-  **Follow the active command**, including a link to another project when applicable. Hiding the tab or leaving
-  the page does not stop the backend command. A lost start response is unconfirmed; refresh status to check it.
-  The app never automatically resends a command.
-- **Stopping:** **Stop** requests termination of the tracked process tree. Unverified termination keeps the
-  mutation lock held and exposes **Retry process cleanup**; this retries cleanup without running the command
-  again. A lost Stop response is also unconfirmed; refresh status before requesting another stop. Empty
-  `NPM_COMMAND_TIMEOUT_MS` means no time limit. Actual exit code, stop reason, failure code and cleanup state
-  remain visible; a stopped/failed command may have changed the project.
-- **Refresh:** **Refresh context and status** reads current runner data. After a spawned command, the backend
-  refreshes that project's scan entry, clears cached sizes and marks earlier package analysis stale. The panel
-  re-reads the runner context itself; scan manually to discover new project folders, measure again for new sizes, and
-  select **Check packages** for a new analysis. None of those actions is started automatically. A successful
-  install does not establish that vulnerability checks are complete or have no findings.
-- **Logs:** stdout/stderr appear as plain text. The browser retains the last 512 KiB / 2,048 chunks, while the
-  backend retains 1 MiB / 4,096 chunks; older output is dropped and counts are shown. Autoscroll follows output
-  only while you are within 24 px of the bottom; **Jump to latest** resumes it. ANSI/OSC codes are stripped and
-  decoding loss is reported. Known credential patterns are masked, but bare tokens printed by scripts are not.
-  Logs survive refreshing page data/context while the panel stays mounted. An F5 reload of a finished run
-  loses the displayed logs; backend restart forgets all runs and logs. If tracking is lost, a retained local
-  tail does not prove processes stopped. The audit log retains intent and result records.
+  supported declared names; there is no arbitrary web command prompt.
+- **Tracking, console session and recovery hold:** only one command/console session runs at a time, machine-wide.
+  It blocks scans, size measurements, package analysis and file-operation previews/deletions. The panel shows
+  the **Initial command result** separately from **Console window status** so you can see whether the initial
+  action succeeded even while the interactive shell stays open. While running or under recovery hold, switching the
+  shell selector is disabled. A conflict with a running command offers **Follow the active command**, including a
+  link to another project when applicable. If a previous native session was interrupted across a backend restart or
+  corrupt marker, the panel displays **Native console recovery hold active** with **Clear recovery hold**
+  confirmation dialog to verify no lingering processes remain and release the lock. Hiding the tab or leaving
+  the page does not stop the backend command or native window. A lost start response is unconfirmed; refresh status
+  to check it. The app never automatically resends a command.
+- **Stopping:** **Stop** requests termination of the tracked native console process tree. Unverified termination
+  keeps the mutation lock held and exposes **Retry process cleanup**; this retries cleanup without running the
+  command again. A lost Stop response is also unconfirmed; refresh status before requesting another stop. Empty
+  `NPM_COMMAND_TIMEOUT_MS` means no time limit for initial command execution; closing the Windows console
+  manually or clicking **Stop** closes the open interactive session. Actual exit code, stop reason, failure code
+  and cleanup state remain visible; a stopped/failed command may have changed the project.
+- **Refresh:** **Refresh context and status** reads current runner data. After a spawned command, an interactive
+  shell session or a cleared recovery hold, the backend refreshes scan data/caches conservatively and marks earlier
+  package analysis stale. The panel re-reads the runner context itself; scan manually to discover new project
+  folders, measure again for new sizes, and select **Check packages** for a new analysis. None of those actions is
+  started automatically. A successful install does not establish that vulnerability checks are complete or have no
+  findings.
+- **Output:** interactive input and live terminal output stay directly inside the opened Windows console window;
+  there is no embedded web terminal stream or log tail for project commands. The audit log retains intent and result
+  records in the backend data folder.
 
 Browser requests use same-origin Route Handlers under `app/api/npm-runs/**`; the server calls the backend:
 `GET /api/npm-runs/context?path=...`, `POST /api/npm-runs`, `GET /api/npm-runs/latest`,
-`GET /api/npm-runs/:id`, `GET /api/npm-runs/:id/logs?cursor=...`, and `POST /api/npm-runs/:id/cancel`.
+`POST /api/npm-runs/recovery/clear`, `GET /api/npm-runs/:id`, `GET /api/npm-runs/:id/logs?cursor=...`, and
+`POST /api/npm-runs/:id/cancel`.
 For fixed command arguments, environment/config limits and process cleanup details, see the backend's
 [Command runner API](../api/README.md#command-runner-api).
 

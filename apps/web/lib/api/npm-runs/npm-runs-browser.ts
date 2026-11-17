@@ -2,19 +2,14 @@ import { npmRunsPaths } from "./npm-runs-paths.ts"
 import { requestApi } from "../request.ts"
 import { unwrapApiData } from "../response.ts"
 import type {
+  RecoveryClearRequest,
+  RecoveryClearResult,
   RunnerContext,
   RunRequest,
   RunStart,
   RunJob,
+  RunLatestResult,
   RunLogPage,
-  TerminalClaimRequest,
-  TerminalInputAck,
-  TerminalInputAckRequest,
-  TerminalInputRequest,
-  TerminalOutputPage,
-  TerminalResizeRequest,
-  TerminalResizeResult,
-  TerminalWriter,
 } from "@/lib/api/types"
 
 export async function getBrowserRunnerContext(path: string, signal?: AbortSignal): Promise<RunnerContext> {
@@ -25,8 +20,13 @@ export async function startBrowserNpmRun(input: RunRequest, signal?: AbortSignal
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
   }, null))
 }
-export async function getBrowserLatestNpmRun(signal?: AbortSignal): Promise<RunJob> {
-  return unwrapApiData(await requestApi<RunJob>(`/api${npmRunsPaths.latest}`, { method: "GET", signal }))
+export async function getBrowserLatestNpmRun(signal?: AbortSignal): Promise<RunLatestResult> {
+  return unwrapApiData(await requestApi<RunLatestResult>(`/api${npmRunsPaths.latest}`, { method: "GET", signal }))
+}
+export async function clearBrowserRecoveryHold(input: RecoveryClearRequest, signal?: AbortSignal): Promise<RecoveryClearResult> {
+  return unwrapApiData(await requestApi<RecoveryClearResult>(`/api${npmRunsPaths.recoveryClear}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
+  }, null))
 }
 export async function pollBrowserNpmRun(id: string, signal?: AbortSignal): Promise<RunJob> {
   return unwrapApiData(await requestApi<RunJob>(`/api${npmRunsPaths.job(id)}`, { method: "GET", signal }))
@@ -36,51 +36,4 @@ export async function getBrowserNpmRunLogs(id: string, cursor = 0, signal?: Abor
 }
 export async function cancelBrowserNpmRun(id: string, signal?: AbortSignal): Promise<RunJob> {
   return unwrapApiData(await requestApi<RunJob>(`/api${npmRunsPaths.cancel(id)}`, { method: "POST", signal }, null))
-}
-export async function getBrowserNpmRunTerminalOutput(
-  id: string,
-  generation: number,
-  cursor = 0,
-  signal?: AbortSignal,
-): Promise<TerminalOutputPage> {
-  return unwrapApiData(await requestApi<TerminalOutputPage>(
-    `/api${npmRunsPaths.terminalOutput(id, generation, cursor)}`,
-    { method: "GET", signal },
-  ))
-}
-export async function claimBrowserNpmRunTerminal(
-  id: string,
-  input: TerminalClaimRequest,
-  signal?: AbortSignal,
-): Promise<TerminalWriter> {
-  return unwrapApiData(await requestApi<TerminalWriter>(`/api${npmRunsPaths.terminalClaim(id)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
-  }, null))
-}
-export async function sendBrowserNpmRunTerminalInput(
-  id: string,
-  input: TerminalInputRequest,
-  signal?: AbortSignal,
-): Promise<TerminalInputAck> {
-  return unwrapApiData(await requestApi<TerminalInputAck>(`/api${npmRunsPaths.terminalInput(id)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
-  }, null))
-}
-export async function getBrowserNpmRunTerminalInputAck(
-  id: string,
-  input: TerminalInputAckRequest,
-  signal?: AbortSignal,
-): Promise<TerminalInputAck> {
-  return unwrapApiData(await requestApi<TerminalInputAck>(`/api${npmRunsPaths.terminalInputAck(id)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
-  }, null))
-}
-export async function resizeBrowserNpmRunTerminal(
-  id: string,
-  input: TerminalResizeRequest,
-  signal?: AbortSignal,
-): Promise<TerminalResizeResult> {
-  return unwrapApiData(await requestApi<TerminalResizeResult>(`/api${npmRunsPaths.terminalResize(id)}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal,
-  }, null))
 }

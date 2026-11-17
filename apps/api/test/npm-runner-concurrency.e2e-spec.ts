@@ -18,6 +18,7 @@ import type {
 } from '@/core/path-guard/interfaces/path-guard.types';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { ScannerService } from '@/scanner/scanner.service';
@@ -109,10 +110,17 @@ jest.mock('node:fs/promises', () => {
 @Module({
   providers: [
     { provide: ConfigService, useValue: {} },
+    {
+      provide: AppPathsService,
+      useValue: {
+        dataDir: 'D:\\TEST\\data',
+        appInstallDir: 'D:\\TEST\\api',
+      },
+    },
     { provide: PathGuardService, useValue: {} },
     { provide: AuditLogService, useValue: {} },
   ],
-  exports: [ConfigService, PathGuardService, AuditLogService],
+  exports: [ConfigService, AppPathsService, PathGuardService, AuditLogService],
 })
 class ContentionTestAdaptersModule {}
 

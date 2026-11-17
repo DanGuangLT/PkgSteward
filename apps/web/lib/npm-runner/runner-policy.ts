@@ -1,13 +1,48 @@
 import { ApiError } from "../api/response.ts"
 import { initialRunnerLogs } from "./runner-log-view.ts"
-import { clampTerminalSize, initialTerminalClientState } from "./terminal-session.ts"
-import type { RunAction, RunJob, RunRequest, RunnerContext } from "@/lib/api/types"
+import type {
+  ConsoleShell,
+  RunAction,
+  RunJob,
+  RunLatestHold,
+  RunLatestResult,
+  RunRecoveryHold,
+  RunRequest,
+  RunnerContext,
+} from "@/lib/api/types"
 import type { RunnerLogs } from "@/lib/npm-runner/runner-log-view"
-import type { TerminalClientState } from "@/lib/npm-runner/terminal-session"
+
+export const CONSOLE_SHELLS: readonly ConsoleShell[] = ["cmd", "powershell"]
+
+export function normalizeConsoleShell(value: unknown): ConsoleShell {
+  return value === "powershell" ? "powershell" : "cmd"
+}
+
+export function isRecoveryHold(value: unknown): value is RunRecoveryHold {
+  return (
+    typeof value === "object"
+    && value !== null
+    && "active" in value
+    && typeof value.active === "boolean"
+    && "reason" in value
+    && typeof value.reason === "string"
+    && "journalPath" in value
+    && typeof value.journalPath === "string"
+  )
+}
+
+export function isLatestRecoveryHold(value: RunLatestResult): value is RunLatestHold {
+  return "job" in value && value.job === null && "recoveryHold" in value && isRecoveryHold(value.recoveryHold)
+}
 
 export interface RunnerConflict { reason: "RUNNING"; jobId: string; requestPath: string }
-export interface RunnerError { code: string; statusCode?: number; conflict?: RunnerConflict; terminalCode?: string }
-export interface RunnerSelection { action: RunAction; package?: string; script?: string }
+export interface RunnerError {
+  code: string
+  statusCode?: number
+  conflict?: RunnerConflict
+  recoveryHold?: RunRecoveryHold
+}
+export interface RunnerSelection { action: RunAction; package?: string; script?: string; consoleShell?: ConsoleShell }
 export interface RunnerState {
   phase: "idle" | "starting" | "tracking" | "lost"
   context: RunnerContext | null
@@ -16,25 +51,28 @@ export interface RunnerState {
   requestId: string | null
   jobId: string | null
   job: RunJob | null
+  recoveryHold: RunRecoveryHold | null
   logs: RunnerLogs
-  terminal: TerminalClientState
   error: RunnerError | null
   pollError: string | null
   contextError: string | null
   startUnknown: boolean
   cancelUnknown: boolean
   cancelPending: boolean
+  clearPending: boolean
   refreshing: boolean
 }
 
 export function initialRunnerState(
   context: RunnerContext | null = null,
-  tabId = "00000000-0000-4000-8000-000000000000",
 ): RunnerState {
   return { phase: "idle", context, requestPath: context?.requestPath ?? null, generation: 0,
-    requestId: null, jobId: null, job: null, logs: initialRunnerLogs(),
-    terminal: initialTerminalClientState(tabId), error: null, pollError: null,
-    contextError: null, startUnknown: false, cancelUnknown: false, cancelPending: false, refreshing: false }
+    requestId: null, jobId: null, job: null,
+    recoveryHold: context?.recoveryHold?.active ? context.recoveryHold : null,
+    logs: initialRunnerLogs(),
+    error: null, pollError: null,
+    contextError: null, startUnknown: false, cancelUnknown: false, cancelPending: false,
+    clearPending: false, refreshing: false }
 }
 export function isRunActive(job: Pick<RunJob, "status" | "gateHeld">): boolean {
   return job.gateHeld || job.status === "running" || job.status === "stopping" || job.status === "termination_failed"
@@ -48,15 +86,15 @@ export function runnerError(cause: unknown): RunnerError {
   const error: RunnerError = { code: cause.code ?? "UNKNOWN", statusCode: cause.statusCode }
   const details = cause.details
   if (typeof details === "object" && details !== null) {
-    if ("terminalCode" in details && typeof details.terminalCode === "string" && details.terminalCode) {
-      error.terminalCode = details.terminalCode
-    }
     if (cause.statusCode === 409 && cause.code === "CONFLICT"
       && "reason" in details && typeof details.reason === "string" && details.reason) {
       error.code = details.reason
       if (details.reason === "RUNNING" && "jobId" in details && typeof details.jobId === "string" && details.jobId
         && "requestPath" in details && typeof details.requestPath === "string" && details.requestPath) {
         error.conflict = { reason: "RUNNING", jobId: details.jobId, requestPath: details.requestPath }
+      }
+      if (details.reason === "RECOVERY_HOLD" && "recoveryHold" in details && isRecoveryHold(details.recoveryHold)) {
+        error.recoveryHold = details.recoveryHold
       }
     }
   }
@@ -95,34 +133,31 @@ function selectionError(context: RunnerContext, selection: RunnerSelection): str
 }
 export function runnerEligibility(state: RunnerState, selection: RunnerSelection): string | null {
   if (state.startUnknown) return "START_UNKNOWN"
+  if (state.recoveryHold?.active || state.error?.code === "RECOVERY_HOLD" || state.clearPending) return "RECOVERY_HOLD"
   if (state.phase === "starting" || ((state.phase === "tracking" || state.phase === "lost") && !state.job)
     || state.cancelPending || (state.job && isRunActive(state.job))) return "RUNNING"
   if (state.error?.code === "RUNNING" || state.error?.code === "READERS_RUNNING") return state.error.code
   if (state.refreshing) return "REFRESHING"
   if (!state.context) return state.contextError ?? "PROJECT_NOT_SCANNED"
   if (!state.context.available || state.context.reason) return state.context.reason ?? "UNKNOWN"
+  if (state.context.nativeConsoleAvailable === false) return "NATIVE_CONSOLE_UNAVAILABLE"
   return selectionError(state.context, selection)
 }
 export function buildRunRequest(
   context: RunnerContext,
   selection: RunnerSelection,
   requestId: string,
-  terminalSize?: { cols?: number | null; rows?: number | null },
 ): RunRequest {
   const error = selectionError(context, selection)
   if (error) throw new ApiError(400, "Invalid run selection.", error)
-  const input: RunRequest = { path: context.requestPath, action: selection.action, inputHash: context.inputHash, requestId }
+  const input: RunRequest = {
+    path: context.requestPath,
+    action: selection.action,
+    consoleShell: normalizeConsoleShell(selection.consoleShell),
+    inputHash: context.inputHash,
+    requestId,
+  }
   if (["install_one", "update_one", "uninstall_one"].includes(selection.action)) input.package = selection.package
   if (selection.action === "script") input.script = selection.script
-  if (context.terminalAvailable === true) {
-    input.terminal = true
-    if (typeof terminalSize?.cols === "number" && typeof terminalSize?.rows === "number") {
-      const clamped = clampTerminalSize(terminalSize.cols, terminalSize.rows)
-      if (clamped) {
-        input.cols = clamped.cols
-        input.rows = clamped.rows
-      }
-    }
-  }
   return input
 }
