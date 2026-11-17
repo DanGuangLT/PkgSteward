@@ -58,10 +58,19 @@ if (task.sequential) {
   runServices(task.apps, task.openBrowser === true && !process.env.PKGSTEWARD_NO_BROWSER, startupTimeoutMs);
 }
 
-function findMissingDependency(appDir) {
+function findMissingDependency(app, appDir) {
   const manifestPath = join(appDir, 'package.json');
   if (!existsSync(manifestPath)) return undefined;
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+      throw new TypeError('Expected a JSON object.');
+    }
+  } catch (error) {
+    console.error(`[run-apps] Invalid apps/${app}/package.json: ${error.message}`);
+    process.exit(1);
+  }
   const packages = [
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.devDependencies ?? {}),
@@ -74,7 +83,7 @@ function findMissingDependency(appDir) {
 function ensureInstalled(apps) {
   for (const [app] of apps) {
     const appDir = join(root, 'apps', app);
-    if (!findMissingDependency(appDir)) continue;
+    if (!findMissingDependency(app, appDir)) continue;
     console.log(`\n[run-apps] ${manager} install in apps/${app}`);
     const result = spawnSync(command, installArgs, { cwd: appDir, stdio: 'inherit' });
     if (result.status !== 0) {
@@ -82,7 +91,7 @@ function ensureInstalled(apps) {
       console.error(`[run-apps] ${manager} install failed in apps/${app}${reason}`);
       process.exit(result.status || 1);
     }
-    const missing = findMissingDependency(appDir);
+    const missing = findMissingDependency(app, appDir);
     if (missing) {
       console.error(`[run-apps] apps/${app}: ${missing} is still missing after ${manager} install.`);
       process.exit(1);

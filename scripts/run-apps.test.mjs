@@ -368,3 +368,21 @@ test('root launcher stops if a successful install leaves a dependency missing', 
   assert.match(result.stderr, /apps\/api.*@fixture\/compiler.*still missing/);
   assert.equal(readFileSync(eventsFile, 'utf8').trim(), 'install');
 });
+
+test('root launcher identifies an invalid app manifest before running a task', (t) => {
+  const { launcher, cli } = setupFakeLauncher(t, "console.log('unexpected command');");
+  const manifest = join(dirname(launcher), '..', 'apps', 'web', 'package.json');
+
+  for (const contents of ['{"dependencies":', 'null', '[]']) {
+    writeFileSync(manifest, contents);
+    const result = spawnSync(process.execPath, [launcher, 'build'], {
+      env: { ...process.env, npm_execpath: cli, npm_config_user_agent: 'npm/10' },
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^\[run-apps\] Invalid apps\/web\/package\.json:/);
+    assert.doesNotMatch(result.stdout, /unexpected command/);
+  }
+});
