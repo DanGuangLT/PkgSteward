@@ -1,6 +1,5 @@
 import { ApiError } from "../api/response.ts"
 import { initialRunnerLogs } from "./runner-log-view.ts"
-import { initialTerminalClientState } from "./terminal-session.ts"
 import type {
   ConsoleShell,
   RunAction,
@@ -12,7 +11,6 @@ import type {
   RunnerContext,
 } from "@/lib/api/types"
 import type { RunnerLogs } from "@/lib/npm-runner/runner-log-view"
-import type { TerminalClientState } from "@/lib/npm-runner/terminal-session"
 
 export const CONSOLE_SHELLS: readonly ConsoleShell[] = ["cmd", "powershell"]
 
@@ -43,7 +41,6 @@ export interface RunnerError {
   statusCode?: number
   conflict?: RunnerConflict
   recoveryHold?: RunRecoveryHold
-  terminalCode?: string
 }
 export interface RunnerSelection { action: RunAction; package?: string; script?: string; consoleShell?: ConsoleShell }
 export interface RunnerState {
@@ -56,7 +53,6 @@ export interface RunnerState {
   job: RunJob | null
   recoveryHold: RunRecoveryHold | null
   logs: RunnerLogs
-  terminal: TerminalClientState
   error: RunnerError | null
   pollError: string | null
   contextError: string | null
@@ -69,13 +65,12 @@ export interface RunnerState {
 
 export function initialRunnerState(
   context: RunnerContext | null = null,
-  tabId = "00000000-0000-4000-8000-000000000000",
 ): RunnerState {
   return { phase: "idle", context, requestPath: context?.requestPath ?? null, generation: 0,
     requestId: null, jobId: null, job: null,
     recoveryHold: context?.recoveryHold?.active ? context.recoveryHold : null,
     logs: initialRunnerLogs(),
-    terminal: initialTerminalClientState(tabId), error: null, pollError: null,
+    error: null, pollError: null,
     contextError: null, startUnknown: false, cancelUnknown: false, cancelPending: false,
     clearPending: false, refreshing: false }
 }
@@ -91,9 +86,6 @@ export function runnerError(cause: unknown): RunnerError {
   const error: RunnerError = { code: cause.code ?? "UNKNOWN", statusCode: cause.statusCode }
   const details = cause.details
   if (typeof details === "object" && details !== null) {
-    if ("terminalCode" in details && typeof details.terminalCode === "string" && details.terminalCode) {
-      error.terminalCode = details.terminalCode
-    }
     if (cause.statusCode === 409 && cause.code === "CONFLICT"
       && "reason" in details && typeof details.reason === "string" && details.reason) {
       error.code = details.reason

@@ -119,9 +119,6 @@ export interface IRunRequest {
   package?: string;
   script?: string;
   consoleShell?: ConsoleShell;
-  terminal?: boolean;
-  cols?: number;
-  rows?: number;
 }
 export interface IRunStart {
   jobId: string;
@@ -141,49 +138,11 @@ export interface IRunnerContext {
   manager: ProjectManager;
   version: string | null;
   available: boolean;
-  terminalAvailable?: boolean;
   nativeConsoleAvailable?: boolean;
   recoveryHold?: IRunRecoveryHold | null;
   reason: RunFailureCode | null;
   scripts: IRunnerScript[];
   warnings: RunWarningCode[];
-}
-export interface IRunTerminalMeta {
-  mode: 'pty';
-  generation: number;
-  available: boolean;
-  ready: boolean;
-  firstCursor: number;
-  endCursor: number;
-  droppedBytes: number;
-  writerGeneration: number | null;
-  inputBlocked: boolean;
-}
-export interface ITerminalClaimBody {
-  requestId: string;
-  generation: number;
-  tabId: string;
-  takeover: boolean;
-}
-export interface ITerminalWriterBody {
-  requestId: string;
-  generation: number;
-  tabId: string;
-  token: string;
-  writerGeneration: number;
-}
-export interface ITerminalInputAckBody extends ITerminalWriterBody {
-  sequence: number;
-}
-export interface ITerminalInputBody extends ITerminalInputAckBody {
-  text: string;
-}
-export interface ITerminalResizeBody extends ITerminalWriterBody {
-  cols: number;
-  rows: number;
-}
-export interface ITerminalResizeResult {
-  queued: boolean;
 }
 export interface IRunJob extends IRunStart {
   requestPath: string;
@@ -211,7 +170,6 @@ export interface IRunJob extends IRunStart {
   firstCursor: number;
   endCursor: number;
   droppedBytes: number;
-  terminal?: IRunTerminalMeta | null;
   nativeSession?: INativeConsoleMeta | null;
   initialCommand?: IRunCommandResult | null;
   recoveryHold?: IRunRecoveryHold | null;

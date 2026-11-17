@@ -199,26 +199,15 @@ describe('StartNpmRunDto admission boundary', () => {
     expect(validateSync(dto, options)).not.toEqual([]);
   });
 
-  it('accepts optional terminal, cols and rows within bounds and rejects invalid values', () => {
-    expect(
-      errors({
-        ...base,
-        action: 'install_all',
-        terminal: true,
-        cols: 120,
-        rows: 40,
-      }),
-    ).toEqual([]);
-    for (const invalid of [
-      { terminal: 'true' },
-      { cols: 1 },
-      { cols: 501 },
-      { rows: 0 },
-      { rows: 301 },
-      { cols: '80' },
+  it('rejects retired terminal, cols and rows fields under forbidNonWhitelisted', () => {
+    for (const retired of [
+      { terminal: true },
+      { terminal: false },
+      { cols: 120 },
+      { rows: 40 },
     ]) {
       expect(
-        errors({ ...base, action: 'install_all', ...invalid }),
+        errors({ ...base, action: 'install_all', ...retired }),
       ).not.toEqual([]);
     }
   });

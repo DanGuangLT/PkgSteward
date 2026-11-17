@@ -13,16 +13,11 @@ import {
 
 import {
   cancelBrowserNpmRun,
-  claimBrowserNpmRunTerminal,
   clearBrowserRecoveryHold,
   getBrowserLatestNpmRun,
   getBrowserNpmRunLogs,
-  getBrowserNpmRunTerminalInputAck,
-  getBrowserNpmRunTerminalOutput,
   getBrowserRunnerContext,
   pollBrowserNpmRun,
-  resizeBrowserNpmRunTerminal,
-  sendBrowserNpmRunTerminalInput,
   startBrowserNpmRun,
 } from "@/lib/api/npm-runs/npm-runs-browser"
 import type { RunJob, RunnerContext } from "@/lib/api/types"
@@ -38,11 +33,6 @@ export interface NpmRunnerContextValue {
   retryPoll: () => void
   refresh: () => Promise<void>
   follow: () => string | null
-  claimTerminal: (takeover?: boolean) => Promise<void>
-  sendTerminalInput: (text: string) => Promise<void>
-  reconcileTerminalInput: () => Promise<void>
-  resizeTerminal: (cols: number, rows: number) => void
-  clearTerminalOutput: () => void
   dismissCompletedJob: () => void
   syncProjectContext: (context: RunnerContext | null, requestPath: string | null) => void
   registerMutationListener: (listener: (job: RunJob) => void) => () => void
@@ -65,11 +55,6 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
         get: pollBrowserNpmRun,
         logs: getBrowserNpmRunLogs,
         cancel: cancelBrowserNpmRun,
-        terminalOutput: getBrowserNpmRunTerminalOutput,
-        claimTerminal: claimBrowserNpmRunTerminal,
-        terminalInput: sendBrowserNpmRunTerminalInput,
-        terminalInputAck: getBrowserNpmRunTerminalInputAck,
-        resizeTerminal: resizeBrowserNpmRunTerminal,
       },
       clock: {
         setTimeout: (callback, delay) => window.setTimeout(callback, delay),
@@ -103,11 +88,6 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
   const retryPoll = useCallback(() => { session.current?.retryPoll() }, [])
   const refresh = useCallback(() => session.current?.refresh() ?? Promise.resolve(), [])
   const follow = useCallback(() => session.current?.follow() ?? null, [])
-  const claimTerminal = useCallback((takeover = false) => session.current?.claimTerminal(takeover) ?? Promise.resolve(), [])
-  const sendTerminalInput = useCallback((text: string) => session.current?.sendTerminalInput(text) ?? Promise.resolve(), [])
-  const reconcileTerminalInput = useCallback(() => session.current?.reconcileTerminalInput() ?? Promise.resolve(), [])
-  const resizeTerminal = useCallback((cols: number, rows: number) => { session.current?.resizeTerminal(cols, rows) }, [])
-  const clearTerminalOutput = useCallback(() => { session.current?.clearTerminalOutput() }, [])
   const dismissCompletedJob = useCallback(() => { session.current?.dismissCompletedJob() }, [])
   const syncProjectContext = useCallback((context: RunnerContext | null, requestPath: string | null) => {
     session.current?.syncProjectContext(context, requestPath)
@@ -125,11 +105,6 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
     retryPoll,
     refresh,
     follow,
-    claimTerminal,
-    sendTerminalInput,
-    reconcileTerminalInput,
-    resizeTerminal,
-    clearTerminalOutput,
     dismissCompletedJob,
     syncProjectContext,
     registerMutationListener,
@@ -141,11 +116,6 @@ export function NpmRunnerProvider({ children }: { children: ReactNode }) {
     retryPoll,
     refresh,
     follow,
-    claimTerminal,
-    sendTerminalInput,
-    reconcileTerminalInput,
-    resizeTerminal,
-    clearTerminalOutput,
     dismissCompletedJob,
     syncProjectContext,
     registerMutationListener,

@@ -15,14 +15,6 @@ import type {
   IRunProcessCallbacks,
 } from '@/npm-runner/execution/runner-process';
 import type {
-  ITerminalRunCallbacks,
-  ITerminalRunProcess,
-} from '@/npm-runner/terminal/terminal-worker-process';
-import type {
-  ITerminalIdentity,
-  ITerminalSize,
-} from '@/npm-runner/terminal/terminal-protocol';
-import type {
   INativeInitCommand,
   INativeSessionIdentity,
 } from '@/npm-runner/native-session/native-protocol';
@@ -99,13 +91,6 @@ export interface INpmRunnerRuntime {
     env: NodeJS.ProcessEnv,
     callbacks: IRunProcessCallbacks,
   ): IRunProcess;
-  launchTerminal?(
-    command: IRunnerCommand,
-    env: NodeJS.ProcessEnv,
-    callbacks: ITerminalRunCallbacks,
-    identity: ITerminalIdentity,
-    initialSize?: ITerminalSize,
-  ): ITerminalRunProcess;
   native?: INativeRunnerRuntime;
   recovery?: INativeRecoveryRuntime;
   now(): Date;
