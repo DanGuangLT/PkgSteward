@@ -1314,7 +1314,7 @@
     },
     "codes": {
       "UNKNOWN": "Đã xảy ra lỗi không xác định.",
-      "PIN_UNSUPPORTED": "Giá trị packageManager hiện tại không đúng dạng <tên>@<phiên bản chính xác>; ứng dụng không sửa giá trị này.",
+      "PIN_UNSUPPORTED": "Giá trị packageManager hiện tại không đúng dạng '<tên>@<phiên bản chính xác>'; ứng dụng không sửa giá trị này.",
       "TARGET_VERSION_UNSUPPORTED": "Phiên bản đích không hợp lệ: chỉ nhận bản ổn định, chưa bị deprecate, cùng major với công cụ đã cài.",
       "MANIFEST_WRITE_FAILED": "Không ghi được package.json.",
       "POSTCONDITION_FAILED": "Đã ghi nhưng kiểm tra lại không khớp; hãy mở package.json để kiểm tra.",

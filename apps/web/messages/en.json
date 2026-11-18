@@ -1304,7 +1304,7 @@
     },
     "codes": {
       "UNKNOWN": "An unknown error occurred.",
-      "PIN_UNSUPPORTED": "The current packageManager value is not <name>@<exact version>; the app does not change it.",
+      "PIN_UNSUPPORTED": "The current packageManager value is not '<name>@<exact version>'; the app does not change it.",
       "TARGET_VERSION_UNSUPPORTED": "Unsupported target: only stable, non-deprecated versions with the installed tool's major are accepted.",
       "MANIFEST_WRITE_FAILED": "package.json could not be written.",
       "POSTCONDITION_FAILED": "The write finished but the check did not match; open package.json to verify it.",
