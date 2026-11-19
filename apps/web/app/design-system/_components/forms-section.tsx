@@ -182,7 +182,6 @@ export async function FormsSection() {
                 variant={demo.variant}
                 size={demo.size}
                 defaultValue="all"
-                className="flex-wrap"
                 aria-label={t("toggleGroup.filterLabel")}
               >
                 {FILTERS.map((filter) => (
@@ -197,7 +196,6 @@ export async function FormsSection() {
             <ToggleGroup
               type="multiple"
               defaultValue={["dependencies", "devDependencies"]}
-              className="flex-wrap"
               aria-label={t("toggleGroup.typeLabel")}
             >
               {DEPENDENCY_TYPES.map((type) => (
