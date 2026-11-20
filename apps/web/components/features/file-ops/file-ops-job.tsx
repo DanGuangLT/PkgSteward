@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import type { FileOpsController } from "@/hooks/use-file-ops"
 import { fileOpsErrorKey } from "@/lib/file-ops/file-ops-list"
 import { fileOpsStatusKey } from "@/lib/file-ops/file-ops-policy"
+import { cn } from "@/lib/utils"
 
 interface FileOpsJobProps {
   controller: FileOpsController
@@ -32,35 +33,114 @@ export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJ
   const canStartOver = state.phase === "finished" || state.phase === "lost"
   const statusRef = useRef<HTMLParagraphElement>(null)
 
+  const measurePercent = progress && progress.totalTargets > 0
+    ? Math.min(100, Math.round((progress.measuredTargets / progress.totalTargets) * 100))
+    : 0
+  const opTotal = state.phase === "operating" ? state.operation?.results.length ?? 0 : 0
+  const opDone = state.phase === "operating"
+    ? (state.operation?.results.filter((r) => r.status !== "pending" && r.status !== "running").length ?? 0)
+    : 0
+  const opPercent = opTotal > 0 ? Math.min(100, Math.round((opDone / opTotal) * 100)) : 0
+  const isIdle = state.phase === "idle"
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <p ref={statusRef} tabIndex={-1} aria-live="polite" aria-atomic="true" className="scroll-mt-24 rounded-sm text-body-sm focus-ring">
-        {t(fileOpsStatusKey(state))}
-        {state.phase === "operating" && state.operation?.currentPath
-          ? ` ${t("currentPath", { path: state.operation.currentPath })}` : null}
-      </p>
-
-      {state.phase === "measuring" && progress ? (
-        <div className="min-w-0 space-y-2">
-          <Progress value={progress.totalTargets === 0 ? 0 : (progress.measuredTargets / progress.totalTargets) * 100}
-            aria-label={t("status.measuring")} />
-          <p className="text-body-sm text-muted-foreground">{t("progress", {
-            measured: format.number(progress.measuredTargets), total: format.number(progress.totalTargets),
-          })}</p>
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-3 text-body-sm",
+          isIdle ? "sr-only" : "rounded-md border border-border bg-card p-4",
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p
+            ref={statusRef}
+            tabIndex={-1}
+            aria-live="polite"
+            aria-atomic="true"
+            className="scroll-mt-24 rounded-sm font-semibold text-foreground focus-ring"
+          >
+            {t(fileOpsStatusKey(state))}
+          </p>
+          {state.phase === "measuring" && progress ? (
+            <p className="text-caption font-medium text-muted-foreground">
+              {t("progress", {
+                measured: format.number(progress.measuredTargets),
+                total: format.number(progress.totalTargets),
+              })}
+            </p>
+          ) : null}
         </div>
-      ) : null}
+
+        {state.phase === "measuring" && progress ? (
+          <Progress value={measurePercent} aria-label={t("status.measuring")} />
+        ) : null}
+
+        {state.phase === "operating" && opTotal > 0 ? (
+          <Progress value={opPercent} aria-label={t("status.deleting")} />
+        ) : null}
+
+        {state.phase === "operating" && state.operation?.currentPath ? (
+          <p className="font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">
+            {t("currentPath", { path: state.operation.currentPath })}
+          </p>
+        ) : null}
+
+        {state.phase === "measuring" || state.phase === "operating" || canStartOver ? (
+          <div className="flex flex-wrap gap-2">
+            {state.phase === "measuring" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={state.cancelPending}
+                onClick={() => void controller.cancelPreview()}
+              >
+                {t("actions.stopMeasuring")}
+              </Button>
+            ) : null}
+            {state.phase === "operating" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={stopping}
+                onClick={() => void controller.cancelOperation()}
+              >
+                {t("actions.stopDeleting")}
+              </Button>
+            ) : null}
+            {pollPaused ? (
+              <Button type="button" variant="secondary" size="sm" onClick={controller.retryPoll}>
+                {t("actions.retryPoll")}
+              </Button>
+            ) : null}
+            {canStartOver ? (
+              <>
+                <Button type="button" variant="secondary" size="sm" onClick={onStartOver}>
+                  {t("actions.startOver")}
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/" prefetch={false}>{t("actions.toProjects")}</Link>
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {errorMessage && summary === null && state.phase !== "unconfirmed" ? (
-        <div role="alert" className="min-w-0 space-y-3 rounded-md border border-border bg-muted p-4 text-body-sm">
-          <p>{errorMessage}</p>
-          {pollPaused ? <p>{t("errors.pollPaused")}</p> : null}
+        <div role="alert" className="min-w-0 space-y-3 rounded-md border border-destructive/50 bg-card p-4 text-body-sm">
+          <p className="font-semibold text-destructive">{errorMessage}</p>
+          {pollPaused ? <p className="text-muted-foreground">{t("errors.pollPaused")}</p> : null}
           {error && error.paths.length > 0 ? (
             <ul className="space-y-1 font-mono text-caption [overflow-wrap:anywhere]">
               {error.paths.map((path) => <li key={path}>{path}</li>)}
             </ul>
           ) : null}
           {error?.source === "start" && error.code === "NOT_FOUND" ? (
-            <Button asChild variant="secondary"><Link href="/" prefetch={false}>{t("actions.toProjects")}</Link></Button>
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/" prefetch={false}>{t("actions.toProjects")}</Link>
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -71,41 +151,39 @@ export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJ
           <p>{t("unconfirmed.description")}</p>
           {errorMessage ? <p>{errorMessage}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={() => void controller.resendExecute()}>{t("actions.resend")}</Button>
+            <Button type="button" variant="secondary" onClick={() => void controller.resendExecute()}>
+              {t("actions.resend")}
+            </Button>
             {/* Lệnh xoá có thể đã chạy: làm mới luôn dữ liệu đang hiện. */}
-            <Button type="button" variant="secondary" onClick={() => {
-              controller.abandon()
-              onStartOver()
-            }}>{t("actions.abandon")}</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                controller.abandon()
+                onStartOver()
+              }}
+            >
+              {t("actions.abandon")}
+            </Button>
           </div>
         </div>
       ) : null}
 
-      {state.phase === "measuring" || state.phase === "operating" ? (
-        <div className="flex flex-wrap gap-2">
-          {state.phase === "measuring" ? (
-            <Button type="button" variant="secondary" disabled={state.cancelPending} onClick={() => void controller.cancelPreview()}>
-              {t("actions.stopMeasuring")}
-            </Button>
-          ) : (
-            <Button type="button" variant="secondary" disabled={stopping} onClick={() => void controller.cancelOperation()}>
-              {t("actions.stopDeleting")}
-            </Button>
-          )}
-          {pollPaused ? <Button type="button" variant="secondary" onClick={controller.retryPoll}>{t("actions.retryPoll")}</Button> : null}
-        </div>
-      ) : null}
-
       {summary && preview ? (
-        <DeleteConfirmDialog previewId={preview.previewId} summary={summary} targets={preview.targets}
-          pending={state.phase === "executing"} errorMessage={errorMessage} returnFocusRef={returnFocusRef} revealRef={statusRef}
-          onConfirm={(confirmation) => void controller.execute(confirmation)} onCancel={controller.closeSummary} />
+        <DeleteConfirmDialog
+          previewId={preview.previewId}
+          summary={summary}
+          targets={preview.targets}
+          pending={state.phase === "executing"}
+          errorMessage={errorMessage}
+          returnFocusRef={returnFocusRef}
+          revealRef={statusRef}
+          onConfirm={(confirmation) => void controller.execute(confirmation)}
+          onCancel={controller.closeSummary}
+        />
       ) : null}
 
       {state.operation ? <OperationResults operation={state.operation} /> : null}
-      {canStartOver ? (
-        <Button type="button" variant="secondary" className="self-start" onClick={onStartOver}>{t("actions.startOver")}</Button>
-      ) : null}
     </div>
   )
 }

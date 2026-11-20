@@ -1,8 +1,9 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
-  cleanupPreviewInput, fileManagerHref, fileOpsErrorKey, initialReviewSelection, isReviewTarget, operationCounts,
-  resultErrorKey, reviewTotals, sortCleanupTargets, sortOperationResults, targetFailureKey,
+  applyQuickSelection, applyRangeSelection, cleanupPreviewInput, computeCleanupMetrics, fileManagerHref, fileOpsErrorKey,
+  formatRelativeDays, groupTargetsByOwner, initialReviewSelection, isReviewTarget, operationCounts, resultErrorKey,
+  reviewTotals, sortCleanupTargets, sortOperationResults, targetFailureKey,
 } from "./file-ops-list.ts"
 import { fileOpsInitialState } from "./file-ops-policy.ts"
 
@@ -152,4 +153,141 @@ test("file manager link round-trips the project path", () => {
   const url = new URL(fileManagerHref(path), "http://127.0.0.1")
   assert.equal(url.pathname, "/files")
   assert.equal(url.searchParams.get("path"), path)
+})
+
+test("cleanupPreviewInput includes deduped projectPaths when specified and rejects over limit", () => {
+  assert.deepEqual(
+    cleanupPreviewInput({
+      kinds: ["node_modules"],
+      olderThanDays: "",
+      minSizeMib: "",
+      projectPaths: ["D:\\TEST\\a", "D:\\TEST\\a", "D:\\TEST\\b"],
+    }),
+    { includeKinds: ["node_modules"], projectPaths: ["D:\\TEST\\a", "D:\\TEST\\b"] },
+  )
+  assert.deepEqual(
+    cleanupPreviewInput({ kinds: ["node_modules"], olderThanDays: "", minSizeMib: "", projectPaths: [] }),
+    { includeKinds: ["node_modules"] },
+  )
+  const overLimit = Array.from({ length: 1001 }, (_, idx) => `D:\\TEST\\p-${idx}`)
+  assert.equal(
+    cleanupPreviewInput({ kinds: ["node_modules"], olderThanDays: "", minSizeMib: "", projectPaths: overLimit }),
+    null,
+  )
+})
+
+test("sortCleanupTargets supports risk, name, and explicit asc/desc directions", () => {
+  const low = target("D:\\TEST\\z\\node_modules", {
+    owner: { path: "D:\\TEST\\z", name: "zeta" },
+    risk: { level: "low", reasons: [] },
+    size: size({ reclaimableBytes: 100 }),
+  })
+  const high = target("D:\\TEST\\a\\node_modules", {
+    owner: { path: "D:\\TEST\\a", name: "alpha" },
+    risk: { level: "high", reasons: [] },
+    size: size({ reclaimableBytes: 10 }),
+  })
+  const med = target("D:\\TEST\\m\\node_modules", {
+    owner: { path: "D:\\TEST\\m", name: "mid" },
+    risk: { level: "medium", reasons: [] },
+    size: size({ reclaimableBytes: 50 }),
+  })
+  assert.deepEqual(sortCleanupTargets([low, high, med], "risk", "en").map((t) => t.path), [high.path, med.path, low.path])
+  assert.deepEqual(sortCleanupTargets([low, high, med], "risk", "en", "asc").map((t) => t.path), [low.path, med.path, high.path])
+  assert.deepEqual(sortCleanupTargets([low, high, med], "name", "en").map((t) => t.path), [high.path, med.path, low.path])
+  assert.deepEqual(sortCleanupTargets([low, high, med], "name", "en", "desc").map((t) => t.path), [low.path, med.path, high.path])
+  assert.deepEqual(sortCleanupTargets([low, high, med], "size", "en", "asc").map((t) => t.path), [high.path, med.path, low.path])
+})
+
+test("computeCleanupMetrics summarizes valid targets, kinds, risks, and selected totals", () => {
+  const targets = [
+    target("a", { kind: "node_modules", method: "permanent", size: size({ reclaimableBytes: 100 }), risk: { level: "low", reasons: [] } }),
+    target("b", { kind: "build_cache", method: "permanent", size: size({ reclaimableBytes: 40 }), risk: { level: "medium", reasons: [] } }),
+    target("c", { kind: "orphan_node_modules", method: "recycle", size: size({ reclaimableBytes: 60 }), risk: { level: "high", reasons: [] } }),
+    target("d", { valid: false, size: size({ status: "failed", reclaimableBytes: null }) }),
+  ]
+  const metrics = computeCleanupMetrics(targets, new Set(["a", "c"]))
+  assert.equal(metrics.totalTargets, 4)
+  assert.equal(metrics.eligibleCount, 3)
+  assert.equal(metrics.invalidCount, 1)
+  assert.equal(metrics.totalReclaimableBytes, 200)
+  assert.equal(metrics.maxTargetBytes, 100)
+  assert.equal(metrics.attentionCount, 2)
+  assert.equal(metrics.selected.count, 2)
+  assert.equal(metrics.selected.reclaimableBytes, 100)
+  assert.equal(metrics.selected.recycleBytes, 60)
+  assert.equal(metrics.selectedHighestRisk, "high")
+  assert.equal(metrics.byKind.node_modules.count, 1)
+  assert.equal(metrics.byKind.build_cache.bytes, 40)
+  assert.equal(metrics.byKind.orphan_node_modules.count, 1)
+})
+
+test("applyQuickSelection handles recommended, visible, low_risk_visible, deselect_visible, clear", () => {
+  const targets = [
+    target("vis-low", { defaultSelected: true, risk: { level: "low", reasons: [] } }),
+    target("vis-high", { defaultSelected: false, risk: { level: "high", reasons: [] } }),
+    target("vis-invalid", { valid: false, defaultSelected: true }),
+    target("hid-low", { defaultSelected: true, risk: { level: "low", reasons: [] } }),
+  ]
+  const visible = new Set(["vis-low", "vis-high", "vis-invalid"])
+
+  assert.deepEqual(
+    [...applyQuickSelection(targets, visible, new Set(["vis-high"]), "recommended")].sort(),
+    ["hid-low", "vis-low"],
+  )
+  assert.deepEqual(
+    [...applyQuickSelection(targets, visible, new Set(["hid-low"]), "visible")].sort(),
+    ["hid-low", "vis-high", "vis-low"],
+  )
+  assert.deepEqual(
+    [...applyQuickSelection(targets, visible, new Set(["vis-high", "hid-low"]), "low_risk_visible")].sort(),
+    ["vis-low"],
+  )
+  assert.deepEqual(
+    [...applyQuickSelection(targets, visible, new Set(["vis-low", "vis-high", "hid-low"]), "deselect_visible")],
+    ["hid-low"],
+  )
+  assert.deepEqual(
+    [...applyQuickSelection(targets, visible, new Set(["vis-low", "hid-low"]), "clear")],
+    [],
+  )
+})
+
+test("applyRangeSelection toggles contiguous eligible range forward and backward", () => {
+  const ordered = ["p1", "p2", "p3", "p4", "p5"]
+  const eligible = new Set(["p1", "p2", "p4", "p5"])
+  const forward = applyRangeSelection(ordered, eligible, new Set(["p1"]), "p1", "p4")
+  assert.deepEqual([...forward].sort(), ["p1", "p2", "p4"])
+  const backward = applyRangeSelection(ordered, eligible, new Set(["p4"]), "p4", "p2")
+  assert.deepEqual([...backward].sort(), ["p2", "p4"])
+  // Deselecting range when target is already selected
+  const deselect = applyRangeSelection(ordered, eligible, new Set(["p1", "p2", "p4", "p5"]), "p2", "p4")
+  assert.deepEqual([...deselect].sort(), ["p1", "p5"])
+})
+
+test("groupTargetsByOwner groups by owner path and puts ownerless items in orphan group", () => {
+  const targets = [
+    target("D:\\TEST\\app-a\\node_modules", { owner: { path: "D:\\TEST\\app-a", name: "app-a" }, size: size({ reclaimableBytes: 50 }) }),
+    target("D:\\TEST\\app-a\\.next", { kind: "build_cache", owner: { path: "D:\\TEST\\app-a", name: "app-a" }, size: size({ reclaimableBytes: 30 }) }),
+    target("D:\\TEST\\app-b\\node_modules", { owner: { path: "D:\\TEST\\app-b", name: "app-b" }, size: size({ reclaimableBytes: 120 }) }),
+    target("D:\\TEST\\stray\\node_modules", { kind: "orphan_node_modules", owner: null, size: size({ reclaimableBytes: 20 }) }),
+  ]
+  const groups = groupTargetsByOwner(targets, "en")
+  assert.equal(groups.length, 3)
+  assert.equal(groups[0].ownerName, "app-b")
+  assert.equal(groups[0].totalReclaimableBytes, 120)
+  assert.equal(groups[1].ownerName, "app-a")
+  assert.equal(groups[1].targets.length, 2)
+  assert.equal(groups[1].totalReclaimableBytes, 80)
+  assert.equal(groups[2].isOrphanGroup, true)
+  assert.equal(groups[2].targets.length, 1)
+})
+
+test("formatRelativeDays computes non-negative day deltas deterministically", () => {
+  const now = Date.parse("2026-11-20T12:00:00.000Z")
+  assert.equal(formatRelativeDays("2026-11-20T10:00:00.000Z", now), 0)
+  assert.equal(formatRelativeDays("2026-11-10T12:00:00.000Z", now), 10)
+  assert.equal(formatRelativeDays("2026-11-25T12:00:00.000Z", now), 0)
+  assert.equal(formatRelativeDays(null, now), null)
+  assert.equal(formatRelativeDays("not-a-date", now), null)
 })

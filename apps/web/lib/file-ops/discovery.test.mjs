@@ -1,6 +1,14 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { selectLoadedTree, hiddenSelectedCount, selectCleanupTargets, CLEANUP_DISCOVERY, selectResults, RESULT_DISCOVERY } from "./discovery.ts"
+import {
+  CLEANUP_DISCOVERY,
+  RESULT_DISCOVERY,
+  cleanupDiscoveryCodec,
+  hiddenSelectedCount,
+  selectCleanupTargets,
+  selectLoadedTree,
+  selectResults,
+} from "./discovery.ts"
 test("loaded-only tree matches retain ancestors without changing expansion or selection", () => {
   const folder = { name: "TEST-folder", path: "TEST/root/folder", type: "directory" }
   const match = { name: "TEST-match", path: "TEST/root/folder/match", type: "file" }
@@ -39,4 +47,45 @@ test("tree search ignores cached levels disconnected from the current root", () 
   assert.equal(result.total, 1)
   assert.equal(result.count, 0)
   assert.equal(result.visiblePaths.size, 0)
+})
+
+test("cleanup discovery supports lockfile filter, selectedOnly, sort direction, and codec defaults", () => {
+  const withLock = {
+    path: "TEST/with",
+    owner: { name: "alpha", path: "TEST/alpha" },
+    kind: "node_modules",
+    valid: true,
+    hasLockfile: true,
+    risk: { level: "low" },
+    size: { reclaimableBytes: 10 },
+    lastActivityAt: null,
+  }
+  const noLock = {
+    path: "TEST/without",
+    owner: { name: "beta", path: "TEST/beta" },
+    kind: "node_modules",
+    valid: true,
+    hasLockfile: false,
+    risk: { level: "medium" },
+    size: { reclaimableBytes: 50 },
+    lastActivityAt: null,
+  }
+  const selected = new Set([withLock.path])
+  assert.deepEqual(
+    selectCleanupTargets([withLock, noLock], { ...CLEANUP_DISCOVERY, lockfiles: ["without"] }, "en", selected),
+    [noLock],
+  )
+  assert.deepEqual(
+    selectCleanupTargets([withLock, noLock], { ...CLEANUP_DISCOVERY, selectedOnly: true }, "en", selected),
+    [withLock],
+  )
+  assert.deepEqual(
+    selectCleanupTargets([withLock, noLock], { ...CLEANUP_DISCOVERY, sort: "size", sortDir: "asc" }, "en", selected),
+    [withLock, noLock],
+  )
+  const legacyDecoded = cleanupDiscoveryCodec.decode({ query: "abc", kinds: [], validities: [], risks: [], sort: "age" })
+  assert.equal(legacyDecoded.sort, "age")
+  assert.deepEqual(legacyDecoded.lockfiles, [])
+  assert.equal(legacyDecoded.selectedOnly, false)
+  assert.equal(legacyDecoded.viewMode, "list")
 })

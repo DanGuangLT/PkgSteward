@@ -755,6 +755,138 @@
       "empty": "This folder is empty.",
       "truncated": "Showing only the first {limit} items of this folder.",
       "link": "Link, cannot be selected"
+    },
+    "scanContext": {
+      "summary": "Latest scan: {projects} projects · {withNodeModules} with node_modules · {orphans} orphaned",
+      "scannedAt": "Scanned {time}",
+      "partial": "Partial scan",
+      "rescan": "Scan again",
+      "missingTitle": "No scan result yet",
+      "missingDescription": "Scan your project roots first to discover node_modules, orphan folders, and build caches eligible for cleanup.",
+      "goScan": "Go to scan"
+    },
+    "presets": {
+      "quickHeading": "Quick presets — 1 click to find & measure",
+      "quickHint": "Click a preset to measure right away (read-only, deletes nothing), or click Customize to adjust criteria first.",
+      "recommendedBadge": "Recommended",
+      "runNow": "Measure now",
+      "customize": "Customize",
+      "builtin": {
+        "safe-recommended": {
+          "title": "Safe recommended",
+          "description": "Find node_modules in projects inactive for 30+ days. Ideal for everyday safe cleanup.",
+          "summary": "node_modules · ≥ 30 days"
+        },
+        "all-node-modules": {
+          "title": "All node_modules",
+          "description": "Measure every node_modules folder across all scanned projects so you can reclaim maximum space.",
+          "summary": "node_modules · any age"
+        },
+        "build-caches": {
+          "title": "Build caches only",
+          "description": "Find regenerable build cache folders (.next, .nuxt, .turbo, coverage…) across scanned projects.",
+          "summary": "Build caches · any age"
+        },
+        "deep-clean": {
+          "title": "Deep clean",
+          "description": "Measure node_modules, orphan folders, and build caches together. Sensitive items still start unselected.",
+          "summary": "All types · any age"
+        }
+      },
+      "customHeading": "Personal presets",
+      "customEmpty": "No personal presets yet. Open Advanced customization to save your own reusable criteria.",
+      "customCount": "{count}/{max}",
+      "edit": "Edit",
+      "delete": "Delete",
+      "saveOpen": "Save as personal preset",
+      "updateOpen": "Update preset \"{name}\"",
+      "savePlaceholder": "Preset name, e.g. Stale projects > 60d",
+      "saveConfirm": "Save preset",
+      "saveNewCopy": "Save as new",
+      "saveCancel": "Cancel",
+      "editingBanner": "Editing personal preset \"{name}\"",
+      "stopEditing": "Stop editing",
+      "errors": {
+        "empty_name": "Enter a preset name before saving.",
+        "name_too_long": "Preset names can be at most 48 characters.",
+        "invalid_criteria": "Current criteria are not valid to save.",
+        "limit_reached": "You can save up to 12 personal presets. Delete an existing one to add more."
+      }
+    },
+    "customizer": {
+      "title": "Advanced customization",
+      "subtitle": "Fine-tune folder types, inactivity age, minimum size, and target specific projects.",
+      "collapse": "Hide customization",
+      "any": "Any",
+      "daysChip": "≥ {days}d",
+      "sizeMibChip": "≥ {mib} MiB",
+      "sizeGibChip": "≥ 1 GiB",
+      "projectScope": "Project scope",
+      "allProjects": "All scanned projects ({count})",
+      "selectedProjects": "Only {count} selected projects",
+      "pickProjects": "Choose projects…",
+      "projectSearchPlaceholder": "Filter projects by name or path…",
+      "projectScopeHint": "When scoped to specific projects, build caches and orphan node_modules are also limited to those projects.",
+      "selectAllProjects": "Select all",
+      "clearProjects": "Use all projects",
+      "noProjectsMatch": "No matching projects found.",
+      "missingProjectsWarning": "{count} project(s) in these criteria are not in the latest scan.",
+      "removeMissingProjects": "Remove missing",
+      "resetDefault": "Reset defaults",
+      "activeBarLabel": "Active criteria:",
+      "changeCriteria": "Change criteria",
+      "remeasure": "Re-measure",
+      "summaryDays": "≥ {days}d",
+      "summaryMinSize": "≥ {mib} MiB",
+      "summaryProjects": "{count} projects",
+      "summaryAllProjects": "All projects"
+    },
+    "kpi": {
+      "totalReclaimable": "Total reclaimable",
+      "totalItems": "{formattedCount} eligible items",
+      "selectedSpace": "Selected to clean",
+      "selectedNone": "Nothing selected",
+      "byKind": "By folder type",
+      "attention": "Needs attention",
+      "attentionCounts": "{risky} risky · {invalid} invalid",
+      "attentionAllClear": "All items are low risk"
+    },
+    "reviewTools": {
+      "tabs": {
+        "all": "All ({count})",
+        "selected": "Selected ({count})",
+        "attention": "Attention ({count})",
+        "invalid": "Invalid ({count})"
+      },
+      "lockfileLabel": "Lockfile",
+      "lockfileWith": "Has lockfile",
+      "lockfileWithout": "No lockfile",
+      "smartSelect": "Quick select",
+      "selectRecommended": "Reset to recommended",
+      "selectVisible": "Select all visible ({count})",
+      "selectLowRiskVisible": "Select low-risk visible only",
+      "deselectVisible": "Deselect visible",
+      "clearAll": "Clear all selection",
+      "viewMode": "View mode",
+      "viewList": "List",
+      "viewGrouped": "Group by project",
+      "orphanGroup": "Orphan folders (no owning project)",
+      "groupItems": "{count} items",
+      "selectGroup": "Select group {name}",
+      "selectVisibleAll": "Select all visible items",
+      "showSelected": "Show selected only",
+      "sortedAnnouncement": "Sorted by {column}, {direction}, {count} items",
+      "sortAsc": "ascending",
+      "sortDesc": "descending",
+      "shiftHint": "Tip: click any row to toggle selection, or Shift+Click to select a range.",
+      "inspectProject": "Project details",
+      "openFiles": "Manage files",
+      "fileCount": "{formattedCount} files",
+      "today": "Today",
+      "daysAgo": "{days}d ago",
+      "sortRisk": "Highest risk",
+      "sortName": "Project name",
+      "columnsActions": "Actions"
     }
   },
   "designSystem": {
