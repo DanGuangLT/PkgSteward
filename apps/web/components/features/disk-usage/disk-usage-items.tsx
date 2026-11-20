@@ -4,7 +4,6 @@ import { useId, useMemo } from "react"
 import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
 import { useViewState } from "@/hooks/use-navigation-continuity"
 import { makeViewStateKey } from "@/lib/ui/navigation-targets"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DISK_DISCOVERY, DISK_KINDS, DISK_STATES, diskDiscoveryCodec, selectDiskRows } from "@/lib/disk-usage/discovery"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
@@ -92,7 +91,18 @@ export function DiskUsageItems({ job, resultsId, onExpand, interaction }: {
       <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={rows.length} total={job.children.length} onReset={reset}>
         <DiscoveryFilter label={d("kinds")} value={view.kinds} options={DISK_KINDS.map(value => ({ value, label: d(`values.${value}`), count: job.children.filter(row => row.kind === value).length }))} onValueChange={kinds => setView({ ...view, kinds })} />
         <DiscoveryFilter label={d("states")} value={view.states} options={DISK_STATES.map(value => ({ value, label: d(`values.${value}`), count: job.children.filter(row => row.state === value).length }))} onValueChange={states => setView({ ...view, states })} />
-        <div className="min-w-0 space-y-2"><Label htmlFor={minId}>{d("minSize")}</Label><Input id={minId} type="text" inputMode="numeric" value={view.minSize} onChange={event => { const minSize = event.target.value; if (/^\d{0,15}$/.test(minSize)) setView({ ...view, minSize }) }} /></div>
+        <div className="flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3.5 py-2 text-body-sm transition-shadow focus-within:border-foreground focus-within:ring-2 focus-within:ring-ring sm:w-auto">
+          <Label htmlFor={minId} className="shrink-0 text-body-sm font-semibold text-foreground">{d("minSize")}</Label>
+          <input
+            id={minId}
+            type="text"
+            inputMode="numeric"
+            placeholder="0"
+            value={view.minSize}
+            onChange={event => { const minSize = event.target.value; if (/^\d{0,15}$/.test(minSize)) setView({ ...view, minSize }) }}
+            className="w-24 min-w-0 bg-transparent text-body-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </div>
         <DiscoverySort value={view.sort} options={[{ value: "size", label: d("size") }, { value: "name", label: d("name") }]} onValueChange={sort => setView({ ...view, sort })} />
       </DiscoveryControls>
       {rows.length === 0 ? job.children.length === 0 && job.status === "running" ? <p className="text-body-sm">{t("empty.listing")}</p> : <DiscoveryEmpty total={job.children.length} /> : null}

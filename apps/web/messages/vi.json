@@ -765,6 +765,138 @@
       "empty": "Thư mục trống.",
       "truncated": "Chỉ hiện {limit} mục đầu tiên của thư mục này.",
       "link": "Liên kết, không chọn riêng được"
+    },
+    "scanContext": {
+      "summary": "Lần quét gần nhất: {projects} dự án · {withNodeModules} có node_modules · {orphans} mồ côi",
+      "scannedAt": "Quét lúc {time}",
+      "partial": "Bản quét một phần",
+      "rescan": "Quét lại",
+      "missingTitle": "Chưa có bản quét nào",
+      "missingDescription": "Quét các thư mục dự án trước để tìm node_modules, thư mục mồ côi và cache build có thể dọn.",
+      "goScan": "Đi tới trang quét"
+    },
+    "presets": {
+      "quickHeading": "Chọn nhanh — 1 chạm để tìm và đo",
+      "quickHint": "Bấm trực tiếp vào gói để đo ngay (chỉ đọc, chưa xoá gì), hoặc bấm Tuỳ chỉnh để chỉnh thêm trước khi đo.",
+      "recommendedBadge": "Khuyên dùng",
+      "runNow": "Đo ngay",
+      "customize": "Tuỳ chỉnh",
+      "builtin": {
+        "safe-recommended": {
+          "title": "An toàn khuyên dùng",
+          "description": "Tìm node_modules của các dự án không hoạt động từ 30 ngày trở lên. Phù hợp cho nhu cầu dọn dẹp hằng ngày.",
+          "summary": "node_modules · ≥ 30 ngày"
+        },
+        "all-node-modules": {
+          "title": "Toàn bộ node_modules",
+          "description": "Đo tất cả thư mục node_modules ở mọi dự án đã quét để tự chọn giải phóng dung lượng lớn.",
+          "summary": "node_modules · mọi độ tuổi"
+        },
+        "build-caches": {
+          "title": "Chỉ Build Caches",
+          "description": "Tìm các thư mục cache tạo lại được (.next, .nuxt, .turbo, coverage…) ở mọi dự án đã quét.",
+          "summary": "Thư mục cache · mọi độ tuổi"
+        },
+        "deep-clean": {
+          "title": "Dọn toàn diện",
+          "description": "Đo đồng thời node_modules, thư mục mồ côi và cache build. Mục nhạy cảm vẫn mặc định bỏ chọn.",
+          "summary": "Tất cả loại · mọi độ tuổi"
+        }
+      },
+      "customHeading": "Preset cá nhân",
+      "customEmpty": "Chưa có preset cá nhân. Mở Tuỳ chỉnh nâng cao để lưu bộ tiêu chí hay dùng của riêng bạn.",
+      "customCount": "{count}/{max}",
+      "edit": "Sửa",
+      "delete": "Xoá",
+      "saveOpen": "Lưu thành preset cá nhân",
+      "updateOpen": "Cập nhật preset \"{name}\"",
+      "savePlaceholder": "Đặt tên preset, ví dụ: Dự án cũ > 60 ngày",
+      "saveConfirm": "Lưu preset",
+      "saveNewCopy": "Lưu thành bản mới",
+      "saveCancel": "Huỷ",
+      "editingBanner": "Đang chỉnh preset cá nhân \"{name}\"",
+      "stopEditing": "Thoát chỉnh sửa",
+      "errors": {
+        "empty_name": "Nhập tên cho preset trước khi lưu.",
+        "name_too_long": "Tên preset tối đa 48 ký tự.",
+        "invalid_criteria": "Tiêu chí hiện tại chưa hợp lệ để lưu.",
+        "limit_reached": "Đã đạt tối đa 12 preset cá nhân. Xoá bớt một preset cũ để lưu thêm."
+      }
+    },
+    "customizer": {
+      "title": "Tuỳ chỉnh nâng cao",
+      "subtitle": "Chỉnh chi tiết loại thư mục, số ngày không hoạt động, dung lượng tối thiểu và chọn đích danh từng dự án.",
+      "collapse": "Thu gọn tuỳ chỉnh",
+      "any": "Bất kỳ",
+      "daysChip": "≥ {days} ngày",
+      "sizeMibChip": "≥ {mib} MiB",
+      "sizeGibChip": "≥ 1 GiB",
+      "projectScope": "Phạm vi dự án",
+      "allProjects": "Tất cả dự án đã quét ({count})",
+      "selectedProjects": "Chỉ {count} dự án đã chọn",
+      "pickProjects": "Chọn dự án…",
+      "projectSearchPlaceholder": "Tìm theo tên hoặc đường dẫn dự án…",
+      "projectScopeHint": "Khi giới hạn dự án, cache build và node_modules mồ côi cũng chỉ tìm bên trong các dự án đã chọn.",
+      "selectAllProjects": "Chọn tất cả",
+      "clearProjects": "Dùng tất cả dự án",
+      "noProjectsMatch": "Không tìm thấy dự án nào khớp.",
+      "missingProjectsWarning": "{count} dự án trong bộ tiêu chí này không còn trong lần quét gần nhất.",
+      "removeMissingProjects": "Bỏ dự án không còn",
+      "resetDefault": "Về mặc định",
+      "activeBarLabel": "Tiêu chí đang áp dụng:",
+      "changeCriteria": "Đổi tiêu chí",
+      "remeasure": "Đo lại",
+      "summaryDays": "≥ {days} ngày",
+      "summaryMinSize": "≥ {mib} MiB",
+      "summaryProjects": "{count} dự án",
+      "summaryAllProjects": "Mọi dự án"
+    },
+    "kpi": {
+      "totalReclaimable": "Tổng có thể giải phóng",
+      "totalItems": "{formattedCount} mục đo được",
+      "selectedSpace": "Đang chọn dọn",
+      "selectedNone": "Chưa chọn mục nào",
+      "byKind": "Phân bổ theo loại",
+      "attention": "Cần kiểm tra",
+      "attentionCounts": "{risky} rủi ro · {invalid} không hợp lệ",
+      "attentionAllClear": "Toàn bộ đều rủi ro thấp"
+    },
+    "reviewTools": {
+      "tabs": {
+        "all": "Tất cả ({count})",
+        "selected": "Đang chọn ({count})",
+        "attention": "Cần chú ý ({count})",
+        "invalid": "Không hợp lệ ({count})"
+      },
+      "lockfileLabel": "Lockfile",
+      "lockfileWith": "Có lockfile",
+      "lockfileWithout": "Thiếu lockfile",
+      "smartSelect": "Chọn nhanh",
+      "selectRecommended": "Khôi phục theo khuyến nghị",
+      "selectVisible": "Chọn tất cả đang hiển thị ({count})",
+      "selectLowRiskVisible": "Chỉ chọn mục rủi ro thấp đang hiển thị",
+      "deselectVisible": "Bỏ chọn các mục đang hiển thị",
+      "clearAll": "Bỏ chọn toàn bộ",
+      "viewMode": "Chế độ hiển thị",
+      "viewList": "Danh sách",
+      "viewGrouped": "Gom theo dự án",
+      "orphanGroup": "Thư mục mồ côi (không thuộc dự án)",
+      "groupItems": "{count} mục",
+      "selectGroup": "Chọn nhóm {name}",
+      "selectVisibleAll": "Chọn tất cả mục đang hiển thị",
+      "showSelected": "Chỉ xem mục đã chọn",
+      "sortedAnnouncement": "Đã sắp xếp theo {column}, {direction}, {count} mục",
+      "sortAsc": "tăng dần",
+      "sortDesc": "giảm dần",
+      "shiftHint": "Mẹo: bấm cả dòng để chọn, giữ Shift để chọn nhiều dòng liên tiếp.",
+      "inspectProject": "Chi tiết dự án",
+      "openFiles": "Quản lý file",
+      "fileCount": "{formattedCount} tệp",
+      "today": "Hôm nay",
+      "daysAgo": "{days} ngày trước",
+      "sortRisk": "Rủi ro cao nhất",
+      "sortName": "Tên dự án",
+      "columnsActions": "Thao tác"
     }
   },
   "designSystem": {
