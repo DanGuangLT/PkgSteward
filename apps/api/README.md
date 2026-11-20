@@ -170,8 +170,8 @@ are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles re
 
 Run one command in a project from the latest scan: install all dependencies, install one package, update all,
 update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 10, npm 11, npm 12,
-pnpm 10 and pnpm 11**; npm 10, npm 12 and pnpm 10 prereleases and other majors are refused. Verified with npm 11.17.0,
-npm 12.2.2, pnpm 11.22.0 and Node 24.19.0; pnpm 10 arguments checked against pnpm 10.34.9. pnpm 10 receives
+pnpm 10 and pnpm 11**; npm 10, npm 12 and pnpm 10 prereleases and other majors are refused. Verified with npm 10.9.3,
+npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.18.0, 22.23.5, 24.19.0. pnpm 10 receives
 `--config.manage-package-manager-versions=false` instead of pnpm 11's `--pm-on-fail=warn` (pnpm 10 rejects that
 flag), so neither major switches to a version pinned in `packageManager`.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
@@ -414,8 +414,8 @@ List, remove or change an installed global package with **npm 10, npm 11, npm 12
 npm 10, npm 12 and pnpm 10 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
-Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0; how npm 12 handles install scripts of
-global packages has not been verified.
+Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.23.5, 24.19.0; how npm 12
+handles install scripts of global packages has not been verified.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
 An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.

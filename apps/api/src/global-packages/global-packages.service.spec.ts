@@ -864,6 +864,129 @@ describe('npm-self service integration (static facts, mocked IO)', () => {
     expect(f.inventory).not.toHaveBeenCalled();
   });
 
+  const attachNpm10Compat = async (
+    f: ReturnType<typeof setup>,
+  ): Promise<{
+    preload: string;
+    source: string;
+    loader: string;
+    libDir: string;
+  }> => {
+    const preload = win32.join(
+      f.memory.nodeDir,
+      'app',
+      'npm10-install-preload.js',
+    );
+    const libDir = win32.join(f.location.tool.packageDir, 'lib');
+    const commandsDir = win32.join(libDir, 'commands');
+    const source = win32.join(commandsDir, 'install.js');
+    const loader = win32.join(libDir, 'npm.js');
+    f.memory.put(preload, { text: 'TEST preload' });
+    f.memory.put(source, { text: 'TEST install' });
+    f.memory.put(loader, { text: 'TEST loader' });
+    f.runtime.nodeVersion = '22.23.5';
+    f.location.tool.version = '10.9.9';
+    f.location.tool.identities = [
+      {
+        path: f.location.tool.packageDir,
+        stat: await f.runtime.fs.lstat(f.location.tool.packageDir),
+      },
+    ];
+    f.location.tool.npm10InstallCompat = {
+      revision: 1,
+      supported: true,
+      preload,
+      source,
+      loader,
+      sourceSha256: 'a'.repeat(64),
+      loaderSha256: 'b'.repeat(64),
+      preloadSha256: 'c'.repeat(64),
+    };
+    f.location.tool.npm10InstallCompatIdentities = await Promise.all(
+      [
+        win32.dirname(preload),
+        f.location.tool.packageDir,
+        libDir,
+        commandsDir,
+        preload,
+        source,
+        loader,
+      ].map(async (path) => ({
+        path,
+        stat: await f.runtime.fs.lstat(path),
+      })),
+    );
+    return { preload, source, loader, libDir };
+  };
+
+  it.each(['change', 'remove', 'repair'] as const)(
+    'revalidates snapshotted npm 10 install-compat files and parent directories during %s postcondition',
+    async (action) => {
+      const f = setup(
+        action === 'change'
+          ? 'absent'
+          : action === 'remove'
+            ? 'present'
+            : 'broken',
+      );
+      await attachNpm10Compat(f);
+      if (action === 'change') {
+        f.target.mockResolvedValue(
+          npmTarget({ version: '11.17.0', engines: '^20.17.0 || >=22.9.0' }),
+        );
+      }
+      const preview = await f.ready(action);
+      const start = await f.execute(preview);
+      if (action === 'repair') {
+        expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+          status: 'completed',
+          failureCode: null,
+          gateHeld: false,
+          refreshRequired: false,
+        });
+        return;
+      }
+      await f.service.waitForPreflight(start.jobId);
+      await settleJobs();
+      if (action === 'change') f.present('11.17.0');
+      else f.absent();
+      f.child.exit();
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'completed',
+        failureCode: null,
+        gateHeld: false,
+        refreshRequired: false,
+      });
+    },
+  );
+
+  it.each(['file', 'directory'] as const)(
+    'fails npm-self postcondition when a snapshotted npm 10 install-compat %s drifts',
+    async (kind) => {
+      const f = setup('absent');
+      const compat = await attachNpm10Compat(f);
+      f.target.mockResolvedValue(
+        npmTarget({ version: '11.17.0', engines: '^20.17.0 || >=22.9.0' }),
+      );
+      const preview = await f.ready('change');
+      const start = await f.execute(preview);
+      await f.service.waitForPreflight(start.jobId);
+      await settleJobs();
+      f.present('11.17.0');
+      if (kind === 'file') {
+        f.memory.put(compat.source, { text: 'TEST drifted install source' });
+      } else {
+        f.memory.put(compat.libDir, { directory: true, link: true });
+      }
+      f.child.exit();
+      expect(await finishPnpmJob(f.service, start.jobId)).toMatchObject({
+        status: 'failed',
+        failureCode: 'POSTCONDITION_FAILED',
+        gateHeld: false,
+      });
+    },
+  );
+
   it('deletes the overlay before exact retired artifacts and ignores directory timestamp drift', async () => {
     const f = setup('broken');
     const retired = win32.join(f.location.globalRoot, '.npm-p9Z75ZzS');

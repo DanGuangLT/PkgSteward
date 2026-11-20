@@ -148,8 +148,8 @@ or recover missing build artifacts. Arguments and environment are unchanged; the
 allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail the job without an automatic retry.
 
 - **Tools and inputs:** npm 10, npm 11, npm 12, pnpm 10 and pnpm 11; npm 10, npm 12 and pnpm 10 prereleases and other
-  majors are refused. Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0; pnpm 10 arguments checked
-  against pnpm 10.34.9. Global packages support npm 10–12 and pnpm 10–11.
+  majors are refused. Verified with npm 10.9.3, npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and
+  Node 22.18.0, 22.23.5, 24.19.0. Global packages support npm 10–12 and pnpm 10–11.
   Installed npm 12 needs valid `engines.node` metadata satisfied by the backend's Node: missing/malformed metadata
   returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`. With installed
   npm 12, any `npm-shrinkwrap.json` (even alongside `package-lock.json`) refuses every action with
@@ -257,8 +257,9 @@ Open `/global-packages` to manage installed global packages with **npm 10, npm 1
 npm 10, npm 12 and pnpm 10 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`).
 Installed npm 12 needs valid `engines.node` metadata
 satisfied by the backend's Node: missing/malformed metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid
-Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 11.17.0, npm 12.2.2, pnpm 11.22.0 and Node 24.19.0;
-how npm 12 handles install scripts of global packages has not been verified. Yarn is not supported;
+Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0
+and Node 22.23.5, 24.19.0; how npm 12 handles install scripts of global packages has not been verified. Yarn is not
+supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
 and read the installed inventory. pnpm discovery and listing read configuration and filesystem metadata statically;
