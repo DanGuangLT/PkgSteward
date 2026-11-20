@@ -13,6 +13,7 @@ import { ProjectAdvisories } from "@/components/features/project-detail/project-
 import { ProjectDependencies } from "@/components/features/project-detail/project-dependencies"
 import { ProjectDetailHeader } from "@/components/features/project-detail/project-detail-header"
 import { ProjectScripts } from "@/components/features/project-detail/project-scripts"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useNavigationContinuity, useRouteScrollContinuity } from "@/hooks/use-navigation-continuity"
@@ -21,6 +22,7 @@ import type { AnalysisSection, ProjectAnalysisJob, ProjectDetail } from "@/lib/a
 import { diskUsageHref } from "@/lib/disk-usage/disk-usage-list"
 import { projectAnalysisStatusKey, projectAuditIsClean, projectDetailHref } from "@/lib/projects/project-detail-list"
 import { analysisProgressPercent, computeProjectDetailMetrics } from "@/lib/projects/project-metrics"
+import { projectAnalysisDisabledReason } from "@/lib/ui/disabled-reasons"
 import { appendReturnContext, makeViewStateKey } from "@/lib/ui/navigation-targets"
 import type messages from "@/messages/vi.json"
 
@@ -72,6 +74,7 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy, ac
   active?: boolean
 }) {
   const t = useTranslations("projectDetail")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const router = useRouter()
   const [refreshing, beginRefresh] = useTransition()
@@ -115,6 +118,15 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy, ac
   const returnContext = { returnTo: hydrated ? currentUrl : undefined, originId: hydrated ? entryId : null }
   const busy = state.phase === "starting" || state.phase === "tracking"
   const blocked = local?.warnings.includes("REGISTRY_CONFIG_UNSUPPORTED")
+  const startReasonKey = projectAnalysisDisabledReason({
+    busy,
+    refreshing,
+    registryBlocked: Boolean(blocked),
+    runnerBusy,
+  })
+  const startDisabledReason = startReasonKey ? tDisabled(startReasonKey) : null
+  const refreshDisabledReason = busy ? tDisabled("analysisRunning") : refreshing ? tDisabled("refreshing") : null
+  const cancelDisabledReason = state.phase === "tracking" && state.cancelPending ? tDisabled("stopping") : null
   const previous = job !== null && (state.phase === "starting" || state.startUnknown
     || (state.phase === "tracking" && state.jobId !== job.jobId))
   const differentInputs = job !== null && local !== null && (job.inputHash !== local.inputHash || job.scanId !== local.scanId)
@@ -155,35 +167,41 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy, ac
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busy || refreshing || blocked || runnerBusy}
-                  aria-describedby={blocked ? "project-registry-notice project-registry-blocked" : "project-registry-notice"}
-                  className="h-auto min-h-10 whitespace-normal"
-                  onClick={() => { void controller.start(local.requestPath) }}
-                >
-                  {t("analysis.start")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || refreshing}
-                  className="h-auto min-h-10 whitespace-normal"
-                  onClick={() => beginRefresh(() => router.refresh())}
-                >
-                  {t(refreshing ? "analysis.refreshing" : "analysis.refresh")}
-                </Button>
-                {state.phase === "tracking" ? (
+                <DisabledTooltip reason={startDisabledReason}>
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={state.cancelPending}
+                    disabled={busy || refreshing || blocked || runnerBusy}
+                    aria-describedby={blocked ? "project-registry-notice project-registry-blocked" : "project-registry-notice"}
                     className="h-auto min-h-10 whitespace-normal"
-                    onClick={() => { void controller.cancel() }}
+                    onClick={() => { void controller.start(local.requestPath) }}
                   >
-                    {t(state.cancelPending ? "analysis.cancelling" : "analysis.cancel")}
+                    {t("analysis.start")}
                   </Button>
+                </DisabledTooltip>
+                <DisabledTooltip reason={refreshDisabledReason}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || refreshing}
+                    className="h-auto min-h-10 whitespace-normal"
+                    onClick={() => beginRefresh(() => router.refresh())}
+                  >
+                    {t(refreshing ? "analysis.refreshing" : "analysis.refresh")}
+                  </Button>
+                </DisabledTooltip>
+                {state.phase === "tracking" ? (
+                  <DisabledTooltip reason={cancelDisabledReason}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={state.cancelPending}
+                      className="h-auto min-h-10 whitespace-normal"
+                      onClick={() => { void controller.cancel() }}
+                    >
+                      {t(state.cancelPending ? "analysis.cancelling" : "analysis.cancel")}
+                    </Button>
+                  </DisabledTooltip>
                 ) : null}
                 {state.phase === "tracking" && state.pollError !== null && !state.cancelPending ? (
                   <Button

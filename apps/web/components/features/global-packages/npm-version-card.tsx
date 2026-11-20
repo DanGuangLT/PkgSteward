@@ -9,11 +9,13 @@ import { makeViewStateKey } from "@/lib/ui/navigation-targets"
 import { TEXT_DISCOVERY, textDiscoveryCodec } from "@/lib/ui/discovery-state"
 import { selectVersionOptions } from "@/lib/global-packages/discovery"
 import { GlobalActionLabel, GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { globalActionPending } from "@/lib/global-packages/global-session"
 import { npmVersionCard, npmVersionOptions } from "@/lib/global-packages/npm-version"
+import { globalActionDisabledReason } from "@/lib/ui/disabled-reasons"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 import type { GlobalSelection } from "@/lib/global-packages/global-preview-form"
 import type { GlobalManagerInventory } from "@/lib/global-packages/global-types"
@@ -28,6 +30,7 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
   onPreview(selection: GlobalSelection, trigger: HTMLButtonElement): void
 }) {
   const t = useTranslations("globalPackages")
+  const tDisabled = useTranslations("disabledReasons")
   const id = useId()
   const d = useTranslations("listDiscovery")
   const [view, setView, reset] = useViewState(makeViewStateKey("npm-version-options", inventory.npmVersion?.prefix ?? inventory.globalRoot), textDiscoveryCodec, TEXT_DISCOVERY)
@@ -48,6 +51,13 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
   const button = "h-auto min-h-10 max-w-full border-border whitespace-normal"
   const stateBadgeVariant = card.state === "broken" ? "destructive"
     : card.state === "present" || card.state === "absent" ? "secondary" : "outline"
+  const blockedReason = blocked ? tDisabled("globalBusy") : null
+  const previewReasonKey = globalActionDisabledReason({
+    blocked,
+    needsVersion: true,
+    hasVersion: Boolean(chosen),
+  })
+  const previewDisabledReason = previewReasonKey ? tDisabled(previewReasonKey) : null
 
   return (
     <section aria-labelledby={`${id}-title`} className="min-w-0 space-y-4 rounded-md border border-border bg-background p-4">
@@ -65,54 +75,60 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
         {card.canChange || card.canRestore || card.canRepair ? (
           <div className="flex shrink-0 flex-wrap gap-2">
             {card.canChange ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={blocked}
-                className="h-auto min-h-9 max-w-full whitespace-normal"
-                aria-busy={loadingVersions}
-                aria-expanded={editing}
-                aria-controls={`${id}-change`}
-                onClick={() => {
-                  controller.select(editing ? { manager: "npm", package: "", action: "remove" } : change)
-                  if (!editing) void controller.loadVersions(NPM_SELF)
-                }}
-              >
-                <GlobalActionLabel pending={loadingVersions} icon={PencilIcon}>
-                  {t(loadingVersions ? "loadingVersions" : "change")}
-                </GlobalActionLabel>
-              </Button>
+              <DisabledTooltip reason={blockedReason}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={blocked}
+                  className="h-auto min-h-9 max-w-full whitespace-normal"
+                  aria-busy={loadingVersions}
+                  aria-expanded={editing}
+                  aria-controls={`${id}-change`}
+                  onClick={() => {
+                    controller.select(editing ? { manager: "npm", package: "", action: "remove" } : change)
+                    if (!editing) void controller.loadVersions(NPM_SELF)
+                  }}
+                >
+                  <GlobalActionLabel pending={loadingVersions} icon={PencilIcon}>
+                    {t(loadingVersions ? "loadingVersions" : "change")}
+                  </GlobalActionLabel>
+                </Button>
+              </DisabledTooltip>
             ) : null}
             {card.canRestore ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={blocked}
-                className="h-auto min-h-9 max-w-full whitespace-normal"
-                aria-busy={previewingRestore}
-                onClick={event => onPreview({ ...NPM_SELF, action: "remove" }, event.currentTarget)}
-              >
-                <GlobalActionLabel pending={previewingRestore} icon={RotateCcwIcon}>
-                  {t(previewingRestore ? "loadingPreview" : "npmVersion.restore")}
-                </GlobalActionLabel>
-              </Button>
+              <DisabledTooltip reason={blockedReason}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={blocked}
+                  className="h-auto min-h-9 max-w-full whitespace-normal"
+                  aria-busy={previewingRestore}
+                  onClick={event => onPreview({ ...NPM_SELF, action: "remove" }, event.currentTarget)}
+                >
+                  <GlobalActionLabel pending={previewingRestore} icon={RotateCcwIcon}>
+                    {t(previewingRestore ? "loadingPreview" : "npmVersion.restore")}
+                  </GlobalActionLabel>
+                </Button>
+              </DisabledTooltip>
             ) : null}
             {card.canRepair ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={blocked}
-                className="h-auto min-h-9 max-w-full whitespace-normal"
-                aria-busy={previewingRepair}
-                onClick={event => onPreview({ ...NPM_SELF, action: "repair" }, event.currentTarget)}
-              >
-                <GlobalActionLabel pending={previewingRepair} icon={WrenchIcon}>
-                  {t(previewingRepair ? "loadingPreview" : "npmVersion.repair")}
-                </GlobalActionLabel>
-              </Button>
+              <DisabledTooltip reason={blockedReason}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={blocked}
+                  className="h-auto min-h-9 max-w-full whitespace-normal"
+                  aria-busy={previewingRepair}
+                  onClick={event => onPreview({ ...NPM_SELF, action: "repair" }, event.currentTarget)}
+                >
+                  <GlobalActionLabel pending={previewingRepair} icon={WrenchIcon}>
+                    {t(previewingRepair ? "loadingPreview" : "npmVersion.repair")}
+                  </GlobalActionLabel>
+                </Button>
+              </DisabledTooltip>
             ) : null}
           </div>
         ) : null}
@@ -187,14 +203,18 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
           ) : null}
           <p id={`${id}-hint`} className="text-caption text-muted-foreground">{t("npmVersion.optionsHint")}</p>
           <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-            <Button type="button" variant="secondary" disabled={blocked} className={button} aria-busy={loadingVersions}
-              onClick={() => { void controller.loadVersions(NPM_SELF) }}>
-              <GlobalActionLabel pending={loadingVersions} icon={DownloadIcon}>{t(loadingVersions ? "loadingVersions" : "loadVersions")}</GlobalActionLabel>
-            </Button>
-            <Button type="button" variant="secondary" disabled={blocked || !chosen} className={button} aria-busy={previewingChange}
-              onClick={event => onPreview(change, event.currentTarget)}>
-              <GlobalActionLabel pending={previewingChange} icon={EyeIcon}>{t(previewingChange ? "loadingPreview" : "preview")}</GlobalActionLabel>
-            </Button>
+            <DisabledTooltip reason={blockedReason}>
+              <Button type="button" variant="secondary" disabled={blocked} className={button} aria-busy={loadingVersions}
+                onClick={() => { void controller.loadVersions(NPM_SELF) }}>
+                <GlobalActionLabel pending={loadingVersions} icon={DownloadIcon}>{t(loadingVersions ? "loadingVersions" : "loadVersions")}</GlobalActionLabel>
+              </Button>
+            </DisabledTooltip>
+            <DisabledTooltip reason={previewDisabledReason}>
+              <Button type="button" variant="secondary" disabled={blocked || !chosen} className={button} aria-busy={previewingChange}
+                onClick={event => onPreview(change, event.currentTarget)}>
+                <GlobalActionLabel pending={previewingChange} icon={EyeIcon}>{t(previewingChange ? "loadingPreview" : "preview")}</GlobalActionLabel>
+              </Button>
+            </DisabledTooltip>
           </div>
         </div>
       ) : null}

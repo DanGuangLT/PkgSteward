@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { RefreshCwIcon } from "lucide-react"
+import { AlertTriangleIcon, RefreshCwIcon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { GlobalManagerKpiStrip } from "@/components/features/global-packages/global-manager-kpi-strip"
@@ -9,6 +9,7 @@ import { GlobalPackagesList } from "@/components/features/global-packages/global
 import { GlobalPackagePreview } from "@/components/features/global-packages/global-package-preview"
 import { GlobalActionLabel, GlobalCodeMessage, GlobalPackageJob } from "@/components/features/global-packages/global-package-job"
 import { NpmVersionCard } from "@/components/features/global-packages/npm-version-card"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -27,6 +28,7 @@ const retainInventory = () => {}
 
 export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnapshot | null; latest: GlobalJob | null }) {
   const t = useTranslations("globalPackages")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const controller = useGlobalPackages(snapshot, latest, retainInventory)
   const { state, stopPreview } = controller
@@ -96,18 +98,20 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
             <h2 ref={inventoryHeadingRef} tabIndex={-1} className="rounded-sm text-heading-lg focus-ring">{t("inventory")}</h2>
             <p className="text-caption text-muted-foreground">{t("refreshHint")} {t("yarnUnsupported")}</p>
           </div>
-          <Button
-            type="button"
-            variant="default"
-            disabled={blocked}
-            aria-busy={refreshingInventory}
-            className="h-auto min-h-10 shrink-0 whitespace-normal"
-            onClick={() => { void controller.inventory() }}
-          >
-            <GlobalActionLabel pending={refreshingInventory} icon={RefreshCwIcon}>
-              {t(refreshingInventory ? "loadingInventory" : "refresh")}
-            </GlobalActionLabel>
-          </Button>
+          <DisabledTooltip reason={blocked ? tDisabled("globalBusy") : null}>
+            <Button
+              type="button"
+              variant="default"
+              disabled={blocked}
+              aria-busy={refreshingInventory}
+              className="h-auto min-h-10 shrink-0 whitespace-normal"
+              onClick={() => { void controller.inventory() }}
+            >
+              <GlobalActionLabel pending={refreshingInventory} icon={RefreshCwIcon}>
+                {t(refreshingInventory ? "loadingInventory" : "refresh")}
+              </GlobalActionLabel>
+            </Button>
+          </DisabledTooltip>
         </div>
 
         {state.snapshot ? (
@@ -154,19 +158,19 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
                     <dl className="grid min-w-0 gap-3 border-b border-border bg-muted/30 px-4 py-3 text-body-sm md:grid-cols-3">
                       <div className="min-w-0 space-y-0.5">
                         <dt className="text-caption text-muted-foreground">{t("managerVersion")}</dt>
-                        <dd className="min-w-0 font-mono font-medium text-foreground [overflow-wrap:anywhere]">
+                        <dd className={item.version ? "min-w-0 font-mono font-medium text-foreground [overflow-wrap:anywhere]" : "min-w-0 text-muted-foreground"}>
                           {item.version ?? t("unknown")}
                         </dd>
                       </div>
                       <div className="min-w-0 space-y-0.5">
                         <dt className="text-caption text-muted-foreground">{t("globalRoot")}</dt>
-                        <dd className="min-w-0 font-mono text-caption text-foreground [overflow-wrap:anywhere]">
+                        <dd className={item.globalRoot ? "min-w-0 font-mono text-caption text-foreground [overflow-wrap:anywhere]" : "min-w-0 text-caption text-muted-foreground"}>
                           {item.globalRoot ?? t("unknown")}
                         </dd>
                       </div>
                       <div className="min-w-0 space-y-0.5">
                         <dt className="text-caption text-muted-foreground">{t("binDir")}</dt>
-                        <dd className="min-w-0 font-mono text-caption text-foreground [overflow-wrap:anywhere]">
+                        <dd className={item.binDir ? "min-w-0 font-mono text-caption text-foreground [overflow-wrap:anywhere]" : "min-w-0 text-caption text-muted-foreground"}>
                           {item.binDir ?? t("unknown")}
                         </dd>
                       </div>
@@ -175,7 +179,8 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
                       {item.available ? (
                         <GlobalPackagesList inventory={item} controller={controller} blocked={blocked} onPreview={preview} />
                       ) : (
-                        <p className="text-body-sm [overflow-wrap:anywhere]">
+                        <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning [overflow-wrap:anywhere]">
+                          <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />
                           {t("unavailable")} <GlobalCodeMessage code={item.reason ?? "UNKNOWN"} />
                         </p>
                       )}

@@ -6,6 +6,7 @@ import { useState } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { useRunnerDock } from "@/components/features/npm-runner/npm-runner-provider"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -84,9 +85,11 @@ export function RecoveryHoldBanner({
   onClear: () => Promise<void>
 }) {
   const t = useTranslations("npmRunner")
+  const tDisabled = useTranslations("disabledReasons")
   const tCommon = useTranslations("common")
   const [confirmOpen, setConfirmOpen] = useState(false)
   const reasonKey = `recovery.reasons.${hold.reason}` as `recovery.reasons.${keyof typeof messages.npmRunner.recovery.reasons}`
+  const clearReason = clearPending ? tDisabled("clearingRecovery") : null
 
   return (
     <div role="alert" className="min-w-0 space-y-3 rounded-md border border-border bg-muted p-4 text-body-sm">
@@ -101,15 +104,17 @@ export function RecoveryHoldBanner({
         </p>
       ) : null}
       <div>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={clearPending}
-          className="h-auto min-h-10 whitespace-normal"
-          onClick={() => setConfirmOpen(true)}
-        >
-          {clearPending ? t("recovery.clearing") : t("recovery.clearAction")}
-        </Button>
+        <DisabledTooltip reason={clearReason}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={clearPending}
+            className="h-auto min-h-10 whitespace-normal"
+            onClick={() => setConfirmOpen(true)}
+          >
+            {clearPending ? t("recovery.clearing") : t("recovery.clearAction")}
+          </Button>
+        </DisabledTooltip>
       </div>
       <AlertDialog open={confirmOpen} onOpenChange={open => { if (!open && !clearPending) setConfirmOpen(false) }}>
         <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-lg">
@@ -118,22 +123,26 @@ export function RecoveryHoldBanner({
             <AlertDialogDescription>{t("recovery.dialogDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearPending} className="h-auto min-h-10 border-border whitespace-normal">
-              <XIcon aria-hidden="true" />
-              {tCommon("cancel")}
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={clearPending}
-              className="h-auto min-h-10 whitespace-normal"
-              onClick={() => {
-                setConfirmOpen(false)
-                void onClear()
-              }}
-            >
-              {clearPending ? t("recovery.clearing") : t("recovery.dialogConfirm")}
-            </Button>
+            <DisabledTooltip reason={clearReason} className="w-full sm:w-auto">
+              <AlertDialogCancel disabled={clearPending} className="h-auto min-h-10 w-full border-border whitespace-normal sm:w-auto">
+                <XIcon aria-hidden="true" />
+                {tCommon("cancel")}
+              </AlertDialogCancel>
+            </DisabledTooltip>
+            <DisabledTooltip reason={clearReason} className="w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={clearPending}
+                className="h-auto min-h-10 w-full whitespace-normal sm:w-auto"
+                onClick={() => {
+                  setConfirmOpen(false)
+                  void onClear()
+                }}
+              >
+                {clearPending ? t("recovery.clearing") : t("recovery.dialogConfirm")}
+              </Button>
+            </DisabledTooltip>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -143,6 +152,7 @@ export function RecoveryHoldBanner({
 
 export function NativeSessionStatus() {
   const t = useTranslations("npmRunner")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const dock = useRunnerDock()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
@@ -182,6 +192,20 @@ export function NativeSessionStatus() {
   const errorKey = state.error?.code
     ? `errors.${state.error.code}` as `errors.${keyof typeof messages.npmRunner.errors}`
     : null
+  const cancelDisabledReason = state.cancelPending
+    ? tDisabled("stopping")
+    : state.cancelUnknown
+      ? tDisabled("cancelUnknown")
+      : null
+  const refreshDisabledReason = state.refreshing
+    ? tDisabled("refreshing")
+    : state.cancelPending
+      ? tDisabled("stopping")
+      : state.phase === "starting"
+        ? tDisabled("runnerStarting")
+        : state.clearPending
+          ? tDisabled("clearingRecovery")
+          : null
 
   return (
     <aside
@@ -210,26 +234,30 @@ export function NativeSessionStatus() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {display.canCancel ? (
+              <DisabledTooltip reason={cancelDisabledReason}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={state.cancelPending || state.cancelUnknown}
+                  onClick={() => { void dock.cancel() }}
+                >
+                  <SquareIcon aria-hidden="true" />
+                  {t(display.cancelLabel)}
+                </Button>
+              </DisabledTooltip>
+            ) : null}
+            <DisabledTooltip reason={refreshDisabledReason}>
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                disabled={state.cancelPending || state.cancelUnknown}
-                onClick={() => { void dock.cancel() }}
+                disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
+                onClick={() => { void dock.refresh() }}
               >
-                <SquareIcon aria-hidden="true" />
-                {t(display.cancelLabel)}
+                {t(state.refreshing ? "refreshing" : "refresh")}
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
-              onClick={() => { void dock.refresh() }}
-            >
-              {t(state.refreshing ? "refreshing" : "refresh")}
-            </Button>
+            </DisabledTooltip>
             {href ? (
               <Link href={href} prefetch={false} className="inline-block rounded-sm px-2 py-1 text-body-sm underline focus-ring">
                 {t("follow")}

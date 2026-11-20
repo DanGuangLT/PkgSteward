@@ -15,6 +15,7 @@ import { DiskUsageControls } from "@/components/features/disk-usage/disk-usage-c
 import { DiskUsageItems } from "@/components/features/disk-usage/disk-usage-items"
 import { DiskUsageKpiStrip } from "@/components/features/disk-usage/disk-usage-kpi-strip"
 import { DiskUsageQuickTargets } from "@/components/features/disk-usage/disk-usage-quick-targets"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { ReturnLink } from "@/components/shared/return-link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -75,6 +76,7 @@ export function DiskUsagePanel({
   active?: boolean
 }) {
   const t = useTranslations("diskUsage")
+  const tDisabled = useTranslations("disabledReasons")
   const tNav = useTranslations("navigationState")
   const tCommon = useTranslations("common")
   const format = useFormatter()
@@ -263,6 +265,9 @@ export function DiskUsagePanel({
   const showFullControls = job === null || controlsExpanded
   const activeFavorited = job ? isPathFavorited(favorites, job.path, job.view) !== null : false
   const formFavorited = isPathFavorited(favorites, path, view) !== null
+  const cancelPending = state.phase === "tracking" && state.cancelPending
+  const busyReason = busy ? tDisabled(cancelPending ? "diskCancelling" : "diskRunning") : null
+  const cancelReason = cancelPending ? tDisabled("diskCancelling") : null
 
   return (
     <section className="flex min-w-0 flex-col gap-5" aria-label={t("title")}>
@@ -279,38 +284,44 @@ export function DiskUsagePanel({
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {!embedded ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={busy}
-                aria-pressed={activeFavorited}
-                onClick={() => toggleFavoriteFor(job.path, job.view)}
-              >
-                {activeFavorited ? <BookmarkCheckIcon aria-hidden="true" /> : <BookmarkPlusIcon aria-hidden="true" />}
-                {t(activeFavorited ? "favorites.pinned" : "favorites.pin")}
-              </Button>
+              <DisabledTooltip reason={busyReason}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  aria-pressed={activeFavorited}
+                  onClick={() => toggleFavoriteFor(job.path, job.view)}
+                >
+                  {activeFavorited ? <BookmarkCheckIcon aria-hidden="true" /> : <BookmarkPlusIcon aria-hidden="true" />}
+                  {t(activeFavorited ? "favorites.pinned" : "favorites.pin")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={busy}
-              onClick={() => measure(true)}
-            >
-              <RefreshCwIcon aria-hidden="true" />
-              {t("activeBar.recalculate")}
-            </Button>
-            {state.phase === "tracking" ? (
+            <DisabledTooltip reason={busyReason}>
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
-                disabled={state.cancelPending}
-                onClick={() => void controller.cancel()}
+                disabled={busy}
+                onClick={() => measure(true)}
               >
-                {state.cancelPending ? t("status.cancelling") : t("actions.cancel")}
+                <RefreshCwIcon aria-hidden="true" />
+                {t("activeBar.recalculate")}
               </Button>
+            </DisabledTooltip>
+            {state.phase === "tracking" ? (
+              <DisabledTooltip reason={cancelReason}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={state.cancelPending}
+                  onClick={() => void controller.cancel()}
+                >
+                  {state.cancelPending ? t("status.cancelling") : t("actions.cancel")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
             {state.phase === "tracking" && state.errorCode !== undefined ? (
               <Button type="button" size="sm" variant="secondary" onClick={controller.retryPoll}>
@@ -375,12 +386,14 @@ export function DiskUsagePanel({
           {error?.conflict ? (
             <>
               <p className="font-mono [overflow-wrap:anywhere]">{error.conflict.path}</p>
-              <Button type="button" variant="secondary" disabled={busy} onClick={() => {
-                if (!error.conflict) return
-                setHistory([])
-                heading.current?.focus()
-                controller.follow(error.conflict)
-              }}>{t("actions.follow")}</Button>
+              <DisabledTooltip reason={busyReason}>
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => {
+                  if (!error.conflict) return
+                  setHistory([])
+                  heading.current?.focus()
+                  controller.follow(error.conflict)
+                }}>{t("actions.follow")}</Button>
+              </DisabledTooltip>
             </>
           ) : null}
         </div>
@@ -412,18 +425,20 @@ export function DiskUsagePanel({
             {ancestors.map((snapshot) => (
               <Fragment key={snapshot.job.jobId}>
                 <li className="min-w-0 max-w-full">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={busy}
-                    aria-label={t("actions.backTo", { path: snapshot.job.path })}
-                    aria-controls={resultsId}
-                    className="h-auto min-h-8 max-w-full py-1 font-mono text-caption whitespace-normal [overflow-wrap:anywhere]"
-                    onClick={() => back(snapshot)}
-                  >
-                    {snapshot.job.path}
-                  </Button>
+                  <DisabledTooltip reason={busyReason}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      aria-label={t("actions.backTo", { path: snapshot.job.path })}
+                      aria-controls={resultsId}
+                      className="h-auto min-h-8 max-w-full py-1 font-mono text-caption whitespace-normal [overflow-wrap:anywhere]"
+                      onClick={() => back(snapshot)}
+                    >
+                      {snapshot.job.path}
+                    </Button>
+                  </DisabledTooltip>
                 </li>
                 <li aria-hidden="true" className="text-muted-foreground">
                   <ChevronRightIcon className="size-3.5" />

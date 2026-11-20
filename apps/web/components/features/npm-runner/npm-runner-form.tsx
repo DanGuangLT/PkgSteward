@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import { AlertTriangleIcon, PlayIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,8 +27,10 @@ export function NpmRunnerForm({ context, selection, blockedReason, shellDisabled
   children: ReactNode
 }) {
   const t = useTranslations("npmRunner")
+  const tDisabled = useTranslations("disabledReasons")
   const id = useId()
   const errorKey = `errors.${blockedReason}` as `errors.${keyof typeof messages.npmRunner.errors}`
+  const blockedMessage = blockedReason ? t(t.has(errorKey) ? errorKey : "errors.UNKNOWN") : null
   const selectedScript = context?.scripts.findIndex(script => script.name === selection.script) ?? -1
   const currentShell = normalizeConsoleShell(selection.consoleShell)
   const eligibleScripts = context?.scripts.filter(script => script.eligible).slice(0, 6) ?? []
@@ -75,7 +78,12 @@ export function NpmRunnerForm({ context, selection, blockedReason, shellDisabled
               }
             }}
           >
-            <SelectTrigger id={`${id}-shell`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+            <DisabledTooltip
+              reason={shellDisabled ? tDisabled("shellLockedWhileRunning") : null}
+              className="w-full"
+            >
+              <SelectTrigger id={`${id}-shell`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+            </DisabledTooltip>
             <SelectContent position="popper" className="max-w-(--radix-select-trigger-width)">
               {CONSOLE_SHELLS.map(shell => (
                 <SelectItem key={shell} value={shell}>{t(`shells.${shell}`)}</SelectItem>
@@ -156,20 +164,22 @@ export function NpmRunnerForm({ context, selection, blockedReason, shellDisabled
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="submit"
-          disabled={blockedReason !== null}
-          aria-describedby={`${id}-trust${blockedReason ? ` ${id}-blocked` : ""}`}
-        >
-          <PlayIcon aria-hidden="true" />
-          {t("run")}
-        </Button>
+        <DisabledTooltip reason={blockedMessage}>
+          <Button
+            type="submit"
+            disabled={blockedReason !== null}
+            aria-describedby={`${id}-trust${blockedReason ? ` ${id}-blocked` : ""}`}
+          >
+            <PlayIcon aria-hidden="true" />
+            {t("run")}
+          </Button>
+        </DisabledTooltip>
         {children}
       </div>
 
-      {blockedReason ? (
+      {blockedMessage ? (
         <p id={`${id}-blocked`} className="text-body-sm font-medium text-foreground">
-          {t(t.has(errorKey) ? errorKey : "errors.UNKNOWN")}
+          {blockedMessage}
         </p>
       ) : null}
 

@@ -3,8 +3,10 @@
 import { FolderSearchIcon, Loader2Icon } from "lucide-react"
 import { useFormatter, useTranslations } from "next-intl"
 
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Button } from "@/components/ui/button"
 import type { ScanController } from "@/hooks/use-scan"
+import { scanStartDisabledReason } from "@/lib/ui/disabled-reasons"
 
 interface ScanControlsProps {
   controller: ScanController
@@ -13,10 +15,14 @@ interface ScanControlsProps {
 
 export function ScanControls({ controller, mode }: ScanControlsProps) {
   const t = useTranslations("projects")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const { state } = controller
   const tracking = state.phase === "tracking" ? state : null
   const job = tracking?.job ?? (state.phase === "refreshing" ? state.job : null)
+  const startReasonKey = scanStartDisabledReason(state.phase, tracking?.cancelPending ?? false)
+  const startDisabledReason = startReasonKey ? tDisabled(startReasonKey) : null
+  const cancelDisabledReason = tracking?.cancelPending ? tDisabled("scanCancelling") : null
   const status = state.phase === "starting" ? t("status.starting")
     : state.phase === "refreshing" ? t("status.refreshing")
       : tracking?.cancelPending ? t("status.cancelling")
@@ -26,21 +32,27 @@ export function ScanControls({ controller, mode }: ScanControlsProps) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={state.phase !== "idle"} onClick={() => void controller.start()}>
-          <FolderSearchIcon aria-hidden="true" />
-          {t(mode === "first" ? "actions.first" : "actions.rescan")}
-        </Button>
+        <DisabledTooltip reason={startDisabledReason}>
+          <Button type="button" disabled={state.phase !== "idle"} onClick={() => void controller.start()}>
+            <FolderSearchIcon aria-hidden="true" />
+            {t(mode === "first" ? "actions.first" : "actions.rescan")}
+          </Button>
+        </DisabledTooltip>
         {tracking ? (
           <>
-            <Button type="button" variant="secondary" disabled={tracking.cancelPending}
-              onClick={() => void controller.cancel()}>
-              {t("actions.cancel")}
-            </Button>
-            {tracking.pollErrorCode !== undefined ? (
+            <DisabledTooltip reason={cancelDisabledReason}>
               <Button type="button" variant="secondary" disabled={tracking.cancelPending}
-                onClick={controller.retryPoll}>
-                {t("actions.retryPoll")}
+                onClick={() => void controller.cancel()}>
+                {t("actions.cancel")}
               </Button>
+            </DisabledTooltip>
+            {tracking.pollErrorCode !== undefined ? (
+              <DisabledTooltip reason={cancelDisabledReason}>
+                <Button type="button" variant="secondary" disabled={tracking.cancelPending}
+                  onClick={controller.retryPoll}>
+                  {t("actions.retryPoll")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
           </>
         ) : null}

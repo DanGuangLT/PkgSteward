@@ -13,6 +13,7 @@ import {
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,10 +52,12 @@ export function DiskUsageQuickTargets({
   onRemoveFavorite,
 }: DiskUsageQuickTargetsProps) {
   const t = useTranslations("diskUsage")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const pickerSearchId = useId()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerQuery, setPickerQuery] = useState("")
+  const disabledReason = disabled ? tDisabled("diskRunning") : null
 
   const topProjects = useMemo(() => selectTopHeaviestProjects(projects, 6), [projects])
   const filteredProjects = useMemo(() => {
@@ -78,17 +81,19 @@ export function DiskUsageQuickTargets({
           <p className="text-caption text-muted-foreground">{t("quickTargets.hint")}</p>
         </div>
         {projects.length > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            aria-expanded={pickerOpen}
-            onClick={() => setPickerOpen((open) => !open)}
-          >
-            <FolderSearchIcon aria-hidden="true" />
-            {t("quickTargets.pickProject", { count: format.number(projects.length) })}
-          </Button>
+          <DisabledTooltip reason={disabledReason}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen((open) => !open)}
+            >
+              <FolderSearchIcon aria-hidden="true" />
+              {t("quickTargets.pickProject", { count: format.number(projects.length) })}
+            </Button>
+          </DisabledTooltip>
         ) : !hasScan ? (
           <Button asChild variant="outline" size="sm">
             <Link href="/">{t("quickTargets.goScan")}</Link>
@@ -103,22 +108,23 @@ export function DiskUsageQuickTargets({
             {roots.map((root) => {
               const isCurrent = activeComparisonKey !== "" && activeComparisonKey === diskFavoriteComparisonKey(root, "directory")
               return (
-                <button
-                  key={root}
-                  type="button"
-                  disabled={disabled}
-                  aria-current={isCurrent ? "true" : undefined}
-                  onClick={() => onPickTarget(root, "directory")}
-                  className={cn(
-                    "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-caption transition-colors focus-ring disabled:opacity-50",
-                    isCurrent
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-foreground hover:bg-muted",
-                  )}
-                >
-                  <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                  <span className="truncate">{root}</span>
-                </button>
+                <DisabledTooltip key={root} reason={disabledReason} className="rounded-full">
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-current={isCurrent ? "true" : undefined}
+                    onClick={() => onPickTarget(root, "directory")}
+                    className={cn(
+                      "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-caption transition-colors focus-ring disabled:opacity-50",
+                      isCurrent
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-background text-foreground hover:bg-muted",
+                    )}
+                  >
+                    <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{root}</span>
+                  </button>
+                </DisabledTooltip>
               )
             })}
           </div>
@@ -133,28 +139,29 @@ export function DiskUsageQuickTargets({
               const nmPath = project.nodeModules.path
               const isCurrent = activeComparisonKey !== "" && activeComparisonKey === diskFavoriteComparisonKey(nmPath, "packages")
               return (
-                <button
-                  key={project.path}
-                  type="button"
-                  disabled={disabled}
-                  aria-current={isCurrent ? "true" : undefined}
-                  title={nmPath}
-                  onClick={() => onPickTarget(nmPath, "packages")}
-                  className={cn(
-                    "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 text-caption transition-colors focus-ring disabled:opacity-50",
-                    isCurrent
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-foreground hover:bg-muted",
-                  )}
-                >
-                  <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                  <span className="truncate font-medium">{projectDisplayName(project)}</span>
-                  {project.nodeModules.sizeBytes !== null ? (
-                    <span className={cn("shrink-0 tabular-nums", isCurrent ? "text-background/80" : "text-muted-foreground")}>
-                      <DiskSize bytes={project.nodeModules.sizeBytes} />
-                    </span>
-                  ) : null}
-                </button>
+                <DisabledTooltip key={project.path} reason={disabledReason} className="rounded-full">
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-current={isCurrent ? "true" : undefined}
+                    title={disabled ? undefined : nmPath}
+                    onClick={() => onPickTarget(nmPath, "packages")}
+                    className={cn(
+                      "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 text-caption transition-colors focus-ring disabled:opacity-50",
+                      isCurrent
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-background text-foreground hover:bg-muted",
+                    )}
+                  >
+                    <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate font-medium">{projectDisplayName(project)}</span>
+                    {project.nodeModules.sizeBytes !== null ? (
+                      <span className={cn("shrink-0 tabular-nums", isCurrent ? "text-background/80" : "text-muted-foreground")}>
+                        <DiskSize bytes={project.nodeModules.sizeBytes} />
+                      </span>
+                    ) : null}
+                  </button>
+                </DisabledTooltip>
               )
             })}
           </div>
@@ -210,33 +217,37 @@ export function DiskUsageQuickTargets({
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={disabled}
-                      onClick={() => {
-                        setPickerOpen(false)
-                        onPickTarget(project.path, "directory")
-                      }}
-                    >
-                      <FolderIcon aria-hidden="true" />
-                      {t("quickTargets.measureFolder")}
-                    </Button>
-                    {project.nodeModules.exists ? (
+                    <DisabledTooltip reason={disabledReason}>
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant="secondary"
                         disabled={disabled}
                         onClick={() => {
                           setPickerOpen(false)
-                          onPickTarget(project.nodeModules.path, "packages")
+                          onPickTarget(project.path, "directory")
                         }}
                       >
-                        <PackageIcon aria-hidden="true" />
-                        {t("quickTargets.measurePackages")}
+                        <FolderIcon aria-hidden="true" />
+                        {t("quickTargets.measureFolder")}
                       </Button>
+                    </DisabledTooltip>
+                    {project.nodeModules.exists ? (
+                      <DisabledTooltip reason={disabledReason}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={disabled}
+                          onClick={() => {
+                            setPickerOpen(false)
+                            onPickTarget(project.nodeModules.path, "packages")
+                          }}
+                        >
+                          <PackageIcon aria-hidden="true" />
+                          {t("quickTargets.measurePackages")}
+                        </Button>
+                      </DisabledTooltip>
                     ) : null}
                   </div>
                 </li>
@@ -273,21 +284,23 @@ export function DiskUsageQuickTargets({
                       : "border-border bg-background text-foreground",
                   )}
                 >
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    aria-current={isCurrent ? "true" : undefined}
-                    title={fav.path}
-                    onClick={() => onPickTarget(fav.path, fav.view)}
-                    className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-l-full py-1 pr-2 pl-3 transition-colors focus-ring hover:opacity-85 disabled:opacity-50"
-                  >
-                    {fav.view === "packages" ? (
-                      <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                    ) : (
-                      <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                    )}
-                    <span className="truncate font-medium">{fav.label}</span>
-                  </button>
+                  <DisabledTooltip reason={disabledReason} className="min-w-0 rounded-l-full">
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      aria-current={isCurrent ? "true" : undefined}
+                      title={disabled ? undefined : fav.path}
+                      onClick={() => onPickTarget(fav.path, fav.view)}
+                      className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-l-full py-1 pr-2 pl-3 transition-colors focus-ring hover:opacity-85 disabled:opacity-50"
+                    >
+                      {fav.view === "packages" ? (
+                        <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                      ) : (
+                        <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                      )}
+                      <span className="truncate font-medium">{fav.label}</span>
+                    </button>
+                  </DisabledTooltip>
                   <button
                     type="button"
                     aria-label={t("favorites.remove", { label: fav.label })}

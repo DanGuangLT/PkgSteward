@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
 import { PmActionLabel, PmCodeMessage } from "@/components/features/package-managers/pm-messages"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -15,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import type { PackageManagersController } from "@/hooks/use-package-managers"
 import { pmConsentError } from "@/lib/package-managers/pm-preview-form"
+import { consentConfirmDisabledReason } from "@/lib/ui/disabled-reasons"
 
 export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCancel }: {
   controller: PackageManagersController
@@ -23,6 +25,7 @@ export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCance
   onCancel(): void
 }) {
   const t = useTranslations("packageManagers")
+  const tDisabled = useTranslations("disabledReasons")
   const tr = useTranslations("fileOps")
   const format = useFormatter()
   const id = useId()
@@ -40,6 +43,8 @@ export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCance
   const executing = state.activity?.kind === "mutation" && (state.phase === "starting" || state.phase === "tracking")
   const previewing = state.activity?.kind === "preview" && (state.phase === "starting" || state.phase === "tracking")
   const selection = state.form.selection
+  const confirmReasonKey = consentConfirmDisabledReason({ pending, blocked, consentError: error })
+  const confirmDisabledReason = confirmReasonKey ? tDisabled(confirmReasonKey) : null
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
@@ -72,8 +77,10 @@ export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCance
         <p>{t("dialog.expiresAt", { time: format.dateTime(new Date(preview.expiresAt), { timeStyle: "medium" }) })}</p>
         {expired && selection ? <div role="alert" className="space-y-3 rounded-md border border-border p-4">
           <p><PmCodeMessage code="PREVIEW_EXPIRED" /></p>
-          <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void previewAgain(selection) }}><PmActionLabel pending={previewing} icon={EyeIcon}>{t(previewing ? "loadingPreview" : "dialog.previewAgain")}</PmActionLabel></Button>
+          <DisabledTooltip reason={blocked ? tDisabled("pmBusy") : null}>
+            <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void previewAgain(selection) }}><PmActionLabel pending={previewing} icon={EyeIcon}>{t(previewing ? "loadingPreview" : "dialog.previewAgain")}</PmActionLabel></Button>
+          </DisabledTooltip>
         </div> : null}
         {preview.risk.reasons.map(({ code }) => <div key={code} className="flex min-w-0 items-start gap-3">
           <Checkbox id={`${id}-${code}`} checked={state.form.acknowledged.includes(code)} disabled={blocked || expired}
@@ -85,11 +92,15 @@ export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCance
         {state.error ? <p role="alert"><PmCodeMessage code={state.error.code} /></p> : null}
       </div>
       <AlertDialogFooter>
-        <AlertDialogCancel disabled={pending} className="h-auto min-h-10 border-border whitespace-normal"><XIcon aria-hidden="true" />{t("cancel")}</AlertDialogCancel>
-        <Button type="button" variant="destructive" disabled={blocked || error !== null} aria-busy={executing}
-          className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}>
-          <PmActionLabel pending={executing} icon={PencilIcon}>{t(executing ? "dialog.confirming" : "dialog.confirm")}</PmActionLabel>
-        </Button>
+        <DisabledTooltip reason={pending ? tDisabled("submitting") : null} className="w-full sm:w-auto">
+          <AlertDialogCancel disabled={pending} className="h-auto min-h-10 w-full border-border whitespace-normal sm:w-auto"><XIcon aria-hidden="true" />{t("cancel")}</AlertDialogCancel>
+        </DisabledTooltip>
+        <DisabledTooltip reason={confirmDisabledReason} className="w-full sm:w-auto">
+          <Button type="button" variant="destructive" disabled={blocked || error !== null} aria-busy={executing}
+            className="h-auto min-h-10 w-full whitespace-normal sm:w-auto" onClick={() => { void execute() }}>
+            <PmActionLabel pending={executing} icon={PencilIcon}>{t(executing ? "dialog.confirming" : "dialog.confirm")}</PmActionLabel>
+          </Button>
+        </DisabledTooltip>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

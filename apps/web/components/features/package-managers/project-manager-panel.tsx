@@ -11,6 +11,7 @@ import { VERSION_DISCOVERY, VERSION_SUPPORT, VERSION_DEPRECATION, versionDiscove
 
 import { PmActionLabel, PmCodeMessage } from "@/components/features/package-managers/pm-messages"
 import { PmPreviewDialog } from "@/components/features/package-managers/pm-preview-dialog"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -19,6 +20,7 @@ import { pmCleanupPending, pmJobSettling, pmMutationSucceeded, pmReadFailure } f
 import type { PmState } from "@/lib/package-managers/pm-session"
 import type { PmJob, PmManager, PmWritableManager } from "@/lib/package-managers/pm-types"
 import { projectDetailHref } from "@/lib/projects/project-detail-list"
+import { pmActionDisabledReason } from "@/lib/ui/disabled-reasons"
 import { revealRegion } from "@/lib/ui/reveal-region"
 
 const WRITABLE: readonly PmWritableManager[] = ["npm", "pnpm"]
@@ -48,6 +50,7 @@ function MutationResult({ job }: { job: PmJob }) {
 
 export function ProjectManagerPanel({ path }: { path: string }) {
   const t = useTranslations("packageManagers")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const id = useId()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
@@ -79,6 +82,25 @@ export function ProjectManagerPanel({ path }: { path: string }) {
   const pendingKind = state.phase === "starting" || state.phase === "tracking" ? state.activity?.kind : undefined
   const previewPending = pendingKind === "preview" && state.form.preview === null
   const key = statusKey(state)
+  const loadVersionsReasonKey = pmActionDisabledReason({
+    busy,
+    otherRunning,
+    loadingContext: !context,
+    hasBlocker: blocker !== null,
+    needsVersion: false,
+    hasTarget: false,
+  })
+  const loadVersionsDisabledReason = loadVersionsReasonKey ? tDisabled(loadVersionsReasonKey) : null
+  const previewReasonKey = pmActionDisabledReason({
+    busy,
+    otherRunning,
+    loadingContext: !context,
+    hasBlocker: blocker !== null,
+    needsVersion: true,
+    hasTarget: Boolean(target),
+  })
+  const previewDisabledReason = previewReasonKey ? tDisabled(previewReasonKey) : null
+  const cancelDisabledReason = state.cancelPending ? tDisabled("stopping") : null
 
   // Escape stops a loading preview (the dialog is not open yet), then focus returns to its button.
   useEffect(() => {
@@ -111,10 +133,12 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <h2 id={`${id}-title`} className="text-heading-md [overflow-wrap:anywhere]">{t("title")}</h2>
           <p className="text-caption text-muted-foreground">{t("scope")}</p>
         </div>
-        <Button type="button" variant="outline" size="sm" disabled={state.contextLoading} aria-busy={state.contextLoading}
-          className="h-auto min-h-9 shrink-0 whitespace-normal" onClick={() => { void controller.refresh() }}>
-          <PmActionLabel pending={state.contextLoading} icon={RefreshCwIcon}>{t(state.contextLoading ? "refreshing" : "refresh")}</PmActionLabel>
-        </Button>
+        <DisabledTooltip reason={state.contextLoading ? tDisabled("refreshing") : null}>
+          <Button type="button" variant="outline" size="sm" disabled={state.contextLoading} aria-busy={state.contextLoading}
+            className="h-auto min-h-9 shrink-0 whitespace-normal" onClick={() => { void controller.refresh() }}>
+            <PmActionLabel pending={state.contextLoading} icon={RefreshCwIcon}>{t(state.contextLoading ? "refreshing" : "refresh")}</PmActionLabel>
+          </Button>
+        </DisabledTooltip>
       </div>
 
       {context ? (
@@ -184,22 +208,26 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <div className="min-w-0 space-y-2">
             <Label htmlFor={`${id}-manager`}>{t("manager")}</Label>
             <Select value={manager} disabled={blocked} onValueChange={value => chooseManager(value as PmWritableManager)}>
-              <SelectTrigger id={`${id}-manager`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+              <DisabledTooltip reason={loadVersionsDisabledReason} className="w-full">
+                <SelectTrigger id={`${id}-manager`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+              </DisabledTooltip>
               <SelectContent>{WRITABLE.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <Button
-            type="button"
-            variant={catalog ? "outline" : "secondary"}
-            disabled={blocked}
-            aria-busy={pendingKind === "versions"}
-            className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void controller.loadVersions(manager) }}
-          >
-            <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>
-              {t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}
-            </PmActionLabel>
-          </Button>
+          <DisabledTooltip reason={loadVersionsDisabledReason}>
+            <Button
+              type="button"
+              variant={catalog ? "outline" : "secondary"}
+              disabled={blocked}
+              aria-busy={pendingKind === "versions"}
+              className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void controller.loadVersions(manager) }}
+            >
+              <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>
+                {t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}
+              </PmActionLabel>
+            </Button>
+          </DisabledTooltip>
         </div>
 
         <p className="text-caption text-muted-foreground">{t("versionsHint")}</p>
@@ -247,9 +275,14 @@ export function ProjectManagerPanel({ path }: { path: string }) {
                   controller.select({ manager, targetVersion: value })
                 }}
               >
-                <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono">
-                  <SelectValue placeholder={t("versionPlaceholder")} />
-                </SelectTrigger>
+                <DisabledTooltip
+                  reason={blocked ? loadVersionsDisabledReason : options.length === 0 ? tDisabled("noMatchingVersions") : null}
+                  className="w-full"
+                >
+                  <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono">
+                    <SelectValue placeholder={t("versionPlaceholder")} />
+                  </SelectTrigger>
+                </DisabledTooltip>
                 <SelectContent>
                   {options.map(item => (
                     <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
@@ -270,45 +303,51 @@ export function ProjectManagerPanel({ path }: { path: string }) {
         ) : null}
 
         <div className="flex flex-col gap-2.5 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap">
-          <Button
-            ref={previewButtonRef}
-            type="button"
-            variant="secondary"
-            disabled={blocked || !target}
-            aria-busy={previewPending}
-            aria-describedby={previewPending ? `${id}-stop` : undefined}
-            className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void controller.preview({ manager, targetVersion: target }) }}
-          >
-            <PmActionLabel pending={previewPending} icon={EyeIcon}>
-              {t(previewPending ? "loadingPreview" : "preview")}
-            </PmActionLabel>
-          </Button>
-          {state.phase === "tracking" && state.job && pmJobSettling(state.job) ? (
+          <DisabledTooltip reason={previewDisabledReason}>
             <Button
+              ref={previewButtonRef}
               type="button"
               variant="secondary"
-              disabled={state.cancelPending}
+              disabled={blocked || !target}
+              aria-busy={previewPending}
+              aria-describedby={previewPending ? `${id}-stop` : undefined}
               className="h-auto min-h-10 border-border whitespace-normal"
-              onClick={() => { void controller.cancel() }}
+              onClick={() => { void controller.preview({ manager, targetVersion: target }) }}
             >
-              <PmActionLabel pending={state.cancelPending} icon={XIcon}>
-                {t(state.cancelPending ? "cancelling" : "cancel")}
+              <PmActionLabel pending={previewPending} icon={EyeIcon}>
+                {t(previewPending ? "loadingPreview" : "preview")}
               </PmActionLabel>
             </Button>
+          </DisabledTooltip>
+          {state.phase === "tracking" && state.job && pmJobSettling(state.job) ? (
+            <DisabledTooltip reason={cancelDisabledReason}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={state.cancelPending}
+                className="h-auto min-h-10 border-border whitespace-normal"
+                onClick={() => { void controller.cancel() }}
+              >
+                <PmActionLabel pending={state.cancelPending} icon={XIcon}>
+                  {t(state.cancelPending ? "cancelling" : "cancel")}
+                </PmActionLabel>
+              </Button>
+            </DisabledTooltip>
           ) : null}
           {cleanupPending ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={state.cancelPending}
-              className="h-auto min-h-10 border-border whitespace-normal"
-              onClick={() => { void controller.cancel() }}
-            >
-              <PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>
-                {t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}
-              </PmActionLabel>
-            </Button>
+            <DisabledTooltip reason={cancelDisabledReason}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={state.cancelPending}
+                className="h-auto min-h-10 border-border whitespace-normal"
+                onClick={() => { void controller.cancel() }}
+              >
+                <PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>
+                  {t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}
+                </PmActionLabel>
+              </Button>
+            </DisabledTooltip>
           ) : null}
           {state.pollError !== null && state.phase === "tracking" ? (
             <Button

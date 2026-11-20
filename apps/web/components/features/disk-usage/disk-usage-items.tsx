@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { DiscoveryControls, DiscoveryEmpty, DiscoveryFilter, DiscoverySort } from "@/components/shared/list-discovery"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -118,6 +119,7 @@ function DiskRowName({
   showCleanupLink: boolean
 }) {
   const t = useTranslations("diskUsage")
+  const tDisabled = useTranslations("disabledReasons")
   const expandable = row.state !== "excluded" && (row.kind === "directory" || row.kind === "package")
   return (
     <div className="min-w-0 space-y-1.5">
@@ -131,17 +133,19 @@ function DiskRowName({
       {expandable || filesHref || showCleanupLink ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
           {expandable ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={!canExpand}
-              aria-label={t("actions.expandName", { name: row.name })}
-              aria-controls={resultsId}
-              onClick={() => onExpand(row)}
-            >
-              {t("actions.expand")}
-            </Button>
+            <DisabledTooltip reason={!canExpand ? tDisabled("diskRunning") : null}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!canExpand}
+                aria-label={t("actions.expandName", { name: row.name })}
+                aria-controls={resultsId}
+                onClick={() => onExpand(row)}
+              >
+                {t("actions.expand")}
+              </Button>
+            </DisabledTooltip>
           ) : null}
           {filesHref ? (
             <Button asChild variant="ghost" size="sm">

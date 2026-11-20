@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { NativeSessionDetails, RecoveryHoldBanner } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useNavigationContinuity, useViewState } from "@/hooks/use-navigation-continuity"
@@ -23,6 +24,7 @@ export function NpmRunnerPanel({ controller, contextError }: {
   contextError: string | null
 }) {
   const t = useTranslations("npmRunner")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
   const { state } = controller
@@ -49,6 +51,20 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const Icon = display.status === "success" ? CheckIcon
     : ["idle", "starting", "running", "stopping"].includes(display.status) ? CircleIcon : AlertTriangleIcon
   const warningCodes = [...new Set([...(state.context?.warnings ?? []), ...(job?.warningCodes ?? [])])]
+  const cancelDisabledReason = state.cancelPending
+    ? tDisabled("stopping")
+    : state.cancelUnknown
+      ? tDisabled("cancelUnknown")
+      : null
+  const refreshDisabledReason = state.refreshing
+    ? tDisabled("refreshing")
+    : state.cancelPending
+      ? tDisabled("stopping")
+      : state.phase === "starting"
+        ? tDisabled("runnerStarting")
+        : state.clearPending
+          ? tDisabled("clearingRecovery")
+          : null
   function errorMessage(code: string) {
     const key = `errors.${code}` as `errors.${keyof typeof messages.npmRunner.errors}`
     return t(t.has(key) ? key : "errors.UNKNOWN")
@@ -89,10 +105,16 @@ export function NpmRunnerPanel({ controller, contextError }: {
     </div>
     <p aria-live="polite" aria-atomic="true" className="sr-only">{t(`status.${display.status}`)}</p>
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      {display.canCancel ? <Button type="button" variant="secondary" disabled={state.cancelPending || state.cancelUnknown}
-        className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.cancel() }}>{t(display.cancelLabel)}</Button> : null}
-      <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
-        className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
+      {display.canCancel ? (
+        <DisabledTooltip reason={cancelDisabledReason}>
+          <Button type="button" variant="secondary" disabled={state.cancelPending || state.cancelUnknown}
+            className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.cancel() }}>{t(display.cancelLabel)}</Button>
+        </DisabledTooltip>
+      ) : null}
+      <DisabledTooltip reason={refreshDisabledReason}>
+        <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
+          className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
+      </DisabledTooltip>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button> : null}
     </div>

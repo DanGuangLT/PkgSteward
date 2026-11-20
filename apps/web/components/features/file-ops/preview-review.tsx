@@ -19,6 +19,7 @@ import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { CleanupItems } from "@/components/features/file-ops/cleanup-items"
 import { CleanupKpiStrip } from "@/components/features/file-ops/cleanup-kpi-strip"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import {
   DiscoveryControls,
   DiscoveryEmpty,
@@ -58,6 +59,7 @@ import {
   type CleanupSort,
 } from "@/lib/file-ops/file-ops-list"
 import { MAX_DELETE_PATHS } from "@/lib/file-ops/tree-selection"
+import { fileSelectionActionDisabledReason } from "@/lib/ui/disabled-reasons"
 import { makeViewStateKey } from "@/lib/ui/navigation-targets"
 import { cn } from "@/lib/utils"
 
@@ -102,6 +104,7 @@ function ReviewSelection({
   actionRef: RefObject<HTMLButtonElement | null>
 }) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const d = useTranslations("listDiscovery")
   const format = useFormatter()
   const locale = useLocale()
@@ -349,52 +352,64 @@ function ReviewSelection({
           ) : <div />}
 
           <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="h-9 px-3.5" disabled={busy || metrics.eligibleCount === 0}>
+            {busy || metrics.eligibleCount === 0 ? (
+              <DisabledTooltip
+                reason={busy ? tDisabled("fileOpsBusy") : tDisabled("noEligibleItems")}
+              >
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3.5" disabled>
                   <CheckSquareIcon aria-hidden="true" />
                   {t("reviewTools.smartSelect")}
                   <ChevronDownIcon aria-hidden="true" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-60">
-                {isCleanup ? (
-                  <DropdownMenuItem onSelect={() => handleQuickSelect("recommended")}>
-                    <RotateCcwIcon aria-hidden="true" />
-                    {t("reviewTools.selectRecommended")}
+              </DisabledTooltip>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-9 px-3.5">
+                    <CheckSquareIcon aria-hidden="true" />
+                    {t("reviewTools.smartSelect")}
+                    <ChevronDownIcon aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-60">
+                  {isCleanup ? (
+                    <DropdownMenuItem onSelect={() => handleQuickSelect("recommended")}>
+                      <RotateCcwIcon aria-hidden="true" />
+                      {t("reviewTools.selectRecommended")}
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem
+                    disabled={visibleEligible.length === 0}
+                    onSelect={() => handleQuickSelect("visible")}
+                  >
+                    <CheckSquareIcon aria-hidden="true" />
+                    {t("reviewTools.selectVisible", { count: format.number(visibleEligible.length) })}
                   </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem
-                  disabled={visibleEligible.length === 0}
-                  onSelect={() => handleQuickSelect("visible")}
-                >
-                  <CheckSquareIcon aria-hidden="true" />
-                  {t("reviewTools.selectVisible", { count: format.number(visibleEligible.length) })}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={visibleEligible.length === 0}
-                  onSelect={() => handleQuickSelect("low_risk_visible")}
-                >
-                  <ShieldCheckIcon aria-hidden="true" />
-                  {t("reviewTools.selectLowRiskVisible")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={visibleSelectedCount === 0}
-                  onSelect={() => handleQuickSelect("deselect_visible")}
-                >
-                  <SquareIcon aria-hidden="true" />
-                  {t("reviewTools.deselectVisible")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={metrics.selected.count === 0}
-                  onSelect={() => handleQuickSelect("clear")}
-                >
-                  <XIcon aria-hidden="true" />
-                  {t("reviewTools.clearAll")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem
+                    disabled={visibleEligible.length === 0}
+                    onSelect={() => handleQuickSelect("low_risk_visible")}
+                  >
+                    <ShieldCheckIcon aria-hidden="true" />
+                    {t("reviewTools.selectLowRiskVisible")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={visibleSelectedCount === 0}
+                    onSelect={() => handleQuickSelect("deselect_visible")}
+                  >
+                    <SquareIcon aria-hidden="true" />
+                    {t("reviewTools.deselectVisible")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={metrics.selected.count === 0}
+                    onSelect={() => handleQuickSelect("clear")}
+                  >
+                    <XIcon aria-hidden="true" />
+                    {t("reviewTools.clearAll")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {isCleanup ? (
               <div
@@ -553,29 +568,42 @@ function ReviewSelection({
 
           <div className="flex flex-wrap items-center gap-2">
             {metrics.selected.count > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => handleQuickSelect("clear")}
-              >
-                {t("actions.clearSelection")}
-              </Button>
+              <DisabledTooltip reason={busy ? tDisabled("fileOpsBusy") : null}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => handleQuickSelect("clear")}
+                >
+                  {t("actions.clearSelection")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
-            <Button
-              ref={actionRef}
-              type="button"
-              variant="destructive"
-              disabled={busy || metrics.selected.count === 0 || tooMany}
-              onClick={() => void controller.summarize([...selected])}
-            >
-              <Trash2Icon aria-hidden="true" />
-              {t("actions.review", {
-                count: metrics.selected.count,
-                formattedCount: format.number(metrics.selected.count),
-              })}
-            </Button>
+            {(() => {
+              const reviewReasonKey = fileSelectionActionDisabledReason({
+                busy,
+                selectedCount: metrics.selected.count,
+                tooMany,
+              })
+              return (
+                <DisabledTooltip reason={reviewReasonKey ? tDisabled(reviewReasonKey) : null}>
+                  <Button
+                    ref={actionRef}
+                    type="button"
+                    variant="destructive"
+                    disabled={busy || metrics.selected.count === 0 || tooMany}
+                    onClick={() => void controller.summarize([...selected])}
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                    {t("actions.review", {
+                      count: metrics.selected.count,
+                      formattedCount: format.number(metrics.selected.count),
+                    })}
+                  </Button>
+                </DisabledTooltip>
+              )
+            })()}
           </div>
         </div>
 

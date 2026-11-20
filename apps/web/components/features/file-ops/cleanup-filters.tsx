@@ -16,6 +16,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import type { CleanupScanProjectItem } from "@/components/features/file-ops/cleanup-scan-banner"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -33,6 +34,7 @@ import {
 } from "@/lib/file-ops/cleanup-presets"
 import { cleanupPreviewInput, type CleanupFilterForm } from "@/lib/file-ops/file-ops-list"
 import { MAX_DELETE_PATHS } from "@/lib/file-ops/tree-selection"
+import { cleanupRunDisabledReason } from "@/lib/ui/disabled-reasons"
 import { cn } from "@/lib/utils"
 
 type PresetSaveErrorReason = Extract<UpsertPresetResult, { ok: false }>["reason"]
@@ -96,6 +98,7 @@ export function CleanupFilters({
   onStopEditingPreset: () => void
 }) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const baseId = useId()
   const [attempted, setAttempted] = useState(false)
@@ -116,6 +119,14 @@ export function CleanupFilters({
 
   const input = cleanupPreviewInput(form)
   const showError = attempted && input === null
+  const busyReason = disabled ? tDisabled("fileOpsBusy") : null
+  const submitReasonKey = cleanupRunDisabledReason({ busy: disabled, hasScan })
+  const submitDisabledReason = submitReasonKey ? tDisabled(submitReasonKey) : null
+  const saveDisabledReason = disabled
+    ? tDisabled("fileOpsBusy")
+    : input === null
+      ? tDisabled("cleanupInvalidCriteria")
+      : null
   const selectedProjectSet = useMemo(() => new Set(form.projectPaths), [form.projectPaths])
   const scannedPathSet = useMemo(() => new Set(projects.map((p) => p.path)), [projects])
   const { missing: missingPaths } = useMemo(
@@ -371,26 +382,30 @@ export function CleanupFilters({
                         className="pl-9"
                       />
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={disabled || filteredProjects.length === 0}
-                      onClick={() => {
-                        const merged = [...form.projectPaths]
-                        const seen = new Set(merged)
-                        for (const p of filteredProjects) {
-                          if (merged.length >= MAX_DELETE_PATHS) break
-                          if (!seen.has(p.path)) {
-                            seen.add(p.path)
-                            merged.push(p.path)
-                          }
-                        }
-                        onChange({ ...form, projectPaths: merged })
-                      }}
+                    <DisabledTooltip
+                      reason={disabled ? busyReason : filteredProjects.length === 0 ? tDisabled("noMatchingProjects") : null}
                     >
-                      {t("customizer.selectAllProjects")}
-                    </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={disabled || filteredProjects.length === 0}
+                        onClick={() => {
+                          const merged = [...form.projectPaths]
+                          const seen = new Set(merged)
+                          for (const p of filteredProjects) {
+                            if (merged.length >= MAX_DELETE_PATHS) break
+                            if (!seen.has(p.path)) {
+                              seen.add(p.path)
+                              merged.push(p.path)
+                            }
+                          }
+                          onChange({ ...form, projectPaths: merged })
+                        }}
+                      >
+                        {t("customizer.selectAllProjects")}
+                      </Button>
+                    </DisabledTooltip>
                   </div>
                   <p className="text-caption text-muted-foreground">{t("customizer.projectScopeHint")}</p>
                   {filteredProjects.length === 0 ? (
@@ -479,34 +494,40 @@ export function CleanupFilters({
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" variant={hasScan ? "default" : "secondary"} disabled={disabled || !hasScan}>
-                {t("actions.findAndMeasure")}
-              </Button>
+              <DisabledTooltip reason={submitDisabledReason}>
+                <Button type="submit" variant={hasScan ? "default" : "secondary"} disabled={disabled || !hasScan}>
+                  {t("actions.findAndMeasure")}
+                </Button>
+              </DisabledTooltip>
+              <DisabledTooltip reason={saveDisabledReason}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={disabled || input === null}
+                  onClick={openSaveComposer}
+                >
+                  <BookmarkPlusIcon aria-hidden="true" />
+                  {editingPreset
+                    ? t("presets.updateOpen", { name: editingPreset.name })
+                    : t("presets.saveOpen")}
+                </Button>
+              </DisabledTooltip>
+            </div>
+            <DisabledTooltip reason={busyReason}>
               <Button
                 type="button"
-                variant="secondary"
-                disabled={disabled || input === null}
-                onClick={openSaveComposer}
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                onClick={() => {
+                  onStopEditingPreset()
+                  onChange(DEFAULT_CLEANUP_FORM)
+                }}
               >
-                <BookmarkPlusIcon aria-hidden="true" />
-                {editingPreset
-                  ? t("presets.updateOpen", { name: editingPreset.name })
-                  : t("presets.saveOpen")}
+                <RotateCcwIcon aria-hidden="true" />
+                {t("customizer.resetDefault")}
               </Button>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                onStopEditingPreset()
-                onChange(DEFAULT_CLEANUP_FORM)
-              }}
-            >
-              <RotateCcwIcon aria-hidden="true" />
-              {t("customizer.resetDefault")}
-            </Button>
+            </DisabledTooltip>
           </div>
         </form>
       ) : null}
@@ -518,6 +539,7 @@ export function ActiveCriteriaBar({
   form,
   activeLabel,
   disabled,
+  disabledReason,
   expanded,
   onToggleExpand,
   onRemeasure,
@@ -525,6 +547,7 @@ export function ActiveCriteriaBar({
   form: Required<CleanupFilterForm> | null
   activeLabel: string | null
   disabled: boolean
+  disabledReason?: string | null
   expanded: boolean
   onToggleExpand: () => void
   onRemeasure?: () => void
@@ -559,15 +582,19 @@ export function ActiveCriteriaBar({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onToggleExpand}>
-          <SlidersHorizontalIcon aria-hidden="true" />
-          {expanded ? t("customizer.collapse") : t("customizer.changeCriteria")}
-        </Button>
-        {form && onRemeasure ? (
-          <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={onRemeasure}>
-            <RefreshCwIcon aria-hidden="true" />
-            {t("customizer.remeasure")}
+        <DisabledTooltip reason={disabled ? disabledReason : null}>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onToggleExpand}>
+            <SlidersHorizontalIcon aria-hidden="true" />
+            {expanded ? t("customizer.collapse") : t("customizer.changeCriteria")}
           </Button>
+        </DisabledTooltip>
+        {form && onRemeasure ? (
+          <DisabledTooltip reason={disabled ? disabledReason : null}>
+            <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={onRemeasure}>
+              <RefreshCwIcon aria-hidden="true" />
+              {t("customizer.remeasure")}
+            </Button>
+          </DisabledTooltip>
         ) : null}
       </div>
     </div>

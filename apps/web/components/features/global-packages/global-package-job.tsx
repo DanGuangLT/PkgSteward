@@ -4,6 +4,7 @@ import { AlertTriangleIcon, CircleIcon, LoaderCircleIcon, RefreshCwIcon, RotateC
 import { useState, type ReactNode, type RefObject } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { globalMutationSucceeded } from "@/lib/global-packages/global-session"
@@ -32,6 +33,7 @@ export function GlobalActionName({ action, npmSelf }: { action: GlobalAction; np
 
 export function GlobalPackageJob({ controller, headingRef }: { controller: GlobalController; headingRef: RefObject<HTMLHeadingElement | null> }) {
   const t = useTranslations("globalPackages")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const { state, cancel, refresh, retryPoll } = controller
   const [cancelledJob, setCancelledJob] = useState<string | null>(null)
@@ -52,6 +54,24 @@ export function GlobalPackageJob({ controller, headingRef }: { controller: Globa
   const activeKind = state.activity?.kind
   const loadingLabel = (state.phase === "starting" || state.phase === "tracking") && activeKind
     ? t(activeKind === "versions" ? "loadingVersions" : activeKind === "preview" ? "loadingPreview" : activeKind === "mutation" ? "loadingExecute" : "loadingInventory") : null
+  const cancelDisabledReason = state.cancelPending
+    ? tDisabled("stopping")
+    : state.cancelUnknown
+      ? tDisabled("cancelUnknown")
+      : state.refreshing
+        ? tDisabled("refreshing")
+        : (!cleanup && cancelledJob === state.jobId)
+          ? tDisabled("alreadyCancelled")
+          : null
+  const refreshDisabledReason = state.refreshing
+    ? tDisabled("refreshing")
+    : state.cancelPending
+      ? tDisabled("stopping")
+      : state.phase === "starting"
+        ? tDisabled("globalStarting")
+        : (state.phase === "tracking" && !state.startUnknown && !state.cancelUnknown && !state.pollError)
+          ? tDisabled("autoPolling")
+          : null
 
   return <section className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6" aria-label={t("job.title")}>
     <h2 ref={headingRef} tabIndex={-1} className="scroll-mt-24 rounded-sm text-heading-lg focus-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring">{t("job.title")}</h2>
@@ -72,15 +92,21 @@ export function GlobalPackageJob({ controller, headingRef }: { controller: Globa
     </div>
     <p className="text-body-sm text-muted-foreground">{t("job.continues")}</p>
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      {canCancel ? <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
-        aria-busy={state.cancelPending}
-        disabled={state.cancelPending || state.cancelUnknown || state.refreshing || (!cleanup && cancelledJob === state.jobId)}
-        onClick={() => { setCancelledJob(state.jobId); void cancel() }}><GlobalActionLabel pending={state.cancelPending} icon={cleanup ? RotateCwIcon : SquareIcon}>{t(state.cancelPending ? "loadingCancel" : cleanup ? "job.retryCleanup" : "job.cancel")}</GlobalActionLabel></Button> : null}
-      <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
-        aria-busy={state.refreshing}
-        disabled={state.refreshing || state.cancelPending || state.phase === "starting"
-          || (state.phase === "tracking" && !state.startUnknown && !state.cancelUnknown && !state.pollError)}
-        onClick={() => { void refresh() }}><GlobalActionLabel pending={state.refreshing} icon={RefreshCwIcon}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</GlobalActionLabel></Button>
+      {canCancel ? (
+        <DisabledTooltip reason={cancelDisabledReason}>
+          <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
+            aria-busy={state.cancelPending}
+            disabled={state.cancelPending || state.cancelUnknown || state.refreshing || (!cleanup && cancelledJob === state.jobId)}
+            onClick={() => { setCancelledJob(state.jobId); void cancel() }}><GlobalActionLabel pending={state.cancelPending} icon={cleanup ? RotateCwIcon : SquareIcon}>{t(state.cancelPending ? "loadingCancel" : cleanup ? "job.retryCleanup" : "job.cancel")}</GlobalActionLabel></Button>
+        </DisabledTooltip>
+      ) : null}
+      <DisabledTooltip reason={refreshDisabledReason}>
+        <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
+          aria-busy={state.refreshing}
+          disabled={state.refreshing || state.cancelPending || state.phase === "starting"
+            || (state.phase === "tracking" && !state.startUnknown && !state.cancelUnknown && !state.pollError)}
+          onClick={() => { void refresh() }}><GlobalActionLabel pending={state.refreshing} icon={RefreshCwIcon}>{t(state.refreshing ? "job.refreshing" : "job.refresh")}</GlobalActionLabel></Button>
+      </DisabledTooltip>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 border-border whitespace-normal" onClick={retryPoll}><RotateCwIcon aria-hidden="true" />{t("job.retryPoll")}</Button> : null}
     </div>

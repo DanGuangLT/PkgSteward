@@ -9,6 +9,7 @@ import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { FileOpsJob } from "@/components/features/file-ops/file-ops-job"
 import { FileTree } from "@/components/features/file-ops/file-tree"
 import { PreviewReview } from "@/components/features/file-ops/preview-review"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { ReturnLink } from "@/components/shared/return-link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ import { useFileTree } from "@/hooks/use-file-tree"
 import { useRouteScrollContinuity } from "@/hooks/use-navigation-continuity"
 import type { FileTreeEntry, ScannedProject } from "@/lib/api/types"
 import { MAX_DELETE_PATHS, isInsidePath, toggleTreePath } from "@/lib/file-ops/tree-selection"
+import { fileSelectionActionDisabledReason } from "@/lib/ui/disabled-reasons"
 import { makeViewStateKey, type ResolvedReturnTarget } from "@/lib/ui/navigation-targets"
 
 const DEFAULT_BACK_TARGET: ResolvedReturnTarget = { href: "/", originId: null, isFallback: true }
@@ -33,6 +35,7 @@ export function FilesPanel({
   active?: boolean
 }) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const tNav = useTranslations("navigationState")
   const tCommon = useTranslations("common")
   const format = useFormatter()
@@ -50,6 +53,9 @@ export function FilesPanel({
   ))
   const count = selected.size
   const tooMany = count > MAX_DELETE_PATHS
+  const busyReason = busy ? tDisabled("fileOpsBusy") : null
+  const previewReasonKey = fileSelectionActionDisabledReason({ busy, selectedCount: count, tooMany })
+  const previewDisabledReason = previewReasonKey ? tDisabled(previewReasonKey) : null
 
   useRouteScrollContinuity({
     routeKey: makeViewStateKey("files", project.path),
@@ -112,27 +118,31 @@ export function FilesPanel({
           {picking ? (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {project.nodeModules.exists ? (
+                <DisabledTooltip reason={busyReason}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void controller.startDelete([project.nodeModules.path])}
+                  >
+                    <FolderXIcon aria-hidden="true" />
+                    {t("actions.deleteNodeModules")}
+                  </Button>
+                </DisabledTooltip>
+              ) : null}
+              <DisabledTooltip reason={busyReason}>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   disabled={busy}
-                  onClick={() => void controller.startDelete([project.nodeModules.path])}
+                  onClick={() => void controller.startDelete([project.path])}
                 >
-                  <FolderXIcon aria-hidden="true" />
-                  {t("actions.deleteNodeModules")}
+                  <Trash2Icon aria-hidden="true" />
+                  {t("actions.deleteProject")}
                 </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => void controller.startDelete([project.path])}
-              >
-                <Trash2Icon aria-hidden="true" />
-                {t("actions.deleteProject")}
-              </Button>
+              </DisabledTooltip>
             </div>
           ) : null}
         </div>
@@ -173,24 +183,28 @@ export function FilesPanel({
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 {count > 0 ? (
+                  <DisabledTooltip reason={busyReason}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setSelected(new Set())}
+                    >
+                      {t("actions.clearSelection")}
+                    </Button>
+                  </DisabledTooltip>
+                ) : null}
+                <DisabledTooltip reason={previewDisabledReason}>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => setSelected(new Set())}
+                    disabled={busy || count === 0 || tooMany}
+                    onClick={() => void controller.startDelete([...selected])}
                   >
-                    {t("actions.clearSelection")}
+                    <EyeIcon aria-hidden="true" />
+                    {t("actions.previewSelection", { count, formattedCount: format.number(count) })}
                   </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  disabled={busy || count === 0 || tooMany}
-                  onClick={() => void controller.startDelete([...selected])}
-                >
-                  <EyeIcon aria-hidden="true" />
-                  {t("actions.previewSelection", { count, formattedCount: format.number(count) })}
-                </Button>
+                </DisabledTooltip>
               </div>
             </div>
           </div>
