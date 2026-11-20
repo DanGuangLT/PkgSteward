@@ -17,3 +17,10 @@ export const navItems = [
   { href: "/global-packages", labelKey: "globalPackages" },
   { href: "/design-system", labelKey: "designSystem" },
 ] as const satisfies readonly NavItem[]
+
+export function getNavCurrent(pathname: string, href: string): "page" | "true" | undefined {
+  if (pathname === href) return "page"
+
+  const sectionPath = href === "/" ? "/projects" : href
+  if (pathname === sectionPath || pathname.startsWith(`${sectionPath}/`)) return "true"
+}
