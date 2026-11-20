@@ -18,6 +18,7 @@ import {
 /** Menu điều hướng cho màn hình < 768px (nav → hamburger drawer). */
 export function MobileNav() {
   const t = useTranslations("nav")
+  const navigationTitle = t("mainNavigation")
   const [open, setOpen] = useState(false)
 
   return (
@@ -34,12 +35,12 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2 text-heading-lg font-bold text-primary">
+          <SheetTitle className="flex items-center gap-2 pr-8 text-heading-lg font-bold text-primary">
             <Logo className="size-8 shrink-0" />
-            {t("brand")}
+            {navigationTitle}
           </SheetTitle>
         </SheetHeader>
-        <nav aria-label={t("mainNavigation")} className="px-4">
+        <nav aria-label={navigationTitle} className="px-4">
           <NavLinks orientation="vertical" onNavigate={() => setOpen(false)} />
         </nav>
       </SheetContent>
