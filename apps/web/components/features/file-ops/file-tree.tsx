@@ -39,7 +39,10 @@ function TreeRow({ entry, ...tree }: FileTreeProps & { entry: FileTreeEntry }) {
 
   return (
     <li className="min-w-0">
-      <div className="flex min-w-0 items-center gap-2 py-1">
+      <div className={cn(
+        "flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 transition-colors hover:bg-muted/40",
+        state === "checked" && "bg-muted/60",
+      )}>
         {entry.type === "directory" ? (
           <Button type="button" variant="ghost" size="icon-sm" aria-expanded={open}
             aria-label={t(open ? "actions.collapse" : "actions.expand", { name: entry.name })}
@@ -53,14 +56,18 @@ function TreeRow({ entry, ...tree }: FileTreeProps & { entry: FileTreeEntry }) {
         <EntryIcon entry={entry} />
         <div className="min-w-0 flex-1">
           <Label htmlFor={checkboxId} className={cn(
-            "block font-mono text-body-sm leading-snug font-normal [overflow-wrap:anywhere]",
-            !entry.selectable && "text-muted-foreground"
+            "block cursor-pointer font-mono text-body-sm leading-snug font-normal [overflow-wrap:anywhere]",
+            !entry.selectable && "cursor-default text-muted-foreground",
           )}>
             {entry.name}
           </Label>
           {entry.type === "link" ? <p className="text-caption text-muted-foreground">{t("tree.link")}</p> : null}
         </div>
-        {entry.sizeBytes !== null ? <span className="shrink-0 text-caption text-muted-foreground"><DiskSize bytes={entry.sizeBytes} /></span> : null}
+        {entry.sizeBytes !== null ? (
+          <span className="shrink-0 text-caption tabular-nums text-muted-foreground">
+            <DiskSize bytes={entry.sizeBytes} />
+          </span>
+        ) : null}
       </div>
       {open ? <TreeLevelView {...tree} path={entry.path} /> : null}
     </li>
@@ -87,10 +94,10 @@ function TreeLevelView({ path, ...tree }: FileTreeProps & { path: string }) {
 
   return (
     <>
-      <ul className={path === tree.root ? "min-w-0" : "min-w-0 pl-4 sm:pl-6"}>
+      <ul className={path === tree.root ? "min-w-0 space-y-0.5" : "min-w-0 space-y-0.5 pl-4 sm:pl-6"}>
         {level.entries.filter(entry => !tree.visiblePaths || tree.visiblePaths.has(entry.path)).map((entry) => <TreeRow key={entry.path} {...tree} entry={entry} />)}
       </ul>
-      {level.truncated ? <p className="py-2 pl-10 text-body-sm text-muted-foreground">{t("tree.truncated", { limit: format.number(2000) })}</p> : null}
+      {level.truncated ? <p className="py-2 pl-10 text-caption text-muted-foreground">{t("tree.truncated", { limit: format.number(2000) })}</p> : null}
     </>
   )
 }
@@ -101,13 +108,15 @@ export function FileTree(props: FileTreeProps) {
   const [view, setView, reset] = useViewState(makeViewStateKey("file-tree-filter", props.root), treeDiscoveryCodec, TREE_DISCOVERY)
   const discovery = selectLoadedTree(props.root, props.tree.levels, props.tree.expanded, view)
   const hidden = hiddenSelectedCount(props.selected, discovery.visiblePaths)
-  return <div className="min-w-0 space-y-4 rounded-md bg-card p-2 text-card-foreground sm:p-4">
-    <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={discovery.count} total={discovery.total} onReset={reset}>
-      <DiscoveryFilter label={d("kinds")} value={view.kinds} options={TREE_KINDS.map(value => ({ value, label: d(`values.${value}`), count: discovery.kindCounts[value] }))} onValueChange={kinds => setView({ ...view, kinds })} />
-    </DiscoveryControls>
-    <p className="text-body-sm text-muted-foreground">{d("loadedScope")}</p>
-    {hidden > 0 ? <p role="status" className="text-body-sm">{d("hiddenSelected", { count: format.number(hidden) })}</p> : null}
-    {discovery.active && discovery.count === 0 ? <DiscoveryEmpty total={discovery.total} /> : null}
-    <TreeLevelView {...props} path={props.root} visiblePaths={discovery.visiblePaths} filtering={discovery.active} />
-  </div>
+  return (
+    <div className="min-w-0 space-y-4 rounded-md border border-border bg-card p-3 text-card-foreground sm:p-4">
+      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={discovery.count} total={discovery.total} onReset={reset}>
+        <DiscoveryFilter label={d("kinds")} value={view.kinds} options={TREE_KINDS.map(value => ({ value, label: d(`values.${value}`), count: discovery.kindCounts[value] }))} onValueChange={kinds => setView({ ...view, kinds })} />
+      </DiscoveryControls>
+      <p className="text-caption text-muted-foreground">{d("loadedScope")}</p>
+      {hidden > 0 ? <p role="status" className="rounded-sm border border-border bg-muted px-3 py-2 text-caption font-medium">{d("hiddenSelected", { count: format.number(hidden) })}</p> : null}
+      {discovery.active && discovery.count === 0 ? <DiscoveryEmpty total={discovery.total} /> : null}
+      <TreeLevelView {...props} path={props.root} visiblePaths={discovery.visiblePaths} filtering={discovery.active} />
+    </div>
+  )
 }

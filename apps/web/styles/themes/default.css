@@ -42,6 +42,9 @@
   /* Trạng thái */
   --destructive: #9e0a0a; /* error */
   --destructive-foreground: #ffffff;
+  --warning: #8a4b00; /* warning-deep */
+  --warning-foreground: #ffffff;
+  --warning-soft: #fef3c7; /* warning-pale */
   --success: #103c25; /* success-deep */
   --success-foreground: #ffffff;
   --success-soft: #c7f0da; /* success-pale */
@@ -89,6 +92,9 @@
 
   --destructive: #ff8a80;
   --destructive-foreground: #141412;
+  --warning: #fbbf24;
+  --warning-foreground: #141412;
+  --warning-soft: #3b2706;
   --success: #6fd39b;
   --success-foreground: #0b2a1a;
   --success-soft: #103c25;

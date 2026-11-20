@@ -35,6 +35,7 @@ const BADGE_VARIANTS = [
   "secondary",
   "outline",
   "destructive",
+  "warning",
   "success",
 ] as const satisfies readonly BadgeVariant[]
 

@@ -112,11 +112,11 @@ export function GlobalPackageJob({ controller, headingRef }: { controller: Globa
       <p>{t("job.startedAt", { time: format.dateTime(new Date(job.startedAt), { dateStyle: "medium", timeStyle: "short" }) })}</p>
       {job.finishedAt ? <p>{t("job.finishedAt", { time: format.dateTime(new Date(job.finishedAt), { dateStyle: "medium", timeStyle: "short" }) })}</p> : null}
       {job.failureCode ? <p><GlobalCodeMessage code={job.failureCode} /></p> : null}
-      {job.mayHaveChanged ? <p>{t("job.mayHaveChanged")}</p> : null}
-      {job.gateHeld ? <p>{t("job.gateHeld")}</p> : null}
-      {job.refreshRequired ? <p>{t("job.refreshRequired")}</p> : null}
-      {job.warningCodes.length ? <ul className="space-y-2">{job.warningCodes.map(code => <li key={code}>
-        <AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><GlobalCodeMessage kind="warnings" code={code} />
+      {job.mayHaveChanged ? <p className="font-medium text-warning">{t("job.mayHaveChanged")}</p> : null}
+      {job.gateHeld ? <p className="font-medium text-warning">{t("job.gateHeld")}</p> : null}
+      {job.refreshRequired ? <p className="font-medium text-warning">{t("job.refreshRequired")}</p> : null}
+      {job.warningCodes.length ? <ul className="space-y-2 rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 font-medium text-warning">{job.warningCodes.map(code => <li key={code}>
+        <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><GlobalCodeMessage kind="warnings" code={code} />
       </li>)}</ul> : null}
     </div> : null}
     <NpmRunnerLog logs={state.logs} />

@@ -8,7 +8,7 @@ import type { Risk, RiskLevel } from "@/lib/api/types"
 
 const LEVELS = {
   low: { variant: "secondary", Icon: InfoIcon },
-  medium: { variant: "outline", Icon: TriangleAlertIcon },
+  medium: { variant: "warning", Icon: TriangleAlertIcon },
   high: { variant: "destructive", Icon: OctagonAlertIcon },
 } as const
 

@@ -38,8 +38,8 @@ function MutationResult({ job }: { job: PmJob }) {
   const t = useTranslations("packageManagers")
   if (pmMutationSucceeded(job)) return <p><CheckIcon aria-hidden="true" className="mr-1 inline size-4" />{t("result.success")}</p>
   const unchanged = !job.mayHaveChanged && !job.fileCommitted
-  return <div className="space-y-2">
-    <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />
+  return <div className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-warning">
+    <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />
       {t(job.fileCommitted && (job.cleanupRequired || job.refreshRequired || job.gateHeld) ? "result.cleanup"
         : unchanged ? (job.status === "cancelled" ? "result.cancelledBefore" : "result.failed") : "result.mayHaveChanged")}</p>
     {job.failureCode ? <p><PmCodeMessage code={job.failureCode} /></p> : null}
@@ -107,90 +107,137 @@ export function ProjectManagerPanel({ path }: { path: string }) {
   return (
     <section aria-labelledby={`${id}-title`} className="min-w-0 space-y-4 rounded-md border border-border bg-card p-4 text-card-foreground md:p-6">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <h2 id={`${id}-title`} className="text-heading-md [overflow-wrap:anywhere]">{t("title")}</h2>
-        <Button type="button" variant="secondary" disabled={state.contextLoading} aria-busy={state.contextLoading}
-          className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.refresh() }}>
+        <div className="min-w-0 space-y-1">
+          <h2 id={`${id}-title`} className="text-heading-md [overflow-wrap:anywhere]">{t("title")}</h2>
+          <p className="text-caption text-muted-foreground">{t("scope")}</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" disabled={state.contextLoading} aria-busy={state.contextLoading}
+          className="h-auto min-h-9 shrink-0 whitespace-normal" onClick={() => { void controller.refresh() }}>
           <PmActionLabel pending={state.contextLoading} icon={RefreshCwIcon}>{t(state.contextLoading ? "refreshing" : "refresh")}</PmActionLabel>
         </Button>
       </div>
-      <p className="text-body-sm">{t("scope")}</p>
-      <p className="text-body-sm text-muted-foreground">{t("method")}</p>
 
-      {context ? <dl className="grid min-w-0 gap-4 text-body-sm sm:grid-cols-2 [overflow-wrap:anywhere]">
-        <div className="min-w-0"><dt className="text-muted-foreground">{t("declared")}</dt>
-          <dd className="break-all font-mono">{context.rawPin ?? t("pinMissing")}{context.rawPinTruncated ? ` ${t("pinTruncated")}` : null}</dd>
-          {context.pinState === "unsupported" ? <dd><PmCodeMessage code="PIN_UNSUPPORTED" /></dd> : null}</div>
-        <div className="min-w-0"><dt className="text-muted-foreground">{t("installed")}</dt>
-          {context.installed.map(tool => <dd key={tool.manager} className="min-w-0">
-            {tool.status === "unsupported" ? t("toolUnsupported", { manager: tool.manager })
-              : tool.version ? <><span className="font-mono">{tool.manager} {tool.version}</span>
-                {tool.toolPath ? <span className="block break-all font-mono text-caption text-muted-foreground">{tool.toolPath}</span> : null}</>
-              : <>{t("toolUnknown", { manager: tool.manager })}{tool.reason ? <> (<PmCodeMessage code={tool.reason} />)</> : null}</>}
-          </dd>)}</div>
-        <div className="min-w-0 sm:col-span-2"><dt className="sr-only">{t("asOfLabel")}</dt>
-          <dd className="text-muted-foreground">{t("asOf", { time: format.dateTime(new Date(context.asOf), { dateStyle: "medium", timeStyle: "short" }) })}</dd></div>
-      </dl> : state.contextError ? null : <p className="text-body-sm">{t("loadingContext")}</p>}
+      {context ? (
+        <dl className="grid min-w-0 gap-3 rounded-md border border-border bg-background p-4 text-body-sm sm:grid-cols-2 [overflow-wrap:anywhere]">
+          <div className="min-w-0 space-y-1">
+            <dt className="text-caption text-muted-foreground">{t("declared")}</dt>
+            <dd className="break-all font-mono font-medium text-foreground">
+              {context.rawPin ?? t("pinMissing")}{context.rawPinTruncated ? ` ${t("pinTruncated")}` : null}
+            </dd>
+            {context.pinState === "unsupported" ? <dd><PmCodeMessage code="PIN_UNSUPPORTED" /></dd> : null}
+          </div>
+          <div className="min-w-0 space-y-1">
+            <dt className="text-caption text-muted-foreground">{t("installed")}</dt>
+            {context.installed.map(tool => (
+              <dd key={tool.manager} className="min-w-0">
+                {tool.status === "unsupported" ? t("toolUnsupported", { manager: tool.manager })
+                  : tool.version ? (
+                    <>
+                      <span className="font-mono font-medium text-foreground">{tool.manager} {tool.version}</span>
+                      {tool.toolPath ? <span className="block break-all font-mono text-caption text-muted-foreground">{tool.toolPath}</span> : null}
+                    </>
+                  ) : (
+                    <>
+                      {t("toolUnknown", { manager: tool.manager })}
+                      {tool.reason ? <> (<PmCodeMessage code={tool.reason} />)</> : null}
+                    </>
+                  )}
+              </dd>
+            ))}
+          </div>
+          <div className="min-w-0 border-t border-border/60 pt-2.5 sm:col-span-2">
+            <dt className="sr-only">{t("asOfLabel")}</dt>
+            <dd className="text-caption text-muted-foreground">
+              {t("asOf", { time: format.dateTime(new Date(context.asOf), { dateStyle: "medium", timeStyle: "short" }) })}
+            </dd>
+          </div>
+        </dl>
+      ) : state.contextError ? null : <p className="text-body-sm text-muted-foreground">{t("loadingContext")}</p>}
 
-      {state.contextError ? <p role="alert" className="text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={state.contextError.code} /></p> : null}
-      {context?.workspace.kind === "leaf" ? <div className="space-y-1 text-body-sm">
-        <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("leaf")}</p>
-        {context.workspace.root ? <p className="break-all font-mono">{context.workspace.root}</p> : null}
-      </div> : blocker ? <p className="text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={blocker} /></p> : null}
-      {context?.warnings.map(code => <p key={code} className="text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage kind="warnings" code={code} /></p>)}
-
-      <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.matches.length} total={catalog?.versions.length ?? 0} onReset={reset}>
-        <DiscoveryFilter label={d("support")} value={view.support} options={VERSION_SUPPORT.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.supported === (value === "supported")).length ?? 0 }))} onValueChange={support => setView({ ...view, support })} />
-        <DiscoveryFilter label={d("deprecation")} value={view.deprecation} options={VERSION_DEPRECATION.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.deprecated === (value === "deprecated")).length ?? 0 }))} onValueChange={deprecation => setView({ ...view, deprecation })} />
-      </DiscoveryControls>
-      {catalog && visible.matches.length === 0 ? <DiscoveryEmpty total={catalog.versions.length} /> : null}
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="min-w-0 space-y-2">
-          <Label htmlFor={`${id}-manager`}>{t("manager")}</Label>
-          <Select value={manager} disabled={blocked} onValueChange={value => chooseManager(value as PmWritableManager)}>
-            <SelectTrigger id={`${id}-manager`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
-            <SelectContent>{WRITABLE.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
-          </Select>
+      {state.contextError ? (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-card px-3.5 py-2.5 text-body-sm font-medium text-destructive">
+          <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage code={state.contextError.code} />
+        </p>
+      ) : null}
+      {context?.workspace.kind === "leaf" ? (
+        <div className="space-y-1 rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">
+          <p><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("leaf")}</p>
+          {context.workspace.root ? <p className="break-all font-mono text-caption">{context.workspace.root}</p> : null}
         </div>
-        <div className="min-w-0 space-y-2">
-          <Label htmlFor={`${id}-version`}>{t("version")}</Label>
-          <Select value={target} disabled={blocked || options.length === 0} onValueChange={value => { setTarget(value); controller.select({ manager, targetVersion: value }) }}>
-            <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono"><SelectValue placeholder={t("versionPlaceholder")} /></SelectTrigger>
-            <SelectContent>{options.map(item => <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
-              {visible.selectedHidden && item.version === target ? d("selectedHidden", { version: item.version }) : tagOf.has(item.version) ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" }) : item.version}
-            </SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-      </div>
-      <p className="text-body-sm text-muted-foreground">{t("versionsHint")}</p>
-      {catalog && options.length === 0 ? <p className="text-body-sm">{t("versionsEmpty")}</p> : null}
-      {catalog?.stale ? <p className="text-body-sm">{t("versionsStale")}</p> : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-        <Button type="button" variant="secondary" disabled={blocked} aria-busy={pendingKind === "versions"}
-          className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.loadVersions(manager) }}>
-          <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>{t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}</PmActionLabel>
-        </Button>
-        <Button ref={previewButtonRef} type="button" variant="secondary" disabled={blocked || !target} aria-busy={previewPending}
-          aria-describedby={previewPending ? `${id}-stop` : undefined}
-          className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.preview({ manager, targetVersion: target }) }}>
-          <PmActionLabel pending={previewPending} icon={EyeIcon}>{t(previewPending ? "loadingPreview" : "preview")}</PmActionLabel>
-        </Button>
-        {state.phase === "tracking" && state.job && pmJobSettling(state.job) ? (
-          <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={XIcon}>{t(state.cancelPending ? "cancelling" : "cancel")}</PmActionLabel></Button>
-        ) : null}
-        {cleanupPending ? (
-          <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>{t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}</PmActionLabel></Button>
-        ) : null}
-        {state.pollError !== null && state.phase === "tracking" ? (
-          <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button>
-        ) : null}
-      </div>
-      {previewPending ? <p id={`${id}-stop`} className="text-body-sm text-muted-foreground">{t("stopPreviewHint")}</p> : null}
-      <p className="text-body-sm text-muted-foreground">{t("registry")}</p>
+      ) : blocker ? (
+        <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">
+          <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage code={blocker} />
+        </p>
+      ) : null}
+      {context?.warnings.length ? (
+        <ul className="space-y-2 rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">
+          {context.warnings.map(code => (
+            <li key={code}>
+              <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage kind="warnings" code={code} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
-      <div className="min-w-0 space-y-2 text-body-sm">
+      <div className="space-y-4 rounded-md border border-border bg-background p-4">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={`${id}-manager`}>{t("manager")}</Label>
+            <Select value={manager} disabled={blocked} onValueChange={value => chooseManager(value as PmWritableManager)}>
+              <SelectTrigger id={`${id}-manager`} className="w-full min-w-0"><SelectValue /></SelectTrigger>
+              <SelectContent>{WRITABLE.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={`${id}-version`}>{t("version")}</Label>
+            <Select value={target} disabled={blocked || options.length === 0} onValueChange={value => { setTarget(value); controller.select({ manager, targetVersion: value }) }}>
+              <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono"><SelectValue placeholder={t("versionPlaceholder")} /></SelectTrigger>
+              <SelectContent>{options.map(item => <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
+                {visible.selectedHidden && item.version === target ? d("selectedHidden", { version: item.version }) : tagOf.has(item.version) ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" }) : item.version}
+              </SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.matches.length} total={catalog?.versions.length ?? 0} onReset={reset}>
+          <DiscoveryFilter label={d("support")} value={view.support} options={VERSION_SUPPORT.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.supported === (value === "supported")).length ?? 0 }))} onValueChange={support => setView({ ...view, support })} />
+          <DiscoveryFilter label={d("deprecation")} value={view.deprecation} options={VERSION_DEPRECATION.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.deprecated === (value === "deprecated")).length ?? 0 }))} onValueChange={deprecation => setView({ ...view, deprecation })} />
+        </DiscoveryControls>
+        {catalog && visible.matches.length === 0 ? <DiscoveryEmpty total={catalog.versions.length} /> : null}
+
+        <p className="text-caption text-muted-foreground">{t("versionsHint")}</p>
+        {catalog && options.length === 0 ? <p className="text-body-sm">{t("versionsEmpty")}</p> : null}
+        {catalog?.stale ? <p className="text-body-sm">{t("versionsStale")}</p> : null}
+
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
+          <Button type="button" variant="secondary" disabled={blocked} aria-busy={pendingKind === "versions"}
+            className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.loadVersions(manager) }}>
+            <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>{t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}</PmActionLabel>
+          </Button>
+          <Button ref={previewButtonRef} type="button" variant="secondary" disabled={blocked || !target} aria-busy={previewPending}
+            aria-describedby={previewPending ? `${id}-stop` : undefined}
+            className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.preview({ manager, targetVersion: target }) }}>
+            <PmActionLabel pending={previewPending} icon={EyeIcon}>{t(previewPending ? "loadingPreview" : "preview")}</PmActionLabel>
+          </Button>
+          {state.phase === "tracking" && state.job && pmJobSettling(state.job) ? (
+            <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={XIcon}>{t(state.cancelPending ? "cancelling" : "cancel")}</PmActionLabel></Button>
+          ) : null}
+          {cleanupPending ? (
+            <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>{t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}</PmActionLabel></Button>
+          ) : null}
+          {state.pollError !== null && state.phase === "tracking" ? (
+            <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button>
+          ) : null}
+        </div>
+        {previewPending ? <p id={`${id}-stop`} className="text-caption text-muted-foreground">{t("stopPreviewHint")}</p> : null}
+      </div>
+
+      <p className="text-caption text-muted-foreground">{t("method")} {t("registry")}</p>
+
+      <div className="min-w-0 space-y-2 border-t border-border/60 pt-3 text-body-sm">
         <h3 ref={statusRef} tabIndex={-1} className="rounded-sm font-semibold focus-ring">{t("statusTitle")}</h3>
         <p aria-live="polite" aria-atomic="true"><CircleIcon aria-hidden="true" className="mr-1 inline size-4" />
           {key ? t(key) : t("status.done")}</p>
@@ -199,10 +246,10 @@ export function ProjectManagerPanel({ path }: { path: string }) {
           <p className="break-all font-mono">{state.otherJob.path}</p>
           <Link href={appendReturnContext(projectDetailHref(state.otherJob.path), returnContext)} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
         </div> : null}
-        {state.lostJobId ? <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("lostNotice")}</p> : null}
-        {readFailure ? <p role="alert"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={readFailure} /></p> : null}
-        {cleanupPending ? <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("cleanupPending")}</p> : null}
-        {state.error && !state.form.preview ? <p role="alert"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage code={state.error.code} /></p> : null}
+        {state.lostJobId ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 font-medium text-warning"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("lostNotice")}</p> : null}
+        {readFailure ? <p role="alert" className="font-medium text-destructive"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage code={readFailure} /></p> : null}
+        {cleanupPending ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 font-medium text-warning"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("cleanupPending")}</p> : null}
+        {state.error && !state.form.preview ? <p role="alert" className="font-medium text-destructive"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage code={state.error.code} /></p> : null}
         {state.mutationResult ? <MutationResult job={state.mutationResult} /> : null}
       </div>
 

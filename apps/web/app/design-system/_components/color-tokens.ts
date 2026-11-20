@@ -41,6 +41,8 @@ export const colorGroups: readonly ColorGroup[] = [
     id: "status",
     swatches: [
       { token: "destructive", on: "destructive-foreground", className: "bg-destructive text-destructive-foreground" },
+      { token: "warning", on: "warning-foreground", className: "bg-warning text-warning-foreground" },
+      { token: "warning-soft", on: "warning", className: "bg-warning-soft text-warning" },
       { token: "success", on: "success-foreground", className: "bg-success text-success-foreground" },
       { token: "success-soft", on: "success", className: "bg-success-soft text-success" },
     ],
@@ -53,6 +55,7 @@ export const colorGroups: readonly ColorGroup[] = [
       { token: "ink-soft", className: "bg-background text-ink-soft" },
       { token: "muted-foreground", className: "bg-background text-muted-foreground" },
       { token: "destructive", className: "bg-background text-destructive" },
+      { token: "warning", className: "bg-background text-warning" },
       { token: "success", className: "bg-background text-success" },
     ],
   },

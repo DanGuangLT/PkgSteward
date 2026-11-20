@@ -35,10 +35,12 @@ const PRESET_ICONS: Record<BuiltinPresetId, typeof ShieldCheckIcon> = {
 export function CleanupPresetsBar({
   currentForm,
   customPresets,
-  editingPresetId,
+  activeCustomPresetId,
   disabled,
   hasScan,
-  primaryOnRecommended = true,
+  allowPrimaryCta = true,
+  onSelectBuiltinPreset,
+  onSelectCustomPreset,
   onRunPreset,
   onCustomizePreset,
   onEditCustomPreset,
@@ -46,18 +48,23 @@ export function CleanupPresetsBar({
 }: {
   currentForm: CleanupFilterForm
   customPresets: readonly CustomCleanupPreset[]
-  editingPresetId: string | null
+  activeCustomPresetId: string | null
   disabled: boolean
   hasScan: boolean
-  primaryOnRecommended?: boolean
-  onRunPreset: (form: Required<CleanupFilterForm>, label: string) => void
+  allowPrimaryCta?: boolean
+  onSelectBuiltinPreset: (form: Required<CleanupFilterForm>) => void
+  onSelectCustomPreset: (preset: CustomCleanupPreset) => void
+  onRunPreset: (form: Required<CleanupFilterForm>, label: string, customId?: string) => void
   onCustomizePreset: (form: Required<CleanupFilterForm>) => void
   onEditCustomPreset: (preset: CustomCleanupPreset) => void
   onDeleteCustomPreset: (id: string) => void
 }) {
   const t = useTranslations("fileOps")
   const format = useFormatter()
-  const activeBuiltin = matchBuiltinPreset(currentForm)
+  const hasActiveCustom = activeCustomPresetId !== null
+    && customPresets.some((preset) => preset.id === activeCustomPresetId)
+  const activeBuiltin = hasActiveCustom ? null : matchBuiltinPreset(currentForm)
+  const fallbackToRecommended = !hasActiveCustom && activeBuiltin === null
   const runDisabled = disabled || !hasScan
 
   return (
@@ -71,18 +78,25 @@ export function CleanupPresetsBar({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {BUILTIN_CLEANUP_PRESETS.map((preset) => {
             const Icon = PRESET_ICONS[preset.id]
-            const isMatched = activeBuiltin === preset.id && editingPresetId === null
+            const isSelected = activeBuiltin === preset.id
+            const isPrimary = allowPrimaryCta && (isSelected || (fallbackToRecommended && Boolean(preset.recommended)))
             const title = t(`presets.builtin.${preset.id}.title`)
             return (
               <div
                 key={preset.id}
                 className={cn(
                   "flex min-w-0 flex-col justify-between gap-3 rounded-md border bg-card p-4 transition-colors",
-                  isMatched ? "border-foreground" : "border-border",
+                  isSelected ? "border-foreground" : "border-border hover:border-foreground/40",
                 )}
               >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={isSelected}
+                  onClick={() => onSelectBuiltinPreset(preset.form)}
+                  className="flex min-w-0 flex-1 cursor-pointer flex-col gap-2 rounded-sm text-left focus-ring disabled:cursor-default"
+                >
+                  <div className="flex w-full items-start justify-between gap-2">
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground">
                       <Icon className="size-4" aria-hidden="true" />
                     </div>
@@ -99,13 +113,13 @@ export function CleanupPresetsBar({
                   <p className="text-caption font-medium text-foreground">
                     {t(`presets.builtin.${preset.id}.summary`)}
                   </p>
-                </div>
+                </button>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Button
                     type="button"
                     size="sm"
-                    variant={preset.recommended && primaryOnRecommended ? "default" : "secondary"}
+                    variant={isPrimary ? "default" : "secondary"}
                     className="flex-1"
                     disabled={runDisabled}
                     onClick={() => onRunPreset(preset.form, title)}
@@ -152,17 +166,24 @@ export function CleanupPresetsBar({
         ) : (
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {customPresets.map((preset) => {
-              const isEditing = editingPresetId === preset.id
+              const isSelected = activeCustomPresetId === preset.id
+              const isPrimary = allowPrimaryCta && isSelected
               return (
                 <div
                   key={preset.id}
                   className={cn(
-                    "flex min-w-0 flex-col justify-between gap-2.5 rounded-md border bg-card p-3.5",
-                    isEditing ? "border-foreground" : "border-border",
+                    "flex min-w-0 flex-col justify-between gap-2.5 rounded-md border bg-card p-3.5 transition-colors",
+                    isSelected ? "border-foreground" : "border-border hover:border-foreground/40",
                   )}
                 >
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="truncate text-body-sm font-semibold text-foreground" title={preset.name}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectCustomPreset(preset)}
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1.5 rounded-sm text-left focus-ring disabled:cursor-default"
+                  >
+                    <p className="w-full truncate text-body-sm font-semibold text-foreground" title={preset.name}>
                       {preset.name}
                     </p>
                     <div className="flex flex-wrap gap-1.5">
@@ -185,15 +206,15 @@ export function CleanupPresetsBar({
                         </Badge>
                       ) : null}
                     </div>
-                  </div>
+                  </button>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
+                      variant={isPrimary ? "default" : "secondary"}
                       className="flex-1"
                       disabled={runDisabled}
-                      onClick={() => onRunPreset(preset.form, preset.name)}
+                      onClick={() => onRunPreset(preset.form, preset.name, preset.id)}
                     >
                       <PlayIcon aria-hidden="true" />
                       {t("presets.runNow")}

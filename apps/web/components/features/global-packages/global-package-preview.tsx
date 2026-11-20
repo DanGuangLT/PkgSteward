@@ -65,19 +65,19 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
           </> : <div className="min-w-0"><dt className="text-muted-foreground">{t("dialog.change")}</dt><dd className="break-all font-mono">{preview.currentVersion ?? t("unknown")} → {preview.action === "change" ? preview.targetVersion ?? t("unknown") : t("removed")}</dd></div>}
         </dl>
         <p className="font-semibold"><GlobalActionName action={preview.action} npmSelf={npm !== undefined} /></p>
-        {repair ? <div className="space-y-3 rounded-md bg-muted p-4">
-          <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("dialog.repairWarning")}</p>
+        {repair ? <div className="space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
+          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("dialog.repairWarning")}</p>
           <h3 className="font-semibold">{t("dialog.repairTargets")}</h3>
           {npm?.repairTargets.length ? <ul className="break-all font-mono">{npm.repairTargets.map(path => <li key={path}>{path}</li>)}</ul> : <p>{t("none")}</p>}
-        </div> : <div className="space-y-3 rounded-md bg-muted p-4">
+        </div> : <div className="space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
           <h3 className="font-semibold">{t("dialog.warnings")}</h3>
-          <ul className="space-y-2">{permanentWarnings.map(code => <li key={code}>
-            <AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t(`dialog.${code}`)}
+          <ul className="space-y-2 font-medium">{permanentWarnings.map(code => <li key={code}>
+            <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t(`dialog.${code}`)}
           </li>)}</ul>
         </div>}
         {preview.risk.reasons.length ? <ul className="space-y-2">{preview.risk.reasons.map(({ code }) => <li key={code}><GlobalCodeMessage kind="risk" code={code} /></li>)}</ul> : null}
-        {preview.sharedPackages?.length ? <section aria-labelledby={`${id}-shared`} className="min-w-0 space-y-3 rounded-md bg-muted p-4">
-          <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
+        {preview.sharedPackages?.length ? <section aria-labelledby={`${id}-shared`} className="min-w-0 space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
+          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
           <h3 id={`${id}-shared`} className="font-semibold">{t("dialog.sharedPackages")}</h3>
           <ul className="min-w-0 space-y-2">{preview.sharedPackages.map(pkg => <li key={pkg.name} className="break-all">
             <span className="font-mono">{pkg.name} {pkg.version}</span>{pkg.linked ? <> · {t("dialog.linkedPackage")}</> : null}

@@ -37,6 +37,7 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
   const [reviewSetupExpanded, setReviewSetupExpanded] = useState(false)
   const [submittedCriteria, setSubmittedCriteria] = useState<SubmittedCriteria | null>(null)
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
+  const [selectedCustomPresetId, setSelectedCustomPresetId] = useState<string | null>(null)
   const reviewAction = useRef<HTMLButtonElement>(null)
 
   const { state } = controller
@@ -48,6 +49,7 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
   const editingPreset = editingPresetId
     ? customPresets.find((preset) => preset.id === editingPresetId) ?? null
     : null
+  const activeCustomPresetId = editingPresetId ?? selectedCustomPresetId
 
   useRouteScrollContinuity({ routeKey: makeViewStateKey("cleanup"), ready: true })
 
@@ -61,9 +63,22 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
     void controller.startCleanup(input)
   }
 
-  function handleRunPreset(presetForm: Required<CleanupFilterForm>, label: string) {
+  function handleSelectBuiltinPreset(presetForm: Required<CleanupFilterForm>) {
     setForm(presetForm)
     setEditingPresetId(null)
+    setSelectedCustomPresetId(null)
+  }
+
+  function handleSelectCustomPreset(preset: CustomCleanupPreset) {
+    setForm(preset.form)
+    setEditingPresetId(null)
+    setSelectedCustomPresetId(preset.id)
+  }
+
+  function handleRunPreset(presetForm: Required<CleanupFilterForm>, label: string, customId?: string) {
+    setForm(presetForm)
+    setEditingPresetId(null)
+    setSelectedCustomPresetId(customId ?? null)
     const input = cleanupPreviewInput(presetForm)
     if (input) runWithInput(presetForm, input, label)
   }
@@ -71,6 +86,7 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
   function handleCustomizePreset(presetForm: Required<CleanupFilterForm>) {
     setForm(presetForm)
     setEditingPresetId(null)
+    setSelectedCustomPresetId(null)
     setCustomizerOpen(true)
     if (isReviewing) setReviewSetupExpanded(true)
   }
@@ -78,19 +94,27 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
   function handleEditCustomPreset(preset: CustomCleanupPreset) {
     setForm(preset.form)
     setEditingPresetId(preset.id)
+    setSelectedCustomPresetId(preset.id)
     setCustomizerOpen(true)
     if (isReviewing) setReviewSetupExpanded(true)
   }
 
   function handleDeleteCustomPreset(id: string) {
     if (editingPresetId === id) setEditingPresetId(null)
+    if (selectedCustomPresetId === id) setSelectedCustomPresetId(null)
     removePreset(id)
+  }
+
+  function handleFormChange(nextForm: Required<CleanupFilterForm>) {
+    setForm(nextForm)
+    if (editingPresetId === null) setSelectedCustomPresetId(null)
   }
 
   function handleSavePreset(name: string, updateId?: string) {
     const result = savePreset({ id: updateId, name, form })
     if (result.ok) {
       setEditingPresetId(result.preset.id)
+      setSelectedCustomPresetId(result.preset.id)
     }
     return result
   }
@@ -131,10 +155,12 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
           <CleanupPresetsBar
             currentForm={form}
             customPresets={customPresets}
-            editingPresetId={editingPresetId}
+            activeCustomPresetId={activeCustomPresetId}
             disabled={busy}
             hasScan={hasScan}
-            primaryOnRecommended={!customizerOpen && !isReviewing && hasScan}
+            allowPrimaryCta={!customizerOpen && !isReviewing && hasScan}
+            onSelectBuiltinPreset={handleSelectBuiltinPreset}
+            onSelectCustomPreset={handleSelectCustomPreset}
             onRunPreset={handleRunPreset}
             onCustomizePreset={handleCustomizePreset}
             onEditCustomPreset={handleEditCustomPreset}
@@ -148,7 +174,7 @@ export function CleanupPanel({ scanContext }: { scanContext: CleanupScanContext 
             hasScan={hasScan}
             projects={scanContext?.projects ?? []}
             editingPreset={editingPreset}
-            onChange={setForm}
+            onChange={handleFormChange}
             onSubmit={(input) => runWithInput(form, input, editingPreset?.name ?? null)}
             onSavePreset={handleSavePreset}
             onStopEditingPreset={() => setEditingPresetId(null)}

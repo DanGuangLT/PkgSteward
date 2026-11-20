@@ -59,10 +59,10 @@ export function PmPreviewDialog({ controller, blocked, onCloseAutoFocus, onCance
           <div className="min-w-0 sm:col-span-2"><dt className="text-muted-foreground">{t("dialog.change")}</dt>
             <dd className="break-all font-mono">{preview.edit.before ?? t("pinMissing")} → {preview.edit.after}</dd></div>
         </dl>
-        <div className="space-y-3 rounded-md bg-muted p-4">
+        <div className="space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
           <h3 className="font-semibold">{t("dialog.warnings")}</h3>
-          <ul className="space-y-2">{preview.warnings.map(code => <li key={code}>
-            <AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" /><PmCodeMessage kind="warnings" code={code} />
+          <ul className="space-y-2 font-medium">{preview.warnings.map(code => <li key={code}>
+            <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" /><PmCodeMessage kind="warnings" code={code} />
           </li>)}</ul>
           {preview.limitations.length ? <>
             <h3 className="font-semibold">{t("dialog.limitations")}</h3>

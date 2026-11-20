@@ -96,15 +96,15 @@ export function NpmRunnerPanel({ controller, contextError }: {
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button> : null}
     </div>
-    {state.startUnknown ? <p className="text-body-sm">{t("outcome.startUnknown")}</p> : null}
-    {state.cancelUnknown ? <p className="text-body-sm">{t("outcome.cancelUnknown")}</p> : null}
-    {state.phase === "lost" ? <p className="text-body-sm">{t("outcome.lost")}</p> : null}
-    {state.error || state.pollError || runningOtherPath ? <div role="alert" className="min-w-0 space-y-2 rounded-md bg-muted p-4 text-body-sm">
-      <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? (runningOtherPath ? "RUNNING" : "UNKNOWN"))}</p>
+    {state.startUnknown ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.startUnknown")}</p> : null}
+    {state.cancelUnknown ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.cancelUnknown")}</p> : null}
+    {state.phase === "lost" ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.lost")}</p> : null}
+    {state.error || state.pollError || runningOtherPath ? <div role="alert" className="min-w-0 space-y-2 rounded-md border border-warning/40 bg-warning-soft p-4 text-body-sm text-warning">
+      <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? (runningOtherPath ? "RUNNING" : "UNKNOWN"))}</p>
       {state.pollError ? <p>{t("outcome.pollPaused")}</p> : null}
       {href && conflictPath ? <>
         <p className="font-mono [overflow-wrap:anywhere]">{conflictPath}</p>
-        <Link href={href} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
+        <Link href={href} prefetch={false} className="inline-block rounded-sm font-semibold underline focus-ring">{t("follow")}</Link>
       </> : null}
     </div> : null}
     {job ? <div className="min-w-0 space-y-3 text-body-sm [overflow-wrap:anywhere]">
@@ -122,13 +122,17 @@ export function NpmRunnerPanel({ controller, contextError }: {
       {job.nativeSession ? (
         <NativeSessionDetails nativeSession={job.nativeSession} initialCommand={job.initialCommand ?? null} />
       ) : null}
-      {job.mayHaveChanged ? <p>{t("outcome.mayHaveChanged")}</p> : null}
-      {job.gateHeld ? <p>{t("outcome.gateHeld")}</p> : null}
-      {job.refreshRequired ? <p>{t("outcome.refreshRequired")}</p> : null}
+      {job.mayHaveChanged ? <p className="font-medium text-warning">{t("outcome.mayHaveChanged")}</p> : null}
+      {job.gateHeld ? <p className="font-medium text-warning">{t("outcome.gateHeld")}</p> : null}
+      {job.refreshRequired ? <p className="font-medium text-warning">{t("outcome.refreshRequired")}</p> : null}
     </div> : null}
-    {warningCodes.length ? <ul className="space-y-2 text-body-sm">{warningCodes.map(code => {
-      const key = `warnings.${code}` as `warnings.${keyof typeof messages.npmRunner.warnings}`
-      return <li key={code}><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t.has(key) ? t(key) : t("errors.UNKNOWN")}</li>
-    })}</ul> : null}
+    {warningCodes.length ? (
+      <ul className="space-y-2 rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">
+        {warningCodes.map(code => {
+          const key = `warnings.${code}` as `warnings.${keyof typeof messages.npmRunner.warnings}`
+          return <li key={code}><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t.has(key) ? t(key) : t("errors.UNKNOWN")}</li>
+        })}
+      </ul>
+    ) : null}
   </section>
 }
