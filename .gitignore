@@ -43,3 +43,6 @@ desktop.ini
 /yarn.lock
 /apps/*/package-lock.json
 /apps/*/yarn.lock
+
+# list ignore files
+imgError/*

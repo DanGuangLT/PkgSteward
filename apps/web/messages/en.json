@@ -148,9 +148,11 @@
       "version": "Installed tool version",
       "target": "Canonical target path",
       "packageHint": "Package name, optionally with an exact version or tag, such as @scope/name@1.2.3 or name@latest. No version ranges, URLs or command flags.",
-      "packageNameHint": "Package name only, such as @scope/name. No version or command flags."
+      "packageNameHint": "Package name only, such as @scope/name. No version or command flags.",
+      "quickScripts": "Quick scripts:"
     },
     "trust": {
+      "summary": "Trust and safety notes — read before running",
       "projectCode": "Only run projects you trust. Commands may execute project and lifecycle code with your user permissions. npm 12 may skip dependency scripts even when the command succeeds, unless the root allowScripts permits them; root and explicitly run scripts still execute, and root preinstall runs before dependencies are installed. Inspect allowScripts yourself; the app does not approve scripts, rebuild packages or recover missing build artifacts.",
       "config": "Configuration in .npmrc, pnpmfile and plugins may execute code or affect tool behavior. Strict npm configuration may make the command fail; the app adds no ignore-scripts, allow-scripts or strict-npmrc overrides and does not retry automatically.",
       "network": "Commands may use the network, shared stores and access or change files outside the project.",
@@ -304,6 +306,7 @@
   },
   "projects": {
     "viewDetails": "View details",
+    "viewDetailsOf": "View details for {name}",
     "title": "Projects",
     "listLabel": "Scanned projects",
     "empty": {
@@ -320,8 +323,6 @@
     },
     "summary": {
       "scannedAt": "Scanned at",
-      "projects": "{count, plural, one {{formattedCount} project} other {{formattedCount} projects}}",
-      "orphans": "{count, plural, one {{formattedCount} node_modules folder without a project} other {{formattedCount} node_modules folders without a project}}",
       "skipped": "{count, plural, one {{formattedCount} skipped item} other {{formattedCount} skipped items}}"
     },
     "partial": {
@@ -331,8 +332,28 @@
     "search": {
       "label": "Find projects",
       "placeholder": "Search by name or path",
+      "clearSearch": "Clear search",
       "clearAll": "Clear search and filters",
       "results": "{count, plural, one {Showing {formattedCount} project} other {Showing {formattedCount} projects}}"
+    },
+    "kpi": {
+      "totalProjects": "Total projects",
+      "withNodeModules": "With node_modules",
+      "measuredCount": "{count} measured",
+      "notMeasuredYet": "Size not measured yet",
+      "orphanNodeModules": "Orphan node_modules",
+      "openCleanup": "Clean up",
+      "noOrphans": "No orphan folders",
+      "attention": "Needs attention",
+      "attentionBreakdown": "{missingLockfile} missing lockfile · {stale} inactive > 30d",
+      "allHealthy": "All projects look healthy"
+    },
+    "quickViews": {
+      "label": "Quick filters",
+      "all": "All ({count})",
+      "hasNodeModules": "Has node_modules ({count})",
+      "missingLockfile": "Missing lockfile ({count})",
+      "inactive30d": "Inactive > 30d ({count})"
     },
     "sort": {
       "label": "Sort by",
@@ -345,7 +366,6 @@
       "all": "All",
       "clearGroup": "Clear this filter",
       "optionCount": "{label} ({count})",
-      "reset": "Clear filters",
       "manager": {
         "label": "Package manager",
         "all": "All"
@@ -385,7 +405,6 @@
     "nodeModules": {
       "present": "Present",
       "missing": "Not present",
-      "size": "Reference size:",
       "viewSize": "View size",
       "measuredAt": "Measured at"
     },
@@ -438,11 +457,26 @@
       "filesUnavailableTitle": "Project files unavailable",
       "filesUnavailable": "This project is not in the latest scan results. Return to the project list and scan again before browsing files."
     },
-    "summary": { "title": "Local project information", "name": "Name", "version": "Version", "manager": "Package manager", "packageManager": "Declared packageManager", "lockfile": "Lockfile", "readAt": "Read at", "unknown": "Unknown", "managerUnknown": "Unknown", "managerAmbiguous": "Multiple lockfile families" },
+    "summary": { "title": "Local project information", "noLockfile": "Missing lockfile", "readAt": "Read at", "unknown": "Unknown", "managerUnknown": "Unknown", "managerAmbiguous": "Multiple lockfile families" },
+    "kpi": {
+      "dependencies": "Dependencies",
+      "declaredInManifest": "Declared in package.json",
+      "outdated": "Outdated",
+      "notChecked": "Not checked online",
+      "allUpToDate": "All up to date",
+      "updatesAvailable": "Newer versions available",
+      "advisories": "Advisories",
+      "criticalHighBadge": "{count} critical/high",
+      "cleanBadge": "Clean",
+      "noAdvisories": "No vulnerabilities found",
+      "findingsFromAudit": "From lockfile audit",
+      "scripts": "Scripts",
+      "scriptsDeclared": "Defined in project"
+    },
     "dependencies": { "title": "Dependencies", "count": "{count, plural, one {{formattedCount} dependency displayed} other {{formattedCount} dependencies displayed}}", "empty": "No dependencies are declared.", "name": "Name", "groups": "Groups", "spec": "Declared specification", "locked": "Locked versions", "wanted": "Wanted version", "latest": "Latest version", "unknown": "Unknown", "outdated": "Newer version available", "vulnerable": "Vulnerability finding" },
     "scripts": { "title": "Scripts", "empty": "No scripts are declared.", "readOnly": "Scripts are displayed as text only and are never executed." },
     "analysis": {
-      "start": "Check packages", "publicRegistryNotice": "Checking sends dependency names and versions to the public npm registry at registry.npmjs.org.", "cancel": "Cancel check", "cancelling": "Requesting cancellation…", "cancelUnknown": "Cancellation is unconfirmed. Check the status before continuing.", "startUnknown": "It is unknown whether the check started. You can explicitly send the request again.", "refresh": "Refresh local data", "refreshing": "Refreshing…", "retryPoll": "Check status again", "follow": "View the project being checked", "otherProject": "Another project is being checked.", "partial": "Results are incomplete. Available findings are retained.", "stale": "Inputs changed or the result is no longer verified. Refresh local data and check again.", "untracked": "Tracking paused after an error. Select Check status again to resume.", "previous": "Showing the previous check while waiting for new results.", "clean": "No vulnerabilities were found across the fully checked lockfile scope.", "checkedAt": "Inputs last verified at", "startedAt": "Started at", "finishedAt": "Finished at", "continues": "Leaving this page only stops tracking. The backend may continue until you cancel or the configured deadline expires.", "historical": "The verification time does not guarantee that files remain unchanged afterwards.", "progress": "Checked {formattedChecked} / {formattedTotal}", "unknownTotal": "unknown total"
+      "start": "Check packages", "publicRegistryNotice": "Checking sends dependency names and versions to the public npm registry at registry.npmjs.org.", "cancel": "Cancel check", "cancelling": "Requesting cancellation…", "cancelUnknown": "Cancellation is unconfirmed. Check the status before continuing.", "startUnknown": "It is unknown whether the check started. You can explicitly send the request again.", "refresh": "Refresh local data", "refreshing": "Refreshing…", "retryPoll": "Check status again", "follow": "View the project being checked", "otherProject": "Another project is being checked.", "partial": "Results are incomplete. Available findings are retained.", "stale": "Inputs changed or the result is no longer verified. Refresh local data and check again.", "untracked": "Tracking paused after an error. Select Check status again to resume.", "previous": "Showing the previous check while waiting for new results.", "clean": "No vulnerabilities were found across the fully checked lockfile scope.", "checkedAt": "Inputs last verified at", "startedAt": "Started at", "finishedAt": "Finished at", "continues": "Leaving this page only stops tracking. The backend may continue until you cancel or the configured deadline expires.", "historical": "The verification time does not guarantee that files remain unchanged afterwards.", "progress": "Checked {formattedChecked} / {formattedTotal}", "unknownTotal": "unknown total", "progressLabel": "Package check progress"
     },
     "status": { "idle": "No online check started.", "starting": "Starting check…", "running": "Checking…", "completed": "Check finished.", "cancelled": "Check cancelled.", "timed_out": "Check timed out.", "failed": "Check failed.", "lost": "This check can no longer be found. Previous results are retained and unverified." },
     "phases": { "reading": "Reading inputs", "outdated": "Checking versions", "audit": "Checking vulnerabilities", "validating": "Verifying inputs", "done": "Finished" },
@@ -462,7 +496,7 @@
       "view": "View",
       "hint": "Choose an allowed scan directory. Package view requires a node_modules path. Cancel the current measurement before changing targets."
     },
-    "views": { "directory": "Directory", "packages": "Packages in node_modules" },
+    "views": { "directory": "Directory", "packages": "Packages in node_modules", "packagesShort": "Packages" },
     "actions": {
       "measure": "Measure size",
       "recalculate": "Recalculate displayed result",
@@ -472,7 +506,55 @@
       "expand": "Look inside",
       "expandName": "Look inside {name}",
       "backTo": "Return to saved measurement: {path}",
-      "projects": "Back to projects"
+      "projects": "Back to projects",
+      "openFiles": "Files",
+      "openCleanup": "Clean up"
+    },
+    "sort": {
+      "announcement": "Sorted by {column}, {direction}, {count} items",
+      "asc": "ascending",
+      "desc": "descending"
+    },
+    "activeBar": {
+      "label": "Active target",
+      "recalculate": "Recalculate",
+      "changeTarget": "Change target",
+      "hideControls": "Hide target controls"
+    },
+    "quickTargets": {
+      "heading": "Quick targets — 1 click to measure",
+      "hint": "Click a scan root, heaviest project, or pinned path to measure immediately (read-only).",
+      "pickProject": "Pick project ({count})…",
+      "goScan": "Scan projects first",
+      "rootsLabel": "Scanned root folders",
+      "heaviestLabel": "Heaviest node_modules",
+      "searchPlaceholder": "Search by project name or path…",
+      "clearSearch": "Clear search",
+      "noProjectMatches": "No matching projects found.",
+      "measureFolder": "Measure folder",
+      "measurePackages": "Measure node_modules"
+    },
+    "favorites": {
+      "heading": "Pinned paths",
+      "count": "{count}/{max}",
+      "empty": "No pinned paths yet. Click Pin path to save targets you inspect often.",
+      "pin": "Pin path",
+      "pinned": "Pinned",
+      "remove": "Remove pinned path {label}",
+      "limitReached": "Maximum 8 pinned paths reached. Remove one before pinning another."
+    },
+    "kpi": {
+      "totalSize": "Total measured size",
+      "cachedBadge": "Cached",
+      "partialBadge": "Partial",
+      "previousBadge": "Previous",
+      "filesAndItems": "Files & items",
+      "listedItems": "{formattedCount} items at this level",
+      "heaviestItem": "Heaviest item",
+      "noHeaviest": "No measured entries yet",
+      "measurementInfo": "Measurement details",
+      "skippedSummary": "Skipped {skipped} entries · {links} links",
+      "notesDisclosure": "Measurement metric & cache notes"
     },
     "status": {
       "idle": "No measurement started.",
@@ -504,10 +586,8 @@
       "unsupported": "Unsupported file type",
       "identity_unavailable": "File identity is unavailable"
     },
-    "total": "Total:",
     "metric": "Apparent size of unique files within the measured scope, deduplicating hardlinks. This is not the space that deleting them would free.",
     "overlap": "The total may differ from the sum of rows: rows can share files, and some entries are not listed.",
-    "measuredAt": "Measured at",
     "cacheHit": "Showing a cached measurement.",
     "cacheHint": "This reference result can become stale when nested files change. Recalculate to measure again and clear the cache.",
     "partial": "The result is incomplete; available sizes are lower bounds.",
@@ -545,6 +625,7 @@
     "files": {
       "title": "Project files",
       "description": "Choose the files or folders to delete. Every action goes through a preview and a confirmation.",
+      "selectionHint": "Selected items always go through preview and confirmation before deletion.",
       "noProject": {
         "title": "No project selected",
         "description": "Open Manage files from the project list."
@@ -974,6 +1055,7 @@
           "secondary": "Installed",
           "outline": "Optional",
           "destructive": "Vulnerable",
+          "warning": "Warning",
           "success": "Up to date"
         }
       }
@@ -1126,6 +1208,18 @@
   },
   "globalPackages": {
     "title": "Global packages",
+    "kpi": {
+      "total": "Total global packages",
+      "installedInPrefix": "Installed in global prefix",
+      "manageable": "Manageable",
+      "readyForActions": "Ready to change or remove",
+      "protectedLinked": "Protected / linked",
+      "invalidExtra": "+ {count} unverified",
+      "viewOnly": "View-only, safely guarded",
+      "activeVersion": "Active version",
+      "available": "Available",
+      "unavailableBadge": "Unavailable"
+    },
     "inventory": "Installed packages",
     "statusLabel": "Status",
     "actions": "Actions",
@@ -1163,7 +1257,7 @@
     "loadingExecute": "Executing…",
     "loadingInventory": "Refreshing inventory…",
     "loadingCancel": "Requesting stop…",
-    "versionsReady": "Choose a version or tag below, then select Preview.",
+    "versionsReady": "Choose a version or tag below, then select Review and apply…",
     "versionsHint": "You can reload the list or enter an exact version or tag.",
     "currentVersion": "{version} (installed)",
     "outcome": {
@@ -1177,7 +1271,7 @@
     "chooseVersion": "Choose a version or tag",
     "versions": "Versions",
     "tags": "Registry tags",
-    "preview": "Preview",
+    "preview": "Review and apply…",
     "previewAgain": "Preview again",
     "previewAgainHint": "The previous preview was cleared. Check the reason, refresh status if needed, then request a new preview from the package row. Nothing is executed automatically.",
     "cancel": "Cancel",
@@ -1377,7 +1471,7 @@
     "versionsStale": "The list may be outdated.",
     "loadVersions": "Load versions",
     "loadingVersions": "Loading versions…",
-    "preview": "Preview change",
+    "preview": "Review and apply…",
     "loadingPreview": "Preparing preview…",
     "stopPreviewHint": "Press Escape to stop the preview.",
     "cancel": "Cancel",
@@ -1488,5 +1582,49 @@
       "INVALID_RESPONSE": "The backend returned invalid data.",
       "HTTP_EXCEPTION": "The request failed."
     }
+  },
+  "disabledReasons": {
+    "scanStarting": "Starting a project scan.",
+    "scanRunning": "A project scan is running. Wait for it to finish or cancel the scan.",
+    "scanCancelling": "Cancelling the current scan.",
+    "scanRefreshing": "Refreshing the project list after the scan finished.",
+    "noNodeModulesProjects": "No projects have a node_modules folder in this scan.",
+    "noAttentionProjects": "No projects are missing a lockfile or inactive for over 30 days.",
+    "diskRunning": "A disk usage measurement is running. Wait for it to finish or cancel it.",
+    "diskCancelling": "Cancelling the current disk usage measurement.",
+    "diskMissingPath": "Enter or select a folder path before measuring.",
+    "fileOpsBusy": "A cleanup measurement or operation is running; wait for it to finish.",
+    "cleanupNeedsScan": "Run a project scan on the Projects page before finding and measuring cleanup targets.",
+    "cleanupInvalidCriteria": "Current filter criteria are invalid (select at least one valid target type).",
+    "noMatchingProjects": "No projects match the current search filter.",
+    "noAttentionItems": "No high-risk or invalid items require attention.",
+    "noEligibleItems": "No eligible items are available to select in this preview.",
+    "selectionEmpty": "Select at least one item before continuing.",
+    "selectionTooMany": "Selected items exceed the per-operation safety limit. Deselect some items.",
+    "stopping": "Stopping the current task.",
+    "submitting": "Sending confirmation to the server; please wait.",
+    "acknowledgeRisks": "Acknowledge all risk warnings before continuing.",
+    "confirmTextMismatch": "Type the exact required confirmation text (case-sensitive).",
+    "previewExpired": "This preview has expired. Run Preview again to generate a fresh one.",
+    "consentIncomplete": "Preview confirmation requirements are incomplete.",
+    "taskRunning": "Another task is currently running; wait before confirming.",
+    "analysisRunning": "Analyzing packages and security advisories for this project.",
+    "refreshing": "Refreshing the latest data.",
+    "registryUnsupported": "This project uses a custom registry configuration that is not supported for analysis here.",
+    "runnerBusy": "A project command is running in the command runner; wait for it to finish before analyzing.",
+    "cancelUnknown": "Stop status is unknown. Click Refresh to check the server state.",
+    "runnerStarting": "Starting the project command session.",
+    "clearingRecovery": "Clearing the recovery hold state.",
+    "pmBusy": "A package manager version task is running or finishing.",
+    "pmOtherRunning": "Another project is currently changing its package manager version.",
+    "loadingContext": "Loading project package manager context.",
+    "pmBlocked": "Cannot change the packageManager pin for this project (see warning above).",
+    "chooseVersionFirst": "Load versions and choose a target version before reviewing and applying.",
+    "globalBusy": "A global package task or refresh is running; please wait.",
+    "globalStarting": "Starting the global package task.",
+    "alreadyCancelled": "Cancellation has already been requested for this task.",
+    "autoPolling": "Task status is updating automatically.",
+    "noMatchingVersions": "No versions match the current filters. Adjust the filters or reload the version list.",
+    "shellLockedWhileRunning": "A command is currently running, so switching terminals is temporarily locked."
   }
 }

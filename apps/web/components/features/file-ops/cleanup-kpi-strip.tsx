@@ -4,6 +4,7 @@ import { CheckCircle2Icon, HardDriveIcon, LayersIcon, TriangleAlertIcon } from "
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import type { CleanupKind } from "@/lib/api/types"
 import type { CleanupMetrics } from "@/lib/file-ops/file-ops-list"
 import { cn } from "@/lib/utils"
@@ -26,6 +27,7 @@ export function CleanupKpiStrip({
   onToggleAttention: () => void
 }) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const activeKinds = KIND_ORDER.filter((kind) => metrics.byKind[kind].count > 0)
   const hasAttention = metrics.attentionCount > 0 || metrics.invalidCount > 0
@@ -107,32 +109,37 @@ export function CleanupKpiStrip({
         </div>
       </div>
 
-      <button
-        type="button"
-        aria-pressed={attentionActive}
-        disabled={!hasAttention}
-        onClick={onToggleAttention}
-        className={cn(
-          "flex min-w-0 flex-col gap-1.5 rounded-md border bg-card p-4 text-left transition-colors focus-ring hover:bg-muted/50 disabled:cursor-default disabled:hover:bg-card",
-          attentionActive ? "border-foreground" : "border-border",
-        )}
+      <DisabledTooltip
+        reason={!hasAttention ? tDisabled("noAttentionItems") : null}
+        className="flex w-full"
       >
-        <div className="flex items-center justify-between gap-2 text-caption text-muted-foreground">
-          <span>{t("kpi.attention")}</span>
-          <TriangleAlertIcon className="size-4 shrink-0" aria-hidden="true" />
-        </div>
-        <p className="text-heading-lg tabular-nums text-foreground">
-          {format.number(metrics.attentionCount + metrics.invalidCount)}
-        </p>
-        <p className="text-caption text-muted-foreground">
-          {hasAttention
-            ? t("kpi.attentionCounts", {
-                risky: format.number(metrics.attentionCount),
-                invalid: format.number(metrics.invalidCount),
-              })
-            : t("kpi.attentionAllClear")}
-        </p>
-      </button>
+        <button
+          type="button"
+          aria-pressed={attentionActive}
+          disabled={!hasAttention}
+          onClick={onToggleAttention}
+          className={cn(
+            "flex w-full min-w-0 flex-col gap-1.5 rounded-md border bg-card p-4 text-left transition-colors focus-ring hover:bg-muted/50 disabled:cursor-default disabled:hover:bg-card",
+            attentionActive ? "border-foreground" : "border-border",
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 text-caption text-muted-foreground">
+            <span>{t("kpi.attention")}</span>
+            <TriangleAlertIcon className="size-4 shrink-0" aria-hidden="true" />
+          </div>
+          <p className="text-heading-lg tabular-nums text-foreground">
+            {format.number(metrics.attentionCount + metrics.invalidCount)}
+          </p>
+          <p className="text-caption text-muted-foreground">
+            {hasAttention
+              ? t("kpi.attentionCounts", {
+                  risky: format.number(metrics.attentionCount),
+                  invalid: format.number(metrics.invalidCount),
+                })
+              : t("kpi.attentionAllClear")}
+          </p>
+        </button>
+      </DisabledTooltip>
     </div>
   )
 }

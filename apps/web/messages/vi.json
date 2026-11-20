@@ -148,9 +148,11 @@
       "version": "Phiên bản công cụ đã cài",
       "target": "Đường dẫn đích đã chuẩn hoá",
       "packageHint": "Tên package, có thể kèm phiên bản chính xác hoặc tag, ví dụ @scope/name@1.2.3 hoặc name@latest. Không nhận dải phiên bản, URL hay cờ lệnh.",
-      "packageNameHint": "Chỉ nhập tên package, ví dụ @scope/name. Không kèm phiên bản hay cờ lệnh."
+      "packageNameHint": "Chỉ nhập tên package, ví dụ @scope/name. Không kèm phiên bản hay cờ lệnh.",
+      "quickScripts": "Chạy nhanh script:"
     },
     "trust": {
+      "summary": "Lưu ý tin cậy và an toàn trước khi chạy",
       "projectCode": "Chỉ chạy dự án bạn tin cậy. Lệnh có thể chạy mã dự án và lifecycle với quyền của bạn. npm 12 có thể bỏ qua script của dependency dù lệnh thành công nếu allowScripts ở gốc chưa cho phép; script ở gốc và script được chạy tường minh vẫn thực thi, còn preinstall ở gốc chạy trước khi cài dependency. Hãy tự kiểm tra allowScripts; ứng dụng không phê duyệt script, rebuild package hay khôi phục sản phẩm build bị thiếu.",
       "config": "Cấu hình .npmrc, pnpmfile và plugin có thể thực thi mã hoặc ảnh hưởng hành vi công cụ. Cấu hình npm nghiêm ngặt có thể khiến lệnh thất bại; ứng dụng không thêm tùy chọn ghi đè ignore-scripts, allow-scripts hay strict-npmrc và không tự thử lại.",
       "network": "Lệnh có thể dùng mạng, kho dùng chung và truy cập hoặc thay đổi tệp ngoài dự án.",
@@ -304,6 +306,7 @@
   },
   "projects": {
     "viewDetails": "Xem chi tiết",
+    "viewDetailsOf": "Xem chi tiết {name}",
     "title": "Dự án",
     "listLabel": "Danh sách dự án quét được",
     "empty": {
@@ -320,8 +323,6 @@
     },
     "summary": {
       "scannedAt": "Quét lúc",
-      "projects": "{formattedCount} dự án",
-      "orphans": "{formattedCount} thư mục node_modules không có dự án",
       "skipped": "{formattedCount} mục đã bỏ qua"
     },
     "partial": {
@@ -331,8 +332,28 @@
     "search": {
       "label": "Tìm dự án",
       "placeholder": "Tìm theo tên hoặc đường dẫn",
+      "clearSearch": "Xoá từ khoá tìm kiếm",
       "clearAll": "Xoá tìm kiếm và bộ lọc",
       "results": "Đang hiển thị {formattedCount} dự án"
+    },
+    "kpi": {
+      "totalProjects": "Tổng số dự án",
+      "withNodeModules": "Có node_modules",
+      "measuredCount": "{count} đã đo",
+      "notMeasuredYet": "Chưa đo dung lượng",
+      "orphanNodeModules": "node_modules mồ côi",
+      "openCleanup": "Dọn ngay",
+      "noOrphans": "Không có thư mục mồ côi",
+      "attention": "Cần chú ý",
+      "attentionBreakdown": "{missingLockfile} thiếu lockfile · {stale} cũ > 30 ngày",
+      "allHealthy": "Tất cả đều ổn định"
+    },
+    "quickViews": {
+      "label": "Bộ lọc nhanh",
+      "all": "Tất cả ({count})",
+      "hasNodeModules": "Có node_modules ({count})",
+      "missingLockfile": "Thiếu lockfile ({count})",
+      "inactive30d": "Không hoạt động > 30 ngày ({count})"
     },
     "sort": {
       "label": "Sắp xếp theo",
@@ -345,7 +366,6 @@
       "all": "Tất cả",
       "clearGroup": "Bỏ lọc nhóm này",
       "optionCount": "{label} ({count})",
-      "reset": "Xoá bộ lọc",
       "manager": {
         "label": "Trình quản lý gói",
         "all": "Tất cả"
@@ -385,7 +405,6 @@
     "nodeModules": {
       "present": "Đã có",
       "missing": "Chưa có",
-      "size": "Dung lượng tham khảo:",
       "viewSize": "Xem dung lượng",
       "measuredAt": "Đo lúc"
     },
@@ -440,7 +459,22 @@
       "filesUnavailableTitle": "Chưa duyệt được file dự án",
       "filesUnavailable": "Dự án này chưa có trong kết quả quét gần nhất. Hãy về danh sách dự án và quét lại trước khi duyệt file."
     },
-    "summary": { "title": "Thông tin từ máy này", "name": "Tên", "version": "Phiên bản", "manager": "Trình quản lý gói", "packageManager": "Khai báo packageManager", "lockfile": "Lockfile", "readAt": "Đọc lúc", "unknown": "Chưa xác định", "managerUnknown": "Chưa xác định", "managerAmbiguous": "Có nhiều loại lockfile" },
+    "summary": { "title": "Thông tin từ máy này", "noLockfile": "Thiếu lockfile", "readAt": "Đọc lúc", "unknown": "Chưa xác định", "managerUnknown": "Chưa xác định", "managerAmbiguous": "Có nhiều loại lockfile" },
+    "kpi": {
+      "dependencies": "Dependencies",
+      "declaredInManifest": "Khai báo trong package.json",
+      "outdated": "Cần cập nhật",
+      "notChecked": "Chưa kiểm tra trực tuyến",
+      "allUpToDate": "Tất cả đều mới nhất",
+      "updatesAvailable": "Có bản mới hơn trên registry",
+      "advisories": "Cảnh báo lỗ hổng",
+      "criticalHighBadge": "{count} nghiêm trọng/cao",
+      "cleanBadge": "An toàn",
+      "noAdvisories": "Không phát hiện lỗ hổng",
+      "findingsFromAudit": "Từ kiểm tra lockfile",
+      "scripts": "Scripts",
+      "scriptsDeclared": "Khai báo sẵn trong dự án"
+    },
     "dependencies": { "title": "Dependency", "count": "{count, plural, other {{formattedCount} dependency được hiển thị}}", "empty": "Không có dependency được khai báo.", "name": "Tên", "groups": "Nhóm", "spec": "Khai báo", "locked": "Phiên bản trong lockfile", "wanted": "Phiên bản phù hợp khai báo", "latest": "Phiên bản mới nhất", "unknown": "Chưa xác định", "outdated": "Có phiên bản mới hơn", "vulnerable": "Có cảnh báo lỗ hổng" },
     "scripts": { "title": "Script", "empty": "Không có script được khai báo.", "readOnly": "Script chỉ được hiển thị dưới dạng văn bản, không được thực thi." },
     "analysis": {
@@ -449,7 +483,7 @@
       "refresh": "Đọc lại dữ liệu trên máy", "refreshing": "Đang đọc lại…", "retryPoll": "Kiểm tra lại trạng thái", "follow": "Xem dự án đang được kiểm tra", "otherProject": "Một dự án khác đang được kiểm tra.",
       "partial": "Kết quả chưa đầy đủ. Các cảnh báo tìm được vẫn được giữ lại.", "stale": "Dữ liệu đầu vào đã thay đổi hoặc kết quả không còn được xác minh. Hãy đọc lại và kiểm tra lại.", "untracked": "Đã tạm dừng theo dõi do lỗi. Chỉ tiếp tục khi bạn kiểm tra lại trạng thái.",
       "previous": "Đang giữ kết quả của lần kiểm tra trước trong khi chờ kết quả mới.", "clean": "Không tìm thấy lỗ hổng trong toàn bộ phạm vi lockfile đã kiểm tra.", "checkedAt": "Xác minh dữ liệu đầu vào lần cuối lúc", "startedAt": "Bắt đầu lúc", "finishedAt": "Kết thúc lúc", "continues": "Rời trang chỉ dừng theo dõi. Backend có thể tiếp tục cho tới khi bạn huỷ hoặc hết thời gian đã cấu hình.", "historical": "Thời điểm xác minh không bảo đảm dữ liệu trên đĩa vẫn giữ nguyên sau đó.",
-      "progress": "Đã kiểm tra {formattedChecked} / {formattedTotal}", "unknownTotal": "tổng chưa xác định"
+      "progress": "Đã kiểm tra {formattedChecked} / {formattedTotal}", "unknownTotal": "tổng chưa xác định", "progressLabel": "Tiến độ kiểm tra package"
     },
     "status": { "idle": "Chưa kiểm tra trực tuyến.", "starting": "Đang bắt đầu kiểm tra…", "running": "Đang kiểm tra…", "completed": "Kiểm tra đã kết thúc.", "cancelled": "Đã huỷ kiểm tra.", "timed_out": "Lần kiểm tra đã hết thời gian.", "failed": "Kiểm tra thất bại.", "lost": "Không còn tìm thấy lần kiểm tra này. Kết quả trước được giữ lại và chưa được xác minh." },
     "phases": { "reading": "Đọc dữ liệu", "outdated": "Kiểm tra phiên bản", "audit": "Kiểm tra lỗ hổng", "validating": "Xác minh dữ liệu đầu vào", "done": "Đã kết thúc" },
@@ -472,7 +506,7 @@
       "view": "Chế độ xem",
       "hint": "Chọn một thư mục được phép quét. Chế độ thư viện chỉ dùng cho đường dẫn node_modules. Huỷ lần đo hiện tại trước khi đổi mục tiêu."
     },
-    "views": { "directory": "Thư mục", "packages": "Thư viện trong node_modules" },
+    "views": { "directory": "Thư mục", "packages": "Thư viện trong node_modules", "packagesShort": "Thư viện" },
     "actions": {
       "measure": "Tính dung lượng",
       "recalculate": "Tính lại kết quả đang xem",
@@ -482,7 +516,55 @@
       "expand": "Xem bên trong",
       "expandName": "Xem bên trong {name}",
       "backTo": "Quay lại kết quả đã đo: {path}",
-      "projects": "Về danh sách dự án"
+      "projects": "Về danh sách dự án",
+      "openFiles": "Quản lý file",
+      "openCleanup": "Dọn dẹp"
+    },
+    "sort": {
+      "announcement": "Đã sắp xếp theo {column}, {direction}, {count} mục",
+      "asc": "tăng dần",
+      "desc": "giảm dần"
+    },
+    "activeBar": {
+      "label": "Đang xem dung lượng",
+      "recalculate": "Tính lại",
+      "changeTarget": "Đổi mục tiêu",
+      "hideControls": "Thu gọn bảng chọn"
+    },
+    "quickTargets": {
+      "heading": "Chọn nhanh — 1 chạm để đo",
+      "hint": "Bấm thư mục gốc, dự án nặng nhất hoặc đường dẫn đã ghim để đo ngay (chỉ đọc).",
+      "pickProject": "Chọn dự án ({count})…",
+      "goScan": "Quét dự án trước",
+      "rootsLabel": "Thư mục gốc đã quét",
+      "heaviestLabel": "node_modules nặng nhất",
+      "searchPlaceholder": "Tìm theo tên hoặc đường dẫn dự án…",
+      "clearSearch": "Xoá tìm kiếm",
+      "noProjectMatches": "Không tìm thấy dự án nào khớp.",
+      "measureFolder": "Đo thư mục",
+      "measurePackages": "Đo node_modules"
+    },
+    "favorites": {
+      "heading": "Đường dẫn đã ghim",
+      "count": "{count}/{max}",
+      "empty": "Chưa có đường dẫn nào được ghim. Bấm Ghim đường dẫn để lưu mục hay đo.",
+      "pin": "Ghim đường dẫn",
+      "pinned": "Đã ghim",
+      "remove": "Bỏ ghim {label}",
+      "limitReached": "Đã đạt tối đa 8 đường dẫn ghim. Bỏ bớt một mục để ghim thêm."
+    },
+    "kpi": {
+      "totalSize": "Tổng dung lượng đo",
+      "cachedBadge": "Bộ nhớ đệm",
+      "partialBadge": "Một phần",
+      "previousBadge": "Ảnh cũ",
+      "filesAndItems": "Số tệp & mục",
+      "listedItems": "{formattedCount} mục ở tầng này",
+      "heaviestItem": "Mục nặng nhất",
+      "noHeaviest": "Chưa có mục nào có số liệu",
+      "measurementInfo": "Thông tin phép đo",
+      "skippedSummary": "Bỏ qua {skipped} mục · {links} liên kết",
+      "notesDisclosure": "Ghi chú cách tính dung lượng & bộ nhớ đệm"
     },
     "status": {
       "idle": "Chưa bắt đầu đo.",
@@ -514,10 +596,8 @@
       "unsupported": "Loại tệp chưa được hỗ trợ",
       "identity_unavailable": "Không xác định được danh tính tệp"
     },
-    "total": "Tổng:",
     "metric": "Dung lượng biểu kiến của các tệp duy nhất trong phạm vi đo; hardlink được khử trùng. Đây không phải dung lượng sẽ giải phóng khi xoá.",
     "overlap": "Tổng có thể không bằng cộng các hàng: các hàng có thể dùng chung tệp, và có mục không xuất hiện trong bảng.",
-    "measuredAt": "Đo lúc",
     "cacheHit": "Đang dùng kết quả trong bộ nhớ đệm.",
     "cacheHint": "Kết quả tham khảo có thể cũ khi tệp con thay đổi. Bấm Tính lại để đo mới và bỏ bộ nhớ đệm.",
     "partial": "Kết quả chưa đầy đủ; dung lượng có số liệu là giới hạn dưới.",
@@ -555,6 +635,7 @@
     "files": {
       "title": "Quản lý file của dự án",
       "description": "Chọn file hoặc thư mục cần xoá. Mọi thao tác đều qua xem trước và xác nhận.",
+      "selectionHint": "Mọi mục đã chọn đều qua bước xem trước và xác nhận trước khi xoá.",
       "noProject": {
         "title": "Chưa chọn dự án",
         "description": "Mở Quản lý file từ danh sách dự án."
@@ -984,6 +1065,7 @@
           "secondary": "Đã cài",
           "outline": "Tuỳ chọn",
           "destructive": "Có lỗ hổng",
+          "warning": "Cảnh báo",
           "success": "Mới nhất"
         }
       }
@@ -1136,6 +1218,18 @@
   },
   "globalPackages": {
     "title": "Gói global",
+    "kpi": {
+      "total": "Tổng số gói global",
+      "installedInPrefix": "Đã cài trong thư mục global",
+      "manageable": "Có thể quản lý",
+      "readyForActions": "Sẵn sàng đổi phiên bản / gỡ",
+      "protectedLinked": "Bảo vệ / liên kết",
+      "invalidExtra": "+ {count} không xác minh được",
+      "viewOnly": "Chỉ xem, không tự sửa đổi",
+      "activeVersion": "Phiên bản công cụ",
+      "available": "Khả dụng",
+      "unavailableBadge": "Không khả dụng"
+    },
     "inventory": "Gói đã cài đặt",
     "statusLabel": "Trạng thái",
     "actions": "Thao tác",
@@ -1173,7 +1267,7 @@
     "loadingExecute": "Đang thực thi…",
     "loadingInventory": "Đang làm mới danh sách…",
     "loadingCancel": "Đang yêu cầu dừng…",
-    "versionsReady": "Chọn phiên bản hoặc thẻ bên dưới, rồi bấm Xem trước.",
+    "versionsReady": "Chọn phiên bản hoặc thẻ bên dưới, rồi bấm Xem lại và áp dụng…",
     "versionsHint": "Bạn có thể tải lại danh sách hoặc nhập phiên bản chính xác hay thẻ.",
     "currentVersion": "{version} (đang cài)",
     "outcome": {
@@ -1187,7 +1281,7 @@
     "chooseVersion": "Chọn phiên bản hoặc thẻ",
     "versions": "Các phiên bản",
     "tags": "Thẻ registry",
-    "preview": "Xem trước",
+    "preview": "Xem lại và áp dụng…",
     "previewAgain": "Xem trước lại",
     "previewAgainHint": "Bản xem trước cũ đã bị xóa. Kiểm tra nguyên nhân, làm mới trạng thái nếu cần, rồi tạo bản xem trước mới từ dòng gói. Ứng dụng không tự thực thi.",
     "cancel": "Hủy",
@@ -1387,7 +1481,7 @@
     "versionsStale": "Danh sách có thể đã cũ.",
     "loadVersions": "Tải danh sách phiên bản",
     "loadingVersions": "Đang tải danh sách…",
-    "preview": "Xem trước thay đổi",
+    "preview": "Xem lại và áp dụng…",
     "loadingPreview": "Đang chuẩn bị xem trước…",
     "stopPreviewHint": "Nhấn Escape để dừng xem trước.",
     "cancel": "Huỷ",
@@ -1498,5 +1592,49 @@
       "INVALID_RESPONSE": "Backend trả về dữ liệu không hợp lệ.",
       "HTTP_EXCEPTION": "Yêu cầu bị lỗi."
     }
+  },
+  "disabledReasons": {
+    "scanStarting": "Đang gửi yêu cầu bắt đầu quét dự án.",
+    "scanRunning": "Đang quét dự án nên tạm khoá nút này. Chờ quét xong hoặc bấm Huỷ quét.",
+    "scanCancelling": "Đang gửi yêu cầu huỷ lần quét hiện tại.",
+    "scanRefreshing": "Đang tải lại danh sách dự án sau khi quét xong.",
+    "noNodeModulesProjects": "Không có dự án nào chứa thư mục node_modules trong lần quét này.",
+    "noAttentionProjects": "Không có dự án nào thiếu lockfile hoặc bỏ trống trên 30 ngày.",
+    "diskRunning": "Đang đo dung lượng nên tạm khoá thao tác này. Chờ đo xong hoặc bấm Huỷ đo.",
+    "diskCancelling": "Đang gửi yêu cầu huỷ tác vụ đo dung lượng.",
+    "diskMissingPath": "Nhập hoặc chọn một đường dẫn thư mục trước khi đo dung lượng.",
+    "fileOpsBusy": "Đang đo hoặc xử lý tác vụ dọn dẹp; vui lòng chờ hoàn tất.",
+    "cleanupNeedsScan": "Cần quét dự án ở trang Dự án trước khi tìm và đo mục cần dọn.",
+    "cleanupInvalidCriteria": "Tiêu chí lọc hiện tại chưa hợp lệ (hãy chọn ít nhất một loại mục hợp lệ).",
+    "noMatchingProjects": "Không có dự án nào khớp bộ lọc tìm kiếm hiện tại.",
+    "noAttentionItems": "Không có mục rủi ro cao hoặc không hợp lệ nào cần lưu ý.",
+    "noEligibleItems": "Không có mục hợp lệ nào để chọn trong bản xem trước này.",
+    "selectionEmpty": "Chọn ít nhất một mục trong danh sách trước khi tiếp tục.",
+    "selectionTooMany": "Số mục đã chọn vượt quá giới hạn an toàn mỗi lần xoá. Hãy bỏ bớt mục.",
+    "stopping": "Đang gửi yêu cầu dừng tác vụ hiện tại.",
+    "submitting": "Đang gửi yêu cầu xác nhận đến máy chủ; vui lòng chờ.",
+    "acknowledgeRisks": "Đánh dấu xác nhận đã hiểu tất cả cảnh báo rủi ro trước khi tiếp tục.",
+    "confirmTextMismatch": "Nhập chính xác chuỗi xác nhận được yêu cầu (phân biệt chữ hoa/thường).",
+    "previewExpired": "Bản xem trước đã hết hạn. Hãy bấm Xem trước lại để tạo bản mới.",
+    "consentIncomplete": "Bản xem trước chưa đủ điều kiện xác nhận để thực thi.",
+    "taskRunning": "Đang có tác vụ khác chạy nên chưa thể xác nhận lúc này.",
+    "analysisRunning": "Đang phân tích gói và lỗ hổng bảo mật cho dự án.",
+    "refreshing": "Đang tải lại dữ liệu mới nhất.",
+    "registryUnsupported": "Dự án dùng cấu hình registry riêng chưa được hỗ trợ phân tích tại đây.",
+    "runnerBusy": "Đang có lệnh dự án chạy trong bảng Chạy lệnh; chờ lệnh dừng để phân tích.",
+    "cancelUnknown": "Chưa xác định được trạng thái dừng từ máy chủ. Hãy bấm Làm mới để kiểm tra.",
+    "runnerStarting": "Đang khởi chạy phiên lệnh dự án.",
+    "clearingRecovery": "Đang xử lý xoá trạng thái khoá phục hồi.",
+    "pmBusy": "Đang có tác vụ quản lý phiên bản chạy hoặc chờ hoàn tất.",
+    "pmOtherRunning": "Một dự án khác đang thực hiện đổi phiên bản trình quản lý gói.",
+    "loadingContext": "Đang tải thông tin trình quản lý gói của dự án.",
+    "pmBlocked": "Không thể đổi pin packageManager cho dự án này (xem cảnh báo phía trên).",
+    "chooseVersionFirst": "Hãy tải danh sách và chọn phiên bản đích trước khi xem lại và áp dụng.",
+    "globalBusy": "Đang có tác vụ gói toàn cục chạy hoặc đang làm mới; vui lòng chờ.",
+    "globalStarting": "Đang gửi yêu cầu khởi chạy tác vụ gói toàn cục.",
+    "alreadyCancelled": "Đã gửi yêu cầu huỷ cho tác vụ này rồi.",
+    "autoPolling": "Trạng thái tác vụ đang tự động cập nhật liên tục.",
+    "noMatchingVersions": "Không có phiên bản phù hợp bộ lọc hiện tại. Hãy nới bộ lọc hoặc tải lại danh sách.",
+    "shellLockedWhileRunning": "Đang có lệnh chạy nên tạm khoá đổi terminal. Chờ lệnh kết thúc rồi chọn lại."
   }
 }

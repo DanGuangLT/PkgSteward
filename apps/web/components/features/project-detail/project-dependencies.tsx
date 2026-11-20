@@ -24,14 +24,14 @@ function DependencyName({ dependency, badges }: {
     <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
       <p className="font-mono font-semibold">{dependency.name}</p>
       {badges.outdated ? <Badge variant="secondary" className="h-auto whitespace-normal"><ArrowUpIcon aria-hidden="true" />{t("dependencies.outdated")}</Badge> : null}
-      {badges.vulnerable ? <Badge variant="outline" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("dependencies.vulnerable")}</Badge> : null}
+      {badges.vulnerable ? <Badge variant="warning" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("dependencies.vulnerable")}</Badge> : null}
     </div>
   )
 }
 
 function DependencyWarning({ warning }: { warning: ProjectAnalysisCode | null | undefined }) {
   const t = useTranslations("projectDetail")
-  return warning ? <p className="mt-2 text-body-sm"><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t(`errors.${warning}`)}</p> : null
+  return warning ? <p className="mt-2 text-body-sm font-medium text-warning"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t(`errors.${warning}`)}</p> : null
 }
 
 function DependencyVersions({ lockedVersions, result }: { lockedVersions: readonly string[]; result?: ProjectOutdated }) {

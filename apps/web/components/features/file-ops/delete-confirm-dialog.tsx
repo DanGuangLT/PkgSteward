@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,6 +23,7 @@ import type { FileOpsSummary, FileOpsTarget, RiskCode } from "@/lib/api/types"
 import {
   canConfirm, confirmationKey, requiredAcknowledgements, requiresTypedText, type ConfirmationInput,
 } from "@/lib/file-ops/confirmation"
+import { deleteConfirmDisabledReason } from "@/lib/ui/disabled-reasons"
 import { restoreOrReveal } from "@/lib/ui/reveal-region"
 
 interface DeleteConfirmDialogProps {
@@ -41,13 +43,24 @@ type ConfirmBodyProps = Omit<DeleteConfirmDialogProps, "onCancel" | "previewId" 
 
 function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: ConfirmBodyProps) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const tCommon = useTranslations("common")
   const format = useFormatter()
   const baseId = useId()
   const [acknowledged, setAcknowledged] = useState<ReadonlySet<RiskCode>>(() => new Set())
   const [typedText, setTypedText] = useState("")
-  const needsTicks = requiredAcknowledgements(summary).length > 0
+  const requiredCodes = requiredAcknowledgements(summary)
+  const needsTicks = requiredCodes.length > 0
   const confirmation = { acknowledged, typedText }
+  const missingAcknowledgements = !requiredCodes.every((code) => acknowledged.has(code))
+  const confirmTextMismatch = requiresTypedText(summary)
+    && (summary.confirmText === null || typedText !== summary.confirmText)
+  const confirmReasonKey = deleteConfirmDisabledReason({
+    pending,
+    missingAcknowledgements,
+    confirmTextMismatch,
+  })
+  const confirmDisabledReason = confirmReasonKey ? tDisabled(confirmReasonKey) : null
   const byPath = new Map(targets.map((target) => [target.path, target]))
   const count = summary.paths.length
 
@@ -140,10 +153,14 @@ function ConfirmBody({ summary, targets, pending, errorMessage, onConfirm }: Con
         {errorMessage ? <p role="alert" className="rounded-md border border-border bg-muted p-4">{errorMessage}</p> : null}
       </div>
       <AlertDialogFooter>
-        <AlertDialogCancel disabled={pending}>{tCommon("cancel")}</AlertDialogCancel>
-        <Button type="button" variant="destructive" disabled={pending || !canConfirm(summary, confirmation)} onClick={() => onConfirm(confirmation)}>
-          {pending ? t("dialog.sending") : t("dialog.confirm", { count, formattedCount: format.number(count) })}
-        </Button>
+        <DisabledTooltip reason={pending ? tDisabled("submitting") : null} className="w-full sm:w-auto">
+          <AlertDialogCancel disabled={pending} className="w-full sm:w-auto">{tCommon("cancel")}</AlertDialogCancel>
+        </DisabledTooltip>
+        <DisabledTooltip reason={confirmDisabledReason} className="w-full sm:w-auto">
+          <Button type="button" variant="destructive" className="w-full sm:w-auto" disabled={pending || !canConfirm(summary, confirmation)} onClick={() => onConfirm(confirmation)}>
+            {pending ? t("dialog.sending") : t("dialog.confirm", { count, formattedCount: format.number(count) })}
+          </Button>
+        </DisabledTooltip>
       </AlertDialogFooter>
     </>
   )

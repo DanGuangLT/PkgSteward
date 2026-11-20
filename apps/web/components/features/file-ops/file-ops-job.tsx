@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { DeleteConfirmDialog } from "@/components/features/file-ops/delete-confirm-dialog"
 import { OperationResults } from "@/components/features/file-ops/operation-results"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { FileOpsController } from "@/hooks/use-file-ops"
@@ -22,6 +23,7 @@ interface FileOpsJobProps {
 /** Phần chung của 2 màn hình: trạng thái, lỗi, nút dừng, dialog xác nhận và kết quả xoá. */
 export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJobProps) {
   const t = useTranslations("fileOps")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const { state, error } = controller
   const errorMessage = error ? t(fileOpsErrorKey(error, state)) : null
@@ -88,26 +90,30 @@ export function FileOpsJob({ controller, returnFocusRef, onStartOver }: FileOpsJ
         {state.phase === "measuring" || state.phase === "operating" || canStartOver ? (
           <div className="flex flex-wrap gap-2">
             {state.phase === "measuring" ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={state.cancelPending}
-                onClick={() => void controller.cancelPreview()}
-              >
-                {t("actions.stopMeasuring")}
-              </Button>
+              <DisabledTooltip reason={state.cancelPending ? tDisabled("stopping") : null}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={state.cancelPending}
+                  onClick={() => void controller.cancelPreview()}
+                >
+                  {t("actions.stopMeasuring")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
             {state.phase === "operating" ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={stopping}
-                onClick={() => void controller.cancelOperation()}
-              >
-                {t("actions.stopDeleting")}
-              </Button>
+              <DisabledTooltip reason={stopping ? tDisabled("stopping") : null}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={stopping}
+                  onClick={() => void controller.cancelOperation()}
+                >
+                  {t("actions.stopDeleting")}
+                </Button>
+              </DisabledTooltip>
             ) : null}
             {pollPaused ? (
               <Button type="button" variant="secondary" size="sm" onClick={controller.retryPoll}>

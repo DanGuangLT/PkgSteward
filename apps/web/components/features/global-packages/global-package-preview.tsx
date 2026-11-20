@@ -5,6 +5,7 @@ import { AlertTriangleIcon, EyeIcon, PencilIcon, RotateCcwIcon, Trash2Icon, Wren
 import { useFormatter, useTranslations } from "next-intl"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
 import { GlobalActionLabel, GlobalActionName, GlobalCodeMessage } from "@/components/features/global-packages/global-package-job"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { globalActionPending } from "@/lib/global-packages/global-session"
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -15,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { globalConsentError, globalPreviewWarningCodes } from "@/lib/global-packages/global-preview-form"
+import { consentConfirmDisabledReason } from "@/lib/ui/disabled-reasons"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 
 const permanentWarnings = ["lifecycle", "consumers", "partial", "crash", "rollback"] as const
@@ -26,6 +28,7 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
   onCancel(): void
 }) {
   const t = useTranslations("globalPackages")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const id = useId()
   const [now, setNow] = useState(() => Date.now())
@@ -44,6 +47,8 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
   const npm = preview.npm
   const repair = preview.action === "repair"
   const warningCodes = globalPreviewWarningCodes(preview)
+  const confirmReasonKey = consentConfirmDisabledReason({ pending, blocked, consentError: error })
+  const confirmDisabledReason = confirmReasonKey ? tDisabled(confirmReasonKey) : null
 
   return <AlertDialog open onOpenChange={open => { if (!open && !pending) onCancel() }}>
     <AlertDialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto data-[size=default]:sm:max-w-2xl"
@@ -65,19 +70,19 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
           </> : <div className="min-w-0"><dt className="text-muted-foreground">{t("dialog.change")}</dt><dd className="break-all font-mono">{preview.currentVersion ?? t("unknown")} → {preview.action === "change" ? preview.targetVersion ?? t("unknown") : t("removed")}</dd></div>}
         </dl>
         <p className="font-semibold"><GlobalActionName action={preview.action} npmSelf={npm !== undefined} /></p>
-        {repair ? <div className="space-y-3 rounded-md bg-muted p-4">
-          <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("dialog.repairWarning")}</p>
+        {repair ? <div className="space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
+          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("dialog.repairWarning")}</p>
           <h3 className="font-semibold">{t("dialog.repairTargets")}</h3>
           {npm?.repairTargets.length ? <ul className="break-all font-mono">{npm.repairTargets.map(path => <li key={path}>{path}</li>)}</ul> : <p>{t("none")}</p>}
-        </div> : <div className="space-y-3 rounded-md bg-muted p-4">
+        </div> : <div className="space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
           <h3 className="font-semibold">{t("dialog.warnings")}</h3>
-          <ul className="space-y-2">{permanentWarnings.map(code => <li key={code}>
-            <AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t(`dialog.${code}`)}
+          <ul className="space-y-2 font-medium">{permanentWarnings.map(code => <li key={code}>
+            <AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t(`dialog.${code}`)}
           </li>)}</ul>
         </div>}
         {preview.risk.reasons.length ? <ul className="space-y-2">{preview.risk.reasons.map(({ code }) => <li key={code}><GlobalCodeMessage kind="risk" code={code} /></li>)}</ul> : null}
-        {preview.sharedPackages?.length ? <section aria-labelledby={`${id}-shared`} className="min-w-0 space-y-3 rounded-md bg-muted p-4">
-          <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t("warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
+        {preview.sharedPackages?.length ? <section aria-labelledby={`${id}-shared`} className="min-w-0 space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
+          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
           <h3 id={`${id}-shared`} className="font-semibold">{t("dialog.sharedPackages")}</h3>
           <ul className="min-w-0 space-y-2">{preview.sharedPackages.map(pkg => <li key={pkg.name} className="break-all">
             <span className="font-mono">{pkg.name} {pkg.version}</span>{pkg.linked ? <> · {t("dialog.linkedPackage")}</> : null}
@@ -99,8 +104,10 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
         <p>{t("dialog.expiresAt", { time: format.dateTime(new Date(preview.expiresAt), { timeStyle: "medium" }) })}</p>
         {expired ? <div role="alert" className="space-y-3 rounded-md border border-border p-4">
           <p>{t("errors.PREVIEW_EXPIRED")}</p>
-          <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 border-border whitespace-normal"
-            onClick={() => { void previewAgain(state.form.selection) }}><GlobalActionLabel pending={previewing} icon={EyeIcon}>{t(previewing ? "loadingPreview" : "previewAgain")}</GlobalActionLabel></Button>
+          <DisabledTooltip reason={blocked ? tDisabled("globalBusy") : null}>
+            <Button type="button" variant="secondary" disabled={blocked} aria-busy={previewing} className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void previewAgain(state.form.selection) }}><GlobalActionLabel pending={previewing} icon={EyeIcon}>{t(previewing ? "loadingPreview" : "previewAgain")}</GlobalActionLabel></Button>
+          </DisabledTooltip>
         </div> : null}
         <div className="flex min-w-0 items-start gap-3">
           <Checkbox id={`${id}-risk`} checked={state.form.acknowledged} disabled={blocked || expired}
@@ -118,11 +125,15 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
         {state.error ? <p role="alert"><GlobalCodeMessage code={state.error.code} /></p> : null}
       </div>
       <AlertDialogFooter>
-        <AlertDialogCancel disabled={pending} className="h-auto min-h-10 border-border whitespace-normal"><XIcon aria-hidden="true" />{t("cancel")}</AlertDialogCancel>
-        <Button type="button" variant="destructive" disabled={blocked || error !== null}
-          aria-busy={executing} className="h-auto min-h-10 whitespace-normal" onClick={() => { void execute() }}><GlobalActionLabel pending={executing}
-            icon={repair ? WrenchIcon : preview.action === "remove" ? npm ? RotateCcwIcon : Trash2Icon : PencilIcon}>{t(executing ? "loadingExecute"
-              : repair ? "dialog.confirmRepair" : preview.action === "remove" ? npm ? "dialog.confirmRestore" : "dialog.confirmRemove" : "dialog.confirmChange")}</GlobalActionLabel></Button>
+        <DisabledTooltip reason={pending ? tDisabled("submitting") : null} className="w-full sm:w-auto">
+          <AlertDialogCancel disabled={pending} className="h-auto min-h-10 w-full border-border whitespace-normal sm:w-auto"><XIcon aria-hidden="true" />{t("cancel")}</AlertDialogCancel>
+        </DisabledTooltip>
+        <DisabledTooltip reason={confirmDisabledReason} className="w-full sm:w-auto">
+          <Button type="button" variant="destructive" disabled={blocked || error !== null}
+            aria-busy={executing} className="h-auto min-h-10 w-full whitespace-normal sm:w-auto" onClick={() => { void execute() }}><GlobalActionLabel pending={executing}
+              icon={repair ? WrenchIcon : preview.action === "remove" ? npm ? RotateCcwIcon : Trash2Icon : PencilIcon}>{t(executing ? "loadingExecute"
+                : repair ? "dialog.confirmRepair" : preview.action === "remove" ? npm ? "dialog.confirmRestore" : "dialog.confirmRemove" : "dialog.confirmChange")}</GlobalActionLabel></Button>
+        </DisabledTooltip>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { NativeSessionDetails, RecoveryHoldBanner } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
+import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useNavigationContinuity, useViewState } from "@/hooks/use-navigation-continuity"
@@ -23,6 +24,7 @@ export function NpmRunnerPanel({ controller, contextError }: {
   contextError: string | null
 }) {
   const t = useTranslations("npmRunner")
+  const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
   const { state } = controller
@@ -49,6 +51,20 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const Icon = display.status === "success" ? CheckIcon
     : ["idle", "starting", "running", "stopping"].includes(display.status) ? CircleIcon : AlertTriangleIcon
   const warningCodes = [...new Set([...(state.context?.warnings ?? []), ...(job?.warningCodes ?? [])])]
+  const cancelDisabledReason = state.cancelPending
+    ? tDisabled("stopping")
+    : state.cancelUnknown
+      ? tDisabled("cancelUnknown")
+      : null
+  const refreshDisabledReason = state.refreshing
+    ? tDisabled("refreshing")
+    : state.cancelPending
+      ? tDisabled("stopping")
+      : state.phase === "starting"
+        ? tDisabled("runnerStarting")
+        : state.clearPending
+          ? tDisabled("clearingRecovery")
+          : null
   function errorMessage(code: string) {
     const key = `errors.${code}` as `errors.${keyof typeof messages.npmRunner.errors}`
     return t(t.has(key) ? key : "errors.UNKNOWN")
@@ -89,22 +105,28 @@ export function NpmRunnerPanel({ controller, contextError }: {
     </div>
     <p aria-live="polite" aria-atomic="true" className="sr-only">{t(`status.${display.status}`)}</p>
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      {display.canCancel ? <Button type="button" variant="secondary" disabled={state.cancelPending || state.cancelUnknown}
-        className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.cancel() }}>{t(display.cancelLabel)}</Button> : null}
-      <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
-        className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
+      {display.canCancel ? (
+        <DisabledTooltip reason={cancelDisabledReason}>
+          <Button type="button" variant="secondary" disabled={state.cancelPending || state.cancelUnknown}
+            className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.cancel() }}>{t(display.cancelLabel)}</Button>
+        </DisabledTooltip>
+      ) : null}
+      <DisabledTooltip reason={refreshDisabledReason}>
+        <Button type="button" variant="secondary" disabled={state.refreshing || state.cancelPending || state.phase === "starting" || state.clearPending}
+          className="h-auto min-h-10 whitespace-normal" onClick={() => { void controller.refresh() }}>{t(state.refreshing ? "refreshing" : "refresh")}</Button>
+      </DisabledTooltip>
       {state.pollError && !state.cancelUnknown && state.phase !== "lost" ? <Button type="button" variant="secondary"
         className="h-auto min-h-10 whitespace-normal" onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button> : null}
     </div>
-    {state.startUnknown ? <p className="text-body-sm">{t("outcome.startUnknown")}</p> : null}
-    {state.cancelUnknown ? <p className="text-body-sm">{t("outcome.cancelUnknown")}</p> : null}
-    {state.phase === "lost" ? <p className="text-body-sm">{t("outcome.lost")}</p> : null}
-    {state.error || state.pollError || runningOtherPath ? <div role="alert" className="min-w-0 space-y-2 rounded-md bg-muted p-4 text-body-sm">
-      <p><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? (runningOtherPath ? "RUNNING" : "UNKNOWN"))}</p>
+    {state.startUnknown ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.startUnknown")}</p> : null}
+    {state.cancelUnknown ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.cancelUnknown")}</p> : null}
+    {state.phase === "lost" ? <p className="rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">{t("outcome.lost")}</p> : null}
+    {state.error || state.pollError || runningOtherPath ? <div role="alert" className="min-w-0 space-y-2 rounded-md border border-warning/40 bg-warning-soft p-4 text-body-sm text-warning">
+      <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{errorMessage(state.error?.code ?? state.pollError ?? (runningOtherPath ? "RUNNING" : "UNKNOWN"))}</p>
       {state.pollError ? <p>{t("outcome.pollPaused")}</p> : null}
       {href && conflictPath ? <>
         <p className="font-mono [overflow-wrap:anywhere]">{conflictPath}</p>
-        <Link href={href} prefetch={false} className="inline-block rounded-sm text-ink-soft underline focus-ring">{t("follow")}</Link>
+        <Link href={href} prefetch={false} className="inline-block rounded-sm font-semibold underline focus-ring">{t("follow")}</Link>
       </> : null}
     </div> : null}
     {job ? <div className="min-w-0 space-y-3 text-body-sm [overflow-wrap:anywhere]">
@@ -122,13 +144,17 @@ export function NpmRunnerPanel({ controller, contextError }: {
       {job.nativeSession ? (
         <NativeSessionDetails nativeSession={job.nativeSession} initialCommand={job.initialCommand ?? null} />
       ) : null}
-      {job.mayHaveChanged ? <p>{t("outcome.mayHaveChanged")}</p> : null}
-      {job.gateHeld ? <p>{t("outcome.gateHeld")}</p> : null}
-      {job.refreshRequired ? <p>{t("outcome.refreshRequired")}</p> : null}
+      {job.mayHaveChanged ? <p className="font-medium text-warning">{t("outcome.mayHaveChanged")}</p> : null}
+      {job.gateHeld ? <p className="font-medium text-warning">{t("outcome.gateHeld")}</p> : null}
+      {job.refreshRequired ? <p className="font-medium text-warning">{t("outcome.refreshRequired")}</p> : null}
     </div> : null}
-    {warningCodes.length ? <ul className="space-y-2 text-body-sm">{warningCodes.map(code => {
-      const key = `warnings.${code}` as `warnings.${keyof typeof messages.npmRunner.warnings}`
-      return <li key={code}><AlertTriangleIcon aria-hidden="true" className="mr-1 inline size-4" />{t.has(key) ? t(key) : t("errors.UNKNOWN")}</li>
-    })}</ul> : null}
+    {warningCodes.length ? (
+      <ul className="space-y-2 rounded-md border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-body-sm font-medium text-warning">
+        {warningCodes.map(code => {
+          const key = `warnings.${code}` as `warnings.${keyof typeof messages.npmRunner.warnings}`
+          return <li key={code}><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t.has(key) ? t(key) : t("errors.UNKNOWN")}</li>
+        })}
+      </ul>
+    ) : null}
   </section>
 }
