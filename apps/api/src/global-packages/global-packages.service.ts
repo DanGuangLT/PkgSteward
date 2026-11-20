@@ -115,8 +115,8 @@ const fail = (reason: GlobalReasonCode, status = 409): AppException =>
   );
 const npmSelf = (request: IGlobalPreviewRequest): boolean =>
   request.manager === 'npm' && request.package === 'npm';
-// Preview storage strips stat methods. Runner identities contain regular files
-// and the package directory; their validated paths retain that distinction.
+// Preview storage strips stat methods. Runner identities contain regular files,
+// the package directory, and npm 10 compat ancestor directories; validated paths retain that distinction.
 const retainedStat = (
   stat: INpmPathFacts['identity']['stat'],
   directory = false,
@@ -1371,6 +1371,15 @@ export class GlobalPackagesService
           let bundledUnchanged = true;
           try {
             const tool = active.facts!.location.tool;
+            const compatFiles = tool.npm10InstallCompat?.supported
+              ? new Set(
+                  [
+                    tool.npm10InstallCompat.preload,
+                    tool.npm10InstallCompat.source,
+                    tool.npm10InstallCompat.loader,
+                  ].map((file) => win32.resolve(file).toLowerCase()),
+                )
+              : null;
             await revalidateRunnerTool(
               {
                 ...tool,
@@ -1382,6 +1391,20 @@ export class GlobalPackagesService
                       win32.resolve(tool.packageDir).toLowerCase(),
                   ),
                 })),
+                ...(compatFiles && tool.npm10InstallCompatIdentities
+                  ? {
+                      npm10InstallCompatIdentities:
+                        tool.npm10InstallCompatIdentities.map((identity) => ({
+                          ...identity,
+                          stat: retainedStat(
+                            identity.stat,
+                            !compatFiles.has(
+                              win32.resolve(identity.path).toLowerCase(),
+                            ),
+                          ),
+                        })),
+                    }
+                  : {}),
               },
               this.runtime.fs,
               signal,
