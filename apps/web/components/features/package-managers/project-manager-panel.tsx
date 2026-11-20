@@ -180,7 +180,7 @@ export function ProjectManagerPanel({ path }: { path: string }) {
       ) : null}
 
       <div className="space-y-4 rounded-md border border-border bg-background p-4">
-        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div className="min-w-0 space-y-2">
             <Label htmlFor={`${id}-manager`}>{t("manager")}</Label>
             <Select value={manager} disabled={blocked} onValueChange={value => chooseManager(value as PmWritableManager)}>
@@ -188,48 +188,137 @@ export function ProjectManagerPanel({ path }: { path: string }) {
               <SelectContent>{WRITABLE.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor={`${id}-version`}>{t("version")}</Label>
-            <Select value={target} disabled={blocked || options.length === 0} onValueChange={value => { setTarget(value); controller.select({ manager, targetVersion: value }) }}>
-              <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono"><SelectValue placeholder={t("versionPlaceholder")} /></SelectTrigger>
-              <SelectContent>{options.map(item => <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
-                {visible.selectedHidden && item.version === target ? d("selectedHidden", { version: item.version }) : tagOf.has(item.version) ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" }) : item.version}
-              </SelectItem>)}</SelectContent>
-            </Select>
-          </div>
+          <Button
+            type="button"
+            variant={catalog ? "outline" : "secondary"}
+            disabled={blocked}
+            aria-busy={pendingKind === "versions"}
+            className="h-auto min-h-10 border-border whitespace-normal"
+            onClick={() => { void controller.loadVersions(manager) }}
+          >
+            <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>
+              {t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}
+            </PmActionLabel>
+          </Button>
         </div>
 
-        <DiscoveryControls query={view.query} onQueryChange={query => setView({ ...view, query })} count={visible.matches.length} total={catalog?.versions.length ?? 0} onReset={reset}>
-          <DiscoveryFilter label={d("support")} value={view.support} options={VERSION_SUPPORT.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.supported === (value === "supported")).length ?? 0 }))} onValueChange={support => setView({ ...view, support })} />
-          <DiscoveryFilter label={d("deprecation")} value={view.deprecation} options={VERSION_DEPRECATION.map(value => ({ value, label: d(`values.${value}`), count: catalog?.versions.filter(row => row.deprecated === (value === "deprecated")).length ?? 0 }))} onValueChange={deprecation => setView({ ...view, deprecation })} />
-        </DiscoveryControls>
-        {catalog && visible.matches.length === 0 ? <DiscoveryEmpty total={catalog.versions.length} /> : null}
-
         <p className="text-caption text-muted-foreground">{t("versionsHint")}</p>
-        {catalog && options.length === 0 ? <p className="text-body-sm">{t("versionsEmpty")}</p> : null}
-        {catalog?.stale ? <p className="text-body-sm">{t("versionsStale")}</p> : null}
 
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-          <Button type="button" variant="secondary" disabled={blocked} aria-busy={pendingKind === "versions"}
-            className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.loadVersions(manager) }}>
-            <PmActionLabel pending={pendingKind === "versions"} icon={ListIcon}>{t(pendingKind === "versions" ? "loadingVersions" : "loadVersions")}</PmActionLabel>
-          </Button>
-          <Button ref={previewButtonRef} type="button" variant="secondary" disabled={blocked || !target} aria-busy={previewPending}
+        {catalog ? (
+          <div className="space-y-4 border-t border-border/60 pt-4">
+            <DiscoveryControls
+              query={view.query}
+              onQueryChange={query => setView({ ...view, query })}
+              count={visible.matches.length}
+              total={catalog.versions.length}
+              onReset={reset}
+            >
+              <DiscoveryFilter
+                label={d("support")}
+                value={view.support}
+                options={VERSION_SUPPORT.map(value => ({
+                  value,
+                  label: d(`values.${value}`),
+                  count: catalog.versions.filter(row => row.supported === (value === "supported")).length,
+                }))}
+                onValueChange={support => setView({ ...view, support })}
+              />
+              <DiscoveryFilter
+                label={d("deprecation")}
+                value={view.deprecation}
+                options={VERSION_DEPRECATION.map(value => ({
+                  value,
+                  label: d(`values.${value}`),
+                  count: catalog.versions.filter(row => row.deprecated === (value === "deprecated")).length,
+                }))}
+                onValueChange={deprecation => setView({ ...view, deprecation })}
+              />
+            </DiscoveryControls>
+
+            {visible.matches.length === 0 ? <DiscoveryEmpty total={catalog.versions.length} /> : null}
+
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor={`${id}-version`}>{t("version")}</Label>
+              <Select
+                value={target}
+                disabled={blocked || options.length === 0}
+                onValueChange={value => {
+                  setTarget(value)
+                  controller.select({ manager, targetVersion: value })
+                }}
+              >
+                <SelectTrigger id={`${id}-version`} className="w-full min-w-0 font-mono">
+                  <SelectValue placeholder={t("versionPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map(item => (
+                    <SelectItem key={item.version} value={item.version} disabled={!item.supported} className="font-mono">
+                      {visible.selectedHidden && item.version === target
+                        ? d("selectedHidden", { version: item.version })
+                        : tagOf.has(item.version)
+                          ? t("tagged", { version: item.version, tag: tagOf.get(item.version) ?? "" })
+                          : item.version}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {options.length === 0 ? <p className="text-body-sm text-muted-foreground">{t("versionsEmpty")}</p> : null}
+            {catalog.stale ? <p className="text-body-sm font-medium text-warning">{t("versionsStale")}</p> : null}
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-2.5 border-t border-border/60 pt-3 sm:flex-row sm:flex-wrap">
+          <Button
+            ref={previewButtonRef}
+            type="button"
+            variant="secondary"
+            disabled={blocked || !target}
+            aria-busy={previewPending}
             aria-describedby={previewPending ? `${id}-stop` : undefined}
-            className="h-auto min-h-10 border-border whitespace-normal" onClick={() => { void controller.preview({ manager, targetVersion: target }) }}>
-            <PmActionLabel pending={previewPending} icon={EyeIcon}>{t(previewPending ? "loadingPreview" : "preview")}</PmActionLabel>
+            className="h-auto min-h-10 border-border whitespace-normal"
+            onClick={() => { void controller.preview({ manager, targetVersion: target }) }}
+          >
+            <PmActionLabel pending={previewPending} icon={EyeIcon}>
+              {t(previewPending ? "loadingPreview" : "preview")}
+            </PmActionLabel>
           </Button>
           {state.phase === "tracking" && state.job && pmJobSettling(state.job) ? (
-            <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
-              onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={XIcon}>{t(state.cancelPending ? "cancelling" : "cancel")}</PmActionLabel></Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={state.cancelPending}
+              className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void controller.cancel() }}
+            >
+              <PmActionLabel pending={state.cancelPending} icon={XIcon}>
+                {t(state.cancelPending ? "cancelling" : "cancel")}
+              </PmActionLabel>
+            </Button>
           ) : null}
           {cleanupPending ? (
-            <Button type="button" variant="secondary" disabled={state.cancelPending} className="h-auto min-h-10 border-border whitespace-normal"
-              onClick={() => { void controller.cancel() }}><PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>{t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}</PmActionLabel></Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={state.cancelPending}
+              className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => { void controller.cancel() }}
+            >
+              <PmActionLabel pending={state.cancelPending} icon={RefreshCwIcon}>
+                {t(state.cancelPending ? "retryingCleanup" : "retryCleanup")}
+              </PmActionLabel>
+            </Button>
           ) : null}
           {state.pollError !== null && state.phase === "tracking" ? (
-            <Button type="button" variant="secondary" className="h-auto min-h-10 border-border whitespace-normal"
-              onClick={() => controller.retryPoll()}>{t("retryPoll")}</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-auto min-h-10 border-border whitespace-normal"
+              onClick={() => controller.retryPoll()}
+            >
+              {t("retryPoll")}
+            </Button>
           ) : null}
         </div>
         {previewPending ? <p id={`${id}-stop`} className="text-caption text-muted-foreground">{t("stopPreviewHint")}</p> : null}
