@@ -88,6 +88,70 @@ describe('readPnpmLock', () => {
       { name: 'is-number', version: '7.0.0', direct: true },
     ]);
   });
+  it('reads a sanitized pnpm 12.21.0 two-document lockfile (packageManagerDependencies header + project lock) without leaking pnpm binary entries', async () => {
+    const input: IManifestInput = {
+      name: 'TEST-pnpm12-multidoc',
+      version: '1.0.0',
+      packageManager: 'pnpm@12.21.0',
+      scripts: [],
+      dependencies: [
+        {
+          name: 'is-number',
+          declarations: [{ group: 'dependencies', spec: '7.0.0' }],
+        },
+      ],
+    };
+    const result = await read(fixture('pnpm12/pnpm-lock-multidoc.yaml'), input);
+    expect(result).toMatchObject({
+      coverage: 'complete',
+      warningCodes: [],
+      failureCode: null,
+    });
+    expect(result.direct).toEqual(new Map([['is-number', ['7.0.0']]]));
+    expect(result.packages).toEqual([
+      { name: 'is-number', version: '7.0.0', direct: true },
+    ]);
+  });
+  it.each([
+    'three documents',
+    'non-config first document',
+    'first document with project dependencies',
+    'first document with YAML alias',
+  ])('rejects invalid multi-document pnpm YAML (%s)', async (kind) => {
+    const base = fixture('pnpm12/pnpm-lock-multidoc.yaml');
+    let value: string;
+    if (kind === 'three documents') {
+      value = `${base}\n---\nlockfileVersion: '9.0'\nimporters: {.: {}}\npackages: {}\n`;
+    } else if (kind === 'non-config first document') {
+      value =
+        "---\nlockfileVersion: '9.0'\nimporters: {.: {}}\npackages: {}\n---\n" +
+        fixture('pnpm12/pnpm-lock.yaml');
+    } else if (kind === 'first document with project dependencies') {
+      value = base.replace(
+        'configDependencies: {}',
+        'configDependencies: {}\n    dependencies:\n      evil: {specifier: 1.0.0, version: 1.0.0}',
+      );
+    } else {
+      value = base.replace(
+        'configDependencies: {}',
+        'configDependencies: &a {}\n    extra: *a',
+      );
+    }
+    expect(await read(value)).toMatchObject({
+      coverage: 'unavailable',
+      failureCode: 'INVALID_LOCKFILE',
+    });
+  });
+  it('rejects a two-document pnpm lockfile whose header has an unsupported lockfileVersion', async () => {
+    const value = fixture('pnpm12/pnpm-lock-multidoc.yaml').replace(
+      "lockfileVersion: '9.0'",
+      "lockfileVersion: '8.0'",
+    );
+    expect(await read(value)).toMatchObject({
+      coverage: 'unavailable',
+      failureCode: 'UNSUPPORTED_LOCKFILE',
+    });
+  });
   it('does not traverse even invalid snapshot dependency relations', async () => {
     const base = text().split('snapshots:')[0];
     expect(

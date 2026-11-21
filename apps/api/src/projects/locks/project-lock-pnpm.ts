@@ -1,4 +1,4 @@
-import { isAlias, isMap, isScalar, isSeq, parseDocument } from 'yaml';
+import { isAlias, isMap, isScalar, isSeq, parseAllDocuments } from 'yaml';
 import type {
   ILockInventory,
   ILockPackage,
@@ -77,6 +77,20 @@ function directReference(
   return packageIdentity(withoutPeers);
 }
 
+function isPnpmConfigHeaderDoc(value: Record<string, unknown>): boolean {
+  if (!isProjectRecord(value.importers)) return false;
+  const headerRoot = value.importers['.'];
+  if (!isProjectRecord(headerRoot)) return false;
+  const hasConfigSection =
+    Object.hasOwn(headerRoot, 'configDependencies') ||
+    Object.hasOwn(headerRoot, 'packageManagerDependencies');
+  const hasProjectDeps =
+    Object.hasOwn(headerRoot, 'dependencies') ||
+    Object.hasOwn(headerRoot, 'devDependencies') ||
+    Object.hasOwn(headerRoot, 'optionalDependencies');
+  return hasConfigSection && !hasProjectDeps;
+}
+
 export async function readPnpmLock(
   text: string,
   manifest: IManifestInput,
@@ -88,30 +102,42 @@ export async function readPnpmLock(
   if (!yamlDepthWithinLimit(text))
     return unavailableInventory('INVALID_LOCKFILE');
   await yieldProjectBatch(signal);
-  let lock: unknown;
+  let parsedDocs: unknown[];
   try {
-    const document = parseDocument(text, {
+    const documents = parseAllDocuments(text, {
       schema: 'core',
       uniqueKeys: true,
       merge: false,
       strict: true,
       customTags: [],
     });
-    if (
-      document.errors.length ||
-      document.warnings.length ||
-      !safeYamlTree(document.contents)
-    )
+    if (documents.length !== 1 && documents.length !== 2)
       return unavailableInventory('INVALID_LOCKFILE');
-    lock = document.toJS({ maxAliasCount: 0 }) as unknown;
+    parsedDocs = [];
+    for (const document of documents) {
+      if (
+        document.errors.length ||
+        document.warnings.length ||
+        !safeYamlTree(document.contents)
+      )
+        return unavailableInventory('INVALID_LOCKFILE');
+      parsedDocs.push(document.toJS({ maxAliasCount: 0 }) as unknown);
+    }
   } catch {
     return unavailableInventory('INVALID_LOCKFILE');
   }
   signal.throwIfAborted();
-  if (!isProjectRecord(lock) || !Object.hasOwn(lock, 'lockfileVersion'))
+  const records: Record<string, unknown>[] = [];
+  for (const doc of parsedDocs) {
+    if (!isProjectRecord(doc) || !Object.hasOwn(doc, 'lockfileVersion'))
+      return unavailableInventory('INVALID_LOCKFILE');
+    if (doc.lockfileVersion !== '9.0' && doc.lockfileVersion !== 9)
+      return unavailableInventory('UNSUPPORTED_LOCKFILE');
+    records.push(doc);
+  }
+  if (records.length === 2 && !isPnpmConfigHeaderDoc(records[0]))
     return unavailableInventory('INVALID_LOCKFILE');
-  if (lock.lockfileVersion !== '9.0' && lock.lockfileVersion !== 9)
-    return unavailableInventory('UNSUPPORTED_LOCKFILE');
+  const lock = records.at(-1)!;
   if (!isProjectRecord(lock.importers) || !isProjectRecord(lock.packages))
     return unavailableInventory('INVALID_LOCKFILE');
   const root = lock.importers['.'];
