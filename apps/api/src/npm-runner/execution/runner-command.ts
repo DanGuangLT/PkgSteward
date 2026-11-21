@@ -57,8 +57,8 @@ export function parseRunnerPackageSpec(
  * other's flag. An unlisted major gets no arguments (null), so no command is built for it.
  */
 export function pnpmPrefixArgs(major: number, cwd: string): string[] | null {
-  // pnpm 11.22 (RT1): the version switch is pm-on-fail, default "download" when a pin exists.
-  if (major === 11) return ['--dir', cwd, '--pm-on-fail=warn'];
+  // pnpm 11.22 (RT1) & pnpm 12.21 (P12-0): the version switch is pm-on-fail, default "download" when a pin exists.
+  if (major === 11 || major === 12) return ['--dir', cwd, '--pm-on-fail=warn'];
   // pnpm 10.34.9: "--pm-on-fail" is an unknown option; without this key it downloads the pin.
   if (major === 10)
     return ['--dir', cwd, '--config.manage-package-manager-versions=false'];
@@ -85,6 +85,12 @@ export function buildRunCommand(
   if (tool.manager !== manager) return fail('UNSUPPORTED_MANAGER');
   if (!isSupportedRunnerVersion(manager, tool.version))
     return fail('TOOL_VERSION_MISMATCH');
+  if (
+    manager === 'pnpm' &&
+    semver.major(tool.version) === 12 &&
+    (tool.entry !== null || !/\.exe$/i.test(tool.file))
+  )
+    return fail('TOOL_LAYOUT_UNSUPPORTED');
   if (!RUN_ACTIONS.includes(input.action)) return fail('INVALID_PACKAGE_SPEC');
   if (context.workspace.kind === 'leaf' && input.action !== 'script')
     return fail('WORKSPACE_LEAF');
