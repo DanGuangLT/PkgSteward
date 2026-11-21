@@ -179,11 +179,14 @@ describe('pnpm 10 pinned commands', () => {
   it.each([
     ['10.34.9', true],
     ['11.22.0', true],
+    ['12.0.0', true],
+    ['12.21.0', true],
     ['9.15.9', false],
-    ['12.0.0', false],
+    ['13.0.0', false],
     ['10.34.9-rc.1', false],
+    ['12.0.0-rc.1', false],
     // pnpm 11 keeps its pre-VC4 global gate (major 11, prereleases included),
-    // matching the runner policy; only pnpm 10 is stable-only.
+    // matching the runner policy; pnpm 10 and 12 are stable-only.
     ['11.23.0-rc.1', true],
   ])('shares the global version gate %s', (version, accepted) => {
     expect(isPnpmGlobalVersion(String(version))).toBe(accepted);

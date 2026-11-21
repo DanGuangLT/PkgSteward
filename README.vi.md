@@ -28,7 +28,7 @@ từng dự án) một cách an toàn.
 
 ## Gói global
 
-Quản lý gói global bằng npm 10/11/12 hoặc pnpm 10/11 qua bước **xem trước → xác nhận**.
+Quản lý gói global bằng npm 10/11/12 hoặc pnpm 10/11/12 qua bước **xem trước → xác nhận**.
 Cần thiết lập pnpm global trước: chạy `pnpm setup` trong terminal, bảo đảm `PNPM_HOME` (hoặc thư mục lệnh
 global đã cấu hình) có trong PATH, mở terminal mới rồi khởi động lại PkgSteward.
 

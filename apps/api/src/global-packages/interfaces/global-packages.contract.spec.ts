@@ -272,6 +272,22 @@ describe('global public contract and entity exclusions', () => {
       }),
     );
     expect(projected).toEqual(job);
+    const projectedV12 = instanceToPlain(
+      plainToInstance(GlobalJobEntity, {
+        ...job,
+        pnpm: pnpmConfigFacts(),
+        pnpmInventory: {
+          ...inventory,
+          groups: [{ ...group, packageMap: null }],
+        },
+        preview: {
+          ...preview,
+          pnpm: pnpmConfigFacts(),
+          pnpmGroup: { ...group, packageMap: null },
+        },
+      }),
+    );
+    expect(projectedV12).toEqual(job);
     expect(JSON.stringify(projected)).not.toMatch(
       /homeDir|authFile|selectors|packageLinks|unreferencedDirectories/,
     );

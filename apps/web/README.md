@@ -149,7 +149,7 @@ allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail 
 
 - **Tools and inputs:** npm 10, npm 11, npm 12, pnpm 10, pnpm 11 and pnpm 12; npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other
   majors are refused. Verified with npm 10.9.3, npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and
-  Node 22.18.0, 22.23.5, 24.19.0. Global packages support npm 10–12 and pnpm 10–11.
+  Node 22.18.0, 22.23.5, 24.19.0. Global packages support npm 10–12 and pnpm 10–12.
   Installed npm 12 needs valid `engines.node` metadata satisfied by the backend's Node: missing/malformed metadata
   returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`. With installed
   npm 12, any `npm-shrinkwrap.json` (even alongside `package-lock.json`) refuses every action with
@@ -253,11 +253,11 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 
 ## Global packages
 
-Open `/global-packages` to manage installed global packages with **npm 10, npm 11, npm 12, pnpm 10 or pnpm 11**.
-npm 10, npm 12 and pnpm 10 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`).
+Open `/global-packages` to manage installed global packages with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11 or pnpm 12**.
+npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`).
 Installed npm 12 needs valid `engines.node` metadata
 satisfied by the backend's Node: missing/malformed metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid
-Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0
+Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0
 and Node 22.23.5, 24.19.0; how npm 12 handles install scripts of global packages has not been verified. Yarn is not
 supported;
 missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
@@ -269,7 +269,7 @@ states remain distinct; protected and linked packages have no mutation controls.
 
 If pnpm reports `PNPM_GLOBAL_NOT_CONFIGURED`, run `pnpm setup` in a terminal, ensure `PNPM_HOME` (or your configured
 global bin directory) is on PATH, open a new terminal, then restart PkgSteward. The app does not run setup or edit PATH.
-With pnpm 11, packages installed together in one `pnpm add -g` are read-only (`GLOBAL_GROUP_UNSUPPORTED`); manage them in a
+With pnpm 11 and pnpm 12, packages installed together in one `pnpm add -g` are read-only (`GLOBAL_GROUP_UNSUPPORTED`); manage them in a
 terminal because a change or removal could affect the whole group. Configuration that can load code or move
 the layout also makes pnpm read-only (`CONFIG_UNSUPPORTED`), including pnpmfile/hooks, `lockfileDir`,
 layout/workspace directories, shell/Node execution options and override/extension maps. Inherited `PNPM_*`

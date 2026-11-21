@@ -3,6 +3,7 @@ import { win32 } from 'node:path';
 import { AppException } from '@/common/exceptions/app.exception';
 import {
   assertGlobalLocationsDistinct,
+  createGlobalProbeSpawn,
   discoverGlobalLocation,
   runGlobalProbe,
 } from '@/global-packages/discovery/global-location';
@@ -26,6 +27,7 @@ import {
   PNPM_TEST_PATHS as Q,
   pnpmLocation,
 } from '@/global-packages/__fixtures__/pnpm11/facts';
+import { pnpm12Tool } from '@/global-packages/__fixtures__/pnpm12/facts';
 import { readGlobalInventory } from '@/global-packages/discovery/global-inventory';
 import { config10Fixture, P10 } from '../__fixtures__/pnpm10/config';
 
@@ -651,28 +653,64 @@ describe.each(TEST_NPM_VERSIONS)('verified location (npm %s)', (v) => {
     expect(h.spawn).not.toHaveBeenCalled();
   });
 
-  it.each(['9.15.9', '12.0.0', '10.34.9-rc.1'])(
-    'refuses unsupported pnpm %s before any config reads',
-    async (version) => {
-      const h = setupPnpm();
-      jest
-        .mocked(runnerTools.resolveRunnerTool)
-        .mockImplementation((manager) =>
-          Promise.resolve(
-            testTool(
-              manager as 'npm' | 'pnpm',
-              manager === 'pnpm' ? version : undefined,
-            ),
-          ),
-        );
-      await expectGlobalReason(
-        () => discoverGlobalLocation('pnpm', h.deps),
-        'TOOL_VERSION_MISMATCH',
+  it('uses M6 resolver and static pnpm 12.21.0 config without discovery spawn', async () => {
+    const h = setupPnpm();
+    const p12 = pnpm12Tool('12.21.0');
+    jest
+      .mocked(runnerTools.resolveRunnerTool)
+      .mockImplementation((manager) =>
+        Promise.resolve(manager === 'pnpm' ? p12 : testTool(manager as 'npm')),
       );
-      expect(h.spawn).not.toHaveBeenCalled();
-      expect(h.open).not.toHaveBeenCalled();
-    },
-  );
+    const location = await discoverGlobalLocation('pnpm', h.deps);
+    expect(location).toMatchObject({
+      manager: 'pnpm',
+      tool: p12,
+      prefix: null,
+      globalDir: Q.global,
+      globalRoot: Q.root,
+      binDir: Q.bin,
+      pnpm: { homeDir: Q.home, binDir: Q.bin, globalRoot: Q.root },
+    });
+    expect(location.protectedPaths).toEqual(
+      expect.arrayContaining([
+        P.npm,
+        P.pnpm,
+        p12.file,
+        P.app,
+        P.source,
+        P.data,
+      ]),
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '9.15.9',
+    '12.0.0-alpha.1',
+    '12.21.0-rc.1',
+    '13.0.0',
+    '10.34.9-rc.1',
+  ])('refuses unsupported pnpm %s before any config reads', async (version) => {
+    const h = setupPnpm();
+    jest
+      .mocked(runnerTools.resolveRunnerTool)
+      .mockImplementation((manager) =>
+        Promise.resolve(
+          manager === 'pnpm' && version.startsWith('12.')
+            ? pnpm12Tool(version)
+            : testTool(
+                manager as 'npm' | 'pnpm',
+                manager === 'pnpm' ? version : undefined,
+              ),
+        ),
+      );
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', h.deps),
+      'TOOL_VERSION_MISMATCH',
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+    expect(h.open).not.toHaveBeenCalled();
+  });
 
   function setup10(patch: NodeJS.ProcessEnv = {}) {
     const h = setup();
@@ -858,30 +896,87 @@ describe.each(TEST_NPM_VERSIONS)('verified location (npm %s)', (v) => {
     expect(h.spawn).not.toHaveBeenCalled();
   });
 
-  it('fails closed for pnpm 12 native binary in global discovery while keeping npm discovery available and pnpm 12 protected', async () => {
+  it('reports unconfigured pnpm 12 native binary while keeping npm discovery available and pnpm 12 protected', async () => {
     const h = setup();
-    const pnpm12Dir = 'D:\\TEST\\AppData\\npm\\node_modules\\pnpm';
-    const pnpm12Tool = {
-      manager: 'pnpm' as const,
-      version: '12.21.0',
-      file: `${pnpm12Dir}\\pnpm.exe`,
-      entry: null,
-      packageDir: pnpm12Dir,
-      identities: [],
-    };
+    const p12 = pnpm12Tool('12.21.0');
     jest
       .mocked(runnerTools.resolveRunnerTool)
       .mockImplementation((manager) =>
-        Promise.resolve(manager === 'pnpm' ? pnpm12Tool : testTool('npm', v)),
+        Promise.resolve(manager === 'pnpm' ? p12 : testTool('npm', v)),
       );
     await expectGlobalReason(
       () => discoverGlobalLocation('pnpm', h.deps),
-      'TOOL_VERSION_MISMATCH',
+      'PNPM_GLOBAL_NOT_CONFIGURED',
     );
     expect(h.spawn).not.toHaveBeenCalled();
     const npmLocation = await discoverGlobalLocation('npm', h.deps);
     expect(npmLocation.manager).toBe('npm');
-    expect(npmLocation.protectedPaths).toContain(pnpm12Dir);
+    expect(npmLocation.protectedPaths).toContain(p12.packageDir);
+  });
+
+  it('allows createGlobalProbeSpawn for valid native pnpm 12 and refuses forged IRunnerTool launchers', async () => {
+    const valid = pnpm12Tool('12.21.0');
+    const deps = {
+      processes: {
+        capture: jest.fn(),
+        descendants: jest.fn(),
+        stopTree: jest.fn(),
+        verifyGone: jest.fn(),
+      },
+      clock: {
+        now: Date.now,
+        setTimeout: (cb: () => void, ms: number) => setTimeout(cb, ms),
+        clearTimeout: (handle: unknown) =>
+          clearTimeout(handle as ReturnType<typeof setTimeout>),
+      },
+    };
+    const launch = jest.fn().mockReturnValue({
+      settled: Promise.resolve({
+        exitCode: 0,
+        termination: 'verified',
+        outputTruncated: false,
+      }),
+      stop: jest.fn(),
+    });
+    const probeOptions = {
+      cwd: P.cwd,
+      env: {},
+      signal: new AbortController().signal,
+      timeout: 5_000,
+      maxBuffer: { stdout: 1024, stderr: 1024 },
+      shell: false as const,
+      extendEnv: false as const,
+      stdin: 'ignore' as const,
+      encoding: 'buffer' as const,
+      reject: false as const,
+    };
+    const okSpawn = createGlobalProbeSpawn(valid, deps, { launch });
+    const res = await okSpawn(valid.file, ['list', '--global'], probeOptions);
+    expect(res.exitCode).toBe(0);
+    expect(launch).toHaveBeenCalledTimes(1);
+
+    const forgedTools = [
+      { ...valid, file: 'D:\\TEST\\evil\\pnpm.exe' },
+      { ...valid, file: `${valid.packageDir}-evil\\pnpm.exe` },
+      { ...valid, file: P.node },
+      { ...valid, file: 'pnpm.exe' },
+      { ...valid, file: `${valid.packageDir}\\pnpm.cmd` },
+      { ...valid, entry: `${valid.packageDir}\\bin\\pnpm.mjs` },
+      { ...testTool('npm', v), entry: null },
+    ];
+    for (const bad of forgedTools) {
+      const badSpawn = createGlobalProbeSpawn(bad, deps, { launch });
+      await expectGlobalReason(
+        () =>
+          badSpawn(
+            bad.file,
+            bad.entry ? [bad.entry, 'list'] : ['list'],
+            probeOptions,
+          ),
+        'TOOL_LAYOUT_UNSUPPORTED',
+      );
+    }
+    expect(launch).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -20,6 +20,10 @@ import {
   testTool,
 } from '@/global-packages/__fixtures__/global-adapters';
 import {
+  PNPM12_EXE,
+  pnpm12Tool,
+} from '@/global-packages/__fixtures__/pnpm12/facts';
+import {
   deferred,
   testProcess,
   testRuntime,
@@ -352,26 +356,148 @@ describe('GlobalPackagesModule runtime bindings', () => {
     },
   );
 
-  it.each(['9.15.9', '12.0.0', '10.34.9-rc.1'])(
-    'refuses pnpm %s before registration',
-    async (version) => {
+  it('registers stable native pnpm 12.21.0 (entry: null) for direct launch and refuses forged launchers', async () => {
+    const b = bindings();
+    const runtime = createGlobalPackagesRuntime(b.input);
+    const tool = pnpm12Tool('12.21.0');
+    const resolve = jest
+      .spyOn(runnerTools, 'resolveRunnerTool')
+      .mockResolvedValue(tool);
+    try {
+      await expect(
+        runtime.resolveTool('pnpm', new AbortController().signal),
+      ).resolves.toEqual(tool);
+      runtime.launch(
+        {
+          file: PNPM12_EXE,
+          args: ['--dir', TEST_PATHS.cwd, 'remove', '--global', '--', 'semver'],
+          cwd: TEST_PATHS.cwd,
+          env: {},
+        },
+        {
+          signal: new AbortController().signal,
+          onOutput: jest.fn(),
+          onExit: jest.fn(),
+        },
+      );
+      expect(b.launchProcess).toHaveBeenCalledTimes(1);
+      expect(b.launchProcess.mock.calls[0][0]).toMatchObject({
+        file: PNPM12_EXE,
+        manager: 'pnpm',
+        version: '12.21.0',
+      });
+      // Unregistered native exe is refused.
+      expect(() =>
+        runtime.launch(
+          {
+            file: 'D:\\TEST\\evil\\pnpm.exe',
+            args: [
+              '--dir',
+              TEST_PATHS.cwd,
+              'remove',
+              '--global',
+              '--',
+              'semver',
+            ],
+            cwd: TEST_PATHS.cwd,
+            env: {},
+          },
+          {
+            signal: new AbortController().signal,
+            onOutput: jest.fn(),
+            onExit: jest.fn(),
+          },
+        ),
+      ).toThrow();
+    } finally {
+      resolve.mockRestore();
+    }
+  });
+
+  it('refuses forged pnpm 12 with non-null entry, sibling-prefix, .cmd, relative or outside-packageDir exe before registration and probe', async () => {
+    for (const badTool of [
+      { ...pnpm12Tool('12.21.0'), entry: `${TEST_PATHS.pnpm}\\bin\\pnpm.mjs` },
+      { ...pnpm12Tool('12.21.0'), file: 'D:\\TEST\\evil\\pnpm.exe' },
+      { ...pnpm12Tool('12.21.0'), file: `${TEST_PATHS.pnpm}-evil\\pnpm.exe` },
+      { ...pnpm12Tool('12.21.0'), file: `${TEST_PATHS.pnpm}\\pnpm.cmd` },
+      { ...pnpm12Tool('12.21.0'), file: 'pnpm.exe' },
+      { ...pnpm12Tool('12.21.0'), file: TEST_PATHS.node },
+    ]) {
       const b = bindings();
       const runtime = createGlobalPackagesRuntime(b.input);
       const resolve = jest
         .spyOn(runnerTools, 'resolveRunnerTool')
-        .mockResolvedValue(testTool('pnpm', version));
+        .mockResolvedValue(badTool);
+      try {
+        await expect(
+          runtime.resolveTool('pnpm', new AbortController().signal),
+        ).rejects.toMatchObject({
+          details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+        });
+      } finally {
+        resolve.mockRestore();
+      }
+    }
+    // Probe rejects relative .\pnpm.exe before resolving tools and accepts verified native pnpm.exe.
+    const b = bindings();
+    const runtime = createGlobalPackagesRuntime(b.input);
+    const valid = pnpm12Tool('12.21.0');
+    const resolve = jest
+      .spyOn(runnerTools, 'resolveRunnerTool')
+      .mockResolvedValue(valid);
+    const probeOptions: IGlobalProbeOptions = {
+      cwd: TEST_PATHS.cwd,
+      env: {},
+      signal: new AbortController().signal,
+      timeout: 30_000,
+      maxBuffer: { stdout: 1024, stderr: 1024 },
+      shell: false,
+      extendEnv: false,
+      stdin: 'ignore',
+      encoding: 'buffer',
+      reject: false,
+    };
+    try {
+      await expect(
+        runtime.probe('.\\pnpm.exe', ['list'], probeOptions),
+      ).rejects.toMatchObject({
+        details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+      });
+      expect(resolve).not.toHaveBeenCalled();
+      const child = testProcess();
+      b.launchProcess.mockReturnValue(child.process);
+      const pending = runtime.probe(PNPM12_EXE, ['list'], probeOptions);
+      await Promise.resolve();
+      await Promise.resolve();
+      child.exit({ exitCode: 0, termination: 'verified' });
+      expect((await pending).exitCode).toBe(0);
+    } finally {
+      resolve.mockRestore();
+    }
+  });
+
+  it.each(['9.15.9', '12.0.0-rc.1', '13.0.0', '10.34.9-rc.1'])(
+    'refuses pnpm %s before registration',
+    async (version) => {
+      const b = bindings();
+      const runtime = createGlobalPackagesRuntime(b.input);
+      const tool = version.startsWith('12.')
+        ? pnpm12Tool(version)
+        : testTool('pnpm', version);
+      const resolve = jest
+        .spyOn(runnerTools, 'resolveRunnerTool')
+        .mockResolvedValue(tool);
       try {
         await expect(
           runtime.resolveTool('pnpm', new AbortController().signal),
         ).rejects.toMatchObject({
           details: { reason: 'TOOL_VERSION_MISMATCH' },
         });
-        const tool = testTool('pnpm', version);
         expect(() =>
           runtime.launch(
             {
               file: tool.file,
-              args: [tool.entry!, 'list'],
+              args: tool.entry ? [tool.entry, 'list'] : ['list'],
               cwd: TEST_PATHS.cwd,
               env: {},
             },

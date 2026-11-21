@@ -42,16 +42,21 @@ function refused(
 
 describe('pnpm 11 mutation protection', () => {
   it.each(['npm', 'pnpm'] as const)(
-    'protects @pnpm/exe hosted by %s',
+    'protects @pnpm/exe and @pnpm/exe.* platform packages hosted by %s',
     (manager) => {
       const location = testLocation(manager);
-      refused({
-        ...protection(),
-        packageName: '@pnpm/exe',
-        packageRoot: win32.join(location.globalRoot, '@pnpm', 'exe'),
-        pnpmGroup: undefined,
-        groupPackages: undefined,
-      });
+      for (const packageName of ['@pnpm/exe', '@pnpm/exe.win32-x64']) {
+        refused({
+          ...protection(),
+          packageName,
+          packageRoot: win32.join(
+            location.globalRoot,
+            ...packageName.split('/'),
+          ),
+          pnpmGroup: undefined,
+          groupPackages: undefined,
+        });
+      }
     },
   );
 

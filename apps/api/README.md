@@ -413,13 +413,14 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Global packages API
 
-List, remove or change an installed global package with **npm 10, npm 11, npm 12, pnpm 10 or pnpm 11** on Windows.
-npm 10, npm 12 and pnpm 10 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported.
+List, remove or change an installed global package with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11 or pnpm 12** on Windows.
+npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
-Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.23.5, 24.19.0; how npm 12
+Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and Node 22.23.5, 24.19.0; how npm 12
 handles install scripts of global packages has not been verified.
-The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point;
+The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point (or for
+pnpm 12, its verified native `pnpm.exe` binary inside the npm-installed pnpm package directory);
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
 An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.
 These queries use a neutral working directory, not a scanned project; the tool may still write caches.
@@ -478,15 +479,19 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
   The retained identical request/payload returns its job; mismatched reuse returns `REQUEST_MISMATCH`.
   Unknown/evicted previews and jobs return `404 NOT_FOUND`. A lost response requires checking latest status;
   do not automatically resend execute. Restart loses the in-memory receipt.
-- **Protected packages:** `npm`, `corepack`, `pnpm`, `@pnpm/exe`, `yarn`, `@yarnpkg/cli`, `@yarnpkg/cli-dist` and `pkgsteward`.
-  Current or target bins named `node`, `npm`, `npx`, `pnpm`, `pnpx`, `yarn`, `yarnpkg`, `corepack` or `pkgsteward`
+- **Protected packages:** `npm`, `corepack`, `pnpm`, `@pnpm/exe`, `@pnpm/exe.*`, `yarn`, `@yarnpkg/cli`, `@yarnpkg/cli-dist`,
+  `deno`, `bun`, `rust`, `rustc`, `cargo` and `pkgsteward`.
+  Current or target bins named `node`, `npm`, `npx`, `pnpm`, `pn`, `pnpx`, `pnx`, `yarn`, `yarnpkg`, `corepack`,
+  `deno`, `bun`, `rust`, `rustc`, `cargo` or `pkgsteward`
   are also protected, case-insensitively, including their Windows shim extensions. Overlap with tool distributions,
   the Node executable, app installation, source checkout or data directory is refused. Confirmation cannot override
   protection. Linked packages are read-only (`LINKED_PACKAGE`); unsafe bins, collisions or incomplete ownership
   prevent mutation (`BIN_CONFLICT`).
-- **pnpm 11 layout:** inventory validates the versioned global root, group metadata, internal links into the store
-  and package/bin ownership. Packages installed together in one `pnpm add -g` are read-only
-  (`GLOBAL_GROUP_UNSUPPORTED`): change or removal could affect the whole group; manage them in a terminal.
+- **pnpm 11 and pnpm 12 layout:** inventory validates the versioned global root (`global\v11`), group metadata,
+  internal links into the store and package/bin ownership (including pnpm 12's counter install-directory names,
+  optional `.package-map.json`, scoped store links without a leading `@`, and hardened POSIX shims; context-aware
+  `pnpm shim` files and cross-major groups stay unowned/read-only). Packages installed together in one `pnpm add -g`
+  are read-only (`GLOBAL_GROUP_UNSUPPORTED`): change or removal could affect the whole group; manage them in a terminal.
   Unreferenced physical install directories block change because pnpm add can clean them up; remove does not
   perform that cleanup. Ambiguous, external or incomplete layouts cannot be mutated.
 - **Registry:** version lookup and change use only `https://registry.npmjs.org`. Public-registry login tokens in
@@ -513,7 +518,8 @@ state/configuration (`RUNNING`, `LOCATION_AMBIGUOUS`, `CONFIG_UNSUPPORTED`, `LIM
 
 ### Fixed arguments and child environment
 
-Commands launch the verified JavaScript entry point through the backend's `node.exe`, using argument arrays,
+Commands launch the verified JavaScript entry point through the backend's `node.exe` (or for pnpm 12, launch its
+verified native `pnpm.exe` directly), using argument arrays,
 closed stdin and no shell launcher. Each npm mutation uses its discovered locations as this fixed prefix:
 
 - npm: `--prefix <prefix> --userconfig <user-config> --globalconfig <global-config> --cache <cache>`
@@ -539,6 +545,13 @@ pnpm 11 uses these exact arguments after its JavaScript entry point (`W` = neutr
 its bin directory comes from pinned configuration. pnpm does not receive npm's user/global-config flags.
 pnpm 10 uses the same arguments with `--config.manage-package-manager-versions=false` in place of
 `--pm-on-fail=warn`. Its shared project is `G\5`; the global bin directory may be `PNPM_HOME` itself.
+pnpm 12 launches `pnpm.exe` directly with these exact arguments (`ST` = state directory, `A` = auth file, `C` = cache
+directory, `CFG` = config directory):
+
+```text
+--dir W --pm-on-fail=warn --store-dir S --state-dir ST --npmrc-auth-file A --config.global-dir=G --config.global-bin-dir=B --config.cache-dir=C --config.config-dir=CFG add --global --registry https://registry.npmjs.org --reporter=append-only -- NAME@EXACT
+--dir W --pm-on-fail=warn --store-dir S --state-dir ST --npmrc-auth-file A --config.global-dir=G --config.global-bin-dir=B --config.cache-dir=C --config.config-dir=CFG remove --global --reporter=append-only -- NAME
+```
 
 No arbitrary arguments, elevation, tool-download fallback or automatic mutation retry is available. The child
 uses the command runner's sanitized environment: backend settings, `NODE_ENV`, `NODE_OPTIONS`, project-run

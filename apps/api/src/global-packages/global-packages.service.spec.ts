@@ -41,6 +41,8 @@ import {
   testLocation,
 } from '@/global-packages/__fixtures__/global-adapters';
 import { pnpmPreviewFacts } from '@/global-packages/__fixtures__/pnpm11/inventory';
+import { PNPM12_EXE } from '@/global-packages/__fixtures__/pnpm12/facts';
+import { pnpm12PreviewFacts } from '@/global-packages/__fixtures__/pnpm12/inventory';
 import { npmLifecycleFixture } from '@/global-packages/__fixtures__/npm-overlay/lifecycle';
 import { npmTarget } from '@/global-packages/__fixtures__/npm-overlay/facts';
 import { PNPM_TEST_PATHS as Q } from '@/global-packages/__fixtures__/pnpm11/facts';
@@ -3527,15 +3529,20 @@ describe.each(TEST_NPM_VERSIONS)('M7 cancellation/shutdown (npm %s)', (v) => {
     await done(f.service, start.jobId);
   });
 
-  it('keeps npm inventory available when pnpm 12 fails closed with TOOL_VERSION_MISMATCH', async () => {
+  it('keeps npm inventory available when pnpm 12 prerelease fails closed with TOOL_VERSION_MISMATCH', async () => {
     const f = setup();
     f.location.mockImplementation((manager) =>
       manager === 'npm'
         ? Promise.resolve({ ...testLocation('npm'), ...f.facts.location })
         : Promise.reject(
-            new AppException(409, 'TEST pnpm 12 unsupported', 'CONFLICT', {
-              reason: 'TOOL_VERSION_MISMATCH',
-            }),
+            new AppException(
+              409,
+              'TEST pnpm 12 prerelease unsupported',
+              'CONFLICT',
+              {
+                reason: 'TOOL_VERSION_MISMATCH',
+              },
+            ),
           ),
     );
     const start = await f.service.inventory({ requestId: f.runtime.uuid() });
@@ -3552,4 +3559,266 @@ describe.each(TEST_NPM_VERSIONS)('M7 cancellation/shutdown (npm %s)', (v) => {
     });
     expect(f.child.launch).not.toHaveBeenCalled();
   });
+});
+
+describe('pnpm 12 service integration', () => {
+  function setupPnpm12Service(change = false) {
+    const fixture = testRuntime();
+    const facts = pnpm12PreviewFacts();
+    const location: IGlobalResolvedLocation = {
+      ...facts.location,
+      cwd: testLocation('pnpm', '12.21.0').cwd,
+      protectedPaths: testLocation('pnpm', '12.21.0').protectedPaths,
+    };
+    facts.location = location;
+    fixture.runtime.environment = {
+      PATH: `${Q.bin};C:\\Program Files\\nodejs;C:\\Windows\\System32`,
+      PNPM_HOME: Q.home,
+    };
+    fixture.fs.put(Q.yaml, { text: 'registry: https://registry.npmjs.org/\n' });
+    fixture.fs.put(Q.auth, { text: '' });
+    location.globalConfig = Q.yaml;
+    location.configIdentities = [
+      testConfigIdentity(Q.yaml, 'registry: https://registry.npmjs.org/\n'),
+      testConfigIdentity(Q.auth),
+    ];
+    location.pnpm!.configIdentities = [...location.configIdentities];
+    jest
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- jest.fn mock
+      .mocked(fixture.runtime.resolveTool)
+      .mockImplementation((manager) =>
+        Promise.resolve(
+          manager === 'pnpm' ? location.tool : testLocation('npm').tool,
+        ),
+      );
+    const discover = jest
+      .spyOn(locationAdapter, 'discoverGlobalLocation')
+      .mockImplementation((manager) =>
+        Promise.resolve(
+          manager === 'pnpm'
+            ? location
+            : { ...testLocation(), ...testFacts().location },
+        ),
+      );
+    let before: IGlobalInventoryResult = {
+      ...testInventory(facts),
+      pnpmInventory: facts.pnpmInventory,
+    };
+    let after: IGlobalInventoryResult = emptyPnpmInventory();
+    const inventory = jest
+      .spyOn(inventoryAdapter, 'readGlobalInventory')
+      .mockImplementation((resolved) =>
+        Promise.resolve(
+          resolved.manager === 'npm'
+            ? testInventory()
+            : fixture.child.launch.mock.calls.length
+              ? after
+              : before,
+        ),
+      );
+    const versions = jest
+      .spyOn(GlobalRegistry.prototype, 'getVersions')
+      .mockResolvedValue({
+        manager: 'pnpm',
+        package: 'is-number',
+        versions: ['7.0.0', '8.0.0'],
+        tags: { latest: '8.0.0' },
+        deprecatedVersions: [],
+      });
+    const target = jest
+      .spyOn(GlobalRegistry.prototype, 'getTarget')
+      .mockResolvedValue({
+        ...testFacts(true).target!,
+        name: 'is-number',
+        version: '8.0.0',
+        bins: [],
+      });
+    const service = new GlobalPackagesService(fixture.runtime);
+    const request = (
+      patch: Partial<IGlobalPreviewRequest> = {},
+    ): IGlobalPreviewRequest => ({
+      requestId: fixture.uuid(),
+      manager: 'pnpm',
+      package: 'is-number',
+      action: change ? 'change' : 'remove',
+      ...(change ? { targetVersion: 'latest' } : {}),
+      ...patch,
+    });
+    const consent = (
+      preview: IGlobalPreview,
+      patch: Partial<IGlobalExecuteRequest> = {},
+    ) =>
+      testConsent({
+        requestId: fixture.uuid(),
+        previewId: preview.previewId,
+        confirmText: preview.confirmText,
+        ...patch,
+      });
+    return {
+      ...fixture,
+      service,
+      facts,
+      location,
+      discover,
+      inventory,
+      versions,
+      target,
+      request,
+      consent,
+      setBefore: (value: IGlobalInventoryResult) => {
+        before = value;
+      },
+      setAfter: (value: IGlobalInventoryResult) => {
+        after = value;
+      },
+    };
+  }
+
+  it('completes pnpm 12 inventory, versions, preview, change execute and postcondition with native pnpm.exe and packageMap: null', async () => {
+    const f = setupPnpm12Service(true);
+    const invStart = await f.service.inventory({ requestId: f.uuid() });
+    const invJob = await finishPnpmJob(f.service, invStart.jobId);
+    expect(invJob).toMatchObject({ status: 'completed', failureCode: null });
+    expect(f.service.getSnapshot()!.managers).toEqual([
+      expect.objectContaining({ manager: 'npm', available: true }),
+      expect.objectContaining({
+        manager: 'pnpm',
+        available: true,
+        version: '12.21.0',
+        reason: null,
+      }),
+    ]);
+
+    const verStart = await f.service.versions({
+      requestId: f.uuid(),
+      manager: 'pnpm',
+      package: 'is-number',
+    });
+    const verJob = await finishPnpmJob(f.service, verStart.jobId);
+    expect(verJob).toMatchObject({
+      status: 'completed',
+      manager: 'pnpm',
+      managerVersion: '12.21.0',
+    });
+
+    const prevStart = await f.service.preview(f.request());
+    const prevJob = await finishPnpmJob(f.service, prevStart.jobId);
+    expect(prevJob).toMatchObject({ status: 'completed', failureCode: null });
+    const preview = prevJob.preview!;
+    expect(preview).toMatchObject({
+      manager: 'pnpm',
+      managerVersion: '12.21.0',
+      action: 'change',
+      currentVersion: '7.0.0',
+      targetVersion: '8.0.0',
+    });
+    expect(preview.sharedPackages).toBeUndefined();
+
+    const updatedFacts = pnpm12PreviewFacts();
+    updatedFacts.current.version = '8.0.0';
+    f.setAfter({
+      ...testInventory(updatedFacts),
+      pnpmInventory: updatedFacts.pnpmInventory,
+    });
+    const execStart = await f.service.execute(f.consent(preview));
+    await flushJobs();
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    const launched = f.child.launch.mock.calls[0][0];
+    expect(launched.file).toBe(PNPM12_EXE);
+    expect(launched.args).toContain(`--config.global-dir=${Q.global}`);
+    expect(launched.args).toContain(`--config.global-bin-dir=${Q.bin}`);
+    expect(launched.args).not.toContain('--global-bin-dir');
+    expect(launched.args.slice(-2)).toEqual(['--', 'is-number@8.0.0']);
+    expect(launched.env).toMatchObject({
+      PNPM_HOME: Q.home,
+      pnpm_config_global_dir: Q.global,
+      pnpm_config_global_bin_dir: Q.bin,
+      pnpm_config_store_dir: Q.store,
+    });
+    f.child.exit({ exitCode: 0, termination: 'verified' });
+    const execJob = await finishPnpmJob(f.service, execStart.jobId);
+    expect(execJob).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      mutationSpawned: true,
+      terminationVerified: true,
+    });
+    expect(f.audit.mock.calls.map(([r]) => r.phase)).toEqual([
+      'intent',
+      'result',
+    ]);
+  });
+
+  it('completes pnpm 12 remove execute and postcondition without --registry', async () => {
+    const f = setupPnpm12Service(false);
+    const prevStart = await f.service.preview(f.request());
+    const prevJob = await finishPnpmJob(f.service, prevStart.jobId);
+    expect(prevJob.status).toBe('completed');
+    const execStart = await f.service.execute(f.consent(prevJob.preview!));
+    await flushJobs();
+    const launched = f.child.launch.mock.calls[0][0];
+    expect(launched.file).toBe(PNPM12_EXE);
+    expect(launched.args).toContain('remove');
+    expect(launched.args).not.toContain('--registry');
+    expect(launched.args.slice(-2)).toEqual(['--', 'is-number']);
+    f.child.exit({ exitCode: 0, termination: 'verified' });
+    const execJob = await finishPnpmJob(f.service, execStart.jobId);
+    expect(execJob).toMatchObject({ status: 'completed', failureCode: null });
+  });
+
+  it('refuses pnpm 12 execute with PREVIEW_CHANGED when .package-map.json appears before launch', async () => {
+    const f = setupPnpm12Service(false);
+    const prevStart = await f.service.preview(f.request());
+    const prevJob = await finishPnpmJob(f.service, prevStart.jobId);
+    expect(prevJob.status).toBe('completed');
+
+    const drifted = pnpm12PreviewFacts();
+    drifted.pnpmInventory!.groups[0].packageMap = testConfigIdentity(
+      win32.join(
+        drifted.current.pnpmGroup!.installDir,
+        'node_modules',
+        '.package-map.json',
+      ),
+    );
+    f.setBefore({
+      ...testInventory(drifted),
+      pnpmInventory: drifted.pnpmInventory,
+    });
+    const execStart = await f.service.execute(f.consent(prevJob.preview!));
+    await expectGlobalReason(
+      () => f.service.waitForPreflight(execStart.jobId),
+      'PREVIEW_CHANGED',
+    );
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it.each(['@pnpm/exe.win32-x64', 'deno'])(
+    'refuses preview for protected pnpm 12 package %s',
+    async (pkgName) => {
+      const f = setupPnpm12Service(false);
+      const protectedFacts = pnpm12PreviewFacts();
+      protectedFacts.current.name = pkgName;
+      f.setBefore({
+        ...testInventory(protectedFacts),
+        packages: [
+          {
+            name: pkgName,
+            version: '1.0.0',
+            bins: [],
+            status: 'protected',
+            reason: 'PROTECTED_PACKAGE',
+          },
+        ],
+        pnpmInventory: protectedFacts.pnpmInventory,
+      });
+      const prevStart = await f.service.preview(
+        f.request({ package: pkgName }),
+      );
+      const prevJob = await finishPnpmJob(f.service, prevStart.jobId);
+      expect(prevJob).toMatchObject({
+        status: 'failed',
+        failureCode: 'PROTECTED_PACKAGE',
+      });
+    },
+  );
 });

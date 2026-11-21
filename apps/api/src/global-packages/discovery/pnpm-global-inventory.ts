@@ -53,7 +53,9 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const missing = (error: unknown): boolean =>
   record(error) && error.code === 'ENOENT';
 // pnpm 11.22.0 globalPackageDir.js:191868 leaves PID/time hex unpadded.
+// pnpm 12.21.0 (P12-0/P12-2) uses a counter suffix (`<hex>-<hex>-<counter>`).
 const installName = /^[a-f0-9]+-[a-f0-9]+-[a-f0-9]{16}$/i;
+const installNameV12 = /^[a-f0-9]+-[a-f0-9]+-[a-f0-9]+$/i;
 const indexName = /^[a-f0-9]{64}$/i;
 const sameEntry = (a: IRunnerFileIdentity, b: IRunnerFileIdentity): boolean =>
   key(a.path) === key(b.path) &&
@@ -138,7 +140,7 @@ interface IData {
 interface IGroup {
   facts: IPnpmGlobalGroupFacts;
   references: Record<string, string>;
-  packageMap: Record<string, unknown>;
+  packageMap: Record<string, unknown> | null;
   storeProven: boolean;
 }
 
@@ -181,6 +183,77 @@ const shPrologue = [
   'esac',
 ];
 
+// Verbatim pnpm 12.21.0 @zkochan/cmd-shim POSIX prologue observed in P12-0.
+const shPrologueV12 = [
+  'caller_path_set=${PATH+set}',
+  'caller_path=${PATH-}',
+  'helper_path=',
+  'rest=$caller_path:',
+  'while [ -n "$rest" ]; do',
+  'dir=${rest%%:*}',
+  'rest=${rest#*:}',
+  'case "$dir" in',
+  '*/node_modules/*|*/node_modules) ;;',
+  '/*) helper_path=${helper_path:+$helper_path:}$dir ;;',
+  'esac',
+  'done',
+  'PATH=${helper_path:-/}',
+  'run_helper() {',
+  'if [ -x "/usr/bin/$1" ] || [ -x "/bin/$1" ] || ! command -v "$1" >/dev/null 2>&1; then command -p "$@"; else command "$@"; fi',
+  '}',
+  'link="$0"',
+  'case "$link" in',
+  '*/*|*\\\\*) ;;',
+  '*) link="./$link" ;;',
+  'esac',
+  'hops=0',
+  'while [ -L "$link" ] && [ "$hops" -lt 40 ]; do',
+  'hops=$((hops+1))',
+  'target=$(run_helper readlink "$link")',
+  'case "$target" in',
+  '/*) link="$target" ;;',
+  '*)  link="${link%/*}/$target" ;;',
+  'esac',
+  'done',
+  'case "$link" in',
+  "*\\\\*) basedir=$(run_helper printf '%s\\n' \"$link\" | run_helper sed -e 's,\\\\,/,g') ;;",
+  '*) basedir=$link ;;',
+  'esac',
+  'basedir="${basedir%/*}"',
+  'basedir_abs=$(CDPATH= cd -P -- "$basedir" && pwd -P) || exit $?',
+  'basedir="$basedir_abs"',
+  'basedir_win="$basedir"',
+  'exe=""',
+  'msys=""',
+  'os=',
+  '{ read -r os < /proc/version; } 2> /dev/null || :',
+  'case "$os" in',
+  '*CYGWIN*|*MINGW*|*MSYS*)',
+  'if converted=$(command -p cygpath -w "$basedir" 2>/dev/null) && [ -n "$converted" ]; then',
+  'basedir_win="$converted"',
+  'elif command -v cygpath > /dev/null 2>&1; then',
+  'basedir_win=`cygpath -w "$basedir"`',
+  'fi',
+  'exe=".exe"',
+  'msys="true"',
+  ';;',
+  '*WSL2*)',
+  'if converted=$(command -p wslpath -w "$basedir" 2>/dev/null) && [ -n "$converted" ]; then',
+  'basedir_win="$converted"',
+  'exe=".exe"',
+  'elif command -v wslpath > /dev/null 2>&1; then',
+  'basedir_win="$(wslpath -w "$basedir" 2> /dev/null)"',
+  'if [ $? -ne 0 ] || [ -z "$basedir_win" ]; then',
+  'basedir_win="$basedir"',
+  'else',
+  'exe=".exe"',
+  'fi',
+  'fi',
+  ';;',
+  'esac',
+  'if [ -n "$caller_path_set" ]; then PATH=$caller_path; else unset PATH; fi',
+];
+
 function shimControl(
   line: string,
   extension: string,
@@ -202,9 +275,10 @@ function shimControl(
     if (/^\} else \{$/i.test(line)) return 'else';
     if (line === '}') return 'end';
   } else {
-    if (/^if \[ -z "\$NODE_PATH" \]; then$/.test(line)) return 'if';
+    if (/^if \[ (?:-z "\$NODE_PATH"|-n "\$msys") \]; then$/.test(line))
+      return 'if';
     if (
-      /^(?:if|elif) (?:\[ -n "\$exe" \] && \[ -x "\$basedir\/node\.exe" \]|\[ -x "\$basedir\/node(?:\.exe)?" \]|command -v node >\/dev\/null 2>&1|\[ -n "\$exe" \] && command -v node\.exe >\/dev\/null 2>&1); then$/.test(
+      /^(?:if|elif) (?:\[ -n "\$exe" \] && \[ -x "\$basedir\/node\.exe" \]|\[ -x "\$basedir\/node(?:\.exe)?" \]|\[ -n "\$msys" \] && command -v node >\/dev\/null 2>&1|command -v node >\/dev\/null 2>&1|\[ -n "\$exe" \] && command -v node\.exe >\/dev\/null 2>&1); then$/.test(
         line,
       )
     )
@@ -252,7 +326,14 @@ function shimStatement(line: string, extension: string): boolean {
       new RegExp(`^\\$(?:new_node_path|prepend_path)="${literal}"$`).test(line)
     );
   return (
-    line === 'exit $?' ||
+    [
+      'exit $?',
+      "node_path_sep=';'",
+      "node_path_sep=':'",
+      'export NODE_PATH="$new_node_path"',
+      'export NODE_PATH="$new_node_path$node_path_sep$NODE_PATH"',
+    ].includes(line) ||
+    /^new_node_path='[^'$`\r\n]*'$/.test(line) ||
     new RegExp(
       `^export (?:NODE_PATH="${literal}(?::\\$NODE_PATH)?"|PATH="${literal}:\\$PATH")$`,
     ).test(line)
@@ -274,19 +355,32 @@ function ownedShim(
   if (extension === '' && lines[0] === shPrologue[0]) {
     if (!shPrologue.every((line, i) => line === lines[i])) return false;
     lines = lines.slice(shPrologue.length);
+  } else if (extension === '' && lines[0] === shPrologueV12[0]) {
+    if (!shPrologueV12.every((line, i) => line === lines[i])) return false;
+    lines = lines.slice(shPrologueV12.length);
   }
   const target = (token: string): boolean => {
-    if (!/^"[^"\r\n]+"$/.test(token)) return false;
-    const value = token
-      .slice(1, -1)
-      .replace(
-        /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir_win|\$basedir)/i,
-        win32.dirname(file),
-      );
+    const v12Match =
+      extension === ''
+        ? /^"(?:\$basedir_win|\$basedir_abs)"\/'([^'\r\n]+)'$/.exec(token)
+        : null;
+    let value: string;
+    if (v12Match) {
+      value = `${win32.dirname(file)}/${v12Match[1]}`;
+    } else if (/^"[^"\r\n]+"$/.test(token)) {
+      value = token
+        .slice(1, -1)
+        .replace(
+          /^(?:%~dp0|%dp0%|\$\{basedir\}|\$basedir_win|\$basedir)/i,
+          win32.dirname(file),
+        );
+    } else {
+      return false;
+    }
     // Generated shims use basedir/../ paths; normalize those only after the
     // known prefix expansion, while rejecting remaining shell interpolation.
     return (
-      !/[$%`!^&]/.test(value) &&
+      !/[$%`!^&"']/.test(value) &&
       /^[a-z]:[\\/]/i.test(value) &&
       !Array.from(value).some(
         (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
@@ -304,6 +398,8 @@ function ownedShim(
     )
       return true;
     return (
+      isGlobalAbsolutePath(nodeFile) &&
+      win32.basename(nodeFile).toLowerCase() === 'node.exe' &&
       /^"[^"\r\n]+"$/.test(token) &&
       !/[$%`]/.test(token) &&
       key(token.slice(1, -1)) === key(nodeFile)
@@ -318,7 +414,11 @@ function ownedShim(
           : /^exec\s+/;
     if (!prefix.test(line)) return false;
     const command = line.replace(prefix, '');
-    const matches = [...command.matchAll(/"[^"\r\n]*"|[^\s"]+/g)];
+    const tokenPattern =
+      extension === ''
+        ? /"(?:\$basedir_win|\$basedir_abs)"\/'[^'\r\n]*'|"[^"\r\n]*"|[^\s"]+/g
+        : /"[^"\r\n]*"|[^\s"]+/g;
+    const matches = [...command.matchAll(tokenPattern)];
     if (
       matches.some(
         (match, i) =>
@@ -333,7 +433,7 @@ function ownedShim(
     )
       return false;
     const tokens = matches.map((match) => match[0]);
-    if (command.replace(/"[^"\r\n]*"|[^\s"]+/g, '').trim()) return false;
+    if (command.replace(tokenPattern, '').trim()) return false;
     if (
       tokens.pop() !==
       (extension === '.cmd' ? '%*' : extension === '.ps1' ? '$args' : '"$@"')
@@ -461,7 +561,19 @@ class PnpmInventoryReader {
     );
   }
 
-  private async data(path: string): Promise<IData> {
+  private toolMajor(): number {
+    return semver.parse(this.location.tool.version)?.major ?? 11;
+  }
+
+  private validInstallDirName(name: string): boolean {
+    return this.toolMajor() === 12
+      ? installNameV12.test(name)
+      : installName.test(name);
+  }
+
+  private async data(path: string): Promise<IData>;
+  private async data(path: string, optional: true): Promise<IData | null>;
+  private async data(path: string, optional = false): Promise<IData | null> {
     await this.guard(win32.dirname(path));
     const data = await readRunnerFile(
       path,
@@ -470,11 +582,15 @@ class PnpmInventoryReader {
       this.deps.signal,
       'win32',
       {
+        optional,
         budget: this.budget,
         checkParent: () => this.guard(win32.dirname(path)),
       },
     );
-    if (!data) throw failed();
+    if (!data) {
+      if (optional) return null;
+      throw failed();
+    }
     return {
       value: parseData(
         data.text,
@@ -495,7 +611,7 @@ class PnpmInventoryReader {
     if (
       !isGlobalAbsolutePath(realPath) ||
       key(win32.dirname(realPath)) !== key(this.location.globalRoot) ||
-      !installName.test(win32.basename(realPath))
+      !this.validInstallDirName(win32.basename(realPath))
     )
       throw failed();
     await this.guard(realPath);
@@ -624,9 +740,11 @@ class PnpmInventoryReader {
     const lock = await this.data(win32.join(installDir, 'pnpm-lock.yaml'));
     const modulesDir = win32.join(installDir, 'node_modules');
     const modules = await this.data(win32.join(modulesDir, '.modules.yaml'));
-    const packageMap = await this.data(
-      win32.join(modulesDir, '.package-map.json'),
-    );
+    const major = this.toolMajor();
+    const packageMap =
+      major === 12
+        ? await this.data(win32.join(modulesDir, '.package-map.json'), true)
+        : await this.data(win32.join(modulesDir, '.package-map.json'));
     const virtualLock = await this.data(
       win32.join(modulesDir, '.pnpm', 'lock.yaml'),
     );
@@ -654,32 +772,37 @@ class PnpmInventoryReader {
     if (
       modules.value.layoutVersion !== 5 ||
       !isGlobalExactVersion(metadataVersion) ||
-      semver.major(metadataVersion) !== 11 ||
+      semver.major(metadataVersion) !== major ||
       modules.value.nodeLinker !== 'isolated'
     )
       storeProven = false;
-    if (
-      !record(packageMap.value.packages) ||
-      !record(packageMap.value.packages['.']) ||
-      !record(packageMap.value.packages['.'].dependencies)
-    )
-      throw failed();
-    const mapDependencies = packageMap.value.packages['.'].dependencies;
-    const rootUrl = packageMap.value.packages['.'].url;
-    if (
-      typeof rootUrl !== 'string' ||
-      /[%?#]/.test(rootUrl) ||
-      /^[a-z]+:/i.test(rootUrl) ||
-      key(win32.resolve(modulesDir, rootUrl)) !== key(installDir)
-    )
-      throw failed();
-    if (
-      Object.keys(mapDependencies).length !== Object.keys(references).length ||
-      Object.keys(references).some(
-        (name) => mapDependencies[name] !== `${name}@${references[name]}`,
+    let packageMapPackages: Record<string, unknown> | null = null;
+    if (packageMap !== null) {
+      if (
+        !record(packageMap.value.packages) ||
+        !record(packageMap.value.packages['.']) ||
+        !record(packageMap.value.packages['.'].dependencies)
       )
-    )
-      throw failed();
+        throw failed();
+      const mapDependencies = packageMap.value.packages['.'].dependencies;
+      const rootUrl = packageMap.value.packages['.'].url;
+      if (
+        typeof rootUrl !== 'string' ||
+        /[%?#]/.test(rootUrl) ||
+        /^[a-z]+:/i.test(rootUrl) ||
+        key(win32.resolve(modulesDir, rootUrl)) !== key(installDir)
+      )
+        throw failed();
+      if (
+        Object.keys(mapDependencies).length !==
+          Object.keys(references).length ||
+        Object.keys(references).some(
+          (name) => mapDependencies[name] !== `${name}@${references[name]}`,
+        )
+      )
+        throw failed();
+      packageMapPackages = packageMap.value.packages;
+    }
     const facts: IPnpmGlobalGroupFacts = {
       index,
       installDir,
@@ -687,7 +810,7 @@ class PnpmInventoryReader {
       manifest: manifest.identity,
       lockfile: lock.identity,
       modules: modules.identity,
-      packageMap: packageMap.identity,
+      packageMap: packageMap ? packageMap.identity : null,
       virtualStoreLockfile: virtualLock.identity,
       directDependencies: Object.keys(dependencies).sort(),
       packageLinks: [],
@@ -703,7 +826,7 @@ class PnpmInventoryReader {
     return {
       facts,
       references,
-      packageMap: packageMap.value.packages,
+      packageMap: packageMapPackages,
       storeProven,
     };
   }
@@ -725,10 +848,13 @@ class PnpmInventoryReader {
       const realPath = await this.deps.fs.realpath(logicalPath);
       this.deps.signal.throwIfAborted();
       if (!group.storeProven || !isGlobalAbsolutePath(realPath)) return null;
+      const storeParts =
+        this.toolMajor() === 12 && name.startsWith('@')
+          ? name.split('/')
+          : ['@', ...name.split('/')];
       const prefix = win32.join(
         group.facts.virtualStoreDir,
-        '@',
-        ...name.split('/'),
+        ...storeParts,
         version,
       );
       const relative = win32.relative(prefix, realPath).split(win32.sep);
@@ -742,17 +868,19 @@ class PnpmInventoryReader {
         )
       )
         return null;
-      const mapping = group.packageMap[`${name}@${group.references[name]}`];
-      if (
-        !record(mapping) ||
-        typeof mapping.url !== 'string' ||
-        /[%?#]/.test(mapping.url) ||
-        /^[a-z]+:/i.test(mapping.url) ||
-        key(
-          win32.resolve(group.facts.installDir, 'node_modules', mapping.url),
-        ) !== key(realPath)
-      )
-        throw failed();
+      if (group.packageMap !== null) {
+        const mapping = group.packageMap[`${name}@${group.references[name]}`];
+        if (
+          !record(mapping) ||
+          typeof mapping.url !== 'string' ||
+          /[%?#]/.test(mapping.url) ||
+          /^[a-z]+:/i.test(mapping.url) ||
+          key(
+            win32.resolve(group.facts.installDir, 'node_modules', mapping.url),
+          ) !== key(realPath)
+        )
+          throw failed();
+      }
       await this.guard(realPath);
       const link = { logicalPath, realPath, identity };
       await this.recheckLink(link);
@@ -917,7 +1045,22 @@ class PnpmInventoryReader {
           ),
         ]),
     );
-    return ownedShim(text, file, this.location.tool.file, accepted);
+    // For native pnpm 12 (entry === null), tool.file is pnpm.exe; resolve an
+    // explicit absolute node.exe identity so pnpm.exe or arbitrary files are never accepted.
+    const candidateNode =
+      this.location.tool.entry === null
+        ? (this.location.tool.identities.find(
+            (entry) =>
+              isGlobalAbsolutePath(entry.path) &&
+              win32.basename(entry.path).toLowerCase() === 'node.exe',
+          )?.path ?? '')
+        : this.location.tool.file;
+    const nodeFile =
+      isGlobalAbsolutePath(candidateNode) &&
+      win32.basename(candidateNode).toLowerCase() === 'node.exe'
+        ? candidateNode
+        : '';
+    return ownedShim(text, file, nodeFile, accepted);
   }
 
   private async shims(
@@ -1020,7 +1163,7 @@ class PnpmInventoryReader {
       group.manifest,
       group.lockfile,
       group.modules,
-      group.packageMap,
+      ...(group.packageMap ? [group.packageMap] : []),
       group.virtualStoreLockfile,
     ]) {
       await this.guard(win32.dirname(config.file.path));
@@ -1029,6 +1172,20 @@ class PnpmInventoryReader {
       const real = await this.deps.fs.realpath(config.file.path);
       this.deps.signal.throwIfAborted();
       if (key(real) !== key(config.file.path)) throw failed();
+    }
+    if (group.packageMap === null) {
+      const absentMap = win32.join(
+        group.installDir,
+        'node_modules',
+        '.package-map.json',
+      );
+      try {
+        await this.deps.fs.lstat(absentMap);
+        throw failed();
+      } catch (error) {
+        this.deps.signal.throwIfAborted();
+        if (!missing(error)) throw failed();
+      }
     }
   }
 
@@ -1082,7 +1239,8 @@ class PnpmInventoryReader {
           !identity.stat.isSymbolicLink()
         ) {
           physical.set(key(path), identity);
-          if (!installName.test(name)) this.result.ownershipComplete = false;
+          if (!this.validInstallDirName(name))
+            this.result.ownershipComplete = false;
         } else if (name !== 'pnpm-workspace.yaml')
           this.result.ownershipComplete = false;
       }

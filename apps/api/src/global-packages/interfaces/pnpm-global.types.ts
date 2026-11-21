@@ -85,7 +85,7 @@ export interface IPnpmGlobalGroupFacts {
   manifest: IGlobalConfigIdentity;
   lockfile: IGlobalConfigIdentity;
   modules: IGlobalConfigIdentity;
-  packageMap: IGlobalConfigIdentity;
+  packageMap: IGlobalConfigIdentity | null;
   virtualStoreLockfile: IGlobalConfigIdentity;
   directDependencies: readonly string[];
   packageLinks: readonly IPnpmGlobalLinkFacts[];

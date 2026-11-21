@@ -66,15 +66,17 @@ export const isGlobalExactVersion = (value: unknown): value is string =>
   semver.valid(value) !== null;
 
 /**
- * pnpm 10 and 11 layouts have global adapters. pnpm 11 keeps its earlier gate
- * (prereleases included, as in the runner policy); pnpm 10 is stable-only.
+ * pnpm 10, 11 and 12 layouts have global adapters. pnpm 11 keeps its earlier
+ * gate (prereleases included, as in the runner policy); pnpm 10 and 12 are
+ * stable-only.
  */
 export const isPnpmGlobalVersion = (version: string): boolean => {
   const parsed = semver.parse(version);
   return (
     !!parsed &&
     (parsed.major === 11 ||
-      (parsed.major === 10 && parsed.prerelease.length === 0))
+      ((parsed.major === 10 || parsed.major === 12) &&
+        parsed.prerelease.length === 0))
   );
 };
 
@@ -97,10 +99,9 @@ export const isGlobalAbsolutePath = (value: string): boolean =>
     .split('/')
     .some((part) => /[. ]$/.test(part));
 
-function assertLauncher(
+export function assertGlobalLauncher(
   manager: GlobalManager,
   tool: IRunnerTool,
-  cwd: string,
 ): void {
   if (manager !== 'npm' && manager !== 'pnpm')
     return fail('UNSUPPORTED_MANAGER');
@@ -111,7 +112,22 @@ function assertLauncher(
     (manager === 'pnpm' && !isPnpmGlobalVersion(tool.version))
   )
     return fail('TOOL_VERSION_MISMATCH');
-  if (
+  const isPnpm12 =
+    manager === 'pnpm' && semver.parse(tool.version)?.major === 12;
+  if (isPnpm12) {
+    if (
+      tool.entry !== null ||
+      !isGlobalAbsolutePath(tool.file) ||
+      !/\.exe$/i.test(tool.file) ||
+      win32.basename(tool.file).toLowerCase() === 'node.exe' ||
+      !isGlobalAbsolutePath(tool.packageDir) ||
+      !win32
+        .resolve(tool.file)
+        .toLowerCase()
+        .startsWith(`${win32.resolve(tool.packageDir).toLowerCase()}\\`)
+    )
+      return fail('TOOL_LAYOUT_UNSUPPORTED');
+  } else if (
     !isGlobalAbsolutePath(tool.file) ||
     win32.basename(tool.file).toLowerCase() !== 'node.exe' ||
     !tool.entry ||
@@ -124,6 +140,14 @@ function assertLauncher(
       .startsWith(`${win32.resolve(tool.packageDir).toLowerCase()}\\`)
   )
     return fail('TOOL_LAYOUT_UNSUPPORTED');
+}
+
+function assertLauncher(
+  manager: GlobalManager,
+  tool: IRunnerTool,
+  cwd: string,
+): void {
+  assertGlobalLauncher(manager, tool);
   if (!isGlobalAbsolutePath(cwd)) return fail('CONFIG_UNSUPPORTED');
 }
 
@@ -316,26 +340,52 @@ function buildPnpmGlobalCommand(input: IGlobalMutationInput): IGlobalCommand {
     if (!actual || !pinned || comparable(actual) !== comparable(pinned))
       return fail('LOCATION_AMBIGUOUS');
   }
+  const isPnpm12 = semver.parse(location.tool.version)?.major === 12;
+  const target =
+    action === 'change' ? `${packageName}@${exactVersion}` : packageName;
+  const args = isPnpm12
+    ? [
+        '--dir',
+        location.cwd,
+        '--pm-on-fail=warn',
+        '--store-dir',
+        config.storeDir!,
+        '--state-dir',
+        config.stateDir,
+        '--npmrc-auth-file',
+        config.authFile,
+        `--config.global-dir=${config.globalDir}`,
+        `--config.global-bin-dir=${config.binDir}`,
+        `--config.cache-dir=${config.cacheDir}`,
+        `--config.config-dir=${config.configDir}`,
+        action === 'change' ? 'add' : 'remove',
+        '--global',
+        ...(action === 'change' ? ['--registry', PUBLIC_REGISTRY] : []),
+        '--reporter=append-only',
+        '--',
+        target,
+      ]
+    : [
+        location.tool.entry!,
+        '--dir',
+        location.cwd,
+        '--pm-on-fail=warn',
+        action === 'change' ? 'add' : 'remove',
+        '--global',
+        '--global-dir',
+        config.globalDir,
+        ...(action === 'change' ? ['--global-bin-dir', config.binDir] : []),
+        '--store-dir',
+        config.storeDir!,
+        ...(action === 'change' ? ['--registry', PUBLIC_REGISTRY] : []),
+        '--reporter=append-only',
+        '--',
+        target,
+      ];
   return {
     file: location.tool.file,
     cwd: location.cwd,
-    args: [
-      location.tool.entry!,
-      '--dir',
-      location.cwd,
-      '--pm-on-fail=warn',
-      action === 'change' ? 'add' : 'remove',
-      '--global',
-      '--global-dir',
-      config.globalDir,
-      ...(action === 'change' ? ['--global-bin-dir', config.binDir] : []),
-      '--store-dir',
-      config.storeDir!,
-      ...(action === 'change' ? ['--registry', PUBLIC_REGISTRY] : []),
-      '--reporter=append-only',
-      '--',
-      action === 'change' ? `${packageName}@${exactVersion}` : packageName,
-    ],
+    args,
     env: pnpmEnvironment(input.environment, location.tool, action, config),
     shell: false,
     extendEnv: false,
@@ -349,21 +399,33 @@ function buildPnpmGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
   if (input.query !== 'list') return fail('CONFIG_UNSUPPORTED');
   if (!isGlobalAbsolutePath(config.globalDir))
     return fail('LOCATION_AMBIGUOUS');
+  const isPnpm12 = semver.parse(input.tool.version)?.major === 12;
   return {
     file: input.tool.file,
     cwd: input.cwd,
-    args: [
-      input.tool.entry!,
-      '--dir',
-      input.cwd,
-      '--pm-on-fail=warn',
-      'list',
-      '--global',
-      '--global-dir',
-      config.globalDir,
-      '--depth=0',
-      '--json',
-    ],
+    args: isPnpm12
+      ? [
+          '--dir',
+          input.cwd,
+          '--pm-on-fail=warn',
+          `--config.global-dir=${config.globalDir}`,
+          'list',
+          '--global',
+          '--depth=0',
+          '--json',
+        ]
+      : [
+          input.tool.entry!,
+          '--dir',
+          input.cwd,
+          '--pm-on-fail=warn',
+          'list',
+          '--global',
+          '--global-dir',
+          config.globalDir,
+          '--depth=0',
+          '--json',
+        ],
     env: pnpmEnvironment(input.environment, input.tool, 'remove', config),
     shell: false,
     extendEnv: false,
@@ -391,6 +453,12 @@ function pnpmEnvironment(
   env.pnpm_config_cache_dir = config.cacheDir;
   env.pnpm_config_state_dir = config.stateDir;
   env.pnpm_config_config_dir = config.configDir;
+  if (semver.parse(tool.version)?.major === 12) {
+    env.pnpm_config_global_dir = config.globalDir;
+    env.pnpm_config_global_bin_dir = config.binDir;
+    if (config.storeDir) env.pnpm_config_store_dir = config.storeDir;
+    env.pnpm_config_manage_package_manager_versions = 'false';
+  }
   // Keep build/release policy in the original consumed YAML. In particular,
   // pnpm 11.22.0:166500-166503,168242-168245 silently ignores env allow-builds.
   return env;
