@@ -417,7 +417,7 @@ List, remove or change an installed global package with **npm 10, npm 11, npm 12
 npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported.
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
-Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.23.5, 24.19.0; how npm 12
+Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and Node 22.23.5, 24.19.0; how npm 12
 handles install scripts of global packages has not been verified.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point (or for
 pnpm 12, its verified native `pnpm.exe` binary inside the npm-installed pnpm package directory);
