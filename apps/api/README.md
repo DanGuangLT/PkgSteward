@@ -128,7 +128,7 @@ from the latest scan return `409 CONFLICT` with reason `PROJECT_NOT_SCANNED`.
   configuration are used. A bounded project-level config text check for registry/authentication keys disables
   online checks with `REGISTRY_CONFIG_UNSUPPORTED`, including when those keys occur in comments. Local detail
   remains available. Offline/registry failures retain local information and any positive findings.
-- **Lock support:** npm lock v2/v3, pnpm lock v9, and Yarn Classic v1. For npm, shrinkwrap takes precedence,
+- **Lock support:** npm lock v2/v3, pnpm lock v9 (including pnpm 12's two-document `packageManagerDependencies`/`configDependencies` + project lockfiles), and Yarn Classic v1. For npm, shrinkwrap takes precedence,
   except that an explicit valid `npm@12.x` pin selects `package-lock.json` only (shrinkwrap alone returns
   `NO_LOCKFILE`). Analysis reads the stored lock: without an explicit npm 12 pin it cannot promise which lock an
   active npm 12 would choose. Yarn Berry
@@ -171,7 +171,7 @@ are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles re
 Run one command in a project from the latest scan: install all dependencies, install one package, update all,
 update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 10, npm 11, npm 12,
 pnpm 10, pnpm 11 and pnpm 12**; npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused. Verified with npm 10.9.3,
-npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.18.0, 22.23.5, 24.19.0. pnpm 10 receives
+npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and Node 22.18.0, 22.23.5, 24.19.0. pnpm 10 receives
 `--config.manage-package-manager-versions=false` instead of pnpm 11/12's `--pm-on-fail=warn` (pnpm 10 rejects that
 flag), so none of those majors switches to a version pinned in `packageManager`.
 Installed pnpm 12 must come from an npm-installed `node_modules\pnpm\` package whose `package.json` declares a
