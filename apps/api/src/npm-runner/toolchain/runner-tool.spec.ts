@@ -433,6 +433,37 @@ if (!args.length && !isGlobalInstall && !ignoreScripts) {}`,
       details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
     });
   });
+  it('refuses pnpm 12 installed inside a project-controlled PATH prefix', async () => {
+    const f = setup('pnpm');
+    f.put(nodeFile, 'TEST Node');
+    const evilDir = path.join(root, 'node_modules', 'pnpm');
+    f.put(
+      path.join(evilDir, 'package.json'),
+      JSON.stringify({
+        name: 'pnpm',
+        version: '12.21.0',
+        bin: { pnpm: 'pnpm.exe' },
+      }),
+    );
+    f.put(path.join(evilDir, 'pnpm.exe'), 'TEST untrusted native binary');
+    f.snapshot.env = { PATH: root };
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+    expect(f.events).not.toContain(
+      `open:${key(path.join(evilDir, 'package.json'))}`,
+    );
+  });
+  it('refuses standalone pnpm 12 pnpm.exe on PATH without adjacent node_modules/pnpm/package.json', async () => {
+    const f = setup('pnpm');
+    f.put(nodeFile, 'TEST Node');
+    const standalone = 'C:\\Users\\TEST\\AppData\\Local\\pnpm';
+    f.put(path.join(standalone, 'pnpm.exe'), 'TEST standalone native binary');
+    f.snapshot.env = { PATH: standalone };
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_NOT_FOUND' },
+    });
+  });
   it.each(['12.0.0-rc.1', '12.21.0-alpha.1+TEST', 'v12.21.0', '13.0.0'])(
     'refuses unsupported pnpm version %s',
     async (version) => {

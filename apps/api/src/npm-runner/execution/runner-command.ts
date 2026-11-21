@@ -1,3 +1,4 @@
+import { win32 } from 'node:path';
 import type {
   IRunRequest,
   IRunnerCommand,
@@ -5,6 +6,11 @@ import type {
   IRunnerPackageSpec,
 } from '@/npm-runner/interfaces/npm-runner.types';
 import { AppException } from '@/common/exceptions/app.exception';
+import {
+  isFullyQualifiedPath,
+  isSameOrInside,
+  toComparable,
+} from '@/common/utils/path.util';
 import * as semver from 'semver';
 import { RUN_ACTIONS } from '@/npm-runner/interfaces/npm-runner.types';
 import { isSupportedRunnerVersion } from '@/npm-runner/toolchain/runner-version-policy';
@@ -85,12 +91,23 @@ export function buildRunCommand(
   if (tool.manager !== manager) return fail('UNSUPPORTED_MANAGER');
   if (!isSupportedRunnerVersion(manager, tool.version))
     return fail('TOOL_VERSION_MISMATCH');
-  if (
-    manager === 'pnpm' &&
-    semver.major(tool.version) === 12 &&
-    (tool.entry !== null || !/\.exe$/i.test(tool.file))
-  )
-    return fail('TOOL_LAYOUT_UNSUPPORTED');
+  if (manager === 'pnpm' && semver.major(tool.version) === 12) {
+    if (
+      tool.entry !== null ||
+      !isFullyQualifiedPath(tool.file, 'win32') ||
+      !isFullyQualifiedPath(tool.packageDir, 'win32') ||
+      !/\.exe$/i.test(tool.file) ||
+      win32.basename(tool.file).toLowerCase() === 'node.exe' ||
+      toComparable(tool.file, 'win32') ===
+        toComparable(tool.packageDir, 'win32') ||
+      !isSameOrInside(
+        toComparable(tool.file, 'win32'),
+        toComparable(tool.packageDir, 'win32'),
+        'win32',
+      )
+    )
+      return fail('TOOL_LAYOUT_UNSUPPORTED');
+  }
   if (!RUN_ACTIONS.includes(input.action)) return fail('INVALID_PACKAGE_SPEC');
   if (context.workspace.kind === 'leaf' && input.action !== 'script')
     return fail('WORKSPACE_LEAF');
@@ -138,7 +155,7 @@ export function buildRunCommand(
         '--no-progress',
         '--update-notifier=false',
       ]
-    : // pnpm 10 and 11: only add/update accept --global (set below).
+    : // pnpm 10, 11 and 12: only add/update accept --global (set below).
       // update-notifier / verify-deps-before-run go through the child env.
       (pnpmPrefixArgs(semver.major(tool.version), cwd) ??
       fail('TOOL_VERSION_MISMATCH'));

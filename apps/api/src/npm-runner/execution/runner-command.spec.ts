@@ -4,6 +4,7 @@ import {
   pnpmPrefixArgs,
 } from '@/npm-runner/execution/runner-command';
 import {
+  nodeFile,
   runnerInput,
   tool,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
@@ -219,6 +220,18 @@ describe('runner command grammar and fixed argv', () => {
       {
         label: 'extensionless file',
         override: { file: 'C:\\TEST\\node_modules\\pnpm\\pnpm', entry: null },
+      },
+      {
+        label: 'node.exe with null entry',
+        override: { file: nodeFile, entry: null },
+      },
+      {
+        label: 'external executable outside packageDir',
+        override: { file: 'C:\\Windows\\System32\\cmd.exe', entry: null },
+      },
+      {
+        label: 'relative exe path',
+        override: { file: 'pnpm.exe', entry: null },
       },
     ])('refuses forged pnpm 12 launcher ($label)', ({ override }) => {
       const context = runnerInput('pnpm');
