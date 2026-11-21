@@ -21,7 +21,7 @@ manager version) safely.
 - **Safety first:** file deletions and machine-wide changes go through a *preview → confirm* flow; project
   commands (below) start in one click next to a permanent trust notice.
 - **Project commands:** run install/update/uninstall or a declared script from project details with npm 10–12 or
-  pnpm 10–11 in a dedicated native Windows **CMD** or **PowerShell** console window (`cmd` default, stays open after
+  pnpm 10–12 in a dedicated native Windows **CMD** or **PowerShell** console window (`cmd` default, stays open after
   the initial command finishes until closed or **Stop** is requested; workspace members support scripts only). Run
   starts in one click without confirmation, and any unresolved previous console session triggers a **recovery hold**
   requiring explicit confirmation to clear and stop remaining processes.
