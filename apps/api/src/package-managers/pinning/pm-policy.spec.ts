@@ -116,7 +116,13 @@ describe('public target policy', () => {
     ['pnpm', '9.15.9', '10.34.9', 'TOOL_VERSION_MISMATCH'],
     ['pnpm', '11.22.0', '11.28.9', null],
     ['pnpm', '11.22.0', '12.18.0', 'TARGET_VERSION_UNSUPPORTED'],
-    ['pnpm', '12.18.0', '12.18.0', 'TOOL_VERSION_MISMATCH'],
+    ['pnpm', '10.34.9', '12.21.0', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '12.21.0', '12.20.0', null],
+    ['pnpm', '12.21.0', '12.21.0', null],
+    ['pnpm', '12.21.0', '11.22.0', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '12.21.0', '10.34.9', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '12.21.0', '12.22.0-rc.1', 'TARGET_VERSION_UNSUPPORTED'],
+    ['pnpm', '13.0.0', '13.0.0', 'TOOL_VERSION_MISMATCH'],
   ] as const)(
     'keeps %s installed %s and target %s in the same supported major',
     (manager, installed, target, reason) => {
@@ -139,8 +145,27 @@ describe('public target policy', () => {
       'TARGET_VERSION_UNSUPPORTED',
     );
   });
-  it('refuses deprecated npm 12 targets', () => {
+  it.each([
+    '9.15.9',
+    '13.0.0',
+    '12.21.0-beta.1',
+    'v12.21.0',
+    '12.21.0+build',
+    '012.21.0',
+    '12.21.0\n',
+  ])('refuses unsupported/noncanonical pnpm 12 inputs %p', (version) => {
+    expect(getPmTargetReason('pnpm', version, '12.21.0', false)).toBe(
+      'TOOL_VERSION_MISMATCH',
+    );
+    expect(getPmTargetReason('pnpm', '12.21.0', version, false)).toBe(
+      'TARGET_VERSION_UNSUPPORTED',
+    );
+  });
+  it('refuses deprecated npm 12 and pnpm 12 targets', () => {
     expect(getPmTargetReason('npm', '12.2.2', '12.2.1', true)).toBe(
+      'TARGET_VERSION_UNSUPPORTED',
+    );
+    expect(getPmTargetReason('pnpm', '12.21.0', '12.20.0', true)).toBe(
       'TARGET_VERSION_UNSUPPORTED',
     );
   });
@@ -223,22 +248,33 @@ describe('public target policy', () => {
 
 describe('project pin eligibility', () => {
   it.each([
-    ['11.17.0', '12.2.1', '11.21.2'],
-    ['12.2.2', '11.17.0', '12.2.1'],
-  ])(
-    'repairs installed %s from old %s to %s only',
-    (installed, old, target) => {
+    ['npm', '11.17.0', '12.2.1', '11.21.2'],
+    ['npm', '12.2.2', '11.17.0', '12.2.1'],
+    ['pnpm', '12.21.0', '11.22.0', '12.21.0'],
+    ['pnpm', '12.21.0', '10.34.9', '12.20.0'],
+    ['pnpm', '11.22.0', '12.21.0', '11.22.0'],
+  ] as const)(
+    'repairs %s installed %s from old %s to %s only',
+    (manager, installed, old, target) => {
       const repair = input({
-        manager: 'npm',
-        installed: { ...tool, manager: 'npm', version: installed },
-        pin: parsePmPin(`npm@${old}`),
+        manager,
+        installed: {
+          ...tool,
+          manager,
+          version: installed,
+          toolPath:
+            manager === 'pnpm' && installed.startsWith('12.')
+              ? 'D:\\TEST\\pnpm.exe'
+              : tool.toolPath,
+        },
+        pin: parsePmPin(`${manager}@${old}`),
         targetVersion: target,
-        lockManagers: ['npm'],
+        lockManagers: [manager],
         inputReason: 'TOOL_VERSION_MISMATCH',
       });
       expect(assessPmPinChange(repair)).toMatchObject({
         eligible: true,
-        targetPin: `npm@${target}`,
+        targetPin: `${manager}@${target}`,
       });
       expect(
         assessPmPinChange({ ...repair, inputReason: 'CONFIG_UNSUPPORTED' })
@@ -262,7 +298,7 @@ describe('project pin eligibility', () => {
       expect(
         assessPmPinChange({
           ...repair,
-          pin: parsePmPin(`npm@${target}`),
+          pin: parsePmPin(`${manager}@${target}`),
         }).reason,
       ).toBe('TOOL_VERSION_MISMATCH');
     },

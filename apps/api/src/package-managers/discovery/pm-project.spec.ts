@@ -55,6 +55,51 @@ describe('M9 guarded static project input', () => {
       expect(f.openExclusive).not.toHaveBeenCalled();
     },
   );
+  it.each([undefined, 'pnpm@12.20.0', 'pnpm@11.22.0'])(
+    'exposes installed native pnpm 12 toolPath without entry: %p',
+    async (pin) => {
+      const f = setup();
+      const pnpm12 = tool('pnpm', '12.21.0');
+      f.resolveTool.mockImplementation((manager) =>
+        Promise.resolve(manager === 'pnpm' ? pnpm12 : tool(manager)),
+      );
+      f.put(
+        f.manifest,
+        JSON.stringify({ name: 'TEST-pin', packageManager: pin }),
+      );
+      const facts = await f.read();
+      expect(facts.context.installed[1]).toMatchObject({
+        manager: 'pnpm',
+        version: '12.21.0',
+        toolPath: pnpm12.file,
+        status: 'available',
+        reason: null,
+      });
+      expect(facts.context.reason).toBe(
+        pin === 'pnpm@11.22.0' ? 'TOOL_VERSION_MISMATCH' : null,
+      );
+      expect(facts.tools.pnpm).toMatchObject({
+        version: '12.21.0',
+        file: pnpm12.file,
+        entry: null,
+      });
+      expect(f.openExclusive).not.toHaveBeenCalled();
+    },
+  );
+  it('refuses cross-major pnpm 12 edits at the commit boundary', async () => {
+    const f = setup();
+    f.put(f.manifest, '{"name":"TEST-pin","packageManager":"pnpm@11.22.0"}');
+    const facts = await f.read();
+    const result = await commitPmPin(
+      facts,
+      planPinEdit(facts.bytes, 'pnpm@12.21.0'),
+      f.controller.signal,
+      { ...f.deps, beforeRename: () => Promise.resolve() },
+    );
+    expect(result.failureCode).toBe('TARGET_VERSION_UNSUPPORTED');
+    expect(f.openExclusive).not.toHaveBeenCalled();
+    expect(f.rename).not.toHaveBeenCalled();
+  });
   it.each([false, true])(
     'npm 12 shrinkwrap blocks old-pin repair with package-lock=%s',
     async (both) => {

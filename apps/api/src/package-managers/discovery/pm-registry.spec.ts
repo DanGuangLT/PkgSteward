@@ -34,6 +34,8 @@ describe('M9 public declaration catalog', () => {
     ['npm', '11.17.0', 'latest', null],
     ['npm', '12.2.2', 'next-11', null],
     ['pnpm', '11.22.0', 'latest', null],
+    ['pnpm', '12.21.0', 'latest', '12.2.2'],
+    ['pnpm', '12.21.0', 'next-11', null],
   ] as const)(
     'projects %s %s eligibility and resolves only its supported %s tag',
     async (manager, installed, tag, target) => {
@@ -73,6 +75,37 @@ describe('M9 public declaration catalog', () => {
         );
     },
   );
+  it('resolves pnpm 12 dist-tags and refuses prerelease/cross-major pnpm tags', async () => {
+    const f = setup();
+    f.getPackageMetadata.mockResolvedValue({
+      versions: ['12.21.0', '12.22.0-beta.1', '11.22.0', '10.34.9'],
+      distTags: {
+        latest: '12.21.0',
+        'latest-12': '12.21.0',
+        'latest-11': '11.22.0',
+        'next-12': '12.22.0-beta.1',
+      },
+      deprecatedVersions: [],
+    });
+    const catalog = await f.registry.readCatalog(
+      'pnpm',
+      '12.21.0',
+      f.controller.signal,
+    );
+    expect(
+      f.registry.resolveTarget(catalog, 'latest', '12.21.0').targetVersion,
+    ).toBe('12.21.0');
+    expect(
+      f.registry.resolveTarget(catalog, 'latest-12', '12.21.0').targetVersion,
+    ).toBe('12.21.0');
+    for (const tag of ['latest-11', 'next-12']) {
+      expect(() => f.registry.resolveTarget(catalog, tag, '12.21.0')).toThrow(
+        expect.objectContaining({
+          details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
+        }),
+      );
+    }
+  });
   it('inherits fixed public origin, omitted credentials and redirect refusal without config probes', async () => {
     const fetcher = jest.fn((url: string, options: RequestInit) => {
       void url;
