@@ -1145,4 +1145,66 @@ describe('pnpm 11 registry policy unions YAML, INI and original environment', ()
       'LIMIT_EXCEEDED',
     );
   });
+
+  describe('pnpm 12 verified config parity (P12-2)', () => {
+    it('reads LOCALAPPDATA\\pnpm\\config\\config.yaml when XDG_CONFIG_HOME is unset and honors camelCase keys', async () => {
+      const localYaml = win32.join(Q.local, 'pnpm', 'config', 'config.yaml');
+      const h = setup(
+        {
+          XDG_CONFIG_HOME: undefined,
+          LOCALAPPDATA: Q.local,
+          PNPM_HOME: Q.home,
+          PATH: `${Q.bin};C:\\Program Files\\nodejs`,
+        },
+        null,
+      );
+      h.put(localYaml, {
+        text: [
+          `globalDir: '${Q.global}'`,
+          `globalBinDir: '${Q.bin}'`,
+          `storeDir: '${Q.store}'`,
+          `npmrcAuthFile: '${Q.auth}'`,
+          'minimumReleaseAge: 1440',
+          'minimumReleaseAgeStrict: true',
+          'allowBuilds: { esbuild: true }',
+        ].join('\n'),
+      });
+      const config = await readPnpmGlobalConfig(h.deps);
+      expect(config).toMatchObject({
+        configDir: win32.join(Q.local, 'pnpm', 'config'),
+        globalDir: Q.global,
+        globalRoot: Q.root,
+        binDir: Q.bin,
+        storeDir: Q.store,
+        authFile: Q.auth,
+        safety: {
+          minimumReleaseAge: 1440,
+          minimumReleaseAgeStrict: true,
+          allowBuilds: { esbuild: true },
+        },
+      });
+    });
+
+    it('honors uppercase PNPM_CONFIG_* overrides and refuses ~/.npmrc custom default registry for change', async () => {
+      const h = setup(
+        {
+          PNPM_CONFIG_STORE_DIR: Q.store,
+          PNPM_CONFIG_NPMRC_AUTH_FILE: win32.join(Q.profile, '.npmrc'),
+        },
+        `globalDir: '${Q.global}'\nglobalBinDir: '${Q.bin}'\n`,
+      );
+      h.put(win32.join(Q.profile, '.npmrc'), {
+        text: 'registry=https://private.invalid/from-npmrc/\n',
+      });
+      const config = await readPnpmGlobalConfig(h.deps);
+      expect(config.storeDir).toBe(Q.store);
+      expect(config.authFile).toBe(win32.join(Q.profile, '.npmrc'));
+      expect(config.policy.defaultRegistry).toBe('custom');
+      expect(
+        assessPnpmGlobalRegistryPolicy(
+          policyInput({ pnpmPolicies: [config.policy] }),
+        ).changeAllowed,
+      ).toBe(false);
+    });
+  });
 });

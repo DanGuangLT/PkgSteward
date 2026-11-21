@@ -41,7 +41,11 @@ import {
   resolveRunnerTool,
   runnerFailure,
 } from '@/npm-runner/toolchain/runner-tool';
-import { isPnpmGlobalVersion } from '@/global-packages/execution/global-command';
+import {
+  assertGlobalLauncher,
+  isGlobalAbsolutePath,
+  isPnpmGlobalVersion,
+} from '@/global-packages/execution/global-command';
 import { launchRun } from '@/npm-runner/execution/runner-process';
 import type { IRunProcess } from '@/npm-runner/execution/runner-process';
 import { GlobalPackagesController } from '@/global-packages/global-packages.controller';
@@ -128,25 +132,28 @@ export function createGlobalPackagesRuntime(
       fs,
     );
     signal.throwIfAborted();
-    // Registration, discovery and command construction share the same version gate.
+    // Registration, discovery and command construction share the same version and launcher gates.
     if (manager === 'pnpm' && !isPnpmGlobalVersion(tool.version))
       throw runnerFailure('TOOL_VERSION_MISMATCH');
-    if (!tool.entry) throw unavailable('TOOL_LAYOUT_UNSUPPORTED');
-    tools.set(key(tool.entry), tool);
+    assertGlobalLauncher(manager, tool);
+    tools.set(key(tool.entry ?? tool.file), tool);
     return tool;
   };
   const probe: GlobalProbeSpawn = async (file, args, options) => {
     const adapter = requireWindows();
     options.signal.throwIfAborted();
     const entry = args[0];
-    const manager =
-      entry && /[\\/]npm-cli\.js$/i.test(entry)
+    const nativePnpm = /[\\/]pnpm\.exe$/i.test(file);
+    const manager = nativePnpm
+      ? 'pnpm'
+      : entry && /[\\/]npm-cli\.js$/i.test(entry)
         ? 'npm'
         : entry && /[\\/]pnpm\.(?:mjs|cjs|js)$/i.test(entry)
           ? 'pnpm'
           : null;
     if (
       !manager ||
+      !isGlobalAbsolutePath(file) ||
       !Number.isFinite(options.timeout) ||
       options.timeout <= 0 ||
       !Number.isSafeInteger(options.maxBuffer.stdout) ||
@@ -156,7 +163,12 @@ export function createGlobalPackagesRuntime(
     )
       throw unavailable('TOOL_LAYOUT_UNSUPPORTED');
     const tool = await resolveTool(manager, options.signal);
-    if (key(tool.file) !== key(file) || key(tool.entry!) !== key(entry))
+    if (
+      key(tool.file) !== key(file) ||
+      (nativePnpm
+        ? tool.entry !== null
+        : !tool.entry || !entry || key(tool.entry) !== key(entry))
+    )
       throw unavailable('TOOL_LAYOUT_UNSUPPORTED');
     let retained: IRunProcess | null = null;
     const spawn = createGlobalProbeSpawn(
@@ -212,9 +224,25 @@ export function createGlobalPackagesRuntime(
     launch: (command, callbacks) => {
       const adapter = requireWindows();
       callbacks.signal.throwIfAborted();
-      const tool = tools.get(key(command.args[0] ?? ''));
-      if (!tool || key(tool.file) !== key(command.file))
-        throw unavailable('TOOL_LAYOUT_UNSUPPORTED');
+      const nativeCandidate = isGlobalAbsolutePath(command.file)
+        ? tools.get(key(command.file))
+        : undefined;
+      const tool =
+        nativeCandidate &&
+        nativeCandidate.entry === null &&
+        key(nativeCandidate.file) === key(command.file)
+          ? nativeCandidate
+          : (() => {
+              const entryArg = command.args[0];
+              if (!entryArg) return undefined;
+              const registered = tools.get(key(entryArg));
+              return registered &&
+                registered.entry !== null &&
+                key(registered.file) === key(command.file)
+                ? registered
+                : undefined;
+            })();
+      if (!tool) throw unavailable('TOOL_LAYOUT_UNSUPPORTED');
       return launchProcess(
         {
           file: command.file,

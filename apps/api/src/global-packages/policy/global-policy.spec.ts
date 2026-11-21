@@ -159,6 +159,41 @@ describe('global protection, without confirmation override', () => {
       );
     },
   );
+  it.each([
+    '@pnpm/exe.win32-x64',
+    '@pnpm/exe.linux-x64',
+    '@pnpm/exe.darwin-arm64',
+    'deno',
+    'bun',
+    'rust',
+    'rustc',
+    'cargo',
+  ])('protects pnpm 12 platform/runtime package %s', (packageName) => {
+    expectReason(
+      () => assertGlobalPackageMutable(protection({ packageName })),
+      'PROTECTED_PACKAGE',
+    );
+  });
+  it.each(['pn', 'pnx', 'deno', 'bun', 'rust', 'rustc', 'cargo'])(
+    'protects pnpm 12 bin and runtime launcher %s',
+    (name) => {
+      const bin = { name: name.toUpperCase(), target: 'bin/tool.js' };
+      expectReason(
+        () =>
+          assertGlobalPackageMutable(
+            protection({ currentBins: [bin], targetBins: [] }),
+          ),
+        'PROTECTED_PACKAGE',
+      );
+      expectReason(
+        () =>
+          assertGlobalPackageMutable(
+            protection({ currentBins: [], targetBins: [bin] }),
+          ),
+        'PROTECTED_PACKAGE',
+      );
+    },
+  );
   it.each(GLOBAL_PROTECTED_BINS)(
     'protects current and target bin %s ignoring case',
     (name) => {

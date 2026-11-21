@@ -21,6 +21,11 @@ import {
   pnpmConfigFacts,
   pnpmLocation,
 } from '@/global-packages/__fixtures__/pnpm11/facts';
+import {
+  PNPM12_EXE,
+  pnpm12Location,
+  pnpm12Tool,
+} from '@/global-packages/__fixtures__/pnpm12/facts';
 import { consumePnpm11Environment } from '@/global-packages/__fixtures__/pnpm11/env-consumer';
 
 const input = (
@@ -702,8 +707,14 @@ describe('pnpm 11 command boundary', () => {
     );
   });
 
-  it.each(['9.15.9', '10.34.9-rc.1', '12.0.0', '12.21.0'])(
-    'rejects unsupported major %s without fallback/probe',
+  it.each([
+    '9.15.9',
+    '10.34.9-rc.1',
+    '12.0.0-alpha.1',
+    '12.22.0-rc.1',
+    '13.0.0',
+  ])(
+    'rejects unsupported major or prerelease %s without fallback/probe',
     async (version) => {
       expect(isPnpmGlobalVersion(version)).toBe(false);
       const location = pnpmLocation();
@@ -824,5 +835,162 @@ describe('pnpm 11 command boundary', () => {
     Object.freeze(request.location);
     buildGlobalCommand(Object.freeze(request));
     expect(JSON.stringify(request)).toBe(before);
+  });
+});
+
+describe('pnpm 12 native command boundary', () => {
+  it.each(['12.0.0', '12.21.0'])('accepts stable pnpm %s', (version) => {
+    expect(isPnpmGlobalVersion(version)).toBe(true);
+  });
+
+  it('pins pnpm 12 change argv with --config.* flags (no --global-bin-dir) and native pnpm.exe', () => {
+    const command = buildGlobalCommand(
+      input('pnpm', {
+        location: pnpm12Location(),
+        environment: { PATH: Q.bin },
+      }),
+    );
+    expect(command).toMatchObject({
+      file: PNPM12_EXE,
+      cwd: P.cwd,
+      shell: false,
+      extendEnv: false,
+      stdin: 'ignore',
+    });
+    expect(command.args).toEqual([
+      '--dir',
+      P.cwd,
+      '--pm-on-fail=warn',
+      '--store-dir',
+      Q.store,
+      '--state-dir',
+      Q.state,
+      '--npmrc-auth-file',
+      Q.auth,
+      `--config.global-dir=${Q.global}`,
+      `--config.global-bin-dir=${Q.bin}`,
+      `--config.cache-dir=${Q.cache}`,
+      `--config.config-dir=${Q.config}`,
+      'add',
+      '--global',
+      '--registry',
+      'https://registry.npmjs.org',
+      '--reporter=append-only',
+      '--',
+      '@test/tool@2.0.0',
+    ]);
+    expect(command.args).not.toContain('--global-bin-dir');
+    expect(command.args).not.toContain('--global-dir');
+    expect(command.env).toMatchObject({
+      PNPM_HOME: Q.home,
+      pnpm_config_global_dir: Q.global,
+      pnpm_config_global_bin_dir: Q.bin,
+      pnpm_config_store_dir: Q.store,
+      pnpm_config_cache_dir: Q.cache,
+      pnpm_config_state_dir: Q.state,
+      pnpm_config_config_dir: Q.config,
+      pnpm_config_npmrc_auth_file: Q.auth,
+      pnpm_config_update_notifier: 'false',
+      pnpm_config_manage_package_manager_versions: 'false',
+      CI: '1',
+    });
+  });
+
+  it('pins pnpm 12 remove argv without --registry or --global-bin-dir', () => {
+    const command = buildGlobalCommand(
+      input('pnpm', {
+        location: pnpm12Location(),
+        action: 'remove',
+        exactVersion: null,
+        publicRegistry: false,
+        environment: { PATH: Q.bin },
+      }),
+    );
+    expect(command.file).toBe(PNPM12_EXE);
+    expect(command.args).toEqual([
+      '--dir',
+      P.cwd,
+      '--pm-on-fail=warn',
+      '--store-dir',
+      Q.store,
+      '--state-dir',
+      Q.state,
+      '--npmrc-auth-file',
+      Q.auth,
+      `--config.global-dir=${Q.global}`,
+      `--config.global-bin-dir=${Q.bin}`,
+      `--config.cache-dir=${Q.cache}`,
+      `--config.config-dir=${Q.config}`,
+      'remove',
+      '--global',
+      '--reporter=append-only',
+      '--',
+      '@test/tool',
+    ]);
+    expect(command.args).not.toContain('--registry');
+  });
+
+  it('pins pnpm 12 list query with native pnpm.exe and --config.global-dir', () => {
+    const command = buildGlobalQuery({
+      manager: 'pnpm',
+      tool: pnpm12Tool(),
+      cwd: P.cwd,
+      query: 'list',
+      captured: {},
+      environment: { PATH: Q.bin },
+      pnpm: pnpmConfigFacts(),
+    });
+    expect(command.file).toBe(PNPM12_EXE);
+    expect(command.args).toEqual([
+      '--dir',
+      P.cwd,
+      '--pm-on-fail=warn',
+      `--config.global-dir=${Q.global}`,
+      'list',
+      '--global',
+      '--depth=0',
+      '--json',
+    ]);
+  });
+
+  it.each([
+    {
+      label: 'non-null entry',
+      patch: { entry: `${P.pnpm}\\bin\\pnpm.mjs` },
+    },
+    {
+      label: 'node.exe as file',
+      patch: { file: P.node },
+    },
+    {
+      label: 'node.exe inside packageDir',
+      patch: { file: `${P.pnpm}\\node.exe` },
+    },
+    {
+      label: 'non-exe file',
+      patch: { file: `${P.pnpm}\\pnpm.cmd` },
+    },
+    {
+      label: 'relative exe',
+      patch: { file: 'pnpm.exe' },
+    },
+    {
+      label: 'exe outside packageDir',
+      patch: { file: 'D:\\TEST\\evil\\pnpm.exe' },
+    },
+    {
+      label: 'sibling prefix bypass',
+      patch: { file: `${P.pnpm}-evil\\pnpm.exe` },
+    },
+  ])('rejects forged pnpm 12 launcher ($label)', async ({ patch }) => {
+    const location = pnpm12Location();
+    location.tool = { ...location.tool, ...patch };
+    await expectGlobalReason(
+      () =>
+        buildGlobalCommand(
+          input('pnpm', { location, environment: { PATH: Q.bin } }),
+        ),
+      'TOOL_LAYOUT_UNSUPPORTED',
+    );
   });
 });

@@ -27,6 +27,7 @@ import {
   parseGlobalNpmrc,
 } from '@/global-packages/config/global-config';
 import {
+  assertGlobalLauncher,
   buildGlobalQuery,
   isGlobalAbsolutePath,
   isPnpmGlobalVersion,
@@ -106,9 +107,12 @@ export function createGlobalProbeSpawn(
 ): GlobalProbeSpawn {
   return async (file, args, options) => {
     options.signal.throwIfAborted();
+    if (tool.manager !== 'npm' && tool.manager !== 'pnpm')
+      throw failure('TOOL_LAYOUT_UNSUPPORTED');
+    assertGlobalLauncher(tool.manager, tool);
     if (
       file !== tool.file ||
-      args[0] !== tool.entry ||
+      (tool.entry !== null && args[0] !== tool.entry) ||
       !Number.isFinite(options.timeout) ||
       options.timeout <= 0
     )

@@ -169,7 +169,9 @@ function snapshotGroup(group: IPnpmGlobalGroupFacts): IPnpmGlobalGroupFacts {
     manifest: snapshotConfigIdentity(group.manifest),
     lockfile: snapshotConfigIdentity(group.lockfile),
     modules: snapshotConfigIdentity(group.modules),
-    packageMap: snapshotConfigIdentity(group.packageMap),
+    packageMap: group.packageMap
+      ? snapshotConfigIdentity(group.packageMap)
+      : null,
     virtualStoreLockfile: snapshotConfigIdentity(group.virtualStoreLockfile),
     packageLinks: group.packageLinks.map(snapshotLink),
   };
@@ -273,7 +275,7 @@ function groupFacts(group: IPnpmGlobalGroupFacts) {
     manifest: configIdentityFacts(group.manifest),
     lockfile: configIdentityFacts(group.lockfile),
     modules: configIdentityFacts(group.modules),
-    packageMap: configIdentityFacts(group.packageMap),
+    packageMap: group.packageMap ? configIdentityFacts(group.packageMap) : null,
     virtualStoreLockfile: configIdentityFacts(group.virtualStoreLockfile),
     directDependencies: [...group.directDependencies].sort(),
     packageLinks: group.packageLinks

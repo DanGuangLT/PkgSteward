@@ -5,6 +5,12 @@ import { expectGlobalReason } from '@/global-packages/__fixtures__/global-adapte
 import { PNPM_TEST_PATHS as Q } from '@/global-packages/__fixtures__/pnpm11/facts';
 import { pnpmInventoryFixture } from '@/global-packages/__fixtures__/pnpm11/inventory';
 import { pnpmNodeShims } from '@/global-packages/__fixtures__/pnpm11/shims';
+import {
+  PNPM12_EXE,
+  PNPM12_TEST_PATHS as Q12,
+} from '@/global-packages/__fixtures__/pnpm12/facts';
+import { pnpm12InventoryFixture } from '@/global-packages/__fixtures__/pnpm12/inventory';
+import { pnpm12NodeShims } from '@/global-packages/__fixtures__/pnpm12/shims';
 
 describe('pnpm 11 static install groups and ownership', () => {
   function cliFixture() {
@@ -419,11 +425,12 @@ describe('pnpm 11 static install groups and ownership', () => {
         },
       ],
     });
+    expect(group.packageMap).not.toBeNull();
     for (const metadata of [
       group.manifest,
       group.lockfile,
       group.modules,
-      group.packageMap,
+      group.packageMap!,
       group.virtualStoreLockfile,
     ]) {
       expect(metadata.sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -785,5 +792,222 @@ describe('pnpm 11 static install groups and ownership', () => {
           path.startsWith(h.group.links[0].target) || path.startsWith('E:\\'),
       ),
     ).toBe(false);
+  });
+});
+
+describe('pnpm 12 static global inventory and hardened POSIX shims', () => {
+  it('reads pnpm 12 counter install dir without .package-map.json and verifies pnpm 12 POSIX/CMD/PS1 shims', async () => {
+    const h = pnpm12InventoryFixture();
+    h.entries.clear();
+    for (const dir of [Q12.root, Q12.bin, Q12.store])
+      h.put(dir, { directory: true });
+    const group = h.addGroup(
+      { semver: '7.7.1' },
+      '1e28-18e9ffe59ef0c7d4-0',
+      'd'.repeat(64),
+      { bins: { semver: { semver: 'bin/semver.js' } } },
+    );
+    const localBin = win32.join(group.installDir, 'node_modules', '.bin');
+    h.put(localBin, { directory: true });
+    const shims = pnpm12NodeShims(
+      win32.join(group.index, 'node_modules', 'semver', 'bin', 'semver.js'),
+    );
+    const localShims = pnpm12NodeShims(
+      win32.join(group.links[0].logical, 'bin', 'semver.js'),
+      { binDir: localBin },
+    );
+    for (const [ext, text] of Object.entries(shims))
+      h.put(win32.join(Q12.bin, `semver${ext}`), { text });
+    for (const [ext, text] of Object.entries(localShims))
+      h.put(win32.join(localBin, `semver${ext}`), { text });
+
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(true);
+    expect(result.packages).toEqual([
+      {
+        name: 'semver',
+        version: '7.7.1',
+        bins: [{ name: 'semver', target: 'bin/semver.js' }],
+        status: 'manageable',
+        reason: null,
+      },
+    ]);
+    expect(result.pnpmInventory?.groups[0].packageMap).toBeNull();
+    expect(h.spawn).not.toHaveBeenCalled();
+  });
+
+  it('resolves pnpm 12 scoped GVS link without leading @ segment (@types/is-odd)', async () => {
+    const h = pnpm12InventoryFixture();
+    h.entries.clear();
+    for (const dir of [Q12.root, Q12.bin, Q12.store])
+      h.put(dir, { directory: true });
+    const group = h.addGroup(
+      { '@types/is-odd': '3.0.0' },
+      '6bc0-18ea0542aca2ee04-0',
+      'e'.repeat(64),
+    );
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(true);
+    expect(result.packages).toEqual([
+      {
+        name: '@types/is-odd',
+        version: '3.0.0',
+        bins: [],
+        status: 'manageable',
+        reason: null,
+      },
+    ]);
+    expect(group.links[0].target).toContain('\\links\\@types\\is-odd\\3.0.0\\');
+    expect(group.links[0].target).not.toContain('\\links\\@\\@types\\');
+  });
+
+  it('keeps .package-map.json mandatory for pnpm 11', async () => {
+    const h = pnpmInventoryFixture();
+    h.entries.delete(
+      win32
+        .join(h.group.installDir, 'node_modules', '.package-map.json')
+        .toLowerCase(),
+    );
+    await expectGlobalReason(
+      () => readPnpmGlobalInventory(h.location, h.deps),
+      'INVENTORY_FAILED',
+    );
+  });
+
+  it('fails closed on cross-major pnpm 11 group when running pnpm 12', async () => {
+    const h = pnpm12InventoryFixture();
+    h.entries.clear();
+    for (const dir of [Q12.root, Q12.bin, Q12.store])
+      h.put(dir, { directory: true });
+    h.addGroup(
+      { 'is-number': '7.0.0' },
+      '1e28-18e9ffe59ef0c7d4-0',
+      'd'.repeat(64),
+      { packageManager: 'pnpm@11.22.0' },
+    );
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(false);
+    expect(result.packages[0].status).not.toBe('manageable');
+  });
+
+  it.each([
+    {
+      label: 'command injection in node_path_sep',
+      mutate: (sh: string) =>
+        sh.replace("node_path_sep=';'", "node_path_sep=';'; whoami"),
+    },
+    {
+      label: 'single-quote breakout in new_node_path',
+      mutate: (sh: string) =>
+        sh.replace(/new_node_path='[^']*'/, "new_node_path='a'; whoami #'"),
+    },
+    {
+      label: 'command substitution in new_node_path',
+      mutate: (sh: string) =>
+        sh.replace(/new_node_path='[^']*'/, "new_node_path='$(evil)'"),
+    },
+    {
+      label: 'backtick expansion in new_node_path',
+      mutate: (sh: string) =>
+        sh.replace(/new_node_path='[^']*'/, "new_node_path='`evil`'"),
+    },
+    {
+      label: 'shell expansion after concatenated target token',
+      mutate: (sh: string) =>
+        sh.replace('semver.js\' "$@"', 'semver.js\'$(evil) "$@"'),
+    },
+    {
+      label: 'elif branch missing exec invocation',
+      mutate: (sh: string) =>
+        sh.replace(
+          /elif \[ -x "\$basedir\/node" \]; then\n[^\n]+/,
+          'elif [ -x "$basedir/node" ]; then\n  node_path_sep=\':\'',
+        ),
+    },
+    {
+      label: 'pnpm.exe used as node executable in shim',
+      mutate: () =>
+        `#!/bin/sh\nexec "${PNPM12_EXE}" "${Q12.root}\\${'d'.repeat(64)}\\node_modules\\semver\\bin\\semver.js" "$@"\n`,
+    },
+  ])('rejects tampered pnpm 12 POSIX shim ($label)', async ({ mutate }) => {
+    const h = pnpm12InventoryFixture();
+    h.entries.clear();
+    for (const dir of [Q12.root, Q12.bin, Q12.store])
+      h.put(dir, { directory: true });
+    const group = h.addGroup(
+      { semver: '7.7.1' },
+      '1e28-18e9ffe59ef0c7d4-0',
+      'd'.repeat(64),
+      { bins: { semver: { semver: 'bin/semver.js' } } },
+    );
+    const localBin = win32.join(group.installDir, 'node_modules', '.bin');
+    h.put(localBin, { directory: true });
+    const shims = pnpm12NodeShims(
+      win32.join(group.index, 'node_modules', 'semver', 'bin', 'semver.js'),
+    );
+    const localShims = pnpm12NodeShims(
+      win32.join(group.links[0].logical, 'bin', 'semver.js'),
+      { binDir: localBin },
+    );
+    shims[''] = mutate(shims['']);
+    for (const [ext, text] of Object.entries(shims))
+      h.put(win32.join(Q12.bin, `semver${ext}`), { text });
+    for (const [ext, text] of Object.entries(localShims))
+      h.put(win32.join(localBin, `semver${ext}`), { text });
+
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(false);
+    expect(result.packages[0].status).not.toBe('manageable');
+    expect(result.packages[0].reason).toBe('BIN_CONFLICT');
+  });
+
+  it('rejects shim invoking forged tool.identities[0] non-node.exe binary', async () => {
+    const h = pnpm12InventoryFixture();
+    h.entries.clear();
+    for (const dir of [Q12.root, Q12.bin, Q12.store])
+      h.put(dir, { directory: true });
+    // Reorder identities so identities[0] is pnpm.exe, not node.exe.
+    h.location.tool = {
+      ...h.location.tool,
+      identities: [
+        { ...h.location.tool.identities[2], path: PNPM12_EXE },
+        ...h.location.tool.identities.slice(1),
+      ],
+    };
+    const group = h.addGroup(
+      { semver: '7.7.1' },
+      '1e28-18e9ffe59ef0c7d4-0',
+      'd'.repeat(64),
+      { bins: { semver: { semver: 'bin/semver.js' } } },
+    );
+    const localBin = win32.join(group.installDir, 'node_modules', '.bin');
+    h.put(localBin, { directory: true });
+    const shims = pnpm12NodeShims(
+      win32.join(group.index, 'node_modules', 'semver', 'bin', 'semver.js'),
+    );
+    const localShims = pnpm12NodeShims(
+      win32.join(group.links[0].logical, 'bin', 'semver.js'),
+      { binDir: localBin },
+    );
+    shims[''] =
+      `#!/bin/sh\nexec "${PNPM12_EXE}" "${Q12.root}\\${'d'.repeat(64)}\\node_modules\\semver\\bin\\semver.js" "$@"\n`;
+    for (const [ext, text] of Object.entries(shims))
+      h.put(win32.join(Q12.bin, `semver${ext}`), { text });
+    for (const [ext, text] of Object.entries(localShims))
+      h.put(win32.join(localBin, `semver${ext}`), { text });
+
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(false);
+    expect(result.packages[0].reason).toBe('BIN_CONFLICT');
+  });
+
+  it('treats foreign pnpm context-aware shim in binDir as unowned', async () => {
+    const h = pnpm12InventoryFixture();
+    h.put(win32.join(Q12.bin, 'tsc.cmd'), {
+      text: '@echo off\r\npnpm exec tsc %*\r\n',
+    });
+    const result = await readPnpmGlobalInventory(h.location, h.deps);
+    expect(result.ownershipComplete).toBe(false);
+    expect(result.binOwners).toContainEqual({ name: 'tsc', owner: null });
   });
 });

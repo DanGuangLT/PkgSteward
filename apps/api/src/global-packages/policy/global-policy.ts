@@ -25,6 +25,11 @@ export const GLOBAL_PROTECTED_PACKAGES = [
   'yarn',
   '@yarnpkg/cli',
   '@yarnpkg/cli-dist',
+  'deno',
+  'bun',
+  'rust',
+  'rustc',
+  'cargo',
   'pkgsteward',
 ] as const;
 export const GLOBAL_PROTECTED_BINS = [
@@ -32,10 +37,17 @@ export const GLOBAL_PROTECTED_BINS = [
   'npm',
   'npx',
   'pnpm',
+  'pn',
   'pnpx',
+  'pnx',
   'yarn',
   'yarnpkg',
   'corepack',
+  'deno',
+  'bun',
+  'rust',
+  'rustc',
+  'cargo',
   'pkgsteward',
 ] as const;
 
@@ -168,7 +180,10 @@ export function assertGlobalPackageMutable(
 ): void {
   if (!isGlobalPackageName(input.packageName))
     return fail('INVALID_PACKAGE_SPEC', 400);
-  if (GLOBAL_PROTECTED_PACKAGES.some((name) => name === input.packageName))
+  if (
+    GLOBAL_PROTECTED_PACKAGES.some((name) => name === input.packageName) ||
+    input.packageName.startsWith('@pnpm/exe.')
+  )
     return fail('PROTECTED_PACKAGE');
   if (input.linked) return fail('LINKED_PACKAGE');
   // Paths must already have been realpath/lstat checked by the location adapter.

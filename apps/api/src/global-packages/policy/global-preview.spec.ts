@@ -27,6 +27,7 @@ import {
   plainPnpmPreviewFacts,
   pnpmPreviewFacts,
 } from '@/global-packages/__fixtures__/pnpm11/inventory';
+import { pnpm12PreviewFacts } from '@/global-packages/__fixtures__/pnpm12/inventory';
 import type { IPnpmGlobalGroupFacts } from '@/global-packages/interfaces/pnpm-global.types';
 import {
   pnpm10InventoryFixture,
@@ -876,13 +877,13 @@ for (const name of metadataKeys) {
     [
       `group ${name} content`,
       (f) => {
-        f.pnpmInventory!.groups[0][name].sha256 = 'changed';
+        f.pnpmInventory!.groups[0][name]!.sha256 = 'changed';
       },
     ],
     [
       `group ${name} identity`,
       (f) => {
-        f.pnpmInventory!.groups[0][name].file.stat.ino = 99;
+        f.pnpmInventory!.groups[0][name]!.file.stat.ino = 99;
       },
     ],
   );
@@ -892,7 +893,7 @@ function groupFiles(group: IPnpmGlobalGroupFacts) {
   return [
     group.index.identity,
     group.directory,
-    ...metadataKeys.map((name) => group[name].file),
+    ...metadataKeys.map((name) => group[name]!.file),
     ...group.packageLinks.map((link) => link.identity),
   ];
 }
@@ -1047,5 +1048,21 @@ describe('pnpm 11 preview config, group and link facts', () => {
       ...actual.pnpmInventory!.unreferencedDirectories,
     ].reverse();
     expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
+  });
+
+  it('snapshots and compares pnpm 12 preview facts with packageMap: null and detects null <-> present drift', async () => {
+    const expected = pnpm12PreviewFacts();
+    const actual = pnpm12PreviewFacts();
+    expect(() => assertGlobalPreviewUnchanged(expected, actual)).not.toThrow();
+    actual.pnpmInventory!.groups[0].packageMap = {
+      file: testIdentity(
+        'D:\\TEST\\pnpm-global\\v11\\1e28-18e9ffe59ef0c7d4-0\\node_modules\\.package-map.json',
+      ),
+      sha256: 'TEST-package-map-hash',
+    };
+    await expectGlobalReason(
+      () => assertGlobalPreviewUnchanged(expected, actual),
+      'PREVIEW_CHANGED',
+    );
   });
 });
