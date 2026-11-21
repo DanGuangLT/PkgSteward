@@ -3526,4 +3526,30 @@ describe.each(TEST_NPM_VERSIONS)('M7 cancellation/shutdown (npm %s)', (v) => {
     wait.resolve();
     await done(f.service, start.jobId);
   });
+
+  it('keeps npm inventory available when pnpm 12 fails closed with TOOL_VERSION_MISMATCH', async () => {
+    const f = setup();
+    f.location.mockImplementation((manager) =>
+      manager === 'npm'
+        ? Promise.resolve({ ...testLocation('npm'), ...f.facts.location })
+        : Promise.reject(
+            new AppException(409, 'TEST pnpm 12 unsupported', 'CONFLICT', {
+              reason: 'TOOL_VERSION_MISMATCH',
+            }),
+          ),
+    );
+    const start = await f.service.inventory({ requestId: f.runtime.uuid() });
+    const job = await done(f.service, start.jobId);
+    expect(job).toMatchObject({ status: 'completed', failureCode: null });
+    const snapshot = f.service.getSnapshot()!;
+    const npm = snapshot.managers.find((item) => item.manager === 'npm');
+    const pnpm = snapshot.managers.find((item) => item.manager === 'pnpm');
+    expect(npm).toMatchObject({ available: true, reason: null });
+    expect(pnpm).toMatchObject({
+      available: false,
+      reason: 'TOOL_VERSION_MISMATCH',
+      packages: [],
+    });
+    expect(f.child.launch).not.toHaveBeenCalled();
+  });
 });

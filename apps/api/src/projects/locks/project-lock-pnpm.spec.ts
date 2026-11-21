@@ -64,6 +64,30 @@ describe('readPnpmLock', () => {
       { name: 'alpha', version: '1.2.0', direct: true },
     ]);
   });
+  it('reads a sanitized pnpm 12.21.0 lockfile (lockfileVersion 9.0) with complete coverage', async () => {
+    const input: IManifestInput = {
+      name: 'TEST-pnpm12',
+      version: '1.0.0',
+      packageManager: 'pnpm@12.21.0',
+      scripts: [],
+      dependencies: [
+        {
+          name: 'is-number',
+          declarations: [{ group: 'dependencies', spec: '7.0.0' }],
+        },
+      ],
+    };
+    const result = await read(fixture('pnpm12/pnpm-lock.yaml'), input);
+    expect(result).toMatchObject({
+      coverage: 'complete',
+      warningCodes: [],
+      failureCode: null,
+    });
+    expect(result.direct).toEqual(new Map([['is-number', ['7.0.0']]]));
+    expect(result.packages).toEqual([
+      { name: 'is-number', version: '7.0.0', direct: true },
+    ]);
+  });
   it('does not traverse even invalid snapshot dependency relations', async () => {
     const base = text().split('snapshots:')[0];
     expect(
