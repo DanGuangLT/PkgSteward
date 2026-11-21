@@ -872,9 +872,7 @@ describe.each(TEST_NPM_VERSIONS)('verified location (npm %s)', (v) => {
     jest
       .mocked(runnerTools.resolveRunnerTool)
       .mockImplementation((manager) =>
-        Promise.resolve(
-          manager === 'pnpm' ? pnpm12Tool : testTool('npm', v),
-        ),
+        Promise.resolve(manager === 'pnpm' ? pnpm12Tool : testTool('npm', v)),
       );
     await expectGlobalReason(
       () => discoverGlobalLocation('pnpm', h.deps),

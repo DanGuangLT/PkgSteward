@@ -113,7 +113,7 @@ describe('M9 service PC admission and finalization', () => {
       );
       f.getPackageMetadata.mockResolvedValue({
         versions: ['11.22.0', '12.20.0', '12.21.0'],
-        distTags: { latest: '12.21.0', 'latest-12': '12.21.0' },
+        distTags: { latest: '12.21.0' },
         deprecatedVersions: [],
       });
       f.put(

@@ -99,11 +99,15 @@ describe('M9 public declaration catalog', () => {
       f.registry.resolveTarget(catalog, 'latest-12', '12.21.0').targetVersion,
     ).toBe('12.21.0');
     for (const tag of ['latest-11', 'next-12']) {
-      expect(() => f.registry.resolveTarget(catalog, tag, '12.21.0')).toThrow(
-        expect.objectContaining({
-          details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
-        }),
-      );
+      let caught: unknown;
+      try {
+        f.registry.resolveTarget(catalog, tag, '12.21.0');
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toMatchObject({
+        details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
+      });
     }
   });
   it('inherits fixed public origin, omitted credentials and redirect refusal without config probes', async () => {
