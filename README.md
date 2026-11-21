@@ -35,7 +35,7 @@ manager version) safely.
 
 ## Global packages
 
-Manage global packages with npm 10/11/12 or pnpm 10/11 through **preview → confirm**.
+Manage global packages with npm 10/11/12 or pnpm 10/11/12 through **preview → confirm**.
 pnpm globals must already be set up: run `pnpm setup` in a terminal, ensure `PNPM_HOME` (or your configured
 global bin directory) is on PATH, open a new terminal and restart PkgSteward.
 
