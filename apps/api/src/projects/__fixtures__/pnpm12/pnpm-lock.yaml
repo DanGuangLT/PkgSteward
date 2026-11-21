@@ -1,0 +1,24 @@
+# TEST fixture sanitized from pnpm 12.21.0 isolated probe; không phải yêu cầu nghiệp vụ.
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      is-number:
+        specifier: 7.0.0
+        version: 7.0.0
+
+packages:
+
+  is-number@7.0.0:
+    resolution: {integrity: sha512-TESTPNPM12INTEGRITY==}
+    engines: {node: '>=0.12.0'}
+
+snapshots:
+
+  is-number@7.0.0: {}

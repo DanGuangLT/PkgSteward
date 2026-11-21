@@ -84,6 +84,87 @@ describe('M9 service PC admission and finalization', () => {
       expect(f.rename).toHaveBeenCalledTimes(1);
     },
   );
+  it.each(['pnpm@12.20.0', 'pnpm@11.22.0'])(
+    'pnpm 12 PC edits only the pin, audits and replays once from %s',
+    async (oldPin) => {
+      const f = setup();
+      f.resolveTool.mockImplementation((manager) =>
+        Promise.resolve(
+          manager === 'pnpm'
+            ? {
+                manager: 'pnpm',
+                version: '12.21.0',
+                file: 'C:\\Users\\TEST\\AppData\\Roaming\\npm\\node_modules\\pnpm\\pnpm.exe',
+                entry: null,
+                packageDir:
+                  'C:\\Users\\TEST\\AppData\\Roaming\\npm\\node_modules\\pnpm',
+                identities: [],
+              }
+            : {
+                manager: 'npm',
+                version: '11.17.0',
+                file: 'C:\\Program Files\\nodejs\\node.exe',
+                entry:
+                  'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+                packageDir: 'C:\\Program Files\\nodejs\\node_modules\\npm',
+                identities: [],
+              },
+        ),
+      );
+      f.getPackageMetadata.mockResolvedValue({
+        versions: ['11.22.0', '12.20.0', '12.21.0'],
+        distTags: { latest: '12.21.0' },
+        deprecatedVersions: [],
+      });
+      f.put(
+        f.manifest,
+        JSON.stringify({ name: 'TEST-pin', packageManager: oldPin }),
+      );
+      const lock = path.join(root, 'pnpm-lock.yaml');
+      f.put(lock, "lockfileVersion: '9.0'\n");
+      const before = new Map(f.files);
+      await f.service.preview({
+        requestId: pmUuid(1),
+        path: root,
+        manager: 'pnpm',
+        targetVersion: 'latest',
+      });
+      await flushPmJobs();
+      const preview = f.service.getLatest()?.preview;
+      if (!preview) throw new Error('TEST expected pnpm 12 preview');
+      const input = {
+        requestId: pmUuid(2),
+        previewId: preview.previewId,
+        confirm: true as const,
+        acknowledgedRisks: preview.risk.reasons.map((reason) => reason.code),
+      };
+      const start = await f.service.execute(input);
+      await f.service.waitForPreflight(start.jobId);
+      await flushPmJobs();
+      expect(f.service.getLatest()).toMatchObject({
+        status: 'completed',
+        fileCommitted: true,
+        auditWritten: true,
+        gateHeld: false,
+      });
+      expect(f.files.get(key(f.manifest))?.toString()).toBe(
+        before.get(key(f.manifest))!.toString().replace(oldPin, 'pnpm@12.21.0'),
+      );
+      expect([...f.files.keys()].sort()).toEqual([...before.keys()].sort());
+      for (const [file, bytes] of before)
+        if (file !== key(f.manifest)) expect(f.files.get(file)).toEqual(bytes);
+      expect(f.audit.write.mock.calls.map((call) => call[1])).toEqual([
+        'intent',
+        'result',
+      ]);
+      expect(f.audit.write.mock.calls[1][2]).toMatchObject({
+        observedPin: 'pnpm@12.21.0',
+      });
+      expect(f.invalidate).toHaveBeenCalledTimes(1);
+      expect((await f.service.execute(input)).jobId).toBe(start.jobId);
+      expect(f.rename).toHaveBeenCalledTimes(1);
+    },
+  );
   it.each(['tag', 'deprecated', 'identity', 'config', 'shrinkwrap'] as const)(
     'npm 12 rechecks %s before writing and never repairs through blockers',
     async (change) => {

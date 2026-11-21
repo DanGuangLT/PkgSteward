@@ -128,7 +128,7 @@ from the latest scan return `409 CONFLICT` with reason `PROJECT_NOT_SCANNED`.
   configuration are used. A bounded project-level config text check for registry/authentication keys disables
   online checks with `REGISTRY_CONFIG_UNSUPPORTED`, including when those keys occur in comments. Local detail
   remains available. Offline/registry failures retain local information and any positive findings.
-- **Lock support:** npm lock v2/v3, pnpm lock v9, and Yarn Classic v1. For npm, shrinkwrap takes precedence,
+- **Lock support:** npm lock v2/v3, pnpm lock v9 (including pnpm 12's two-document `packageManagerDependencies`/`configDependencies` + project lockfiles), and Yarn Classic v1. For npm, shrinkwrap takes precedence,
   except that an explicit valid `npm@12.x` pin selects `package-lock.json` only (shrinkwrap alone returns
   `NO_LOCKFILE`). Analysis reads the stored lock: without an explicit npm 12 pin it cannot promise which lock an
   active npm 12 would choose. Yarn Berry
@@ -170,10 +170,13 @@ are clickable only for validated HTTPS GitHub/npm advisory URLs; other titles re
 
 Run one command in a project from the latest scan: install all dependencies, install one package, update all,
 update one, uninstall one, or run one script declared in `package.json`. Supported tools are **npm 10, npm 11, npm 12,
-pnpm 10 and pnpm 11**; npm 10, npm 12 and pnpm 10 prereleases and other majors are refused. Verified with npm 10.9.3,
-npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and Node 22.18.0, 22.23.5, 24.19.0. pnpm 10 receives
-`--config.manage-package-manager-versions=false` instead of pnpm 11's `--pm-on-fail=warn` (pnpm 10 rejects that
-flag), so neither major switches to a version pinned in `packageManager`.
+pnpm 10, pnpm 11 and pnpm 12**; npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused. Verified with npm 10.9.3,
+npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and Node 22.18.0, 22.23.5, 24.19.0. pnpm 10 receives
+`--config.manage-package-manager-versions=false` instead of pnpm 11/12's `--pm-on-fail=warn` (pnpm 10 rejects that
+flag), so none of those majors switches to a version pinned in `packageManager`.
+Installed pnpm 12 must come from an npm-installed `node_modules\pnpm\` package whose `package.json` declares a
+local native `pnpm.exe` inside that package directory; `bin/pnpm.mjs` download shims and standalone `pnpm.exe` binaries
+without adjacent `package.json` metadata are refused (`TOOL_LAYOUT_UNSUPPORTED` / `TOOL_NOT_FOUND`).
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
 With installed npm 12, a project containing any `npm-shrinkwrap.json` (even alongside `package-lock.json`)
@@ -219,7 +222,7 @@ is a nonnegative safe integer. Errors include `400 VALIDATION_ERROR`, `403 FORBI
 ### Commands and child environment
 
 Project runs launch through signed Windows `node.exe` processes (`native-console-supervisor.js` → visible `native-console-entry.js` window bridge allocating a new Windows console attached to `'cmd'` (`cmd.exe /d`) or `'powershell'` (`powershell.exe -NoLogo -NoProfile`)).
-The initial command inside that window executes the running backend's `node.exe`, followed by the verified npm/pnpm JavaScript entry point.
+The initial command inside that window executes the running backend's `node.exe` followed by the verified npm/pnpm JavaScript entry point, or for pnpm 12 executes its verified native `pnpm.exe` directly from the npm-installed pnpm package directory.
 The app never launches a `.cmd`, builds a shell command string for initial execution, or selects a program from the project folder; a fake
 project-local `npm.cmd` or `node.exe` is ignored. Scripts still use the package manager's own script shell. After the initial command finishes,
 the native console remains open as an interactive shell with direct Windows console I/O until closed or cancelled.
@@ -259,7 +262,7 @@ package name without a version. Flags, version ranges, URLs, `file:`, git specs 
 - **Configuration:** project `.npmrc` or pnpm workspace settings that select global mode, `prefix`, `location`,
   directory redirection or package-manager version management are refused with `CONFIG_UNSUPPORTED`.
   User credentials in the environment and user-level config still apply; user-level config is not inspected.
-  pnpm 10 and 11 accept `--global=false` only for `add`/`update`; `install`/`remove` cannot be forced non-global.
+  pnpm 10, 11 and 12 accept `--global=false` only for `add`/`update`; `install`/`remove` cannot be forced non-global.
 
 ### Lifecycle, output and limits
 
@@ -599,13 +602,14 @@ All routes below use `/api/v1/package-managers` and the standard response envelo
 
 - **Scope:** `path` must be a project root in the latest scan and pass the path guard. `manager` is `npm` or `pnpm`
   for changes; Yarn pins are shown read-only. A new pin is `<manager>@<exact>` for a **stable, non-deprecated
-  version with the same major as the installed tool** (npm 10 / npm 11 / npm 12 / pnpm 10 / pnpm 11);
+  version with the same major as the installed tool** (npm 10 / npm 11 / npm 12 / pnpm 10 / pnpm 11 / pnpm 12);
   `targetVersion` may be an exact version or a dist-tag resolved to one. An old pin hash is dropped
   (`PIN_HASH_REMOVED`) and never invented.
   Workspace members (`WORKSPACE_LEAF`), unsupported current values (`PIN_UNSUPPORTED`), `devEngines`
   (`CONFIG_UNSUPPORTED`) and lockfiles of another family (`LOCKFILE_MISMATCH`) are refused. With installed npm 12,
   a project with any `npm-shrinkwrap.json` is also refused (`CONFIG_UNSUPPORTED`), even alongside `package-lock.json`.
-  An old npm 11 pin can be repaired to installed npm 12, and vice versa; the target must match the installed
+  An old pin of another major (such as npm 11 ↔ npm 12 or pnpm 10/11 ↔ pnpm 12) can be repaired to the installed
+  major; the target must match the installed
   major and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
   the same-major target's Node engines are not checked.
 - **Registry:** version lists come only from `https://registry.npmjs.org` for the package names `npm`, `pnpm`

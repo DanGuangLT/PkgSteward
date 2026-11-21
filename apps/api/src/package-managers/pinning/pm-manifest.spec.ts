@@ -9,7 +9,7 @@ const parse = (bytes: Buffer): Record<string, unknown> =>
   >;
 
 describe('format-preserving project pin plan', () => {
-  describe.each(['npm@11.17.0', 'npm@12.2.2'])(
+  describe.each(['npm@11.17.0', 'npm@12.2.2', 'pnpm@12.21.0'])(
     'byte-preserving editor for %s',
     (target) => {
       it.each(MANIFEST_EDITS)(
@@ -141,7 +141,12 @@ describe('format-preserving project pin plan', () => {
     'latest',
     'npm@9.9.4',
     'npm@13.0.0',
-    'pnpm@12.18.0',
+    'pnpm@9.15.9',
+    'pnpm@13.0.0',
+    'pnpm@12.21.0-beta.1',
+    'pnpm@v12.21.0',
+    'pnpm@12.21.0+build',
+    `pnpm@12.21.0+sha256.${'a'.repeat(64)}`,
     'npm@12.2.2-beta.1',
     'npm@v12.2.2',
     'npm@12.2.2+build',

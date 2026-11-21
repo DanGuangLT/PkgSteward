@@ -7,7 +7,7 @@ describe('runner version policy', () => {
   it('exports the finite supported majors', () => {
     expect(SUPPORTED_RUNNER_MAJORS).toEqual({
       npm: [10, 11, 12],
-      pnpm: [10, 11],
+      pnpm: [10, 11, 12],
     });
   });
 
@@ -21,6 +21,9 @@ describe('runner version policy', () => {
     ['pnpm', '10.0.0'],
     ['pnpm', '10.34.9'],
     ['pnpm', '11.22.0'],
+    ['pnpm', '12.0.0'],
+    ['pnpm', '12.21.0'],
+    ['pnpm', '12.21.0+TEST'],
     ['npm', '11.0.0-pre.1'],
     ['pnpm', '11.0.0-pre.1'],
     ['npm', '11.17.0+TEST'],
@@ -38,7 +41,10 @@ describe('runner version policy', () => {
     ['npm', '13.0.0'],
     ['pnpm', '9.15.9'],
     ['pnpm', '10.0.0-rc.1'],
-    ['pnpm', '12.0.0'],
+    ['pnpm', '12.0.0-rc.1'],
+    ['pnpm', '12.21.0-alpha.1+TEST'],
+    ['pnpm', 'v12.21.0'],
+    ['pnpm', '13.0.0'],
     ['yarn', '11.17.0'],
     ['unknown', '12.2.2'],
     ['toString', '11.17.0'],

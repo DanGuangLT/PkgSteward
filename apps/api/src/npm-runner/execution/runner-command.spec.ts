@@ -4,6 +4,7 @@ import {
   pnpmPrefixArgs,
 } from '@/npm-runner/execution/runner-command';
 import {
+  nodeFile,
   runnerInput,
   tool,
 } from '@/npm-runner/__fixtures__/runner-test.fixture';
@@ -168,8 +169,108 @@ describe('runner command grammar and fixed argv', () => {
         );
     },
   );
-  it.each([9, 12, 0, NaN])('gives pnpm major %p no arguments', (major) => {
+  it.each([9, 13, 0, NaN])('gives pnpm major %p no arguments', (major) => {
     expect(pnpmPrefixArgs(major, 'D:\\TEST\\project')).toBeNull();
+  });
+  it('uses --pm-on-fail=warn for pnpm 12 prefix arguments', () => {
+    expect(pnpmPrefixArgs(12, 'D:\\TEST\\project')).toEqual([
+      '--dir',
+      'D:\\TEST\\project',
+      '--pm-on-fail=warn',
+    ]);
+  });
+  describe('pnpm 12.21.0 native executable', () => {
+    it.each(rows)(
+      '%s launches pnpm.exe directly without prepending a script entry',
+      (action, extra, _npm, pnpm) => {
+        const context = runnerInput('pnpm');
+        context.tool = tool('pnpm', '12.21.0');
+        context.path = 'D:\\TEST tiếng Việt\\project with spaces';
+        expect(buildRunCommand(context, request(action, extra))).toEqual({
+          file: context.tool.file,
+          args: ['--dir', context.path, '--pm-on-fail=warn', ...pnpm],
+          cwd: context.path,
+          manager: 'pnpm',
+          version: '12.21.0',
+        });
+      },
+    );
+    it.each(['install', 'env', 'add'])(
+      'treats script collision %s as data',
+      (script) => {
+        const context = runnerInput('pnpm');
+        context.tool = tool('pnpm', '12.21.0');
+        context.scripts[script] = 'echo TEST';
+        const command = buildRunCommand(context, request('script', { script }));
+        expect(command.args.slice(-2)).toEqual(['run', script]);
+      },
+    );
+    it.each([
+      {
+        label: 'non-null entry',
+        override: { entry: 'C:\\TEST\\node_modules\\pnpm\\bin\\pnpm.mjs' },
+      },
+      {
+        label: 'non-exe file',
+        override: {
+          file: 'C:\\TEST\\node_modules\\pnpm\\pnpm.cmd',
+          entry: null,
+        },
+      },
+      {
+        label: 'extensionless file',
+        override: { file: 'C:\\TEST\\node_modules\\pnpm\\pnpm', entry: null },
+      },
+      {
+        label: 'node.exe with null entry',
+        override: { file: nodeFile, entry: null },
+      },
+      {
+        label: 'external executable outside packageDir',
+        override: { file: 'C:\\Windows\\System32\\cmd.exe', entry: null },
+      },
+      {
+        label: 'relative exe path',
+        override: { file: 'pnpm.exe', entry: null },
+      },
+    ])('refuses forged pnpm 12 launcher ($label)', ({ override }) => {
+      const context = runnerInput('pnpm');
+      context.tool = { ...tool('pnpm', '12.21.0'), ...override };
+      expect.assertions(rows.length);
+      for (const [action, extra] of rows) {
+        try {
+          buildRunCommand(context, request(action, extra));
+        } catch (error: unknown) {
+          expect(error).toMatchObject({
+            details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+          });
+        }
+      }
+    });
+    it('keeps pnpm 12 workspace mutation and script boundaries', () => {
+      expect.assertions(rows.length * 2);
+      const context = runnerInput('pnpm');
+      context.tool = tool('pnpm', '12.21.0');
+      context.workspace = { kind: 'root', root: context.path };
+      for (const [action, extra] of rows)
+        expect(buildRunCommand(context, request(action, extra)).cwd).toBe(
+          context.path,
+        );
+      context.workspace = { kind: 'leaf', root: 'D:\\TEST' };
+      expect(
+        buildRunCommand(context, request('script', { script: 'dev' })).cwd,
+      ).toBe(context.path);
+      for (const [action, extra] of rows) {
+        if (action === 'script') continue;
+        try {
+          buildRunCommand(context, request(action, extra));
+        } catch (error: unknown) {
+          expect(error).toMatchObject({
+            details: { reason: 'WORKSPACE_LEAF' },
+          });
+        }
+      }
+    });
   });
   const packageRows: [string, string, string | null][] = [
     ['alpha', 'alpha', null],
@@ -357,7 +458,8 @@ describe('runner command grammar and fixed argv', () => {
     ['npm', '13.0.0'],
     ['npm', '12.2.2-rc.1'],
     ['npm', 'invalid'],
-    ['pnpm', '12.0.0'],
+    ['pnpm', '13.0.0'],
+    ['pnpm', '12.21.0-rc.1'],
   ] as const)('refuses a forged %s %s context', (manager, version) => {
     const context = runnerInput(manager);
     context.tool = tool(manager, version);

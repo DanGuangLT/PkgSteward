@@ -443,7 +443,8 @@ describe('runner npm 12 policy and shrinkwrap refusal', () => {
   it.each([
     ['npm', '13.0.0', 'npm@13.0.0'],
     ['npm', '12.2.2-rc.1', 'npm@12.2.2-rc.1'],
-    ['pnpm', '12.0.0', 'pnpm@12.0.0'],
+    ['pnpm', '13.0.0', 'pnpm@13.0.0'],
+    ['pnpm', '12.21.0-rc.1', 'pnpm@12.21.0-rc.1'],
   ] as const)(
     'refuses forged installed %s %s even with matching pin %s',
     async (manager, version, packageManager) => {
@@ -576,6 +577,68 @@ describe('runner npm 12 policy and shrinkwrap refusal', () => {
       return Promise.resolve(tool('npm', '12.2.2'));
     });
     await expect(f.read()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+// TEST pnpm 12 scenarios; không phải yêu cầu nghiệp vụ.
+describe('runner pnpm 12 policy and native executable revalidation', () => {
+  const setupPnpm12 = () => {
+    const f = setup();
+    f.put(path.join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+    f.resolveTool.mockResolvedValue(tool('pnpm', '12.21.0'));
+    return f;
+  };
+  it.each([
+    [undefined, false],
+    ['pnpm@12.21.0', false],
+    ['pnpm@12.0.0', true],
+    ['pnpm@12.0.0+sha512.TEST', true],
+  ] as const)(
+    'accepts pin %p with warning=%s',
+    async (packageManager, warning) => {
+      const f = setupPnpm12();
+      f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+      const input = await f.read();
+      expect(input).toMatchObject({
+        manager: 'pnpm',
+        reason: null,
+        tool: { version: '12.21.0', entry: null },
+      });
+      expect(input.tool?.file).toMatch(/\\pnpm\.exe$/i);
+      expect(input.warnings.includes('PACKAGE_MANAGER_PIN_DIFFERS')).toBe(
+        warning,
+      );
+    },
+  );
+  it.each([
+    ['11.22.0', 'pnpm@12.21.0'],
+    ['12.21.0', 'pnpm@11.22.0'],
+    ['12.21.0', 'pnpm@10.34.9'],
+    ['12.21.0', 'pnpm@13.0.0'],
+  ])('refuses installed %s versus pin %s', async (version, packageManager) => {
+    const f = setup();
+    f.put(path.join(root, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+    f.resolveTool.mockResolvedValue(tool('pnpm', version));
+    f.put(path.join(root, 'package.json'), manifest({ packageManager }));
+    expect((await f.read()).reason).toBe('TOOL_VERSION_MISMATCH');
+  });
+  it('revalidates pnpm 12 native executable path and detects file drift', async () => {
+    const f = setupPnpm12();
+    const installed = f.installTool('pnpm', '12.21.0');
+    f.resolveTool.mockImplementation((manager) =>
+      resolveRunnerTool(manager, f.snapshot, f.fs),
+    );
+    const input = await f.read();
+    expect(input.reason).toBeNull();
+    await expect(f.revalidate(input)).resolves.toMatchObject({
+      manager: 'pnpm',
+      tool: { file: installed.file, entry: null },
+    });
+    const before = f.stats.get(key(installed.file))!;
+    f.stats.set(key(installed.file), { ...before, ino: before.ino + 1 });
+    await expect(f.revalidate(input)).rejects.toMatchObject({
+      details: { reason: 'INPUT_CHANGED' },
+    });
   });
 });
 

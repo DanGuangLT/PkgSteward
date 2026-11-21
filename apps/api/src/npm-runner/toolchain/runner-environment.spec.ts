@@ -80,6 +80,7 @@ describe('runner child environment (A8)', () => {
     ['npm', '12.2.2'],
     ['pnpm', '10.34.9'],
     ['pnpm', '11.22.0'],
+    ['pnpm', '12.21.0'],
   ] as const)('compat environment %s %s', (manager, version) => {
     it.each(RUN_ACTIONS)(
       'strips inherited private keys and sets exact schema only for install_all: %s',
@@ -266,6 +267,25 @@ describe('runner child environment (A8)', () => {
       'script',
     );
     expect(Object.keys(pnpm11).some((key) => /^npm_/i.test(key))).toBe(false);
+    const pnpm12 = buildRunnerEnvironment(
+      user,
+      tool('pnpm', '12.21.0'),
+      'pnpm',
+      'script',
+    );
+    expect(pnpm12).toMatchObject({
+      pnpm_config_verify_deps_before_run: 'false',
+      pnpm_config_update_notifier: 'false',
+    });
+    expect(Object.keys(pnpm12).some((key) => /^npm_/i.test(key))).toBe(false);
+    expect(pnpm12.CI).toBeUndefined();
+    const pnpm12Install = buildRunnerEnvironment(
+      {},
+      tool('pnpm', '12.21.0'),
+      'pnpm',
+      'install_all',
+    );
+    expect(pnpm12Install.CI).toBe('1');
   });
   it('keeps only absolute local PATH entries without expanding variables', () => {
     const env = buildRunnerEnvironment(

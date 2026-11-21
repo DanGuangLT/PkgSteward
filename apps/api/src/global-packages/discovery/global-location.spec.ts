@@ -857,6 +857,32 @@ describe.each(TEST_NPM_VERSIONS)('verified location (npm %s)', (v) => {
     );
     expect(h.spawn).not.toHaveBeenCalled();
   });
+
+  it('fails closed for pnpm 12 native binary in global discovery while keeping npm discovery available and pnpm 12 protected', async () => {
+    const h = setup();
+    const pnpm12Dir = 'D:\\TEST\\AppData\\npm\\node_modules\\pnpm';
+    const pnpm12Tool = {
+      manager: 'pnpm' as const,
+      version: '12.21.0',
+      file: `${pnpm12Dir}\\pnpm.exe`,
+      entry: null,
+      packageDir: pnpm12Dir,
+      identities: [],
+    };
+    jest
+      .mocked(runnerTools.resolveRunnerTool)
+      .mockImplementation((manager) =>
+        Promise.resolve(manager === 'pnpm' ? pnpm12Tool : testTool('npm', v)),
+      );
+    await expectGlobalReason(
+      () => discoverGlobalLocation('pnpm', h.deps),
+      'TOOL_VERSION_MISMATCH',
+    );
+    expect(h.spawn).not.toHaveBeenCalled();
+    const npmLocation = await discoverGlobalLocation('npm', h.deps);
+    expect(npmLocation.manager).toBe('npm');
+    expect(npmLocation.protectedPaths).toContain(pnpm12Dir);
+  });
 });
 
 describe('cross-manager location ambiguity', () => {

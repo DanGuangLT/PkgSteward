@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import {
   buildGlobalCommand,
   buildGlobalQuery,
+  isPnpmGlobalVersion,
 } from '@/global-packages/execution/global-command';
 import type {
   GlobalQuery,
@@ -701,11 +702,19 @@ describe('pnpm 11 command boundary', () => {
     );
   });
 
-  it.each(['9.15.9', '10.34.9-rc.1', '12.0.0'])(
+  it.each(['9.15.9', '10.34.9-rc.1', '12.0.0', '12.21.0'])(
     'rejects unsupported major %s without fallback/probe',
     async (version) => {
+      expect(isPnpmGlobalVersion(version)).toBe(false);
       const location = pnpmLocation();
-      location.tool = { ...location.tool, version };
+      location.tool = version.startsWith('12.')
+        ? {
+            ...location.tool,
+            version,
+            file: `${location.tool.packageDir}\\pnpm.exe`,
+            entry: null,
+          }
+        : { ...location.tool, version };
       for (const action of ['change', 'remove'] as const)
         await expectGlobalReason(
           () =>
