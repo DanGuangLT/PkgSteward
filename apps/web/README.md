@@ -147,7 +147,7 @@ dependencies are installed. Inspect `allowScripts` yourself: the app does not ap
 or recover missing build artifacts. Arguments and environment are unchanged; the app adds no ignore-scripts,
 allow-scripts or strict-npmrc overrides. Strict npm configuration failures fail the job without an automatic retry.
 
-- **Tools and inputs:** npm 10, npm 11, npm 12, pnpm 10 and pnpm 11; npm 10, npm 12 and pnpm 10 prereleases and other
+- **Tools and inputs:** npm 10, npm 11, npm 12, pnpm 10, pnpm 11 and pnpm 12; npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other
   majors are refused. Verified with npm 10.9.3, npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0 and
   Node 22.18.0, 22.23.5, 24.19.0. Global packages support npm 10–12 and pnpm 10–11.
   Installed npm 12 needs valid `engines.node` metadata satisfied by the backend's Node: missing/malformed metadata
@@ -348,7 +348,7 @@ changes the npm/pnpm installed on the machine.
 
 1. Choose `npm` or `pnpm`, then **Load versions**. The list comes from the public npm registry and shows only
    stable, non-deprecated versions with the same major as the installed tool
-   (npm 10, npm 11, npm 12, pnpm 10 or pnpm 11).
+   (npm 10, npm 11, npm 12, pnpm 10, pnpm 11 or pnpm 12).
 2. Pick a version and **Preview change**. Escape stops a preview that is still loading.
 3. The confirmation dialog shows the project, the single `package.json` edit (current value → new value), the
    installed tool PkgSteward keeps using, notes (an old pin hash is dropped; the pin does not switch the tool
@@ -357,7 +357,7 @@ changes the npm/pnpm installed on the machine.
 4. **Write pin to package.json** writes only that field. Nothing is downloaded or installed and Corepack is not used;
    terminals follow the pin only if you use Corepack or pnpm's own version management.
 
-An old npm 11 pin can be repaired to installed npm 12, and vice versa; targets must match the installed major
+An old pin of another major (such as npm 11 ↔ npm 12 or pnpm 10/11 ↔ pnpm 12) can be repaired to the installed major; targets must match the installed major
 and all other checks still apply. A pin is a declaration, not activation or proof of engine compatibility:
 the same-major target's Node engines are not checked.
 
