@@ -306,12 +306,14 @@ export async function resolveRunnerTool(
         )
           throw runnerFailure('TOOL_VERSION_MISMATCH');
       }
+      const nativePnpm12 = manager === 'pnpm' && major === 12;
+      const expectedBin = nativePnpm12 ? /\.exe$/i : /\.(?:mjs|cjs|js)$/i;
       const entryPath = api.resolve(packageDir, bin);
       if (
         api.isAbsolute(bin) ||
         /^[A-Za-z]:/.test(bin) ||
         !isSameOrInside(compare(entryPath), compare(packageDir), platform) ||
-        !/\.(?:mjs|cjs|js)$/i.test(entryPath)
+        !expectedBin.test(entryPath)
       )
         throw runnerFailure('TOOL_LAYOUT_UNSUPPORTED');
       const entry = api.resolve(await fs.realpath(entryPath));
@@ -319,7 +321,7 @@ export async function resolveRunnerTool(
       if (
         !local(entry) ||
         !isSameOrInside(compare(entry), compare(packageDir), platform) ||
-        !/\.(?:mjs|cjs|js)$/i.test(entry)
+        !expectedBin.test(entry)
       )
         throw runnerFailure('TOOL_LAYOUT_UNSUPPORTED');
       const entryIdentity = await regularIdentity(entry);
@@ -327,8 +329,8 @@ export async function resolveRunnerTool(
       const selected: IRunnerTool = {
         manager,
         version: raw.version,
-        file: node,
-        entry,
+        file: nativePnpm12 ? entry : node,
+        entry: nativePnpm12 ? null : entry,
         packageDir,
         identities: [
           nodeIdentity,

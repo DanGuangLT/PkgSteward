@@ -351,11 +351,132 @@ if (!args.length && !isGlobalInstall && !ignoreScripts) {}`,
       });
     },
   );
-  it('keeps pnpm 12 unsupported', async () => {
+  it('resolves stable pnpm 12.21.0 native pnpm.exe directly without Node engines', async () => {
     const f = setup('pnpm');
-    f.installTool('pnpm', '12.0.0');
+    const installed = f.installTool('pnpm', '12.21.0');
+    f.snapshot.nodeVersion = 'invalid';
+    const result = await f.resolve();
+    expect(result).toMatchObject({
+      manager: 'pnpm',
+      version: '12.21.0',
+      file: path.join(installed.packageDir, 'pnpm.exe'),
+      entry: null,
+      packageDir: installed.packageDir,
+    });
+    expect(result.identities.map((item) => key(item.path))).toEqual(
+      expect.arrayContaining([
+        key(nodeFile),
+        key(path.join(installed.packageDir, 'package.json')),
+        key(path.join(installed.packageDir, 'pnpm.exe')),
+        key(installed.packageDir),
+      ]),
+    );
+    await expect(
+      revalidateRunnerTool(result, f.fs, f.controller.signal),
+    ).resolves.toBeUndefined();
+    for (const identity of result.identities) {
+      const before = f.stats.get(key(identity.path))!;
+      f.stats.set(key(identity.path), { ...before, ino: before.ino + 1 });
+      await expect(
+        revalidateRunnerTool(result, f.fs, f.controller.signal),
+      ).rejects.toMatchObject({ details: { reason: 'INPUT_CHANGED' } });
+      f.stats.set(key(identity.path), before);
+    }
+  });
+  it.each([
+    'bin/pnpm.mjs',
+    'pnpm',
+    'bin/pnpm.cmd',
+    'bin/pnpm.ps1',
+    '../../escape.exe',
+    'C:\\TEST\\evil.exe',
+  ])('refuses non-native or escaping pnpm 12 bin %p', async (bin) => {
+    const f = setup('pnpm');
+    const installed = f.installTool('pnpm', '12.21.0');
+    f.put(
+      path.join(installed.packageDir, 'package.json'),
+      JSON.stringify({
+        name: 'pnpm',
+        version: '12.21.0',
+        bin: { pnpm: bin },
+      }),
+    );
+    if (!bin.startsWith('..') && !/^[A-Za-z]:/.test(bin)) {
+      f.put(path.join(installed.packageDir, bin), 'TEST never execute');
+    }
     await expect(f.resolve()).rejects.toMatchObject({
-      details: { reason: 'TOOL_VERSION_MISMATCH' },
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+  });
+  it('refuses pnpm 12 symlinked or escaping pnpm.exe', async () => {
+    const f = setup('pnpm');
+    const installed = f.installTool('pnpm', '12.21.0');
+    const exe = path.join(installed.packageDir, 'pnpm.exe');
+    f.realpaths.set(key(exe), 'E:\\Tools\\other.exe');
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+    f.realpaths.clear();
+    const before = f.stats.get(key(exe))!;
+    f.stats.set(key(exe), { ...before, isSymbolicLink: () => true });
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+  });
+  it('refuses pnpm 12 from a project-controlled path or junction into project', async () => {
+    const f = setup('pnpm');
+    const installed = f.installTool('pnpm', '12.21.0');
+    const exe = path.join(installed.packageDir, 'pnpm.exe');
+    f.realpaths.set(key(exe), path.join(root, 'evil.exe'));
+    f.put(path.join(root, 'evil.exe'), 'TEST untrusted');
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'TOOL_LAYOUT_UNSUPPORTED' },
+    });
+  });
+  it.each(['12.0.0-rc.1', '12.21.0-alpha.1+TEST', 'v12.21.0', '13.0.0'])(
+    'refuses unsupported pnpm version %s',
+    async (version) => {
+      const f = setup('pnpm');
+      f.installTool('pnpm', version);
+      await expect(f.resolve()).rejects.toMatchObject({
+        details: { reason: 'TOOL_VERSION_MISMATCH' },
+      });
+    },
+  );
+  it('detects pnpm 12 executable replacement during resolution', async () => {
+    const f = setup('pnpm');
+    const installed = f.installTool('pnpm', '12.21.0');
+    const exe = path.join(installed.packageDir, 'pnpm.exe');
+    let observations = 0;
+    f.onEvent((event) => {
+      if (event !== `lstat:${key(exe)}` || ++observations !== 2) return;
+      const before = f.stats.get(key(exe))!;
+      f.stats.set(key(exe), { ...before, ino: before.ino + 1 });
+    });
+    await expect(f.resolve()).rejects.toMatchObject({
+      details: { reason: 'INPUT_CHANGED' },
+    });
+  });
+  it('canonicalizes linked PATH prefix for native pnpm 12.21.0', async () => {
+    const f = setup('pnpm');
+    f.installTool('pnpm', '12.21.0');
+    const targetPrefix = 'E:\\MachineTools\\npm';
+    const packageDir = path.join(targetPrefix, 'node_modules', 'pnpm');
+    const exe = path.join(packageDir, 'pnpm.exe');
+    f.put(
+      path.join(packageDir, 'package.json'),
+      readFileSync(
+        join(__dirname, '..', '__fixtures__', 'tools', 'pnpm12-package.json'),
+        'utf8',
+      ),
+    );
+    f.put(exe, 'TEST canonical pnpm 12 native binary');
+    f.realpaths.set(key(pnpmPrefix), targetPrefix);
+    f.snapshot.env = { PATH: `${pnpmPrefix};${targetPrefix}` };
+    expect(await f.resolve()).toMatchObject({
+      file: exe,
+      entry: null,
+      packageDir,
     });
   });
   it.each([

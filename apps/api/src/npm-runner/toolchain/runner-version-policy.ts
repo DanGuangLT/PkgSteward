@@ -2,7 +2,7 @@ import * as semver from 'semver';
 
 export const SUPPORTED_RUNNER_MAJORS = {
   npm: [10, 11, 12],
-  pnpm: [10, 11],
+  pnpm: [10, 11, 12],
 } as const;
 
 /** Pure installed-runner policy; pin targets apply their stricter checks too. */

@@ -39,6 +39,19 @@ export const tool = (
 ): IRunnerTool => {
   const packageDir =
     manager === 'npm' ? npmDir : path.join(pnpmPrefix, 'node_modules', 'pnpm');
+  if (manager === 'pnpm' && version.startsWith('12.')) {
+    const exe = path.join(packageDir, 'pnpm.exe');
+    return {
+      manager,
+      version,
+      file: exe,
+      entry: null,
+      packageDir,
+      identities: [nodeFile, exe, path.join(packageDir, 'package.json')].map(
+        (file) => ({ path: file, stat: fileStat() }),
+      ),
+    };
+  }
   const entry = path.join(
     packageDir,
     'bin',
@@ -163,7 +176,9 @@ export const fsFixture = () => {
     const fixture =
       manager === 'npm' && installed.version.startsWith('12.')
         ? 'npm12'
-        : manager;
+        : manager === 'pnpm' && installed.version.startsWith('12.')
+          ? 'pnpm12'
+          : manager;
     let metadata = readFileSync(
       join(__dirname, 'tools', `${fixture}-package.json`),
       'utf8',
@@ -174,9 +189,12 @@ export const fsFixture = () => {
         throw new Error('TEST tool fixture must be an object');
       metadata = JSON.stringify({ ...parsed, version: installed.version });
     }
+    put(nodeFile, 'TEST executable bytes, never executed');
     put(installed.file, 'TEST executable bytes, never executed');
     put(path.join(installed.packageDir, 'package.json'), metadata);
-    put(installed.entry!, '// TEST distribution entry; never executed');
+    if (installed.entry !== null) {
+      put(installed.entry, '// TEST distribution entry; never executed');
+    }
     return installed;
   };
   const scan: ProjectScanSnapshot = {
