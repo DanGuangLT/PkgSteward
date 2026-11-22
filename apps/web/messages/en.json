@@ -1011,7 +1011,7 @@
       "description": "Corner radius, shadow, spacing and content width shared by every screen.",
       "radius": {
         "title": "Corner radius",
-        "description": "The whole scale derives from --radius (16px): change that one variable and every corner follows.",
+        "description": "The whole scale derives from the active preset's --radius variable: change that one variable and every corner follows.",
         "sm": "Tooltips, menu items",
         "md": "Buttons, inputs, cards",
         "xl": "Modals, large cards",
@@ -1034,10 +1034,10 @@
     },
     "actions": {
       "title": "Buttons and badges",
-      "description": "Buttons are 40px tall with 16px corners. Badges are pill-shaped with 12px bold text.",
+      "description": "Buttons are 40px tall with corners following --radius. Badges are pill-shaped with 12px bold text.",
       "buttons": {
         "title": "Button",
-        "description": "Each screen has at most one default (red) button for its main action; everything else uses secondary. Each row shows sizes sm, default, lg, icon-sm, icon, icon-lg and the disabled state.",
+        "description": "Each screen has at most one default (red) button for its main action; everything else uses secondary. Each row shows sizes sm, default, lg, icon-sm, icon, icon-lg and the disabled state. On real screens, always wrap icon-only buttons in a Tooltip.",
         "labels": {
           "default": "Rescan",
           "secondary": "View details",
@@ -1151,7 +1151,7 @@
     },
     "overlays": {
       "title": "Floating layers",
-      "description": "Tooltips and menus float above the page with 8–16px corners; only floating layers cast a shadow.",
+      "description": "Tooltips and menus float above the page with corners from the --radius scale; only floating layers cast a shadow.",
       "tooltip": {
         "title": "Tooltip",
         "description": "Hover or focus a button to see it. Icon-only buttons always need a tooltip.",
@@ -1263,6 +1263,7 @@
     "outcome": {
       "success": "Completed the operation on {name}.",
       "failure": "The operation on {name} did not complete.",
+      "cancelledLate": "The command for {name} exited 0 before cancellation stopped it — the version may have changed.",
       "unchanged": "The mutation command never started; this operation did not change the package. The package row is retained.",
       "refreshHint": "Inventory refreshes automatically once. If refresh fails, refresh explicitly before relying on the list."
     },
@@ -1335,7 +1336,7 @@
     "risk": { "MACHINE_WIDE": "This operation affects the whole machine, not a single project." },
     "status": {
       "idle": "No activity", "starting": "Submitting request", "running": "Running", "stopping": "Stopping",
-      "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled", "timed_out": "Stopped after timeout",
+      "completed": "Completed", "failed": "Failed", "cancelled": "Cancelled", "cancelledLate": "Cancelled late (exited 0)", "timed_out": "Stopped after timeout",
       "termination_failed": "Process termination is unconfirmed", "startUnknown": "Request acceptance is unconfirmed",
       "cancelUnknown": "Stop result is unconfirmed", "lost": "Activity is no longer tracked"
     },

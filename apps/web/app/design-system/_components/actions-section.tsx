@@ -82,7 +82,7 @@ export async function ActionsSection() {
       </ShowcaseItem>
       <ShowcaseItem title={t("badges.title")} description={t("badges.description")}>
         {BADGE_VARIANTS.map((variant) => (
-          <ShowcaseRow key={variant} label={variant}>
+          <ShowcaseRow key={variant} label={`variant="${variant}"`}>
             <Badge variant={variant}>{t(`badges.labels.${variant}`)}</Badge>
           </ShowcaseRow>
         ))}

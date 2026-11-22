@@ -7,7 +7,7 @@ import { NpmRunnerLog } from "@/components/features/npm-runner/npm-runner-log"
 import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { globalMutationSucceeded } from "@/lib/global-packages/global-session"
+import { globalMutationSucceeded, isGlobalLateCancel } from "@/lib/global-packages/global-session"
 import type { GlobalController } from "@/components/features/global-packages/global-packages-panel"
 import type { GlobalAction } from "@/lib/global-packages/global-types"
 import type messages from "@/messages/vi.json"
@@ -40,8 +40,11 @@ export function GlobalPackageJob({ controller, headingRef }: { controller: Globa
   const job = state.job
   const result = state.mutationResult
   const succeeded = result !== null && globalMutationSucceeded(result)
+  const lateCancelledJob = isGlobalLateCancel(job)
+  const lateCancelledResult = isGlobalLateCancel(result)
   const status = state.phase === "lost" ? "lost" : state.startUnknown ? "startUnknown"
     : state.cancelUnknown ? "cancelUnknown" : state.phase === "starting" ? "starting"
+    : lateCancelledJob ? "cancelledLate"
     : job?.status ?? (state.phase === "tracking" ? "running" : "idle")
   const statusKey = `status.${status}` as `status.${keyof typeof messages.globalPackages.status}`
   const statusLabel = t(t.has(statusKey) ? statusKey : "errors.UNKNOWN")
@@ -77,7 +80,7 @@ export function GlobalPackageJob({ controller, headingRef }: { controller: Globa
     <h2 ref={headingRef} tabIndex={-1} className="scroll-mt-24 rounded-sm text-heading-lg focus-ring focus:outline-2 focus:outline-offset-2 focus:outline-ring">{t("job.title")}</h2>
     <div role="status" aria-live="polite" aria-atomic="true">
       {result ? <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-body-sm">
-        <p className="font-semibold">{t(succeeded ? "outcome.success" : "outcome.failure", { name: result.package ?? t("package") })}</p>
+        <p className="font-semibold">{t(succeeded ? "outcome.success" : lateCancelledResult ? "outcome.cancelledLate" : "outcome.failure", { name: result.package ?? t("package") })}</p>
         {result.failureCode ? <p><GlobalCodeMessage code={result.failureCode} /></p> : null}
         {!succeeded ? <p>{t(result.mutationSpawned || result.mayHaveChanged ? "job.mayHaveChanged" : "outcome.unchanged")}</p> : <p>{t("outcome.refreshHint")}</p>}
       </div> : null}
