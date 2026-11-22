@@ -17,7 +17,7 @@ machine. NestJS 12 + TypeScript.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10, 11 or 12 (development uses pnpm 11). Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11 for installation (development uses pnpm 11). Target platform: Windows 11.
 
 Use a current Node.js 24 release for the backend Jest unit and end-to-end tests. CI starts the built
 backend on Node 22 and runs the Jest suites on Node 24, which can load the ESM-only NestJS packages.
@@ -65,7 +65,7 @@ Full list in `.env.example`.
 | `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Folder for runtime data (logs, cache, `settings.json`): an absolute path, or a path relative to the project folder. The default is a `PkgStewardLog` folder inside the project folder |
 | `NPM_COMMAND_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop an npm or pnpm command after that long |
 
-Use a flat JSON object in `settings.json` inside the runtime data folder. Supported keys use their environment variable names and accept string, number, or boolean values. Settings override environment variables, and explicit CLI options take precedence over both. Set `PKGSTEWARD_DATA_DIR` through the environment or CLI because PkgSteward resolves the data folder before reading the settings file.
+See [Settings API](#settings-api) for the persisted format and how settings override environment variables.
 
 The frontend has its own `PORT` (default `24680`, integer `1`–`65535`) and `HOST` (default `127.0.0.1`,
 only `127.0.0.1`, `localhost` or `::1`), set in `apps/web/.env.local` or `apps/web/.env`.
@@ -73,6 +73,17 @@ For each frontend variable, the first nonempty value wins: real environment → 
 When changing the frontend address, update this backend's `LIST_ORIGIN_CORS` to match the origin used in the
 browser (for example, `http://localhost:24680`). Update the frontend's `API_BASE_URL` (default
 `http://127.0.0.1:24681/api/v1`) when changing this backend's `HOST`, `PORT`, `GLOBAL_PREFIX` or `VERSION`.
+
+## Settings API
+
+`settings.json` lives in the runtime data folder. Settings saved by the app use `schemaVersion: 1`, with sections such as `runtime`, `server`, `appearance`, `behavior`, and `plugins`. Legacy flat files using environment variable names are still accepted. Settings override environment variables, which override defaults. Set `PKGSTEWARD_DATA_DIR` through the environment: the app resolves the data folder before reading settings.
+
+- `GET /settings` returns effective values, configuration sources, and server fields requiring a restart.
+- `PATCH /settings/preferences` saves appearance and behavior without a preview. Use `POST /settings/preview` before `PATCH /settings` for changes to runtime or server fields. Send the returned `previewId`, `confirm: true`, and the codes of any high risks in `acknowledgedRisks`.
+- Runtime settings such as scan roots, depth, and timeouts apply without restarting. Changes to the listen address, port, and other server fields take effect after restarting the API.
+- `GET /settings/export` returns `{ exportedAt, document }` in `data`; the web UI saves the document as a backup file. Import and reset have separate preview and confirmation steps. Plugin installation and removal also require preview and confirmation; the API does not run plugin lifecycle scripts or load plugin code into the backend process.
+
+Paths above are relative to the API prefix (default `/api/v1`).
 
 ## Scan API
 
