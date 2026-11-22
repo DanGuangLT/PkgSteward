@@ -69,6 +69,7 @@ import {
 import {
   validateSurfaceGlassDraft,
   validateTextReadabilityDraft,
+  resolveWallpaperImagePreviewUrl,
   validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "@/lib/settings/settings-validation"
@@ -139,11 +140,7 @@ function CustomWallpaperMediaPanel({
     urlDraft.trim() !== "" || urlSubmitted
       ? validateWallpaperMediaUrl(urlDraft, { required: true })
       : null
-  const canPreviewImage =
-    normalizedUrl !== "" &&
-    !validateWallpaperMediaUrl(urlDraft, { required: true }) &&
-    inferMediaKindFromUrl(normalizedUrl) === "image"
-  const urlLoadFailed = canPreviewImage && failedPreviewUrl === normalizedUrl
+  const previewImageUrl = resolveWallpaperImagePreviewUrl(urlDraft)
 
   const isCustomMediaActive = activeMode === "image" || activeMode === "video"
   const isLocalActive = isCustomMediaActive && activeSource === "local" && savedAsset !== ""
@@ -284,7 +281,7 @@ function CustomWallpaperMediaPanel({
             )}
           </div>
 
-          {canPreviewImage && (
+          {previewImageUrl && (
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex flex-col gap-1">
                 <span className="text-caption text-muted-foreground">
@@ -292,18 +289,18 @@ function CustomWallpaperMediaPanel({
                 </span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  key={normalizedUrl}
-                  src={normalizedUrl}
+                  key={previewImageUrl}
+                  src={previewImageUrl}
                   alt=""
                   referrerPolicy="no-referrer"
                   onLoad={() => {
                     if (failedPreviewUrl) setFailedPreviewUrl(null)
                   }}
-                  onError={() => setFailedPreviewUrl(normalizedUrl)}
+                  onError={() => setFailedPreviewUrl(previewImageUrl)}
                   className="h-20 w-36 rounded-sm border border-border bg-background object-cover"
                 />
               </div>
-              {urlLoadFailed && (
+              {failedPreviewUrl === previewImageUrl && (
                 <p
                   role="alert"
                   className="flex-1 rounded-md border border-warning/40 bg-warning-soft p-2.5 text-caption text-warning"

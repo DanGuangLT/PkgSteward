@@ -1,5 +1,5 @@
 import type { PluginSettingFieldSchema, PrimitiveConfigValue } from "./types.ts"
-import { normalizeWallpaperMediaUrl } from "./wallpaper-presets.ts"
+import { inferMediaKindFromUrl, normalizeWallpaperMediaUrl } from "./wallpaper-presets.ts"
 
 export const MAX_TIMEOUT_MS = 86_400_000
 export const MAX_BACKUP_JSON_BYTES = 256 * 1024
@@ -208,22 +208,37 @@ export function validateServerDraft(input: {
   return first ?? null
 }
 
+function parseWallpaperMediaUrl(rawUrl: string): URL | WallpaperValidationCode {
+  const clean = normalizeWallpaperMediaUrl(rawUrl)
+  if (clean === "") return "WALLPAPER_URL_REQUIRED"
+  if (clean.length > MAX_CONFIG_STRING_LENGTH) return "WALLPAPER_URL_TOO_LONG"
+  try {
+    const parsed = new URL(clean)
+    if (parsed.protocol === "https:" && parsed.username === "" && parsed.password === "") {
+      return parsed
+    }
+  } catch {
+    return "WALLPAPER_URL_HTTPS"
+  }
+  return "WALLPAPER_URL_HTTPS"
+}
+
 export function validateWallpaperMediaUrl(
   rawUrl: string,
   options?: { required?: boolean }
 ): WallpaperValidationCode | null {
-  const clean = normalizeWallpaperMediaUrl(rawUrl)
-  if (clean === "") return options?.required ? "WALLPAPER_URL_REQUIRED" : null
-  if (clean.length > MAX_CONFIG_STRING_LENGTH) return "WALLPAPER_URL_TOO_LONG"
-  try {
-    const parsed = new URL(clean)
-    if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") {
-      return "WALLPAPER_URL_HTTPS"
-    }
+  const result = parseWallpaperMediaUrl(rawUrl)
+  if (result instanceof URL || (result === "WALLPAPER_URL_REQUIRED" && !options?.required)) {
     return null
-  } catch {
-    return "WALLPAPER_URL_HTTPS"
   }
+  return result
+}
+
+export function resolveWallpaperImagePreviewUrl(rawUrl: string): string | null {
+  const result = parseWallpaperMediaUrl(rawUrl)
+  if (!(result instanceof URL)) return null
+  const previewUrl = result.href
+  return inferMediaKindFromUrl(previewUrl) === "image" ? previewUrl : null
 }
 
 function validateSafeIntegerRange(

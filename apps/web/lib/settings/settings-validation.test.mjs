@@ -7,6 +7,7 @@ import {
   normalizeDrivePath,
   parseImportSettingsJson,
   resolvePluginFieldUnit,
+  resolveWallpaperImagePreviewUrl,
   validateBackupImportText,
   validateMaxDepthInput,
   validatePluginConfigDraft,
@@ -106,6 +107,15 @@ test("validateWallpaperTuningDraft checks HTTPS mediaUrl and all 4 numeric bound
   assert.equal(validateWallpaperMediaUrl("", { required: true }), "WALLPAPER_URL_REQUIRED")
   assert.equal(validateWallpaperMediaUrl("https://www.google.com/imgres?imgurl=https%3A%2F%2Fcdn.example.com%2Fa.jpg"), null)
   assert.equal(validateWallpaperMediaUrl(`https://cdn.example.com/${"a".repeat(2040)}.jpg`), "WALLPAPER_URL_TOO_LONG")
+})
+
+test("wallpaper image preview preserves only the approved canonical HTTPS URL", () => {
+  assert.equal(resolveWallpaperImagePreviewUrl(" HTTPS://CDN.EXAMPLE.COM:443/my photo.png "), "https://cdn.example.com/my%20photo.png")
+  assert.equal(resolveWallpaperImagePreviewUrl("https://www.google.com/imgres?imgurl=https%3A%2F%2Fcdn.example.com%2Fa.jpg"), "https://cdn.example.com/a.jpg")
+  assert.equal(resolveWallpaperImagePreviewUrl("https://name:pass@cdn.example.com/a.jpg"), null)
+  assert.equal(resolveWallpaperImagePreviewUrl("http://cdn.example.com/a.jpg"), null)
+  assert.equal(resolveWallpaperImagePreviewUrl("https://cdn.example.com/a.mp4?rev=1"), null)
+  assert.equal(resolveWallpaperImagePreviewUrl(""), null)
 })
 
 test("plugin validators validate install URLs, directories, registries, and schema configs", () => {
