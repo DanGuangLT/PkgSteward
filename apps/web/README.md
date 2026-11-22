@@ -15,7 +15,7 @@ next-themes and next-intl.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10, 11 or 12 (development uses pnpm 11). Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11 for installation (development uses pnpm 11). Target platform: Windows 11.
 
 ## Install
 
@@ -98,7 +98,7 @@ registry package entry at the chosen lock root, including other workspaces/impor
 root declarations. Supported audit locks are npm v2/v3, pnpm v9 and Yarn Classic v1. Yarn Berry/other unsupported,
 missing or mismatched locks have unavailable audit coverage, even when wanted/latest metadata is available.
 
-The project detail page groups Overview, Files and Disk Usage under tabs, and the dependency list supports search and status/type filters (becoming cards on narrow screens, with no paging).
+The project detail page has Overview, Files, and Disk Usage tabs. The dependency list supports search, group and status filters, and optional pagination. It displays as cards on narrow screens.
 Outdated/vulnerable badges indicate available findings, including partial ones; absent badges do not assert
 clean results. Advisory findings sort by severity, package name and ID. Titles are text, and only backend-validated
 advisory URLs are links. A deprecated version is a row warning and does not alone make a check incomplete.
@@ -370,6 +370,12 @@ match the chosen manager cannot be changed here. A lost response is recovered fr
 the change again; if the result is unknown, open `package.json` to check it. Opening the page only reads; versions are
 fetched only when you ask. See [Package manager pin API](../api/README.md#package-manager-pin-api).
 
+## Settings
+
+Open **Settings** from the navigation bar. Themes, light/dark/system mode, typography, glass surfaces, layout, language, and list preferences apply as you change them. Runtime options include scan drives, depth, and timeouts. Turn on **Advanced** to show server and backup controls. Changes to runtime and server settings require preview and confirmation; server changes that need a restart are marked.
+
+The **Plugins** section manages the built-in Wallpaper Engine plugin and compatible local or downloaded plugins. Wallpaper sources include images, video, and supported HTML wallpapers, which run in a sandboxed frame. Install only plugins from sources you trust. Use the backup controls to export, import, or reset the settings document; a settings backup does not include plugin files.
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:
@@ -382,8 +388,7 @@ Three layers, so a component never hard-codes a color:
 ESLint (in `app/`, `components/`, `hooks/`) rejects fixed palette classes (`bg-red-500`), hex values in classes
 (`bg-[#fff]`) and `dark:` variants. Use `cn` from `@/lib/utils`, which knows the theme's custom tokens.
 
-Light / dark / system mode is handled by next-themes. The default preset is `default`; the selected preset is stored
-in a cookie so the server renders it directly.
+Light / dark / system mode is handled by next-themes. The default preset is `default`. Appearance settings are saved by the API; an appearance cookie lets the frontend render those preferences on the first paint.
 
 To add a preset: create `styles/themes/<id>.css` and import it in `app/globals.css`, add `<id>` to
 `lib/theme/presets.ts`, add its display name under `theme.presets.<id>` in `messages/*.json`, then run
@@ -404,14 +409,14 @@ Each translated key must have the same structure as the default catalog. A messa
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin Route Handlers (disk-usage, file-ops, global-packages, npm-runs, package-managers, projects, scans)
-app/design-system/    Living style guide (adding a component or variant requires adding a showcase sample)
+app/api/              Same-origin Route Handlers (disk-usage, file-ops, global-packages, npm-runs, package-managers, projects, scans, settings)
+app/design-system/    Development-only style guide (adding a component or variant requires a showcase sample)
 components/ui/        shadcn/ui components (adapted to theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
 components/shared/    Shared UI helpers (disabled-reason tooltips, filters, return links)
-components/features/  Feature panels (disk-usage, file-ops, global-packages, npm-runner, package-managers, project-detail, project-list)
+components/features/  Feature panels (disk-usage, file-ops, global-packages, npm-runner, package-managers, project-detail, project-list, settings)
 i18n/, messages/      next-intl config and translations (vi, en)
 hooks/                Client hooks for scan, project analysis, disk usage (+ favorites), file ops (+ cleanup presets), runner, global packages, pins and navigation
 lib/                  Core client policy, session state machines and API helpers (api, config, disk-usage, file-ops, global-packages, npm-runner, package-managers, projects, scans, security, theme, ui)
