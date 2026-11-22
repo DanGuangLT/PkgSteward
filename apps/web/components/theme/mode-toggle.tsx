@@ -44,7 +44,7 @@ export function ModeToggle() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={t("label")}>
           <SunMoonIcon />
