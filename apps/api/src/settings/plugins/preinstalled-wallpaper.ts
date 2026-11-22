@@ -29,6 +29,13 @@ export function buildPreinstalledWallpaperManifest(): IPluginManifest {
           'off, aurora, particles, waves, matrix, mesh, image, or video',
       },
       {
+        key: 'mediaSource',
+        label: 'Custom Media Source',
+        type: 'string',
+        defaultValue: 'local',
+        description: 'local or url',
+      },
+      {
         key: 'mediaUrl',
         label: 'Image / Video URL',
         type: 'string',

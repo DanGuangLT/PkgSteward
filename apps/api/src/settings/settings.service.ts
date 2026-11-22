@@ -367,6 +367,7 @@ export class SettingsService implements ISettingsService {
         config: {
           ...(existingEntry?.config ?? {}),
           mode: saved.mediaType,
+          mediaSource: 'local',
           mediaAsset: saved.assetPath,
         },
       };

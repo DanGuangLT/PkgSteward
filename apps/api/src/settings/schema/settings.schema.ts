@@ -11,6 +11,7 @@ export const MAX_SETTINGS_PLUGIN_ENTRIES = 100;
 export const MAX_SETTINGS_PLUGIN_CONFIG_KEYS = 50;
 export const MAX_SETTINGS_TRUSTED_REGISTRIES = 20;
 export const MAX_SETTINGS_DESKTOP_KEYS = 50;
+export const MAX_PLUGIN_CONFIG_STRING_LENGTH = 2048;
 export const MAX_SCAN_DEPTH_LIMIT = 20;
 export const MAX_TIMEOUT_MS = 86_400_000;
 
@@ -134,6 +135,9 @@ export interface IBehaviorSettings {
   locale: SettingsLocale;
   defaultConsoleShell: SettingsConsoleShell;
   defaultPageSize: SettingsPageSize;
+  paginationEnabled: boolean;
+  showPageSizeSelector: boolean;
+  scrollToTopOnPageChange: boolean;
   autoRefreshOnFocus: boolean;
   confirmBeforeNavigation: boolean;
   dateFormat: SettingsDateFormat;
@@ -227,6 +231,9 @@ export const DEFAULT_BEHAVIOR_SETTINGS: Readonly<IBehaviorSettings> =
     locale: 'vi',
     defaultConsoleShell: 'cmd',
     defaultPageSize: 25,
+    paginationEnabled: true,
+    showPageSizeSelector: true,
+    scrollToTopOnPageChange: true,
     autoRefreshOnFocus: true,
     confirmBeforeNavigation: true,
     dateFormat: 'relative',
@@ -306,6 +313,9 @@ const BEHAVIOR_KEYS = new Set([
   'locale',
   'defaultConsoleShell',
   'defaultPageSize',
+  'paginationEnabled',
+  'showPageSizeSelector',
+  'scrollToTopOnPageChange',
   'autoRefreshOnFocus',
   'confirmBeforeNavigation',
   'dateFormat',
@@ -483,9 +493,12 @@ const parsePrimitiveRecord = (
         `${formatContext(filePath)}"${scope}.${key}" must be a string, finite number, boolean, or null`,
       );
     }
-    if (typeof val === 'string' && val.length > 1024) {
+    if (
+      typeof val === 'string' &&
+      val.length > MAX_PLUGIN_CONFIG_STRING_LENGTH
+    ) {
       throw new Error(
-        `${formatContext(filePath)}"${scope}.${key}" exceeds 1024 characters`,
+        `${formatContext(filePath)}"${scope}.${key}" exceeds ${MAX_PLUGIN_CONFIG_STRING_LENGTH} characters`,
       );
     }
     safeOut[key] = val;
@@ -787,6 +800,27 @@ const parseBehaviorSection = (
           value,
           PAGE_SIZES,
           'behavior.defaultPageSize',
+          filePath,
+        );
+        break;
+      case 'paginationEnabled':
+        out.paginationEnabled = assertBoolean(
+          value,
+          'behavior.paginationEnabled',
+          filePath,
+        );
+        break;
+      case 'showPageSizeSelector':
+        out.showPageSizeSelector = assertBoolean(
+          value,
+          'behavior.showPageSizeSelector',
+          filePath,
+        );
+        break;
+      case 'scrollToTopOnPageChange':
+        out.scrollToTopOnPageChange = assertBoolean(
+          value,
+          'behavior.scrollToTopOnPageChange',
           filePath,
         );
         break;

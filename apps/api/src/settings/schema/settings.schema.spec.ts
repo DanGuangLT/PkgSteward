@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import {
   applyOverridesToDocument,
   createDefaultSettingsDocument,
+  MAX_PLUGIN_CONFIG_STRING_LENGTH,
   MAX_TIMEOUT_MS,
   migrateLegacyFlatSettings,
   parseStructuredSettingsDocument,
@@ -23,6 +24,9 @@ describe('settings.schema', () => {
     expect(doc.appearance.themePreset).toBe('default');
     expect(doc.appearance.navigationLayout).toBe('topbar');
     expect(doc.appearance.showBreadcrumbs).toBe(false);
+    expect(doc.behavior.paginationEnabled).toBe(true);
+    expect(doc.behavior.showPageSizeSelector).toBe(true);
+    expect(doc.behavior.scrollToTopOnPageChange).toBe(true);
     expect(doc.behavior.advancedMode).toBe(false);
     expect(doc.plugins.enabled).toBe(true);
     expect(doc.plugins.allowLocalPlugins).toBe(true);
@@ -249,11 +253,50 @@ describe('settings.schema', () => {
       ),
     ).toThrow(/path traversal/);
 
+    const longUrl = `https://example.com/${'a'.repeat(1500)}.jpg`;
+    const withLongConfig = parseStructuredSettingsOverrides({
+      schemaVersion: 1,
+      plugins: {
+        entries: {
+          'wallpaper-engine': {
+            enabled: true,
+            config: { mediaUrl: longUrl, mediaSource: 'url' },
+          },
+        },
+      },
+    });
+    expect(
+      withLongConfig.plugins?.entries?.['wallpaper-engine']?.config.mediaUrl,
+    ).toBe(longUrl);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        plugins: {
+          entries: {
+            'wallpaper-engine': {
+              enabled: true,
+              config: {
+                mediaUrl: `https://example.com/${'a'.repeat(MAX_PLUGIN_CONFIG_STRING_LENGTH)}`,
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/exceeds 2048 characters/);
+
     expect(() =>
       parseStructuredSettingsOverrides({
         schemaVersion: 1,
         plugins: { trustedRegistries: ['not a url'] },
       }),
     ).toThrow(/trustedRegistries.*contains invalid URL/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        behavior: { paginationEnabled: 'yes' },
+      }),
+    ).toThrow(/behavior\.paginationEnabled/);
   });
 });
