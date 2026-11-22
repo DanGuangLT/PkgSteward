@@ -4,7 +4,7 @@ All notable changes to **PkgSteward** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-11-22
+## [1.0.0]
 
 First stable release of **PkgSteward**, a local single-user Windows workspace to scan, inspect, measure, clean, and manage Node.js / npm / pnpm / Yarn projects on your machine.
 
@@ -28,7 +28,7 @@ First stable release of **PkgSteward**, a local single-user Windows workspace to
 - **Global Packages & Package-Manager Pinning (`GlobalPackagesModule`, `PackageManagerModule`):** Preview/confirm management of global npm (`10–12`) and pnpm (`10–12`) packages (including global `npm` version change/restore/repair) and format-preserving `packageManager` manifest pinning.
 - **Web UI (`@pkgsteward/web`):** Next.js 16 App Router workspace with light/dark themes (WCAG AA contrast), Vietnamese/English i18n (`next-intl`), disabled-reason tooltips, URL- and session-persisted workspace filters, and `/design-system`.
 
-## [0.2.4-alpha] - 2026-11-20
+## [0.2.4-alpha] - 2026-11-16
 
 - Native Windows CMD / PowerShell project terminal runner with persistent shell window & recovery hold (replacing the embedded terminal), bounded checkbox filter popovers, and workspace-wide FE UX overhaul across Home/Projects, Disk Usage, Project Detail, Files, Global Packages, `/cleanup` presets, WCAG AA warning tokens, and disabled-reason tooltips.
 
