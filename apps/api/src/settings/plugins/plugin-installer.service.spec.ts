@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -165,6 +166,96 @@ describe('PluginInstallerService', () => {
     ).rejects.toThrow(ValidationException);
   });
 
+  it.each([
+    ['127.0.0.1', '127.0.0.1'],
+    ['[::1]', '::1'],
+    ['localhost', 'localhost'],
+  ])(
+    'downloads from the explicitly trusted %s origin using a loopback-only connection',
+    async (host, hostname) => {
+      const origin = `http://${host}:8123`;
+      const lookup = jest.fn(() => Promise.reject(new Error('unexpected DNS')));
+      installer.setNetworkAdaptersForTest({ lookup });
+      const fetchMock = jest
+        .spyOn(globalThis, 'fetch')
+        .mockRejectedValue(new Error('unexpected full-URL fetch'));
+      const request = jest.spyOn(http, 'request').mockImplementation(() => {
+        throw new Error('stop before connecting');
+      });
+      try {
+        await expect(
+          installer.previewInstallFromUrl(
+            { ...DEFAULT_PLUGINS_SETTINGS, trustedRegistries: [origin] },
+            `${origin}/sample.zip?rev=1`,
+          ),
+        ).rejects.toThrow('stop before connecting');
+        expect(request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            hostname,
+            port: '8123',
+            path: '/sample.zip?rev=1',
+            headers: {
+              Host: `${host}:8123`,
+              'User-Agent': 'PkgSteward-PluginInstaller/1.0',
+            },
+          }),
+          expect.any(Function),
+        );
+        expect(lookup).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+        if (host === 'localhost') {
+          const options = request.mock.calls[0][0] as http.RequestOptions;
+          const onLookup = jest.fn();
+          options.lookup?.('localhost', { all: true }, onLookup);
+          expect(onLookup).toHaveBeenCalledWith(null, [
+            { address: '::1', family: 6 },
+            { address: '127.0.0.1', family: 4 },
+          ]);
+        }
+      } finally {
+        request.mockRestore();
+        fetchMock.mockRestore();
+      }
+    },
+  );
+
+  it('stops at a redirect to a loopback origin that is not on the trusted list', async () => {
+    const origin = 'http://127.0.0.1:8123';
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('unexpected full-URL fetch'));
+    const request = jest
+      .spyOn(http, 'request')
+      .mockImplementation((...args: unknown[]) => {
+        const [, respond] = args as [
+          http.RequestOptions,
+          (res: EventEmitter) => void,
+        ];
+        const response = Object.assign(new EventEmitter(), {
+          statusCode: 302,
+          headers: { location: 'http://127.0.0.1:8124/sample.zip' },
+        });
+        return Object.assign(new EventEmitter(), {
+          end: () => {
+            respond(response);
+            response.emit('end');
+          },
+        }) as ReturnType<typeof http.request>;
+      });
+    try {
+      await expect(
+        installer.previewInstallFromUrl(
+          { ...DEFAULT_PLUGINS_SETTINGS, trustedRegistries: [origin] },
+          `${origin}/sample.zip`,
+        ),
+      ).rejects.toThrow('explicitly trusted loopback registries');
+      expect(request).toHaveBeenCalledTimes(1);
+    } finally {
+      request.mockRestore();
+      fetchMock.mockRestore();
+    }
+  });
+
   it('uses the approved IP for HTTPS but keeps the original Host and TLS identity', async () => {
     const request = jest.spyOn(https, 'request').mockImplementation(() => {
       throw new Error('stop before connecting');
@@ -199,20 +290,23 @@ describe('PluginInstallerService', () => {
   });
 
   it('rejects a lookup result without a usable address before downloading', async () => {
-    const fetchMock = jest.fn(() =>
-      Promise.reject(new Error('unexpected download')),
-    );
-    installer.setNetworkAdaptersForTest({
-      lookup: () => Promise.resolve([{ address: ' 93.184.216.34 ' }]),
-      fetchImpl: fetchMock,
+    const request = jest.spyOn(https, 'request').mockImplementation(() => {
+      throw new Error('unexpected download');
     });
-    await expect(
-      installer.previewInstallFromUrl(
-        DEFAULT_PLUGINS_SETTINGS,
-        'https://plugins.example/sample.zip',
-      ),
-    ).rejects.toThrow(ValidationException);
-    expect(fetchMock).not.toHaveBeenCalled();
+    try {
+      installer.setNetworkAdaptersForTest({
+        lookup: () => Promise.resolve([{ address: ' 93.184.216.34 ' }]),
+      });
+      await expect(
+        installer.previewInstallFromUrl(
+          DEFAULT_PLUGINS_SETTINGS,
+          'https://plugins.example/sample.zip',
+        ),
+      ).rejects.toThrow(ValidationException);
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
   });
 
   it('uses a newly approved HTTPS address after a redirect', async () => {
@@ -347,7 +441,7 @@ describe('PluginInstallerService', () => {
     expect(existsSync(join(pluginsDir, 'aurora-shader'))).toBe(false);
   });
 
-  it('installs npm: package from mocked safe public endpoint and verifies redirect hops', async () => {
+  it('installs npm: package from mocked public metadata and archive requests', async () => {
     const tgz = makeSimpleTarGz(
       'package/package.json',
       Buffer.from(
@@ -358,46 +452,60 @@ describe('PluginInstallerService', () => {
         }),
       ),
     );
-    const fetchMock = jest
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Headers(),
-        body: null,
-        arrayBuffer: () =>
-          Promise.resolve(
-            Buffer.from(
-              JSON.stringify({
-                dist: {
-                  tarball: 'https://registry.npmjs.org/demo/-/demo-1.2.3.tgz',
-                },
-              }),
-            ),
-          ),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: new Headers(),
-        body: null,
-        arrayBuffer: () => Promise.resolve(tgz),
-      });
-
     installer.setNetworkAdaptersForTest({
-      lookup: jest.fn(() => Promise.resolve([{ address: '104.16.25.34' }])),
-      fetchImpl: fetchMock as typeof fetch,
+      lookup: () => Promise.resolve([{ address: '104.16.25.34' }]),
     });
-
-    const preview = await installer.previewInstallFromUrl(
-      { ...DEFAULT_PLUGINS_SETTINGS, trustedRegistries: [] },
-      'npm:demo-community-plugin',
-    );
-    expect(preview.pluginId).toBe('demo-community-plugin');
-    expect(preview.format).toBe('package.json');
-    expect(preview.risk.reasons.map((r) => r.code)).toContain(
-      'PLUGIN_INSTALL_REMOTE',
-    );
+    const request = jest
+      .spyOn(https, 'request')
+      .mockImplementation((...args: unknown[]) => {
+        const [options, respond] = args as [
+          https.RequestOptions,
+          (res: EventEmitter) => void,
+        ];
+        const body =
+          options.path === '/demo-community-plugin/latest'
+            ? Buffer.from(
+                JSON.stringify({
+                  dist: {
+                    tarball: 'https://registry.npmjs.org/demo/-/demo-1.2.3.tgz',
+                  },
+                }),
+              )
+            : tgz;
+        const response = Object.assign(new EventEmitter(), {
+          statusCode: 200,
+          headers: {},
+        });
+        return Object.assign(new EventEmitter(), {
+          end: () => {
+            respond(response);
+            response.emit('data', body);
+            response.emit('end');
+          },
+        }) as ReturnType<typeof https.request>;
+      });
+    try {
+      const preview = await installer.previewInstallFromUrl(
+        { ...DEFAULT_PLUGINS_SETTINGS, trustedRegistries: [] },
+        'npm:demo-community-plugin',
+      );
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          hostname: '104.16.25.34',
+          servername: 'registry.npmjs.org',
+          path: '/demo/-/demo-1.2.3.tgz',
+        }),
+        expect.any(Function),
+      );
+      expect(preview.pluginId).toBe('demo-community-plugin');
+      expect(preview.format).toBe('package.json');
+      expect(preview.risk.reasons.map((r) => r.code)).toContain(
+        'PLUGIN_INSTALL_REMOTE',
+      );
+    } finally {
+      request.mockRestore();
+    }
   });
 
   it('saves valid wallpaper PNG with magic byte verification and rejects spoofed files', async () => {

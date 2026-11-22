@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { lookup as nodeDnsLookup } from 'node:dns/promises';
+import * as http from 'node:http';
 import * as https from 'node:https';
 import {
   lstat,
@@ -12,7 +13,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 import { basename, extname, join } from 'node:path';
 import {
   ConflictException,
@@ -64,7 +65,23 @@ const REMOTE_FETCH_TIMEOUT_MS = 20_000;
 export type DnsLookupFn = (
   hostname: string,
 ) => Promise<ReadonlyArray<{ address: string }>>;
-export type FetchFn = typeof fetch;
+type RemoteDestination =
+  | { kind: 'loopback'; hostname: 'localhost' | '127.0.0.1' | '::1' }
+  | { kind: 'https'; address: string };
+
+// Preserve both localhost address families without consulting DNS.
+const lookupLocalhost: LookupFunction = (_host, options, callback) => {
+  const ipv6 = { address: '::1', family: 6 };
+  const ipv4 = { address: '127.0.0.1', family: 4 };
+  const addresses =
+    options.family === 4 || options.family === 'IPv4'
+      ? [ipv4]
+      : options.family === 6 || options.family === 'IPv6'
+        ? [ipv6]
+        : [ipv6, ipv4];
+  if (options.all) callback(null, addresses);
+  else callback(null, addresses[0].address, addresses[0].family);
+};
 
 interface IStagedInstallPreview {
   kind: 'install';
@@ -301,7 +318,6 @@ export class PluginInstallerService {
   private readonly previews = new Map<string, IStoredPluginPreview>();
   private lookupImpl: DnsLookupFn = (host) =>
     nodeDnsLookup(host, { all: true });
-  private fetchImplForTest?: FetchFn;
 
   constructor(
     private readonly registry: PluginRegistryService,
@@ -310,12 +326,8 @@ export class PluginInstallerService {
     private readonly gate: MutationGateService,
   ) {}
 
-  setNetworkAdaptersForTest(adapters: {
-    lookup?: DnsLookupFn;
-    fetchImpl?: FetchFn;
-  }): void {
+  setNetworkAdaptersForTest(adapters: { lookup?: DnsLookupFn }): void {
     if (adapters.lookup) this.lookupImpl = adapters.lookup;
-    if (adapters.fetchImpl) this.fetchImplForTest = adapters.fetchImpl;
   }
 
   async ensurePreinstalled(pluginsSettings: IPluginsSettings): Promise<void> {
@@ -836,7 +848,7 @@ export class PluginInstallerService {
     trustedRegistries: readonly string[],
   ): Promise<{
     url: URL;
-    destination: { kind: 'loopback' } | { kind: 'https'; address: string };
+    destination: RemoteDestination;
   }> {
     let url: URL;
     try {
@@ -848,20 +860,26 @@ export class PluginInstallerService {
       throw new ValidationException('Plugin URLs must not contain credentials');
     }
 
-    const isLoopbackHttp =
+    const loopbackHost =
+      url.hostname === 'localhost'
+        ? 'localhost'
+        : url.hostname === '127.0.0.1'
+          ? '127.0.0.1'
+          : url.hostname === '[::1]'
+            ? '::1'
+            : null;
+    if (
       url.protocol === 'http:' &&
-      (url.hostname === 'localhost' ||
-        url.hostname === '127.0.0.1' ||
-        url.hostname === '[::1]') &&
-      trustedRegistries.includes(url.origin);
-
-    if (url.protocol !== 'https:' && !isLoopbackHttp) {
+      loopbackHost !== null &&
+      trustedRegistries.includes(url.origin)
+    ) {
+      return { url, destination: { kind: 'loopback', hostname: loopbackHost } };
+    }
+    if (url.protocol !== 'https:') {
       throw new ValidationException(
         'Only https:// URLs (or explicitly trusted loopback registries) are allowed',
       );
     }
-
-    if (isLoopbackHttp) return { url, destination: { kind: 'loopback' } };
 
     const host = url.hostname.replace(/^\[|\]$/g, '');
     if (isIP(host)) {
@@ -909,28 +927,10 @@ export class PluginInstallerService {
         trustedRegistries,
       );
 
-      let status: number;
-      let headers: Headers;
-      let pinnedBodyBuffer: Buffer | null = null;
-      let fetchResponse: Response | null = null;
-
-      if (validated.destination.kind === 'https' && !this.fetchImplForTest) {
-        const res = await this.performPinnedHttpsGet(
-          validated.url,
-          validated.destination.address,
-        );
-        status = res.status;
-        headers = res.headers;
-        pinnedBodyBuffer = res.bodyBuffer;
-      } else {
-        fetchResponse = await (this.fetchImplForTest ?? fetch)(validated.url, {
-          method: 'GET',
-          redirect: 'manual',
-          signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
-        });
-        status = fetchResponse.status;
-        headers = fetchResponse.headers;
-      }
+      const { status, headers, bodyBuffer } = await this.performRemoteGet(
+        validated.url,
+        validated.destination,
+      );
 
       const location = headers.get('location');
       if (status >= 300 && status < 400 && location) {
@@ -964,20 +964,6 @@ export class PluginInstallerService {
         );
       }
 
-      const contentLenHeader = headers.get('content-length');
-      if (contentLenHeader) {
-        const len = Number(contentLenHeader);
-        if (Number.isFinite(len) && len > MAX_PLUGIN_ARCHIVE_BYTES) {
-          throw new ValidationException(
-            `Remote plugin exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes limit`,
-          );
-        }
-      }
-
-      const bodyBuffer =
-        pinnedBodyBuffer !== null
-          ? pinnedBodyBuffer
-          : await this.readStreamBounded(fetchResponse!);
       const disposition = headers.get('content-disposition') ?? '';
       const dispMatch = /filename\*?=(?:UTF-8'')?["']?([^"';\s]+)/i.exec(
         disposition,
@@ -992,20 +978,31 @@ export class PluginInstallerService {
     );
   }
 
-  private performPinnedHttpsGet(
+  private performRemoteGet(
     url: URL,
-    address: string,
+    destination: RemoteDestination,
   ): Promise<{ status: number; headers: Headers; bodyBuffer: Buffer }> {
     return new Promise((resolve, reject) => {
+      const loopback = destination.kind === 'loopback';
+      const request = loopback ? http.request : https.request;
       const hostname = url.hostname.replace(/^\[|\]$/g, '');
-      // Connect to the checked IP without a second DNS lookup; verify the original HTTPS identity.
-      const req = https.request(
+      // Connect only to a checked IP or a fixed loopback destination.
+      const req = request(
         {
-          hostname: address,
-          port: Number(url.port || '443'),
+          ...(loopback
+            ? {
+                hostname: destination.hostname,
+                port: url.port || 80,
+                lookup: lookupLocalhost,
+                signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
+              }
+            : {
+                hostname: destination.address,
+                port: Number(url.port || '443'),
+                servername: isIP(hostname) ? '' : hostname,
+                rejectUnauthorized: true,
+              }),
           path: `${url.pathname}${url.search}`,
-          servername: isIP(hostname) ? '' : hostname,
-          rejectUnauthorized: true,
           agent: false,
           method: 'GET',
           timeout: REMOTE_FETCH_TIMEOUT_MS,
@@ -1082,41 +1079,6 @@ export class PluginInstallerService {
       });
       req.end();
     });
-  }
-
-  private async readStreamBounded(response: Response): Promise<Buffer> {
-    if (!response.body) {
-      const ab = await response.arrayBuffer();
-      if (ab.byteLength > MAX_PLUGIN_ARCHIVE_BYTES) {
-        throw new ValidationException(
-          `Remote plugin exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes limit`,
-        );
-      }
-      return Buffer.from(ab);
-    }
-
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          total += value.byteLength;
-          if (total > MAX_PLUGIN_ARCHIVE_BYTES) {
-            await reader.cancel().catch(() => undefined);
-            throw new ValidationException(
-              `Remote plugin exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes limit`,
-            );
-          }
-          chunks.push(value);
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-    return Buffer.concat(chunks);
   }
 
   private async stagePackagePreview(
