@@ -11,7 +11,9 @@ import {
   type IAssessDeps,
 } from '@/file-ops/assessment/file-ops-assessment';
 import * as risk from '@/file-ops/assessment/file-ops-risk';
+import { GIT_PROBE_CONCURRENCY } from '@/file-ops/git/git-probe';
 import type {
+  GitStatusResult,
   GitTrackedResult,
   IFileOpsFs,
   IFileOpsStat,
@@ -761,5 +763,132 @@ describe('assessTargets', () => {
     expect(f.facts).not.toHaveBeenCalled();
     if (stage !== 'process') expect(f.capture).not.toHaveBeenCalled();
     if (stage === 'before') expect(f.checkMany).not.toHaveBeenCalled();
+  });
+
+  it('probes owner git status concurrently up to GIT_PROBE_CONCURRENCY while preserving output order', async () => {
+    const f = fixture();
+    const ownerStatuses: GitStatusResult[] = [
+      { state: 'dirty', changedCount: 2 },
+      { state: 'clean' },
+      { state: 'unknown', reason: 'timeout' },
+      { state: 'not_repo' },
+      { state: 'dirty', changedCount: 1 },
+      { state: 'clean' },
+    ];
+    const ownerRoots = ownerStatuses.map((_, index) => {
+      const ownerRoot = `D:\\TEST-owner-${index + 1}`;
+      const nmPath = f.api.join(ownerRoot, 'node_modules');
+      f.put(ownerRoot);
+      f.put(f.api.join(ownerRoot, 'package.json'), true);
+      f.put(nmPath);
+      f.scan.projects.push({
+        path: ownerRoot,
+        name: `TEST-owner-${index + 1}`,
+        packageManager: 'pnpm',
+        hasLockfile: false,
+        lastActivityAt: '2020-01-01T00:00:00.000Z',
+        nodeModules: { exists: true, path: nmPath, sizeBytes: null },
+      });
+      return { ownerRoot, nmPath };
+    });
+
+    const waiters = new Map<string, (value: GitStatusResult) => void>();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    f.gitStatus.mockImplementation((ownerPath) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise<GitStatusResult>((resolve) => {
+        waiters.set(toComparable(ownerPath, 'win32'), (result) => {
+          inFlight -= 1;
+          resolve(result);
+        });
+      });
+    });
+
+    const runPromise = f.run(ownerRoots.map((entry) => entry.nmPath));
+    for (let i = 0; i < 10 && waiters.size < GIT_PROBE_CONCURRENCY; i += 1) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    expect(waiters.size).toBe(GIT_PROBE_CONCURRENCY);
+    expect(inFlight).toBe(GIT_PROBE_CONCURRENCY);
+
+    // Resolve the first wave in reverse order, then the remaining owners.
+    for (const index of [3, 1, 2, 0]) {
+      const key = toComparable(ownerRoots[index].ownerRoot, 'win32');
+      waiters.get(key)!(ownerStatuses[index]);
+    }
+    for (let i = 0; i < 10 && waiters.size < ownerRoots.length; i += 1) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(waiters.size).toBe(ownerRoots.length);
+    for (const index of [5, 4]) {
+      const key = toComparable(ownerRoots[index].ownerRoot, 'win32');
+      waiters.get(key)!(ownerStatuses[index]);
+    }
+
+    const assessed = await runPromise;
+    expect(maxInFlight).toBe(GIT_PROBE_CONCURRENCY);
+    expect(f.gitStatus).toHaveBeenCalledTimes(ownerRoots.length);
+    expect(assessed.map((item) => item.path)).toEqual(
+      ownerRoots.map((entry) => entry.nmPath),
+    );
+    expect(
+      assessed.map((item) => item.risk.reasons.map(({ code }) => code)),
+    ).toEqual([
+      ['UNCOMMITTED_GIT_CHANGES'],
+      [],
+      ['RISK_CHECK_INCOMPLETE'],
+      [],
+      ['UNCOMMITTED_GIT_CHANGES'],
+      [],
+    ]);
+  });
+
+  it('stops starting queued git status probes and skips process capture on mid-batch abort', async () => {
+    const f = fixture();
+    const nmPaths = Array.from({ length: 6 }, (_, index) => {
+      const ownerRoot = `D:\\TEST-abort-owner-${index + 1}`;
+      const nmPath = f.api.join(ownerRoot, 'node_modules');
+      f.put(ownerRoot);
+      f.put(f.api.join(ownerRoot, 'package.json'), true);
+      f.put(nmPath);
+      f.scan.projects.push({
+        path: ownerRoot,
+        name: `TEST-abort-owner-${index + 1}`,
+        packageManager: 'pnpm',
+        hasLockfile: false,
+        lastActivityAt: '2020-01-01T00:00:00.000Z',
+        nodeModules: { exists: true, path: nmPath, sizeBytes: null },
+      });
+      return nmPath;
+    });
+
+    const resolvers: Array<(value: GitStatusResult) => void> = [];
+    f.gitStatus.mockImplementation(
+      () =>
+        new Promise<GitStatusResult>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+
+    const runPromise = f.run(nmPaths);
+    for (
+      let i = 0;
+      i < 10 && resolvers.length < GIT_PROBE_CONCURRENCY;
+      i += 1
+    ) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    expect(resolvers).toHaveLength(GIT_PROBE_CONCURRENCY);
+    const reason = new Error('TEST aborted mid parallel git status');
+    f.controller.abort(reason);
+    for (const resolve of resolvers) resolve({ state: 'clean' });
+
+    await expect(runPromise).rejects.toBe(reason);
+    expect(f.gitStatus).toHaveBeenCalledTimes(GIT_PROBE_CONCURRENCY);
+    expect(f.capture).not.toHaveBeenCalled();
   });
 });

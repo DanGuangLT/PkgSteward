@@ -18,6 +18,7 @@ import {
   type IOwnerActivity,
   type ProcessState,
 } from '@/file-ops/assessment/file-ops-risk';
+import { GIT_PROBE_CONCURRENCY } from '@/file-ops/git/git-probe';
 import {
   classifyTargets,
   matchBuildCacheName,
@@ -195,11 +196,31 @@ export async function assessTargets(
   }
 
   const statuses = new Map<string, GitStatusResult>();
-  for (const [ownerKey, ownerPath] of owners) {
+  if (owners.size > 0) {
     signal.throwIfAborted();
-    const status = await git.status(ownerPath, signal);
-    signal.throwIfAborted();
-    statuses.set(ownerKey, status);
+    const queue = owners.entries();
+    const workerCount = Math.min(GIT_PROBE_CONCURRENCY, owners.size);
+    let hasError = false;
+    let firstError: unknown;
+    const workers = Array.from({ length: workerCount }, async () => {
+      for (let next = queue.next(); !next.done; next = queue.next()) {
+        if (signal.aborted || hasError) return;
+        const [ownerKey, ownerPath] = next.value;
+        try {
+          const status = await git.status(ownerPath, signal);
+          if (signal.aborted || hasError) return;
+          statuses.set(ownerKey, status);
+        } catch (error) {
+          if (!hasError) {
+            hasError = true;
+            firstError = error;
+          }
+          return;
+        }
+      }
+    });
+    await Promise.all(workers);
+    if (hasError && !signal.aborted) throw firstError;
   }
   signal.throwIfAborted();
   // Invalid-only batches must not trigger a machine-wide process capture.

@@ -1,5 +1,6 @@
 import { planPinEdit } from '@/package-managers/pinning/pm-manifest';
 import { MANIFEST_EDITS } from '@/package-managers/__fixtures__/manifests';
+import { expectPmAppError } from '@/package-managers/__fixtures__/pm-error.fixture';
 
 const target = 'npm@11.17.0';
 const parse = (bytes: Buffer): Record<string, unknown> =>
@@ -100,9 +101,9 @@ describe('format-preserving project pin plan', () => {
     '{"x":}',
     '{"x":"\\uZZZZ"}',
   ])('refuses duplicate/ambiguous/non-strict JSON %p', (text) => {
-    expect(() => planPinEdit(Buffer.from(text), target)).toThrow(
-      expect.objectContaining({ details: { reason: 'CONFIG_UNSUPPORTED' } }),
-    );
+    expectPmAppError(() => planPinEdit(Buffer.from(text), target), {
+      details: { reason: 'CONFIG_UNSUPPORTED' },
+    });
   });
   it.each([
     Buffer.from([0xff, 0xfe, 0x7b, 0x00, 0x7d, 0x00]),
@@ -111,31 +112,31 @@ describe('format-preserving project pin plan', () => {
       0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xed, 0xa0, 0x80, 0x22, 0x7d,
     ]),
   ])('refuses non-UTF8 without replacement decoding', (bytes) => {
-    expect(() => planPinEdit(bytes, target)).toThrow(
-      expect.objectContaining({ details: { reason: 'CONFIG_UNSUPPORTED' } }),
-    );
+    expectPmAppError(() => planPinEdit(bytes, target), {
+      details: { reason: 'CONFIG_UNSUPPORTED' },
+    });
   });
   it('accepts depth 64 and refuses depth 65 before recursive parsing', () => {
     const nested = (levels: number) =>
       `{"x":${'['.repeat(levels)}0${']'.repeat(levels)}}`;
     expect(() => planPinEdit(Buffer.from(nested(63)), target)).not.toThrow();
-    expect(() => planPinEdit(Buffer.from(nested(64)), target)).toThrow(
-      expect.objectContaining({ details: { reason: 'CONFIG_UNSUPPORTED' } }),
-    );
+    expectPmAppError(() => planPinEdit(Buffer.from(nested(64)), target), {
+      details: { reason: 'CONFIG_UNSUPPORTED' },
+    });
   });
   it('refuses an oversized manifest without truncating the write', () => {
-    expect(() =>
-      planPinEdit(Buffer.from(`{"x":"${'a'.repeat(1024 * 1024)}"}`), target),
-    ).toThrow(
-      expect.objectContaining({ details: { reason: 'LIMIT_EXCEEDED' } }),
+    expectPmAppError(
+      () =>
+        planPinEdit(Buffer.from(`{"x":"${'a'.repeat(1024 * 1024)}"}`), target),
+      { details: { reason: 'LIMIT_EXCEEDED' } },
     );
   });
   it('refuses an insertion that would make a bounded input exceed the manifest byte limit', () => {
     const bytes = Buffer.from('{"x":"' + 'a'.repeat(1024 * 1024 - 8) + '"}');
     expect(bytes.byteLength).toBe(1024 * 1024);
-    expect(() => planPinEdit(bytes, target)).toThrow(
-      expect.objectContaining({ details: { reason: 'LIMIT_EXCEEDED' } }),
-    );
+    expectPmAppError(() => planPinEdit(bytes, target), {
+      details: { reason: 'LIMIT_EXCEEDED' },
+    });
   });
   it.each([
     'latest',
@@ -156,34 +157,32 @@ describe('format-preserving project pin plan', () => {
     'npm@11.17.0+build',
     `npm@11.17.0+sha256.${'a'.repeat(64)}`,
   ])('refuses an unsupported new declaration %p', (pin) => {
-    expect(() => planPinEdit(Buffer.from('{}'), pin)).toThrow(
-      expect.objectContaining({
-        details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
-      }),
-    );
+    expectPmAppError(() => planPinEdit(Buffer.from('{}'), pin), {
+      details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
+    });
   });
   it.each([null, false, 1, {}, 'pnpm@latest', 'npm@11.1.0+build'])(
     'never overwrites an inert current declaration %p',
     (pin) => {
-      expect(() =>
-        planPinEdit(
-          Buffer.from(JSON.stringify({ packageManager: pin })),
-          target,
-        ),
-      ).toThrow(
-        expect.objectContaining({ details: { reason: 'PIN_UNSUPPORTED' } }),
+      expectPmAppError(
+        () =>
+          planPinEdit(
+            Buffer.from(JSON.stringify({ packageManager: pin })),
+            target,
+          ),
+        { details: { reason: 'PIN_UNSUPPORTED' } },
       );
     },
   );
   it('refuses same manager/version including a current hash', () => {
     for (const pin of [target, `${target}+sha256.${'a'.repeat(64)}`])
-      expect(() =>
-        planPinEdit(
-          Buffer.from(JSON.stringify({ packageManager: pin })),
-          target,
-        ),
-      ).toThrow(
-        expect.objectContaining({ details: { reason: 'NO_VERSION_CHANGE' } }),
+      expectPmAppError(
+        () =>
+          planPinEdit(
+            Buffer.from(JSON.stringify({ packageManager: pin })),
+            target,
+          ),
+        { details: { reason: 'NO_VERSION_CHANGE' } },
       );
   });
   it('handles __proto__ as an ordinary JSON key and detects its duplicate', () => {

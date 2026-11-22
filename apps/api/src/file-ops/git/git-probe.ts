@@ -120,6 +120,7 @@ export class GitProbe implements IGitProbe {
   private activeCount = 0;
   private readonly queue: Array<() => void> = [];
   private gitPath?: string;
+  private gitPathPromise?: Promise<string | undefined>;
 
   async status(
     projectRoot: string,
@@ -194,19 +195,38 @@ export class GitProbe implements IGitProbe {
     }
   }
 
+  private getGitPath(): Promise<string | undefined> {
+    if (this.gitPath !== undefined) return Promise.resolve(this.gitPath);
+    if (this.gitPathPromise === undefined) {
+      this.gitPathPromise = resolveGitExecutable(
+        process.env.PATH,
+        this.platform,
+      )
+        .then((resolved) => {
+          const path = resolved ?? undefined;
+          if (path !== undefined) this.gitPath = path;
+          return path;
+        })
+        .finally(() => {
+          this.gitPathPromise = undefined;
+        });
+    }
+    return this.gitPathPromise;
+  }
+
   private async exec(
     projectRoot: string,
     args: readonly string[],
     signal?: AbortSignal,
   ): Promise<GitCommandResult> {
     // Never spawn a bare "git": a missing install must not fall back to a lookup in the project.
-    this.gitPath ??=
-      (await resolveGitExecutable(process.env.PATH, this.platform)) ??
-      undefined;
-    if (this.gitPath === undefined)
-      return { state: 'failed', error: { code: 'ENOENT' } };
     try {
-      const { stdout } = await execa(this.gitPath, args, {
+      const gitPath = await this.getGitPath();
+      if (signal?.aborted)
+        return { state: 'failed', error: { isCanceled: true } };
+      if (gitPath === undefined)
+        return { state: 'failed', error: { code: 'ENOENT' } };
+      const { stdout } = await execa(gitPath, args, {
         cwd: projectRoot,
         shell: false,
         timeout: GIT_PROBE_TIMEOUT_MS,
