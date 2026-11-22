@@ -89,7 +89,7 @@ export function BehaviorTab() {
             >
               {PAGE_SIZES.map((size) => (
                 <ToggleGroupItem key={size} value={String(size)}>
-                  {size}
+                  {t("pageSizeOption", { count: size })}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>

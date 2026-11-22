@@ -2,8 +2,9 @@
 
 import { HardDriveIcon, PlusIcon, Trash2Icon, ZapIcon } from "lucide-react"
 import { useState } from "react"
-import { useTranslations } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 
+import { UnitNumberInput } from "@/components/features/settings/unit-number-input"
 import { useSettings } from "@/components/settings/settings-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
+  formatDurationHintMs,
   inferScanRootMode,
+  MAX_TIMEOUT_MS,
   validateMaxDepthInput,
   validateScanRootInput,
   validateTimeoutInput,
@@ -36,6 +39,7 @@ export function RuntimeTab({
 }) {
   const t = useTranslations("settings.runtime")
   const tVal = useTranslations("settings.validation")
+  const locale = useLocale() === "en" ? "en" : "vi"
   const { behavior } = useSettings()
   const initial = snapshot.document.runtime
   const availableDrives = snapshot.availableDrives ?? []
@@ -45,34 +49,55 @@ export function RuntimeTab({
   const [selectedDrives, setSelectedDrives] = useState<string[]>(initialInferred.selectedDrives)
   const [scanPaths, setScanPaths] = useState<string[]>(initialInferred.customPaths)
   const [newPathInput, setNewPathInput] = useState("")
-  const [pathError, setPathError] = useState<string | null>(null)
+  const [addAttempted, setAddAttempted] = useState(false)
 
   const [maxScanDepth, setMaxScanDepth] = useState(String(initial.maxScanDepth))
   const [scanTimeoutEnabled, setScanTimeoutEnabled] = useState(initial.scanTimeoutMs !== null)
   const [scanTimeoutMs, setScanTimeoutMs] = useState(String(initial.scanTimeoutMs ?? 900_000))
   const [npmTimeoutEnabled, setNpmTimeoutEnabled] = useState(initial.npmCommandTimeoutMs !== null)
   const [npmTimeoutMs, setNpmTimeoutMs] = useState(String(initial.npmCommandTimeoutMs ?? 300_000))
-  const [formError, setFormError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
+
+  const livePathError =
+    newPathInput.trim() !== "" || addAttempted ? validateScanRootInput(newPathInput) : null
+  const drivesError =
+    submitted && scanMode === "drives" && selectedDrives.length === 0 ? t("drivesRequired") : null
+  const customPathsError =
+    submitted && scanMode === "custom" && scanPaths.length === 0 ? t("customPathsRequired") : null
+  const depthError = behavior.advancedMode ? validateMaxDepthInput(maxScanDepth) : null
+  const scanTimeoutError = behavior.advancedMode
+    ? validateTimeoutInput(scanTimeoutEnabled, scanTimeoutMs)
+    : null
+  const npmTimeoutError = behavior.advancedMode
+    ? validateTimeoutInput(npmTimeoutEnabled, npmTimeoutMs)
+    : null
+
+  const hasValidationErrors = Boolean(
+    (scanMode === "drives" && selectedDrives.length === 0) ||
+      (scanMode === "custom" && scanPaths.length === 0) ||
+      depthError ||
+      scanTimeoutError ||
+      npmTimeoutError
+  )
 
   const handleAddPath = () => {
     const trimmed = newPathInput.trim()
+    setAddAttempted(true)
     if (!trimmed) return
     const code = validateScanRootInput(trimmed)
-    if (code) {
-      setPathError(tVal(code))
-      return
-    }
+    if (code) return
+
     if (trimmed === "*") {
       setScanMode("all")
       setScanPaths([])
       setNewPathInput("")
-      setPathError(null)
+      setAddAttempted(false)
       return
     }
     setScanMode("custom")
     setScanPaths((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
     setNewPathInput("")
-    setPathError(null)
+    setAddAttempted(false)
   }
 
   const toggleDrive = (drive: string, checked: boolean) => {
@@ -83,31 +108,8 @@ export function RuntimeTab({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setFormError(null)
-
-    if (scanMode === "drives" && selectedDrives.length === 0) {
-      setFormError(t("drivesRequired"))
-      return
-    }
-    if (scanMode === "custom" && scanPaths.length === 0) {
-      setFormError(t("customPathsRequired"))
-      return
-    }
-    const depthErr = validateMaxDepthInput(maxScanDepth)
-    if (depthErr) {
-      setFormError(tVal(depthErr))
-      return
-    }
-    const scanToErr = validateTimeoutInput(scanTimeoutEnabled, scanTimeoutMs)
-    if (scanToErr) {
-      setFormError(tVal(scanToErr))
-      return
-    }
-    const npmToErr = validateTimeoutInput(npmTimeoutEnabled, npmTimeoutMs)
-    if (npmToErr) {
-      setFormError(tVal(npmToErr))
-      return
-    }
+    setSubmitted(true)
+    if (hasValidationErrors) return
 
     const nextScanRootPaths =
       scanMode === "all"
@@ -127,7 +129,7 @@ export function RuntimeTab({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-6">
       <div className="flex items-start gap-2.5 rounded-md border border-border bg-card p-3.5 text-body-sm text-foreground">
         <ZapIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
         <span>{t("hotReloadBanner")}</span>
@@ -147,7 +149,7 @@ export function RuntimeTab({
             value={scanMode}
             onValueChange={(val) => {
               if (val === "drives" || val === "custom" || val === "all") {
-                setFormError(null)
+                setSubmitted(false)
                 setScanMode(val)
               }
             }}
@@ -220,6 +222,12 @@ export function RuntimeTab({
                   })}
                 </div>
               )}
+
+              {drivesError && (
+                <p role="alert" className="text-caption text-destructive">
+                  {drivesError}
+                </p>
+              )}
             </div>
           )}
 
@@ -230,7 +238,7 @@ export function RuntimeTab({
                   value={newPathInput}
                   onChange={(e) => {
                     setNewPathInput(e.target.value)
-                    if (pathError) setPathError(null)
+                    if (addAttempted) setAddAttempted(false)
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -240,6 +248,7 @@ export function RuntimeTab({
                   }}
                   placeholder={t("pathPlaceholder")}
                   aria-label={t("pathPlaceholder")}
+                  aria-invalid={livePathError ? true : undefined}
                   className="font-mono"
                 />
                 <Button type="button" variant="secondary" onClick={handleAddPath}>
@@ -247,7 +256,11 @@ export function RuntimeTab({
                   {t("addPath")}
                 </Button>
               </div>
-              {pathError && <p className="text-caption text-destructive">{pathError}</p>}
+              {livePathError && (
+                <p role="alert" className="text-caption text-destructive">
+                  {tVal(livePathError)}
+                </p>
+              )}
 
               {scanPaths.length === 0 ? (
                 <p className="text-body-sm text-muted-foreground">{t("noCustomPaths")}</p>
@@ -272,11 +285,12 @@ export function RuntimeTab({
                   ))}
                 </ul>
               )}
-            </div>
-          )}
-          {!behavior.advancedMode && formError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
-              {formError}
+
+              {customPathsError && (
+                <p role="alert" className="text-caption text-destructive">
+                  {customPathsError}
+                </p>
+              )}
             </div>
           )}
 
@@ -302,16 +316,19 @@ export function RuntimeTab({
                 <Label htmlFor="max-scan-depth">{t("maxScanDepthLabel")}</Label>
                 <SourceBadge source={snapshot.sources.runtime.maxScanDepth} />
               </div>
-              <Input
+              <UnitNumberInput
                 id="max-scan-depth"
                 type="number"
                 min={0}
                 max={20}
+                step={1}
+                unit={t("depthUnit")}
                 value={maxScanDepth}
                 onChange={(e) => setMaxScanDepth(e.target.value)}
-                className="max-w-44 font-mono"
+                error={depthError ? tVal(depthError) : null}
+                hint={t("maxScanDepthHint")}
+                containerClassName="max-w-56"
               />
-              <p className="text-caption text-muted-foreground">{t("maxScanDepthHint")}</p>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -327,14 +344,18 @@ export function RuntimeTab({
                 <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
               </label>
               {scanTimeoutEnabled && (
-                <Input
+                <UnitNumberInput
                   id="scan-timeout-ms"
                   type="number"
                   min={1000}
+                  max={MAX_TIMEOUT_MS}
                   step={1000}
+                  unit="ms"
                   value={scanTimeoutMs}
                   onChange={(e) => setScanTimeoutMs(e.target.value)}
-                  className="max-w-52 font-mono"
+                  error={scanTimeoutError ? tVal(scanTimeoutError) : null}
+                  hint={formatDurationHintMs(scanTimeoutMs, locale)}
+                  containerClassName="max-w-64"
                 />
               )}
             </div>
@@ -352,23 +373,21 @@ export function RuntimeTab({
                 <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
               </label>
               {npmTimeoutEnabled && (
-                <Input
+                <UnitNumberInput
                   id="npm-timeout-ms"
                   type="number"
                   min={1000}
+                  max={MAX_TIMEOUT_MS}
                   step={1000}
+                  unit="ms"
                   value={npmTimeoutMs}
                   onChange={(e) => setNpmTimeoutMs(e.target.value)}
-                  className="max-w-52 font-mono"
+                  error={npmTimeoutError ? tVal(npmTimeoutError) : null}
+                  hint={formatDurationHintMs(npmTimeoutMs, locale)}
+                  containerClassName="max-w-64"
                 />
               )}
             </div>
-
-            {formError && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
-                {formError}
-              </div>
-            )}
 
             <div className="flex justify-end">
               <Button type="submit" disabled={busy}>

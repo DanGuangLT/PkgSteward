@@ -60,7 +60,7 @@ export const DEFAULT_APPEARANCE: Readonly<AppearanceSettings> = {
   sidebarCollapsed: false,
   reducedMotion: "system",
   highContrastBorders: false,
-  showBreadcrumbs: true,
+  showBreadcrumbs: false,
 }
 
 export const DEFAULT_BEHAVIOR: Readonly<BehaviorSettings> = {

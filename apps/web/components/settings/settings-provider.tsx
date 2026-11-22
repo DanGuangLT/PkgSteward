@@ -30,6 +30,10 @@ interface SettingsContextValue {
   snapshot: SettingsSnapshot | null
   restartRequiredFields: (keyof ServerSettings)[]
   loading: boolean
+  settingsOpen: boolean
+  setSettingsOpen: (open: boolean) => void
+  openSettings: () => void
+  closeSettings: () => void
   updatePreferences: (patch: PreferencesPatch) => Promise<SettingsSnapshot | null>
   applySnapshot: (next: SettingsSnapshot) => void
   refreshSettings: () => Promise<SettingsSnapshot | null>
@@ -60,14 +64,17 @@ export function SettingsProvider({
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null)
   const [restartRequiredFields, setRestartRequiredFields] = useState<(keyof ServerSettings)[]>([])
   const [loading, setLoading] = useState(true)
+  const [settingsOpen, setSettingsOpenState] = useState(false)
 
   const appearanceRef = useRef(appearance)
   const behaviorRef = useRef(behavior)
+  const snapshotRef = useRef(snapshot)
 
   useEffect(() => {
     appearanceRef.current = appearance
     behaviorRef.current = behavior
-  }, [appearance, behavior])
+    snapshotRef.current = snapshot
+  }, [appearance, behavior, snapshot])
 
   const applySnapshot = useCallback(
     (next: SettingsSnapshot) => {
@@ -175,6 +182,44 @@ export function SettingsProvider({
     [applySnapshot, router, setTheme, t]
   )
 
+  const setSettingsOpen = useCallback(
+    (open: boolean) => {
+      setSettingsOpenState(open)
+      if (open && !snapshotRef.current) {
+        void refreshSettings()
+      }
+    },
+    [refreshSettings]
+  )
+
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true)
+  }, [setSettingsOpen])
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpenState(false)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key === ",") {
+        if (typeof window !== "undefined" && window.location.pathname === "/settings") {
+          return
+        }
+        event.preventDefault()
+        setSettingsOpenState((prev) => {
+          const next = !prev
+          if (next && !snapshotRef.current) {
+            void refreshSettings()
+          }
+          return next
+        })
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [refreshSettings])
+
   return (
     <SettingsContext.Provider
       value={{
@@ -183,6 +228,10 @@ export function SettingsProvider({
         snapshot,
         restartRequiredFields,
         loading,
+        settingsOpen,
+        setSettingsOpen,
+        openSettings,
+        closeSettings,
         updatePreferences,
         applySnapshot,
         refreshSettings,

@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { SettingsIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-/** Nút biểu tượng Cài đặt đặt cạnh chọn ngôn ngữ và chế độ sáng/tối. */
+/** Nút biểu tượng Cài đặt mở cửa sổ Settings nổi ngay trong ứng dụng. */
 export function SettingsNavButton({
   tooltipSide = "bottom",
 }: {
@@ -21,7 +20,9 @@ export function SettingsNavButton({
   const pathname = usePathname()
   const settings = useSettingsOptional()
 
-  const current = getNavCurrent(pathname, "/settings")
+  const onSettingsRoute = Boolean(getNavCurrent(pathname, "/settings"))
+  const isOpen = Boolean(settings?.settingsOpen)
+  const isActive = onSettingsRoute || isOpen
   const hasRestartPending = (settings?.restartRequiredFields.length ?? 0) > 0
   const label = t("settings")
   const restartBadge = t("restartBadge")
@@ -31,20 +32,27 @@ export function SettingsNavButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
-          asChild
-          className={cn("relative", current && "bg-muted text-foreground")}
+          aria-label={accessibleLabel}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          aria-current={onSettingsRoute ? "page" : undefined}
+          onClick={() => {
+            if (!onSettingsRoute) {
+              settings?.openSettings()
+            }
+          }}
+          className={cn("relative", isActive && "bg-muted text-foreground")}
         >
-          <Link href="/settings" aria-current={current} aria-label={accessibleLabel}>
-            <SettingsIcon aria-hidden />
-            {hasRestartPending && (
-              <span
-                className="absolute top-1.5 right-1.5 size-2 rounded-full bg-warning"
-                aria-hidden
-              />
-            )}
-          </Link>
+          <SettingsIcon aria-hidden />
+          {hasRestartPending && (
+            <span
+              className="absolute top-1.5 right-1.5 size-2 rounded-full bg-warning"
+              aria-hidden
+            />
+          )}
         </Button>
       </TooltipTrigger>
       <TooltipContent side={tooltipSide}>

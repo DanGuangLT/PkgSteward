@@ -11,6 +11,7 @@ import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { useSettings } from "@/components/settings/settings-provider"
 import { ModeToggle } from "@/components/theme/mode-toggle"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 /** Thanh điều hướng dọc kiểu ứng dụng Desktop/Electron (có thu gọn). */
@@ -29,30 +30,63 @@ export function SidebarNav() {
     >
       <div
         className={cn(
-          "flex h-16 items-center border-b border-border px-3",
-          collapsed ? "justify-center" : "justify-between"
+          "flex items-center border-b border-border",
+          collapsed ? "flex-col gap-2 px-2 py-3" : "h-16 justify-between px-3"
         )}
       >
-        {!collapsed && (
-          <Link
-            href="/"
-            className="flex items-center gap-2 rounded-sm text-heading-md font-bold text-primary focus-ring"
-          >
-            <Logo className="size-7 shrink-0" />
-            <span>{t("brand")}</span>
-          </Link>
+        {collapsed ? (
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/"
+                  aria-label={t("brand")}
+                  className="flex size-10 items-center justify-center rounded-md text-primary transition-colors hover:bg-muted focus-ring"
+                >
+                  <Logo className="size-7 shrink-0" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t("brand")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("expandSidebar")}
+                  onClick={() => {
+                    void updatePreferences({ appearance: { sidebarCollapsed: false } })
+                  }}
+                >
+                  <PanelLeftOpenIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t("expandSidebar")}</TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-sm text-heading-md font-bold text-primary focus-ring"
+            >
+              <Logo className="size-7 shrink-0" />
+              <span>{t("brand")}</span>
+            </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={t("collapseSidebar")}
+              onClick={() => {
+                void updatePreferences({ appearance: { sidebarCollapsed: true } })
+              }}
+            >
+              <PanelLeftCloseIcon />
+            </Button>
+          </>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
-          onClick={() => {
-            void updatePreferences({ appearance: { sidebarCollapsed: !collapsed } })
-          }}
-        >
-          {collapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
-        </Button>
       </div>
 
       <nav aria-label={t("mainNavigation")} className="flex-1 overflow-y-auto p-2.5">

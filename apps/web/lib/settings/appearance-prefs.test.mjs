@@ -9,6 +9,10 @@ import {
   serializeAppearanceCookie,
 } from "./appearance-prefs.ts"
 
+test("DEFAULT_APPEARANCE disables global breadcrumb strip by default", () => {
+  assert.equal(DEFAULT_APPEARANCE.showBreadcrumbs, false)
+})
+
 test("sanitizeAppearance rejects unknown/XSS values and preserves valid enum choices", () => {
   const sanitized = sanitizeAppearance(
     {

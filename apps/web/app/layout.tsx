@@ -13,6 +13,7 @@ import { getLocale, getTranslations } from "next-intl/server"
 
 import { NativeSessionStatus } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerProvider } from "@/components/features/npm-runner/npm-runner-provider"
+import { SettingsWindowModal } from "@/components/features/settings/settings-window-modal"
 import { AppShell } from "@/components/layout/app-shell"
 import { TopNav } from "@/components/layout/top-nav"
 import { SettingsProvider } from "@/components/settings/settings-provider"
@@ -112,6 +113,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                     <div className="relative z-10 flex min-h-full flex-1 flex-col">
                       <AppShell topNav={<TopNav />}>{children}</AppShell>
                     </div>
+                    <SettingsWindowModal />
                     <NativeSessionStatus />
                     <Toaster />
                   </NpmRunnerProvider>

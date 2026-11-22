@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { exportBrowserSettings } from "@/lib/api/settings/settings-browser"
-import { parseImportSettingsJson } from "@/lib/settings/settings-validation"
+import { validateBackupImportText } from "@/lib/settings/settings-validation"
 import type { SettingsResetScope } from "@/lib/settings/types"
 
 const RESET_SCOPES: readonly SettingsResetScope[] = [
@@ -32,9 +32,16 @@ export function BackupTab({
   onPreviewReset: (scope: SettingsResetScope) => Promise<void>
 }) {
   const t = useTranslations("settings.backup")
+  const tVal = useTranslations("settings.validation")
   const [importText, setImportText] = useState("")
-  const [importError, setImportError] = useState<string | null>(null)
+  const [readError, setReadError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
   const [resetScope, setResetScope] = useState<SettingsResetScope>("appearance")
+
+  const validation =
+    importText.trim() !== "" || submitted ? validateBackupImportText(importText) : null
+  const displayError =
+    readError ?? (validation && !validation.ok ? tVal(validation.code) : null)
 
   const handleDownloadExport = async () => {
     try {
@@ -72,20 +79,19 @@ export function BackupTab({
     try {
       const text = await file.text()
       setImportText(text)
-      setImportError(null)
+      setReadError(null)
+      setSubmitted(false)
     } catch {
-      setImportError(t("fileReadFailed"))
+      setReadError(t("fileReadFailed"))
     }
   }
 
   const handlePreviewImport = async () => {
-    setImportError(null)
-    const parsed = parseImportSettingsJson(importText)
-    if (!parsed.ok) {
-      setImportError(t("invalidJson"))
-      return
-    }
-    await onPreviewImport(parsed.value)
+    setSubmitted(true)
+    setReadError(null)
+    const checked = validateBackupImportText(importText)
+    if (!checked.ok) return
+    await onPreviewImport(checked.value)
   }
 
   return (
@@ -132,23 +138,27 @@ export function BackupTab({
               value={importText}
               onChange={(e) => {
                 setImportText(e.target.value)
-                if (importError) setImportError(null)
+                if (readError) setReadError(null)
               }}
-              placeholder='{ "schemaVersion": 1, ... }'
-              className="w-full rounded-md border border-input bg-background p-3 font-mono text-caption text-foreground focus-ring-input"
+              aria-invalid={displayError ? true : undefined}
+              placeholder='{ "appearance": { ... }, "runtime": { ... } }'
+              className="w-full rounded-md border border-input bg-background p-3 font-mono text-caption text-foreground focus-ring-input aria-invalid:border-destructive"
             />
           </div>
 
-          {importError && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
-              {importError}
+          {displayError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive"
+            >
+              {displayError}
             </div>
           )}
 
           <div className="flex justify-end">
             <Button
               type="button"
-              disabled={busy || importText.trim() === ""}
+              disabled={busy || Boolean(displayError) || importText.trim() === ""}
               onClick={handlePreviewImport}
             >
               <UploadIcon className="size-4" aria-hidden />

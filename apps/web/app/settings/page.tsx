@@ -12,5 +12,5 @@ export default async function SettingsPage() {
     // Allow page to load cleanly even if BE API is temporarily offline during startup/build
   }
 
-  return <SettingsWorkspace initialSnapshot={initialSnapshot} />
+  return <SettingsWorkspace variant="page" initialSnapshot={initialSnapshot} />
 }

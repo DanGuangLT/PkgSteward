@@ -16,6 +16,7 @@ import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
+import { UnitNumberInput } from "@/components/features/settings/unit-number-input"
 import { useSettings } from "@/components/settings/settings-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,7 @@ import {
   THEME_MODES,
   THEME_PRESET_IDS,
 } from "@/lib/settings/appearance-prefs"
+import { validateWallpaperTuningDraft } from "@/lib/settings/settings-validation"
 import {
   BUILTIN_WALLPAPER_MODES,
   type BuiltinWallpaperMode,
@@ -80,6 +82,7 @@ function WallpaperTuningForm({
   }) => void
 }) {
   const t = useTranslations("settings.appearance")
+  const tVal = useTranslations("settings.validation")
   const [mediaUrlDraft, setMediaUrlDraft] = useState(
     typeof wpConfig.mediaUrl === "string" ? wpConfig.mediaUrl : ""
   )
@@ -89,8 +92,19 @@ function WallpaperTuningForm({
   const [speedDraft, setSpeedDraft] = useState(String(wpConfig.speed ?? 100))
   const [pauseHiddenDraft, setPauseHiddenDraft] = useState(wpConfig.pauseWhenHidden !== false)
 
+  const fieldErrors = validateWallpaperTuningDraft({
+    mediaUrl: mediaUrlDraft,
+    blurPx: blurDraft,
+    dimOpacity: dimDraft,
+    surfaceOpacity: surfaceDraft,
+    speed: speedDraft,
+  })
+  const hasErrors = Object.keys(fieldErrors).length > 0
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasErrors) return
+
     const cleanUrl = mediaUrlDraft.trim()
     let nextMode: BuiltinWallpaperMode = activeMode
     if (cleanUrl && nextMode === "off") {
@@ -102,10 +116,10 @@ function WallpaperTuningForm({
     }
     onSave({
       mediaUrl: cleanUrl,
-      blurPx: Number.isFinite(Number(blurDraft)) ? Number(blurDraft) : 8,
-      dimOpacity: Number.isFinite(Number(dimDraft)) ? Number(dimDraft) : 30,
-      surfaceOpacity: Number.isFinite(Number(surfaceDraft)) ? Number(surfaceDraft) : 86,
-      speed: Number.isFinite(Number(speedDraft)) ? Number(speedDraft) : 100,
+      blurPx: Number(blurDraft.trim()),
+      dimOpacity: Number(dimDraft.trim()),
+      surfaceOpacity: Number(surfaceDraft.trim()),
+      speed: Number(speedDraft.trim()),
       pauseWhenHidden: pauseHiddenDraft,
       nextMode,
     })
@@ -113,6 +127,7 @@ function WallpaperTuningForm({
 
   return (
     <form
+      noValidate
       onSubmit={handleSubmit}
       className="flex flex-col gap-4 rounded-md border border-border bg-background p-4"
     >
@@ -123,56 +138,74 @@ function WallpaperTuningForm({
           value={mediaUrlDraft}
           onChange={(e) => setMediaUrlDraft(e.target.value)}
           placeholder="https://example.com/wallpaper.mp4"
+          aria-invalid={fieldErrors.mediaUrl ? true : undefined}
           className="font-mono"
         />
+        {fieldErrors.mediaUrl && (
+          <p role="alert" className="text-caption text-destructive">
+            {tVal(fieldErrors.mediaUrl)}
+          </p>
+        )}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-blur">{t("wallpaperBlurLabel")}</Label>
-          <Input
+          <UnitNumberInput
             id="wp-blur"
             type="number"
             min={0}
             max={32}
+            step={1}
+            unit="px"
+            hint="0–32 px"
             value={blurDraft}
             onChange={(e) => setBlurDraft(e.target.value)}
-            className="font-mono"
+            error={fieldErrors.blurPx ? tVal(fieldErrors.blurPx) : null}
           />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-dim">{t("wallpaperDimLabel")}</Label>
-          <Input
+          <UnitNumberInput
             id="wp-dim"
             type="number"
             min={0}
             max={85}
+            step={1}
+            unit="%"
+            hint="0–85 %"
             value={dimDraft}
             onChange={(e) => setDimDraft(e.target.value)}
-            className="font-mono"
+            error={fieldErrors.dimOpacity ? tVal(fieldErrors.dimOpacity) : null}
           />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-surface">{t("wallpaperSurfaceOpacityLabel")}</Label>
-          <Input
+          <UnitNumberInput
             id="wp-surface"
             type="number"
             min={45}
             max={100}
+            step={1}
+            unit="%"
+            hint="45–100 %"
             value={surfaceDraft}
             onChange={(e) => setSurfaceDraft(e.target.value)}
-            className="font-mono"
+            error={fieldErrors.surfaceOpacity ? tVal(fieldErrors.surfaceOpacity) : null}
           />
         </div>
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-speed">{t("wallpaperSpeedLabel")}</Label>
-          <Input
+          <UnitNumberInput
             id="wp-speed"
             type="number"
             min={25}
             max={250}
+            step={1}
+            unit="%"
+            hint="25–250 %"
             value={speedDraft}
             onChange={(e) => setSpeedDraft(e.target.value)}
-            className="font-mono"
+            error={fieldErrors.speed ? tVal(fieldErrors.speed) : null}
           />
         </div>
       </div>
@@ -184,7 +217,7 @@ function WallpaperTuningForm({
           />
           <span>{t("wallpaperPauseHiddenLabel")}</span>
         </label>
-        <Button type="submit" size="sm" variant="secondary">
+        <Button type="submit" size="sm" variant="secondary" disabled={hasErrors}>
           {t("wallpaperApplyTuningCta")}
         </Button>
       </div>
@@ -750,21 +783,6 @@ export function AppearanceTab() {
                   ))}
                 </ToggleGroup>
               </div>
-
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-                <Checkbox
-                  checked={appearance.showBreadcrumbs}
-                  onCheckedChange={(val) => patchAppearance({ showBreadcrumbs: val === true })}
-                />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-body-sm font-medium text-foreground">
-                    {t("showBreadcrumbsLabel")}
-                  </span>
-                  <span className="text-caption text-muted-foreground">
-                    {t("showBreadcrumbsDesc")}
-                  </span>
-                </div>
-              </label>
             </>
           )}
         </CardContent>

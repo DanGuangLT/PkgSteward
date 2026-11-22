@@ -143,6 +143,7 @@ export interface PluginSettingFieldSchema {
   label: string
   type: "string" | "number" | "boolean"
   defaultValue: PrimitiveConfigValue
+  unit?: string
   description?: string
 }
 

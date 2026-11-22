@@ -5,6 +5,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
+import { UnitNumberInput } from "@/components/features/settings/unit-number-input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { validateServerDraft } from "@/lib/settings/settings-validation"
+import { validateServerDraftFields } from "@/lib/settings/settings-validation"
 import type { PrivilegedSettingsPatch, SettingsSnapshot } from "@/lib/settings/types"
 
 export function ServerTab({
@@ -37,22 +38,19 @@ export function ServerTab({
   const [version, setVersion] = useState(srv.version)
   const [listOriginCors, setListOriginCors] = useState(srv.listOriginCors)
   const [exportSwaggerApiJson, setExportSwaggerApiJson] = useState(srv.exportSwaggerApiJson)
-  const [formError, setFormError] = useState<string | null>(null)
+
+  const fieldErrors = validateServerDraftFields({
+    host,
+    port,
+    globalPrefix,
+    version,
+    listOriginCors,
+  })
+  const hasErrors = Object.keys(fieldErrors).length > 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setFormError(null)
-    const err = validateServerDraft({
-      host,
-      port,
-      globalPrefix,
-      version,
-      listOriginCors,
-    })
-    if (err) {
-      setFormError(tVal(err))
-      return
-    }
+    if (hasErrors) return
     await onPreviewUpdate({
       server: {
         mode,
@@ -82,8 +80,10 @@ export function ServerTab({
     [t("paths.auditLogFilePath"), paths.auditLogFilePath],
     [t("paths.cacheDir"), paths.cacheDir],
     [t("paths.appInstallDir"), paths.appInstallDir],
-    ...(paths.sourceCheckoutDir ? [[t("paths.sourceCheckoutDir"), paths.sourceCheckoutDir] as [string, string]] : []),
-    [t("paths.runtimeEnv"), `${paths.platform} · Node ${paths.nodeVersion}`],
+    ...(paths.sourceCheckoutDir
+      ? [[t("paths.sourceCheckoutDir"), paths.sourceCheckoutDir] as [string, string]]
+      : []),
+    [t("paths.runtimeEnv"), paths.platform],
   ]
 
   return (
@@ -99,7 +99,7 @@ export function ServerTab({
         </span>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form noValidate onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
             <CardTitle>{t("configTitle")}</CardTitle>
@@ -144,6 +144,11 @@ export function ServerTab({
                   <ToggleGroupItem value="localhost" className="font-mono">localhost</ToggleGroupItem>
                   <ToggleGroupItem value="::1" className="font-mono">::1</ToggleGroupItem>
                 </ToggleGroup>
+                {fieldErrors.host && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(fieldErrors.host)}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -153,14 +158,17 @@ export function ServerTab({
                     {tSrc(snapshot.sources.server.port)}
                   </Badge>
                 </div>
-                <Input
+                <UnitNumberInput
                   id="srv-port"
                   type="number"
                   min={1}
                   max={65535}
+                  step={1}
+                  unit={t("portUnit")}
+                  hint="1–65535"
                   value={port}
                   onChange={(e) => setPort(e.target.value)}
-                  className="font-mono"
+                  error={fieldErrors.port ? tVal(fieldErrors.port) : null}
                 />
               </div>
 
@@ -175,8 +183,14 @@ export function ServerTab({
                   id="srv-prefix"
                   value={globalPrefix}
                   onChange={(e) => setGlobalPrefix(e.target.value)}
+                  aria-invalid={fieldErrors.globalPrefix ? true : undefined}
                   className="font-mono"
                 />
+                {fieldErrors.globalPrefix && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(fieldErrors.globalPrefix)}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -190,8 +204,14 @@ export function ServerTab({
                   id="srv-version"
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
+                  aria-invalid={fieldErrors.version ? true : undefined}
                   className="font-mono"
                 />
+                {fieldErrors.version && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(fieldErrors.version)}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -205,8 +225,14 @@ export function ServerTab({
                   id="srv-cors"
                   value={listOriginCors}
                   onChange={(e) => setListOriginCors(e.target.value)}
+                  aria-invalid={fieldErrors.listOriginCors ? true : undefined}
                   className="font-mono"
                 />
+                {fieldErrors.listOriginCors && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(fieldErrors.listOriginCors)}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -218,14 +244,8 @@ export function ServerTab({
               <span className="text-body-sm font-medium text-foreground">{t("swaggerLabel")}</span>
             </label>
 
-            {formError && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
-                {formError}
-              </div>
-            )}
-
             <div className="flex justify-end">
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || hasErrors}>
                 {t("previewSaveCta")}
               </Button>
             </div>

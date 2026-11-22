@@ -15,6 +15,7 @@ import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
+import { UnitNumberInput } from "@/components/features/settings/unit-number-input"
 import { useSettings } from "@/components/settings/settings-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,7 +23,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  resolvePluginFieldUnit,
+  validatePluginConfigDraft,
+  validatePluginDirectoryInput,
+  validatePluginInstallUrlInput,
+  validateTrustedRegistriesInput,
+} from "@/lib/settings/settings-validation"
 import type {
+  DiscoveredPlugin,
   PluginEntrySetting,
   PrimitiveConfigValue,
   PrivilegedSettingsPatch,
@@ -39,12 +48,43 @@ const SAMPLE_MANIFEST = `{
   "settingsSchema": [
     {
       "key": "intervalSeconds",
-      "label": "Check Interval (sec)",
+      "label": "Check Interval",
       "type": "number",
-      "defaultValue": 300
+      "defaultValue": 300,
+      "unit": "s"
     }
   ]
 }`
+
+type RawPluginDraft = Record<string, string | boolean>
+
+function buildInitialPluginDraft(plugin: DiscoveredPlugin): RawPluginDraft {
+  const out: RawPluginDraft = {}
+  for (const field of plugin.settingsSchema) {
+    const val = plugin.config[field.key] ?? field.defaultValue
+    out[field.key] = field.type === "boolean" ? val === true : val === null ? "" : String(val)
+  }
+  return out
+}
+
+function parseDraftToConfig(
+  plugin: DiscoveredPlugin,
+  draft: RawPluginDraft
+): Record<string, PrimitiveConfigValue> {
+  const out: Record<string, PrimitiveConfigValue> = { ...plugin.config }
+  for (const field of plugin.settingsSchema) {
+    const raw = draft[field.key]
+    if (field.type === "boolean") {
+      out[field.key] = raw === true
+    } else if (field.type === "number") {
+      const trimmed = typeof raw === "string" ? raw.trim() : ""
+      out[field.key] = trimmed === "" ? null : Number(trimmed)
+    } else {
+      out[field.key] = typeof raw === "string" ? raw : ""
+    }
+  }
+  return out
+}
 
 export function PluginsTab({
   snapshot,
@@ -70,6 +110,7 @@ export function PluginsTab({
   onRefresh: () => Promise<unknown>
 }) {
   const t = useTranslations("settings.plugins")
+  const tVal = useTranslations("settings.validation")
   const { behavior } = useSettings()
   const pluginsState = snapshot.document.plugins
   const catalog = snapshot.plugins
@@ -78,19 +119,25 @@ export function PluginsTab({
   const [directoryInput, setDirectoryInput] = useState(pluginsState.directory ?? "")
   const [registriesInput, setRegistriesInput] = useState(pluginsState.trustedRegistries.join(", "))
   const [installUrlInput, setInstallUrlInput] = useState("")
+  const [installUrlSubmitted, setInstallUrlSubmitted] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [draftConfigs, setDraftConfigs] = useState<
-    Record<string, Record<string, PrimitiveConfigValue>>
-  >(() =>
-    Object.fromEntries(
-      catalog.discovered.map((plugin) => [plugin.id, { ...plugin.config }])
-    )
+  const [draftConfigs, setDraftConfigs] = useState<Record<string, RawPluginDraft>>(() =>
+    Object.fromEntries(catalog.discovered.map((plugin) => [plugin.id, buildInitialPluginDraft(plugin)]))
   )
+
+  const urlInputError =
+    installUrlInput.trim() !== "" || installUrlSubmitted
+      ? validatePluginInstallUrlInput(installUrlInput)
+      : null
+  const directoryError = validatePluginDirectoryInput(directoryInput)
+  const registriesError = validateTrustedRegistriesInput(registriesInput)
+  const hasPolicyErrors = Boolean(directoryError || registriesError)
 
   const handleSaveSecurityPolicy = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasPolicyErrors) return
     const registries = registriesInput
       .split(",")
       .map((item) => item.trim())
@@ -106,18 +153,40 @@ export function PluginsTab({
   }
 
   const handleTogglePlugin = async (
-    pluginId: string,
+    plugin: DiscoveredPlugin,
     enabled: boolean,
-    config: Record<string, PrimitiveConfigValue>,
-    preinstalled: boolean
+    draft: RawPluginDraft
   ) => {
+    const errors = validatePluginConfigDraft(plugin.settingsSchema, draft, plugin.id)
+    const config =
+      Object.keys(errors).length === 0 ? parseDraftToConfig(plugin, draft) : plugin.config
     await onUpdatePreferences({
       plugins: {
         entries: {
-          [pluginId]: {
+          [plugin.id]: {
             enabled,
-            source: preinstalled ? "builtin" : "local",
+            source: plugin.preinstalled ? "builtin" : "local",
             config,
+          },
+        },
+      },
+    })
+  }
+
+  const handleSavePluginConfig = async (
+    plugin: DiscoveredPlugin,
+    enabled: boolean,
+    draft: RawPluginDraft
+  ) => {
+    const errors = validatePluginConfigDraft(plugin.settingsSchema, draft, plugin.id)
+    if (Object.keys(errors).length > 0) return
+    await onUpdatePreferences({
+      plugins: {
+        entries: {
+          [plugin.id]: {
+            enabled,
+            source: plugin.preinstalled ? "builtin" : "local",
+            config: parseDraftToConfig(plugin, draft),
           },
         },
       },
@@ -126,10 +195,12 @@ export function PluginsTab({
 
   const handleInstallUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const trimmed = installUrlInput.trim()
-    if (!trimmed) return
-    await onPreviewInstallUrl(trimmed)
+    setInstallUrlSubmitted(true)
+    const err = validatePluginInstallUrlInput(installUrlInput)
+    if (err) return
+    await onPreviewInstallUrl(installUrlInput.trim())
     setInstallUrlInput("")
+    setInstallUrlSubmitted(false)
   }
 
   return (
@@ -142,14 +213,11 @@ export function PluginsTab({
               <PuzzleIcon className="size-5 text-primary" aria-hidden />
               <CardTitle>{t("foundationTitle")}</CardTitle>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">API v{catalog.apiVersion}</Badge>
-              <Badge variant="success">
-                {catalog.runtimeMode === "sandboxed-web"
-                  ? t("sandboxedRuntimeBadge")
-                  : t("manifestOnlyBadge")}
-              </Badge>
-            </div>
+            <Badge variant="success">
+              {catalog.runtimeMode === "sandboxed-web"
+                ? t("sandboxedRuntimeBadge")
+                : t("manifestOnlyBadge")}
+            </Badge>
           </div>
           <CardDescription>{t("foundationDescription")}</CardDescription>
         </CardHeader>
@@ -245,7 +313,7 @@ export function PluginsTab({
             </Button>
           </div>
 
-          <form onSubmit={handleInstallUrlSubmit} className="flex flex-col gap-2">
+          <form noValidate onSubmit={handleInstallUrlSubmit} className="flex flex-col gap-2">
             <Label htmlFor="install-plugin-url">{t("installUrlLabel")}</Label>
             <div className="flex flex-wrap gap-2">
               <div className="relative min-w-64 flex-1">
@@ -256,22 +324,31 @@ export function PluginsTab({
                 <Input
                   id="install-plugin-url"
                   value={installUrlInput}
-                  onChange={(e) => setInstallUrlInput(e.target.value)}
+                  onChange={(e) => {
+                    setInstallUrlInput(e.target.value)
+                    if (installUrlSubmitted) setInstallUrlSubmitted(false)
+                  }}
                   placeholder="https://github.com/user/wallpaper-repo | npm:pkg | https://..."
+                  aria-invalid={urlInputError ? true : undefined}
                   className="pl-9 font-mono"
                 />
               </div>
-              <Button type="submit" disabled={busy || installUrlInput.trim() === ""}>
+              <Button type="submit" disabled={busy || Boolean(urlInputError)}>
                 {t("installFromUrlCta")}
               </Button>
             </div>
+            {urlInputError && (
+              <p role="alert" className="text-caption text-destructive">
+                {tVal(urlInputError)}
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>
 
       {/* Tier B security settings (Advanced only) */}
       {behavior.advancedMode && (
-        <form onSubmit={handleSaveSecurityPolicy}>
+        <form noValidate onSubmit={handleSaveSecurityPolicy}>
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -303,8 +380,14 @@ export function PluginsTab({
                   value={directoryInput}
                   onChange={(e) => setDirectoryInput(e.target.value)}
                   placeholder={snapshot.systemPaths.pluginsDir}
+                  aria-invalid={directoryError ? true : undefined}
                   className="font-mono"
                 />
+                {directoryError && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(directoryError)}
+                  </p>
+                )}
                 <p className="text-caption text-muted-foreground">
                   {t("directoryHint", { defaultDir: snapshot.systemPaths.pluginsDir })}
                 </p>
@@ -317,12 +400,18 @@ export function PluginsTab({
                   value={registriesInput}
                   onChange={(e) => setRegistriesInput(e.target.value)}
                   placeholder="https://registry.npmjs.org"
+                  aria-invalid={registriesError ? true : undefined}
                   className="font-mono"
                 />
+                {registriesError && (
+                  <p role="alert" className="text-caption text-destructive">
+                    {tVal(registriesError)}
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end">
-                <Button type="submit" disabled={busy}>
+                <Button type="submit" disabled={busy || hasPolicyErrors}>
                   {t("previewSavePolicyCta")}
                 </Button>
               </div>
@@ -379,145 +468,165 @@ export function PluginsTab({
             </p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {catalog.discovered.map((plugin) => (
-                <li
-                  key={plugin.id}
-                  className="flex flex-col gap-2 rounded-md border border-border bg-background p-3.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-body-md font-semibold text-foreground">{plugin.name}</span>
-                      <Badge variant="outline" className="font-mono">
-                        {plugin.id}@{plugin.version}
-                      </Badge>
-                      {plugin.preinstalled && (
-                        <Badge variant="secondary">{t("preinstalledBadge")}</Badge>
-                      )}
-                      {behavior.advancedMode && (
-                        <Badge variant="outline" className="font-mono">
-                          {plugin.format} · {plugin.entry.kind}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <label className="flex cursor-pointer items-center gap-2 text-body-sm select-none">
-                        <Checkbox
-                          checked={
-                            pluginsState.enabled &&
-                            pluginsState.allowLocalPlugins &&
-                            (snapshot.document.plugins.entries[plugin.id]?.enabled ??
-                              plugin.enabled)
-                          }
-                          onCheckedChange={(val) =>
-                            void handleTogglePlugin(
-                              plugin.id,
-                              val === true,
-                              draftConfigs[plugin.id] ?? plugin.config,
-                              plugin.preinstalled
-                            )
-                          }
-                        />
-                        <span>{t("enableEntry")}</span>
-                      </label>
-                      {plugin.removable && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() => void onPreviewUninstall(plugin.id)}
-                          aria-label={t("uninstallAria", { name: plugin.name })}
-                        >
-                          <Trash2Icon className="size-4 text-destructive" aria-hidden />
-                          {t("uninstallCta")}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  {plugin.description && (
-                    <p className="text-body-sm text-muted-foreground">{plugin.description}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    {plugin.capabilities.map((cap) => (
-                      <Badge key={cap} variant="secondary" className="font-mono">
-                        {cap}
-                      </Badge>
-                    ))}
-                  </div>
-                  {plugin.settingsSchema.length > 0 && (
-                    <div className="mt-2 flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {plugin.settingsSchema.map((field) => {
-                          const currentVal =
-                            draftConfigs[plugin.id]?.[field.key] ??
-                            plugin.config[field.key] ??
-                            field.defaultValue
-                          const setField = (val: PrimitiveConfigValue) =>
-                            setDraftConfigs((prev) => ({
-                              ...prev,
-                              [plugin.id]: {
-                                ...(prev[plugin.id] ?? plugin.config),
-                                [field.key]: val,
-                              },
-                            }))
+              {catalog.discovered.map((plugin) => {
+                const draft = draftConfigs[plugin.id] ?? buildInitialPluginDraft(plugin)
+                const configErrors = validatePluginConfigDraft(
+                  plugin.settingsSchema,
+                  draft,
+                  plugin.id
+                )
+                const hasConfigErrors = Object.keys(configErrors).length > 0
+                const isPluginEnabled =
+                  pluginsState.enabled &&
+                  pluginsState.allowLocalPlugins &&
+                  (snapshot.document.plugins.entries[plugin.id]?.enabled ?? plugin.enabled)
 
-                          if (field.type === "boolean") {
-                            return (
-                              <label
-                                key={field.key}
-                                className="flex cursor-pointer items-center gap-2.5 text-body-sm select-none"
-                              >
-                                <Checkbox
-                                  checked={currentVal === true}
-                                  onCheckedChange={(checked) => setField(checked === true)}
-                                />
-                                <span>{field.label}</span>
-                              </label>
-                            )
-                          }
-                          return (
-                            <div key={field.key} className="flex flex-col gap-1">
-                              <Label htmlFor={`plg-${plugin.id}-${field.key}`}>{field.label}</Label>
-                              <Input
-                                id={`plg-${plugin.id}-${field.key}`}
-                                type={field.type === "number" ? "number" : "text"}
-                                value={currentVal === null ? "" : String(currentVal)}
-                                onChange={(e) => {
-                                  if (field.type === "number") {
-                                    const num = Number(e.target.value)
-                                    setField(e.target.value.trim() === "" ? null : Number.isFinite(num) ? num : 0)
-                                  } else {
-                                    setField(e.target.value)
-                                  }
-                                }}
-                                className="h-9 font-mono text-body-sm"
-                              />
-                            </div>
-                          )
-                        })}
+                return (
+                  <li
+                    key={plugin.id}
+                    className="flex flex-col gap-2 rounded-md border border-border bg-background p-3.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-body-md font-semibold text-foreground">{plugin.name}</span>
+                        <Badge variant="outline" className="font-mono">
+                          {plugin.id}
+                        </Badge>
+                        {plugin.preinstalled && (
+                          <Badge variant="secondary">{t("preinstalledBadge")}</Badge>
+                        )}
+                        {behavior.advancedMode && (
+                          <Badge variant="outline" className="font-mono">
+                            {plugin.format} · {plugin.entry.kind}
+                          </Badge>
+                        )}
                       </div>
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          onClick={() =>
-                            void handleTogglePlugin(
-                              plugin.id,
-                              snapshot.document.plugins.entries[plugin.id]?.enabled ??
-                                plugin.enabled,
-                              draftConfigs[plugin.id] ?? plugin.config,
-                              plugin.preinstalled
-                            )
-                          }
-                        >
-                          {t("saveConfigCta")}
-                        </Button>
+                      <div className="flex items-center gap-3">
+                        <label className="flex cursor-pointer items-center gap-2 text-body-sm select-none">
+                          <Checkbox
+                            checked={isPluginEnabled}
+                            onCheckedChange={(val) =>
+                              void handleTogglePlugin(plugin, val === true, draft)
+                            }
+                          />
+                          <span>{t("enableEntry")}</span>
+                        </label>
+                        {plugin.removable && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => void onPreviewUninstall(plugin.id)}
+                            aria-label={t("uninstallAria", { name: plugin.name })}
+                          >
+                            <Trash2Icon className="size-4 text-destructive" aria-hidden />
+                            {t("uninstallCta")}
+                          </Button>
+                        )}
                       </div>
                     </div>
-                  )}
-                </li>
-              ))}
+                    {plugin.description && (
+                      <p className="text-body-sm text-muted-foreground">{plugin.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {plugin.capabilities.map((cap) => (
+                        <Badge key={cap} variant="secondary" className="font-mono">
+                          {cap}
+                        </Badge>
+                      ))}
+                    </div>
+                    {plugin.settingsSchema.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {plugin.settingsSchema.map((field) => {
+                            const currentVal = draft[field.key]
+                            const fieldError = configErrors[field.key]
+                            const setField = (val: string | boolean) =>
+                              setDraftConfigs((prev) => ({
+                                ...prev,
+                                [plugin.id]: {
+                                  ...(prev[plugin.id] ?? buildInitialPluginDraft(plugin)),
+                                  [field.key]: val,
+                                },
+                              }))
+
+                            if (field.type === "boolean") {
+                              return (
+                                <label
+                                  key={field.key}
+                                  className="flex cursor-pointer items-center gap-2.5 text-body-sm select-none"
+                                >
+                                  <Checkbox
+                                    checked={currentVal === true}
+                                    onCheckedChange={(checked) => setField(checked === true)}
+                                  />
+                                  <span>{field.label}</span>
+                                </label>
+                              )
+                            }
+
+                            if (field.type === "number") {
+                              const resolvedUnit = resolvePluginFieldUnit(field)
+                              return (
+                                <div key={field.key} className="flex flex-col gap-1">
+                                  <Label htmlFor={`plg-${plugin.id}-${field.key}`}>{field.label}</Label>
+                                  <UnitNumberInput
+                                    id={`plg-${plugin.id}-${field.key}`}
+                                    type="number"
+                                    compact
+                                    unit={resolvedUnit}
+                                    value={typeof currentVal === "string" ? currentVal : ""}
+                                    onChange={(e) => setField(e.target.value)}
+                                    error={fieldError ? tVal(fieldError) : null}
+                                  />
+                                </div>
+                              )
+                            }
+
+                            return (
+                              <div key={field.key} className="flex flex-col gap-1">
+                                <Label htmlFor={`plg-${plugin.id}-${field.key}`}>{field.label}</Label>
+                                <Input
+                                  id={`plg-${plugin.id}-${field.key}`}
+                                  type="text"
+                                  value={typeof currentVal === "string" ? currentVal : ""}
+                                  onChange={(e) => setField(e.target.value)}
+                                  aria-invalid={fieldError ? true : undefined}
+                                  className="h-9 font-mono text-body-sm"
+                                />
+                                {fieldError && (
+                                  <p role="alert" className="text-caption text-destructive">
+                                    {tVal(fieldError)}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={hasConfigErrors}
+                            onClick={() =>
+                              void handleSavePluginConfig(
+                                plugin,
+                                snapshot.document.plugins.entries[plugin.id]?.enabled ??
+                                  plugin.enabled,
+                                draft
+                              )
+                            }
+                          >
+                            {t("saveConfigCta")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           )}
 
