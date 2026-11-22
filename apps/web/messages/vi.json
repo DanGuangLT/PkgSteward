@@ -1700,6 +1700,10 @@
       "SURFACE_OPACITY_RANGE": "Độ trong suốt nền thành phần phải là số nguyên từ 35 đến 100 %.",
       "SURFACE_BLUR_RANGE": "Độ mờ kính (backdrop blur) phải là số nguyên từ 0 đến 40 px.",
       "SURFACE_SATURATION_RANGE": "Độ rực màu sau kính phải là số nguyên từ 100 đến 220 %.",
+      "TEXT_CUSTOM_COLOR_HEX": "Màu chữ tuỳ chỉnh phải đúng định dạng #RRGGBB (ví dụ #F8FAFC).",
+      "TEXT_SHADOW_BLUR_RANGE": "Độ lan bóng chữ phải là số nguyên từ 0 đến 24 px.",
+      "TEXT_SHADOW_OPACITY_RANGE": "Độ đậm bóng chữ phải là số nguyên từ 0 đến 100 %.",
+      "TEXT_OUTLINE_RANGE": "Độ dày viền chữ phải là số nguyên từ 0 đến 3 px.",
       "PLUGIN_URL_REQUIRED": "Hãy nhập liên kết GitHub, gói npm:tên-gói hoặc URL HTTPS trước.",
       "PLUGIN_URL_TOO_LONG": "Liên kết plugin vượt quá 2048 ký tự.",
       "PLUGIN_NPM_SPEC": "Gói npm phải có dạng npm:tên-gói hoặc npm:@scope/tên-gói (có thể kèm @nhãn).",
@@ -1917,7 +1921,52 @@
       "surfaceSpecularLabel": "Viền phản chiếu & ánh sáng kính lỏng",
       "surfaceSpecularDesc": "Hiển thị đường viền phản quang sắc nét, ánh lướt chéo bề mặt và bóng chiều sâu kiểu Apple Liquid Glass.",
       "surfaceResetPresetCta": "Theo mặc định kiểu kính",
-      "surfaceApplyTuningCta": "Áp dụng tinh chỉnh kính"
+      "surfaceApplyTuningCta": "Áp dụng tinh chỉnh kính",
+      "previewFloatingTitle": "Mẫu chữ nổi trực tiếp trên hình nền",
+      "previewFloatingDesc": "Dòng mô tả mẫu giúp kiểm tra ngay độ bóng, màu chữ và viền nét trước khi áp dụng.",
+      "recommendedBadge": "Khuyên dùng",
+      "textSectionTitle": "Độ rõ chữ, Đổ bóng & Màu chữ",
+      "textSectionDescription": "Tự động làm nổi chữ khi đặt hình nền sáng hoặc nhiều chi tiết, hoặc tuỳ chỉnh riêng màu chữ, bóng đổ và viền chữ mà không cần đổi bảng màu chính.",
+      "textModes": {
+        "auto": "Tự thích ứng theo nền",
+        "off": "Mặc định bảng màu",
+        "custom": "Tuỳ chỉnh chi tiết"
+      },
+      "textModeDescs": {
+        "auto": "Khuyên dùng: tự cân chỉnh bóng chữ và tăng độ rõ chữ mô tả theo độ sáng nền.",
+        "off": "Giữ chữ nguyên bản theo theme, không thêm bóng hay viền chữ.",
+        "custom": "Chủ động chọn màu chữ riêng, độ đậm/lan bóng và viền nét nổi bật."
+      },
+      "textShadowLabel": "Mức đổ bóng chữ",
+      "textShadows": {
+        "auto": "Tự động",
+        "none": "Tắt bóng",
+        "subtle": "Nhẹ",
+        "strong": "Đậm rõ",
+        "halo": "Hào quang nổi"
+      },
+      "textColorModeLabel": "Chế độ màu chữ",
+      "textColorModes": {
+        "theme": "Theo bảng màu",
+        "auto-wallpaper": "Tự đảo theo nền ảnh",
+        "light": "Ưu tiên chữ sáng",
+        "dark": "Ưu tiên chữ tối",
+        "custom": "Tự chọn màu HEX"
+      },
+      "textBoostMutedLabel": "Tăng độ rõ chữ phụ & mô tả",
+      "textBoostMutedDesc": "Đẩy độ tương phản của nhãn phụ và đường dẫn để không bị chìm trên nền ảnh phức tạp.",
+      "textCustomColorLabel": "Mã màu chữ tuỳ chỉnh (HEX)",
+      "textCustomColorHint": "Áp dụng cho tiêu đề, nhãn và mô tả (giữ nguyên độ sắc nét của nút bấm và badge).",
+      "textShadowBlurLabel": "Độ lan bóng chữ",
+      "textShadowOpacityLabel": "Độ đậm bóng chữ",
+      "textOutlineWidthLabel": "Độ dày viền chữ",
+      "textEffectScopeLabel": "Phạm vi áp dụng hiệu ứng chữ",
+      "textEffectScopes": {
+        "wallpaper-only": "Chỉ khi đang bật hình nền",
+        "always": "Luôn bật trên toàn ứng dụng"
+      },
+      "textResetRecommendedCta": "Về chuẩn khuyên dùng",
+      "textApplyTuningCta": "Áp dụng tinh chỉnh chữ"
     },
     "behavior": {
       "generalTitle": "Tùy chọn hành vi mặc định",

@@ -1690,6 +1690,10 @@
       "SURFACE_OPACITY_RANGE": "Surface translucency must be an integer between 35 and 100 %.",
       "SURFACE_BLUR_RANGE": "Glass blur radius must be an integer between 0 and 40 px.",
       "SURFACE_SATURATION_RANGE": "Backdrop color saturation must be an integer between 100 and 220 %.",
+      "TEXT_CUSTOM_COLOR_HEX": "Custom text color must match #RRGGBB format (for example #F8FAFC).",
+      "TEXT_SHADOW_BLUR_RANGE": "Text shadow blur must be an integer between 0 and 24 px.",
+      "TEXT_SHADOW_OPACITY_RANGE": "Text shadow opacity must be an integer between 0 and 100 %.",
+      "TEXT_OUTLINE_RANGE": "Text outline thickness must be an integer between 0 and 3 px.",
       "PLUGIN_URL_REQUIRED": "Enter a GitHub URL, npm:package specifier, or HTTPS link first.",
       "PLUGIN_URL_TOO_LONG": "Plugin link exceeds 2048 characters.",
       "PLUGIN_NPM_SPEC": "npm specifier must match npm:package or npm:@scope/package (optional @tag).",
@@ -1907,7 +1911,52 @@
       "surfaceSpecularLabel": "Specular glass rim & diagonal sheen",
       "surfaceSpecularDesc": "Render Apple Liquid Glass crisp highlight edges, inner specular reflection, and soft layered depth.",
       "surfaceResetPresetCta": "Reset to preset",
-      "surfaceApplyTuningCta": "Apply glass tuning"
+      "surfaceApplyTuningCta": "Apply glass tuning",
+      "previewFloatingTitle": "Floating heading contrast sample",
+      "previewFloatingDesc": "Subtitle directly over the ambient background to test text shadow, color, and outline.",
+      "recommendedBadge": "Recommended",
+      "textSectionTitle": "Text Readability, Shadow & Color",
+      "textSectionDescription": "Automatically enhance text legibility against bright or busy backgrounds, or customize text color, drop shadow, and outline without changing your overall theme.",
+      "textModes": {
+        "auto": "Auto-adaptive",
+        "off": "Theme default",
+        "custom": "Custom"
+      },
+      "textModeDescs": {
+        "auto": "Recommended: applies crisp adaptive text shadow and boosts muted contrast over wallpapers.",
+        "off": "Keep standard typography without extra shadows, strokes, or color overrides.",
+        "custom": "Override ink polarity, custom text color, shadow intensity, and outline stroke."
+      },
+      "textShadowLabel": "Text shadow intensity",
+      "textShadows": {
+        "auto": "Auto",
+        "none": "None",
+        "subtle": "Subtle",
+        "strong": "Strong",
+        "halo": "Halo glow"
+      },
+      "textColorModeLabel": "Text ink polarity & color",
+      "textColorModes": {
+        "theme": "Match theme",
+        "auto-wallpaper": "Auto from wallpaper",
+        "light": "Force light text",
+        "dark": "Force dark text",
+        "custom": "Custom color"
+      },
+      "textBoostMutedLabel": "Boost secondary / muted text clarity",
+      "textBoostMutedDesc": "Raise muted label and path contrast so descriptions stay easy to read over busy images.",
+      "textCustomColorLabel": "Custom HEX text color",
+      "textCustomColorHint": "Applied to headings, labels, and descriptions (keeping solid buttons & badges sharp).",
+      "textShadowBlurLabel": "Shadow blur spread",
+      "textShadowOpacityLabel": "Shadow opacity",
+      "textOutlineWidthLabel": "Text outline stroke",
+      "textEffectScopeLabel": "Where text enhancements apply",
+      "textEffectScopes": {
+        "wallpaper-only": "Only when wallpaper is active",
+        "always": "Always across the workspace"
+      },
+      "textResetRecommendedCta": "Use Recommended defaults",
+      "textApplyTuningCta": "Apply text readability"
     },
     "behavior": {
       "generalTitle": "Behavior Defaults",

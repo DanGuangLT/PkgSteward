@@ -20,6 +20,12 @@ export const SURFACE_GLASS_BOUNDS = {
   surfaceSaturation: { min: 100, max: 220 },
 } as const
 
+export const TEXT_READABILITY_BOUNDS = {
+  textShadowBlurPx: { min: 0, max: 24 },
+  textShadowOpacity: { min: 0, max: 100 },
+  textOutlineWidthPx: { min: 0, max: 3 },
+} as const
+
 export type ScanRootValidationCode =
   | "SCAN_ROOTS_WILDCARD"
   | "SCAN_ROOTS_ABSOLUTE"
@@ -48,6 +54,12 @@ export type SurfaceGlassValidationCode =
   | "SURFACE_BLUR_RANGE"
   | "SURFACE_SATURATION_RANGE"
 
+export type TextReadabilityValidationCode =
+  | "TEXT_CUSTOM_COLOR_HEX"
+  | "TEXT_SHADOW_BLUR_RANGE"
+  | "TEXT_SHADOW_OPACITY_RANGE"
+  | "TEXT_OUTLINE_RANGE"
+
 export type PluginValidationCode =
   | "PLUGIN_URL_REQUIRED"
   | "PLUGIN_URL_TOO_LONG"
@@ -75,6 +87,7 @@ export type AnySettingsValidationCode =
   | ServerValidationCode
   | WallpaperValidationCode
   | SurfaceGlassValidationCode
+  | TextReadabilityValidationCode
   | PluginValidationCode
   | BackupValidationCode
 
@@ -321,6 +334,72 @@ export function validateSurfaceGlassDraft(input: {
     satNum > SURFACE_GLASS_BOUNDS.surfaceSaturation.max
   ) {
     errors.surfaceSaturation = "SURFACE_SATURATION_RANGE"
+  }
+
+  return errors
+}
+
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/
+
+export function validateTextReadabilityDraft(input: {
+  textColorMode: string
+  textCustomColor: string
+  textShadowBlurPx: string
+  textShadowOpacity: string
+  textOutlineWidthPx: string
+}): Partial<
+  Record<
+    "textCustomColor" | "textShadowBlurPx" | "textShadowOpacity" | "textOutlineWidthPx",
+    TextReadabilityValidationCode
+  >
+> {
+  const errors: Partial<
+    Record<
+      "textCustomColor" | "textShadowBlurPx" | "textShadowOpacity" | "textOutlineWidthPx",
+      TextReadabilityValidationCode
+    >
+  > = {}
+
+  const colorTrimmed = input.textCustomColor.trim()
+  if (input.textColorMode === "custom") {
+    if (!HEX_COLOR_REGEX.test(colorTrimmed)) {
+      errors.textCustomColor = "TEXT_CUSTOM_COLOR_HEX"
+    }
+  } else if (colorTrimmed !== "" && !HEX_COLOR_REGEX.test(colorTrimmed)) {
+    errors.textCustomColor = "TEXT_CUSTOM_COLOR_HEX"
+  }
+
+  const blurTrimmed = input.textShadowBlurPx.trim()
+  const blurNum = Number(blurTrimmed)
+  if (
+    blurTrimmed === "" ||
+    !Number.isSafeInteger(blurNum) ||
+    blurNum < TEXT_READABILITY_BOUNDS.textShadowBlurPx.min ||
+    blurNum > TEXT_READABILITY_BOUNDS.textShadowBlurPx.max
+  ) {
+    errors.textShadowBlurPx = "TEXT_SHADOW_BLUR_RANGE"
+  }
+
+  const opacityTrimmed = input.textShadowOpacity.trim()
+  const opacityNum = Number(opacityTrimmed)
+  if (
+    opacityTrimmed === "" ||
+    !Number.isSafeInteger(opacityNum) ||
+    opacityNum < TEXT_READABILITY_BOUNDS.textShadowOpacity.min ||
+    opacityNum > TEXT_READABILITY_BOUNDS.textShadowOpacity.max
+  ) {
+    errors.textShadowOpacity = "TEXT_SHADOW_OPACITY_RANGE"
+  }
+
+  const outlineTrimmed = input.textOutlineWidthPx.trim()
+  const outlineNum = Number(outlineTrimmed)
+  if (
+    outlineTrimmed === "" ||
+    !Number.isSafeInteger(outlineNum) ||
+    outlineNum < TEXT_READABILITY_BOUNDS.textOutlineWidthPx.min ||
+    outlineNum > TEXT_READABILITY_BOUNDS.textOutlineWidthPx.max
+  ) {
+    errors.textOutlineWidthPx = "TEXT_OUTLINE_RANGE"
   }
 
   return errors

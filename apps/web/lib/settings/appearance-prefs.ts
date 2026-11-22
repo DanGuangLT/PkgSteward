@@ -11,6 +11,10 @@ import type {
   SettingsRadius,
   SettingsReducedMotion,
   SettingsSurfaceStyle,
+  SettingsTextColorMode,
+  SettingsTextEffectScope,
+  SettingsTextReadabilityMode,
+  SettingsTextShadowStrength,
   SettingsThemeMode,
   SettingsThemePreset,
 } from "./types.ts"
@@ -92,6 +96,68 @@ export const SURFACE_STYLE_PRESETS: Readonly<
   },
 }
 
+export const TEXT_READABILITY_MODES: readonly SettingsTextReadabilityMode[] = [
+  "auto",
+  "off",
+  "custom",
+]
+export const TEXT_COLOR_MODES: readonly SettingsTextColorMode[] = [
+  "theme",
+  "auto-wallpaper",
+  "light",
+  "dark",
+  "custom",
+]
+export const TEXT_SHADOW_STRENGTHS: readonly SettingsTextShadowStrength[] = [
+  "auto",
+  "none",
+  "subtle",
+  "strong",
+  "halo",
+]
+export const TEXT_EFFECT_SCOPES: readonly SettingsTextEffectScope[] = ["wallpaper-only", "always"]
+
+export const TEXT_SHADOW_BLUR_BOUNDS = { min: 0, max: 24 } as const
+export const TEXT_SHADOW_OPACITY_BOUNDS = { min: 0, max: 100 } as const
+export const TEXT_OUTLINE_WIDTH_BOUNDS = { min: 0, max: 3 } as const
+export const DEFAULT_CUSTOM_TEXT_COLOR = "#f8fafc"
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
+
+export const TEXT_SHADOW_PRESETS: Readonly<
+  Record<SettingsTextShadowStrength, { textShadowBlurPx: number; textShadowOpacity: number }>
+> = {
+  auto: { textShadowBlurPx: 8, textShadowOpacity: 78 },
+  none: { textShadowBlurPx: 0, textShadowOpacity: 0 },
+  subtle: { textShadowBlurPx: 4, textShadowOpacity: 55 },
+  strong: { textShadowBlurPx: 10, textShadowOpacity: 88 },
+  halo: { textShadowBlurPx: 16, textShadowOpacity: 96 },
+}
+
+export const DEFAULT_TEXT_READABILITY_PRESET: Readonly<
+  Pick<
+    AppearanceSettings,
+    | "textReadabilityMode"
+    | "textColorMode"
+    | "textCustomColor"
+    | "textShadowStrength"
+    | "textShadowBlurPx"
+    | "textShadowOpacity"
+    | "textOutlineWidthPx"
+    | "textBoostMuted"
+    | "textEffectScope"
+  >
+> = {
+  textReadabilityMode: "auto",
+  textColorMode: "theme",
+  textCustomColor: null,
+  textShadowStrength: "auto",
+  textShadowBlurPx: 8,
+  textShadowOpacity: 78,
+  textOutlineWidthPx: 0,
+  textBoostMuted: true,
+  textEffectScope: "wallpaper-only",
+}
+
 export const DEFAULT_APPEARANCE: Readonly<AppearanceSettings> = {
   themeMode: "system",
   themePreset: "default",
@@ -112,6 +178,7 @@ export const DEFAULT_APPEARANCE: Readonly<AppearanceSettings> = {
   surfaceBlurPx: 0,
   surfaceSaturation: 100,
   surfaceSpecularBorder: false,
+  ...DEFAULT_TEXT_READABILITY_PRESET,
 }
 
 export const DEFAULT_BEHAVIOR: Readonly<BehaviorSettings> = {
@@ -138,6 +205,12 @@ function pickIntInRange(value: unknown, min: number, max: number, fallback: numb
     : fallback
 }
 
+export function normalizeOptionalHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return HEX_COLOR_PATTERN.test(trimmed) ? trimmed.toLowerCase() : null
+}
+
 export function sanitizeAppearance(
   raw: Partial<AppearanceSettings> | Record<string, unknown> | null | undefined,
   fallbackPreset?: string | null
@@ -146,6 +219,12 @@ export function sanitizeAppearance(
   const presetFallback = pickEnum(fallbackPreset, THEME_PRESET_IDS, DEFAULT_APPEARANCE.themePreset)
   const surfaceStyle = pickEnum(input.surfaceStyle, SURFACE_STYLES, DEFAULT_APPEARANCE.surfaceStyle)
   const surfacePreset = SURFACE_STYLE_PRESETS[surfaceStyle]
+  const textShadowStrength = pickEnum(
+    input.textShadowStrength,
+    TEXT_SHADOW_STRENGTHS,
+    DEFAULT_APPEARANCE.textShadowStrength
+  )
+  const textShadowPreset = TEXT_SHADOW_PRESETS[textShadowStrength]
 
   return {
     themeMode: pickEnum(input.themeMode, THEME_MODES, DEFAULT_APPEARANCE.themeMode),
@@ -190,6 +269,45 @@ export function sanitizeAppearance(
       typeof input.surfaceSpecularBorder === "boolean"
         ? input.surfaceSpecularBorder
         : surfacePreset.surfaceSpecularBorder,
+    textReadabilityMode: pickEnum(
+      input.textReadabilityMode,
+      TEXT_READABILITY_MODES,
+      DEFAULT_APPEARANCE.textReadabilityMode
+    ),
+    textColorMode: pickEnum(
+      input.textColorMode,
+      TEXT_COLOR_MODES,
+      DEFAULT_APPEARANCE.textColorMode
+    ),
+    textCustomColor: normalizeOptionalHexColor(input.textCustomColor),
+    textShadowStrength,
+    textShadowBlurPx: pickIntInRange(
+      input.textShadowBlurPx,
+      TEXT_SHADOW_BLUR_BOUNDS.min,
+      TEXT_SHADOW_BLUR_BOUNDS.max,
+      textShadowPreset.textShadowBlurPx
+    ),
+    textShadowOpacity: pickIntInRange(
+      input.textShadowOpacity,
+      TEXT_SHADOW_OPACITY_BOUNDS.min,
+      TEXT_SHADOW_OPACITY_BOUNDS.max,
+      textShadowPreset.textShadowOpacity
+    ),
+    textOutlineWidthPx: pickIntInRange(
+      input.textOutlineWidthPx,
+      TEXT_OUTLINE_WIDTH_BOUNDS.min,
+      TEXT_OUTLINE_WIDTH_BOUNDS.max,
+      DEFAULT_APPEARANCE.textOutlineWidthPx
+    ),
+    textBoostMuted:
+      typeof input.textBoostMuted === "boolean"
+        ? input.textBoostMuted
+        : DEFAULT_APPEARANCE.textBoostMuted,
+    textEffectScope: pickEnum(
+      input.textEffectScope,
+      TEXT_EFFECT_SCOPES,
+      DEFAULT_APPEARANCE.textEffectScope
+    ),
   }
 }
 
@@ -214,6 +332,15 @@ export function serializeAppearanceCookie(prefs: AppearanceSettings): string {
     surfaceBlurPx: prefs.surfaceBlurPx,
     surfaceSaturation: prefs.surfaceSaturation,
     surfaceSpecularBorder: prefs.surfaceSpecularBorder,
+    textReadabilityMode: prefs.textReadabilityMode,
+    textColorMode: prefs.textColorMode,
+    textCustomColor: prefs.textCustomColor,
+    textShadowStrength: prefs.textShadowStrength,
+    textShadowBlurPx: prefs.textShadowBlurPx,
+    textShadowOpacity: prefs.textShadowOpacity,
+    textOutlineWidthPx: prefs.textOutlineWidthPx,
+    textBoostMuted: prefs.textBoostMuted,
+    textEffectScope: prefs.textEffectScope,
   })
 }
 
@@ -262,8 +389,44 @@ export function computeSurfaceGlassCssVars(
     "--app-glass-opacity": `${opacity}%`,
     "--app-glass-chrome-opacity": `${Math.min(opacity + 6, 96)}%`,
     "--app-glass-popover-opacity": `${Math.min(opacity + 10, 96)}%`,
+    "--app-glass-muted-opacity": `${Math.max(opacity - 10, 28)}%`,
+    "--app-glass-input-opacity": `${Math.min(opacity + 4, 92)}%`,
     "--app-glass-blur": `${blurPx}px`,
     "--app-glass-saturation": `${saturation}%`,
+  }
+}
+
+export function computeTextReadabilityCssVars(
+  prefs: Pick<
+    AppearanceSettings,
+    "textShadowBlurPx" | "textShadowOpacity" | "textOutlineWidthPx" | "textCustomColor"
+  >
+): Record<string, string> {
+  const blurPx = pickIntInRange(
+    prefs.textShadowBlurPx,
+    TEXT_SHADOW_BLUR_BOUNDS.min,
+    TEXT_SHADOW_BLUR_BOUNDS.max,
+    DEFAULT_APPEARANCE.textShadowBlurPx
+  )
+  const opacity = pickIntInRange(
+    prefs.textShadowOpacity,
+    TEXT_SHADOW_OPACITY_BOUNDS.min,
+    TEXT_SHADOW_OPACITY_BOUNDS.max,
+    DEFAULT_APPEARANCE.textShadowOpacity
+  )
+  const outlinePx = pickIntInRange(
+    prefs.textOutlineWidthPx,
+    TEXT_OUTLINE_WIDTH_BOUNDS.min,
+    TEXT_OUTLINE_WIDTH_BOUNDS.max,
+    DEFAULT_APPEARANCE.textOutlineWidthPx
+  )
+  const customColor = normalizeOptionalHexColor(prefs.textCustomColor) ?? "currentColor"
+
+  return {
+    "--app-text-shadow-blur": `${blurPx}px`,
+    "--app-text-shadow-opacity": `${opacity}%`,
+    "--app-text-outline-width": `${outlinePx}px`,
+    "--app-text-custom-color": customColor,
   }
 }
 
@@ -286,9 +449,18 @@ export function getHtmlAttributesForAppearance(prefs: AppearanceSettings): {
       "data-surface-style": prefs.surfaceStyle,
       "data-surface-specular":
         prefs.surfaceStyle !== "solid" && prefs.surfaceSpecularBorder ? "on" : "off",
+      "data-text-readability": prefs.textReadabilityMode,
+      "data-text-color-mode": prefs.textColorMode,
+      "data-text-shadow": prefs.textShadowStrength,
+      "data-text-outline": prefs.textOutlineWidthPx > 0 ? "on" : "off",
+      "data-text-boost-muted": prefs.textBoostMuted ? "on" : "off",
+      "data-text-scope": prefs.textEffectScope,
     },
     fontSizePercent: `${prefs.fontScale}%`,
-    cssVars: computeSurfaceGlassCssVars(prefs),
+    cssVars: {
+      ...computeSurfaceGlassCssVars(prefs),
+      ...computeTextReadabilityCssVars(prefs),
+    },
   }
 }
 

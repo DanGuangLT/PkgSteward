@@ -10,6 +10,10 @@ export type SettingsContentWidth = "narrow" | "standard" | "wide" | "full"
 export type SettingsNavigationLayout = "topbar" | "sidebar"
 export type SettingsReducedMotion = "system" | "reduce" | "normal"
 export type SettingsSurfaceStyle = "solid" | "frosted" | "liquid-glass" | "crystal"
+export type SettingsTextReadabilityMode = "auto" | "off" | "custom"
+export type SettingsTextColorMode = "theme" | "auto-wallpaper" | "light" | "dark" | "custom"
+export type SettingsTextShadowStrength = "auto" | "none" | "subtle" | "strong" | "halo"
+export type SettingsTextEffectScope = "wallpaper-only" | "always"
 
 export type SettingsLocale = "vi" | "en"
 export type SettingsConsoleShell = "cmd" | "powershell"
@@ -55,6 +59,15 @@ export interface AppearanceSettings {
   surfaceBlurPx: number
   surfaceSaturation: number
   surfaceSpecularBorder: boolean
+  textReadabilityMode: SettingsTextReadabilityMode
+  textColorMode: SettingsTextColorMode
+  textCustomColor: string | null
+  textShadowStrength: SettingsTextShadowStrength
+  textShadowBlurPx: number
+  textShadowOpacity: number
+  textOutlineWidthPx: number
+  textBoostMuted: boolean
+  textEffectScope: SettingsTextEffectScope
 }
 
 export interface BehaviorSettings {

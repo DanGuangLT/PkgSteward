@@ -87,19 +87,25 @@ html {
   --app-density-pad: 1.5rem;
   --app-density-gap: 1.5rem;
   --app-line-height: 1.5;
+  --glass-dark-ink: var(--foreground);
+  --glass-light-ink: var(--background);
   --glass-rim-light: var(--background);
   --glass-rim-dark: var(--foreground);
   --glass-rim-top-alpha: 70%;
   --glass-sheen-alpha: 26%;
   --glass-shadow-alpha: 55%;
+  --app-text-shadow-ink: var(--glass-light-ink);
 }
 
 html.dark {
+  --glass-dark-ink: var(--background);
+  --glass-light-ink: var(--foreground);
   --glass-rim-light: var(--foreground);
   --glass-rim-dark: var(--background);
   --glass-rim-top-alpha: 24%;
   --glass-sheen-alpha: 11%;
   --glass-shadow-alpha: 75%;
+  --app-text-shadow-ink: var(--glass-dark-ink);
 }
 html[data-density="compact"] {
   --app-density-pad: 1rem;
@@ -146,7 +152,8 @@ html[data-motion="reduce"] *::after {
 }
 
 /* Fallback translucency when live wallpaper runs alongside Solid surface mode (in oklab prevents neutral magenta shift) */
-html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) [data-slot="card"] {
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"])
+  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt])) {
   background-color: color-mix(in oklab, var(--card) var(--wallpaper-surface-opacity, 86%), transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
@@ -159,7 +166,7 @@ html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surf
   backdrop-filter: blur(14px);
 }
 
-/* Apple Liquid Glass & Frosted surface materials across cards, navigation chrome, and floating overlays */
+/* Apple Liquid Glass & Frosted surface materials across ALL cards, muted blocks, dashed placeholders, inputs, chrome, and floating overlays */
 html:is([data-surface-style="liquid-glass"], [data-surface-style="crystal"]):not([data-wallpaper="active"]) body {
   background-image:
     radial-gradient(
@@ -176,8 +183,37 @@ html:is([data-surface-style="liquid-glass"], [data-surface-style="crystal"]):not
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt])) {
   background-color: color-mix(in oklab, var(--card) var(--app-glass-opacity, 84%), transparent);
+  -webkit-backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+  backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(button, a).bg-card:not(:disabled):not([data-surface-exempt]):hover {
+  background-color: color-mix(in oklab, var(--card) var(--app-glass-chrome-opacity, 90%), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(div, section, pre, ul, dl, article, form).bg-muted:not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--muted) var(--app-glass-muted-opacity, 72%), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  .border-dashed.rounded-md:not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--card) var(--app-glass-muted-opacity, 55%), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 0.6)) saturate(var(--app-glass-saturation, 140%));
+  backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 0.6)) saturate(var(--app-glass-saturation, 140%));
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  [data-slot="input"]:not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--background) var(--app-glass-input-opacity, 78%), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(.bg-card\/95, .bg-background\/95):not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--card) var(--app-glass-chrome-opacity, 90%), transparent);
   -webkit-backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
   backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
 }
@@ -206,7 +242,7 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
 /* Prevent double backdrop-filter stacking on cards inside glass dialogs while keeping live preview panels reactive */
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
   [data-slot="dialog-content"]
-  [data-slot="card"] {
+  :is([data-slot="card"], .bg-card):not([data-slot="glass-preview-panel"]) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -216,6 +252,7 @@ html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surfac
     [data-slot="card"],
     [data-slot="list-pagination"],
     [data-slot="glass-preview-panel"],
+    .bg-card:not(span):not([data-surface-exempt]),
     [data-slot="dialog-content"],
     [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
@@ -239,6 +276,7 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
     [data-slot="card"],
     [data-slot="list-pagination"],
     [data-slot="glass-preview-panel"],
+    .bg-card:not(span):not([data-surface-exempt]),
     [data-slot="dialog-content"],
     [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
@@ -251,7 +289,7 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt]), .bg-card\/95, .bg-background\/95) {
     background-color: color-mix(in oklab, var(--card) 95%, transparent);
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
@@ -273,11 +311,19 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
 
 @media (prefers-reduced-transparency: reduce) {
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt]), .border-dashed.rounded-md:not([data-surface-exempt]), .bg-card\/95, .bg-background\/95) {
     background-color: var(--card);
     background-image: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(div, section, pre, ul, dl, article, form).bg-muted:not([data-surface-exempt]) {
+    background-color: var(--muted);
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    [data-slot="input"]:not([data-surface-exempt]) {
+    background-color: var(--background);
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
     :is(header, aside):not([data-slot="dialog-content"] *) {
@@ -299,6 +345,144 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+}
+
+/* Adaptive Text Readability: shadow ink polarity, text stroke (paint-order: stroke fill), muted boost & custom tint */
+html[data-text-color-mode="light"],
+html[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"],
+html[data-text-color-mode="custom"] {
+  --app-text-shadow-ink: var(--glass-dark-ink);
+}
+
+html[data-text-color-mode="dark"],
+html[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"] {
+  --app-text-shadow-ink: var(--glass-light-ink);
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="light"]:is([data-text-scope="always"], [data-wallpaper="active"]),
+html:not([data-text-readability="off"])[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"]:is([data-text-scope="always"], [data-wallpaper="active"]) {
+  --app-resolved-text-color: var(--glass-light-ink);
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="dark"]:is([data-text-scope="always"], [data-wallpaper="active"]),
+html:not([data-text-readability="off"])[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"]:is([data-text-scope="always"], [data-wallpaper="active"]) {
+  --app-resolved-text-color: var(--glass-dark-ink);
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="custom"]:is([data-text-scope="always"], [data-wallpaper="active"]) {
+  --app-resolved-text-color: var(--app-text-custom-color, var(--foreground));
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="light"] [data-slot="text-preview-stage"],
+html:not([data-text-readability="off"])[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"] [data-slot="text-preview-stage"] {
+  --app-resolved-text-color: var(--glass-light-ink);
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="dark"] [data-slot="text-preview-stage"],
+html:not([data-text-readability="off"])[data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"] [data-slot="text-preview-stage"] {
+  --app-resolved-text-color: var(--glass-dark-ink);
+}
+
+html:not([data-text-readability="off"])[data-text-color-mode="custom"] [data-slot="text-preview-stage"] {
+  --app-resolved-text-color: var(--app-text-custom-color, var(--foreground));
+}
+
+/* Muted text boost so secondary labels stay legible on wallpapers or translucent glass */
+html:not([data-text-readability="off"])[data-text-boost-muted="on"]:is([data-text-scope="always"], [data-wallpaper="active"]) main,
+html:not([data-text-readability="off"])[data-text-boost-muted="on"] [data-slot="text-preview-stage"] {
+  --muted-foreground: color-mix(in oklab, var(--foreground) 84%, var(--muted-foreground));
+}
+
+html:not([data-text-readability="off"]):is([data-text-color-mode="light"], [data-text-color-mode="dark"], [data-text-color-mode="custom"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"]):is([data-text-scope="always"], [data-wallpaper="active"])
+  main
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code),
+html:not([data-text-readability="off"]):is([data-text-color-mode="light"], [data-text-color-mode="dark"], [data-text-color-mode="custom"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"])
+  [data-slot="text-preview-stage"]
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code) {
+  color: var(--app-resolved-text-color);
+}
+
+html:not([data-text-readability="off"])[data-text-boost-muted="on"]:is([data-text-color-mode="light"], [data-text-color-mode="dark"], [data-text-color-mode="custom"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"]):is([data-text-scope="always"], [data-wallpaper="active"]) main,
+html:not([data-text-readability="off"])[data-text-boost-muted="on"]:is([data-text-color-mode="light"], [data-text-color-mode="dark"], [data-text-color-mode="custom"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="light"], [data-text-color-mode="auto-wallpaper"][data-wallpaper-tone="dark"]) [data-slot="text-preview-stage"] {
+  --muted-foreground: color-mix(in oklab, var(--app-resolved-text-color) 82%, transparent);
+}
+
+/* Text Shadow & Halo */
+html:not([data-text-readability="off"]):not([data-text-shadow="none"]):is([data-text-scope="always"], [data-wallpaper="active"])
+  main
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code),
+html:not([data-text-readability="off"]):not([data-text-shadow="none"])
+  [data-slot="text-preview-stage"]
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code) {
+  text-shadow:
+    0 1px 2px color-mix(in oklab, var(--app-text-shadow-ink) var(--app-text-shadow-opacity, 78%), transparent),
+    0 0 var(--app-text-shadow-blur, 8px) color-mix(in oklab, var(--app-text-shadow-ink) calc(var(--app-text-shadow-opacity, 78%) * 0.72), transparent);
+}
+
+html:not([data-text-readability="off"]):is(
+  [data-text-shadow="halo"],
+  [data-text-readability="auto"].dark[data-wallpaper-tone="light"],
+  [data-text-readability="auto"]:not(.dark)[data-wallpaper-tone="dark"]
+):is([data-text-scope="always"], [data-wallpaper="active"])
+  main
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code),
+html:not([data-text-readability="off"])[data-text-shadow="halo"]
+  [data-slot="text-preview-stage"]
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code) {
+  text-shadow:
+    1px 1px 1px color-mix(in oklab, var(--app-text-shadow-ink) var(--app-text-shadow-opacity, 86%), transparent),
+    -1px -1px 1px color-mix(in oklab, var(--app-text-shadow-ink) calc(var(--app-text-shadow-opacity, 86%) * 0.72), transparent),
+    0 0 var(--app-text-shadow-blur, 14px) color-mix(in oklab, var(--app-text-shadow-ink) var(--app-text-shadow-opacity, 86%), transparent),
+    0 2px calc(var(--app-text-shadow-blur, 14px) * 1.6) color-mix(in oklab, var(--app-text-shadow-ink) calc(var(--app-text-shadow-opacity, 86%) * 0.65), transparent);
+}
+
+/* Text Stroke Outline with paint-order: stroke fill so glyphs keep natural weight */
+html:not([data-text-readability="off"])[data-text-outline="on"]:is([data-text-scope="always"], [data-wallpaper="active"])
+  main
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li),
+html:not([data-text-readability="off"])[data-text-outline="on"]
+  [data-slot="text-preview-stage"]
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li) {
+  paint-order: stroke fill;
+  -webkit-text-stroke: var(--app-text-outline-width, 1px) color-mix(in oklab, var(--app-text-shadow-ink) 88%, transparent);
+}
+
+/* Exempt solid buttons, active dark/primary pills, badges, and inputs from text-readability ink & stroke overrides */
+html:not([data-text-readability="off"])
+  :is(
+    [data-slot="button"][data-variant="default"],
+    [data-slot="button"][data-variant="destructive"],
+    [data-slot="badge"],
+    .bg-foreground,
+    .bg-primary,
+    [data-slot="input"],
+    [data-surface-exempt]
+  ),
+html:not([data-text-readability="off"])
+  :is(
+    [data-slot="button"][data-variant="default"],
+    [data-slot="button"][data-variant="destructive"],
+    [data-slot="badge"],
+    .bg-foreground,
+    .bg-primary,
+    [data-surface-exempt]
+  )
+  * {
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
+}
+
+html:not([data-text-readability="off"])
+  :is(
+    [data-slot="button"][data-variant="default"],
+    [data-slot="button"][data-variant="destructive"],
+    [data-slot="badge"],
+    .bg-foreground,
+    .bg-primary,
+    [data-surface-exempt]
+  )
+  :is(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code, span) {
+  color: inherit;
 }
 
 /* Theme-aligned range slider with @supports fallback */

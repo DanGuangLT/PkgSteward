@@ -3,6 +3,7 @@
 import {
   CheckIcon,
   DropletsIcon,
+  EyeIcon,
   GlobeIcon,
   HardDriveIcon,
   ImageIcon,
@@ -14,6 +15,7 @@ import {
   RotateCcwIcon,
   SparklesIcon,
   SunIcon,
+  TypeIcon,
   UploadIcon,
 } from "lucide-react"
 import { useRef, useState } from "react"
@@ -38,11 +40,14 @@ import {
   applyAppearanceToDocument,
   BODY_FONTS,
   CONTENT_WIDTHS,
+  DEFAULT_CUSTOM_TEXT_COLOR,
+  DEFAULT_TEXT_READABILITY_PRESET,
   DENSITY_MODES,
   FONT_SCALES,
   LINE_HEIGHTS,
   MONO_FONTS,
   NAV_LAYOUTS,
+  normalizeOptionalHexColor,
   RADIUS_MODES,
   REDUCED_MOTION_MODES,
   SURFACE_BLUR_BOUNDS,
@@ -50,11 +55,20 @@ import {
   SURFACE_SATURATION_BOUNDS,
   SURFACE_STYLE_PRESETS,
   SURFACE_STYLES,
+  TEXT_COLOR_MODES,
+  TEXT_EFFECT_SCOPES,
+  TEXT_OUTLINE_WIDTH_BOUNDS,
+  TEXT_READABILITY_MODES,
+  TEXT_SHADOW_BLUR_BOUNDS,
+  TEXT_SHADOW_OPACITY_BOUNDS,
+  TEXT_SHADOW_PRESETS,
+  TEXT_SHADOW_STRENGTHS,
   THEME_MODES,
   THEME_PRESET_IDS,
 } from "@/lib/settings/appearance-prefs"
 import {
   validateSurfaceGlassDraft,
+  validateTextReadabilityDraft,
   validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "@/lib/settings/settings-validation"
@@ -83,6 +97,10 @@ import type {
   SettingsRadius,
   SettingsReducedMotion,
   SettingsSurfaceStyle,
+  SettingsTextColorMode,
+  SettingsTextEffectScope,
+  SettingsTextReadabilityMode,
+  SettingsTextShadowStrength,
   SettingsThemeMode,
   SettingsThemePreset,
 } from "@/lib/settings/types"
@@ -834,6 +852,506 @@ function SurfaceMaterialCard({
   )
 }
 
+function TextReadabilityCard({
+  appearance,
+  advancedMode,
+  onPatchAppearance,
+}: {
+  appearance: AppearanceSettings
+  advancedMode: boolean
+  onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
+}) {
+  const t = useTranslations("settings.appearance")
+  const tVal = useTranslations("settings.validation")
+
+  const isOff = appearance.textReadabilityMode === "off"
+  const [colorModeDraft, setColorModeDraft] = useState<SettingsTextColorMode>(
+    appearance.textColorMode
+  )
+  const [customColorDraft, setCustomColorDraft] = useState(
+    appearance.textCustomColor ?? DEFAULT_CUSTOM_TEXT_COLOR
+  )
+  const [blurDraft, setBlurDraft] = useState(String(appearance.textShadowBlurPx))
+  const [opacityDraft, setOpacityDraft] = useState(String(appearance.textShadowOpacity))
+  const [outlineDraft, setOutlineDraft] = useState(String(appearance.textOutlineWidthPx))
+  const [scopeDraft, setScopeDraft] = useState<SettingsTextEffectScope>(appearance.textEffectScope)
+
+  const blurNum = parseIntInBounds(
+    blurDraft,
+    TEXT_SHADOW_BLUR_BOUNDS.min,
+    TEXT_SHADOW_BLUR_BOUNDS.max,
+    appearance.textShadowBlurPx
+  )
+  const opacityNum = parseIntInBounds(
+    opacityDraft,
+    TEXT_SHADOW_OPACITY_BOUNDS.min,
+    TEXT_SHADOW_OPACITY_BOUNDS.max,
+    appearance.textShadowOpacity
+  )
+  const outlineNum = parseIntInBounds(
+    outlineDraft,
+    TEXT_OUTLINE_WIDTH_BOUNDS.min,
+    TEXT_OUTLINE_WIDTH_BOUNDS.max,
+    appearance.textOutlineWidthPx
+  )
+  const pickerHex = normalizeOptionalHexColor(customColorDraft) ?? DEFAULT_CUSTOM_TEXT_COLOR
+
+  const textErrors = validateTextReadabilityDraft({
+    textColorMode: colorModeDraft,
+    textCustomColor: customColorDraft,
+    textShadowBlurPx: blurDraft,
+    textShadowOpacity: opacityDraft,
+    textOutlineWidthPx: outlineDraft,
+  })
+  const hasErrors = Object.keys(textErrors).length > 0
+
+  const previewLiveText = (next: {
+    textReadabilityMode?: SettingsTextReadabilityMode
+    textColorMode?: SettingsTextColorMode
+    textCustomColor?: string | null
+    textShadowStrength?: SettingsTextShadowStrength
+    textShadowBlurPx?: number
+    textShadowOpacity?: number
+    textOutlineWidthPx?: number
+    textEffectScope?: SettingsTextEffectScope
+  }) => {
+    if (typeof document === "undefined") return
+    const nextColor =
+      next.textCustomColor !== undefined
+        ? next.textCustomColor
+        : normalizeOptionalHexColor(customColorDraft)
+    applyAppearanceToDocument(document, {
+      ...appearance,
+      textReadabilityMode:
+        next.textReadabilityMode ?? (isOff ? "custom" : appearance.textReadabilityMode),
+      textColorMode: next.textColorMode ?? colorModeDraft,
+      textCustomColor: nextColor,
+      textShadowStrength: next.textShadowStrength ?? appearance.textShadowStrength,
+      textShadowBlurPx: next.textShadowBlurPx ?? blurNum,
+      textShadowOpacity: next.textShadowOpacity ?? opacityNum,
+      textOutlineWidthPx: next.textOutlineWidthPx ?? outlineNum,
+      textEffectScope: next.textEffectScope ?? scopeDraft,
+    })
+  }
+
+  const visibleColorModes: readonly SettingsTextColorMode[] = advancedMode
+    ? TEXT_COLOR_MODES
+    : TEXT_COLOR_MODES.filter((mode) => mode !== "custom")
+
+  const handleModeSelect = (mode: SettingsTextReadabilityMode) => {
+    if (mode === "auto") {
+      onPatchAppearance({ ...DEFAULT_TEXT_READABILITY_PRESET })
+      return
+    }
+    if (mode === "off") {
+      onPatchAppearance({ textReadabilityMode: "off" })
+      return
+    }
+    onPatchAppearance({ textReadabilityMode: "custom" })
+  }
+
+  const handleAdvancedSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isOff || hasErrors) return
+    const normalizedColor =
+      colorModeDraft === "custom"
+        ? (normalizeOptionalHexColor(customColorDraft) ?? DEFAULT_CUSTOM_TEXT_COLOR)
+        : normalizeOptionalHexColor(customColorDraft)
+    onPatchAppearance({
+      textReadabilityMode: "custom",
+      textColorMode: colorModeDraft,
+      textCustomColor: normalizedColor,
+      textShadowBlurPx: Number(blurDraft.trim()),
+      textShadowOpacity: Number(opacityDraft.trim()),
+      textOutlineWidthPx: Number(outlineDraft.trim()),
+      textEffectScope: scopeDraft,
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <TypeIcon className="size-5 text-primary" aria-hidden />
+            <CardTitle>{t("textSectionTitle")}</CardTitle>
+          </div>
+          <Badge
+            variant={
+              appearance.textReadabilityMode === "auto"
+                ? "success"
+                : appearance.textReadabilityMode === "off"
+                  ? "secondary"
+                  : "outline"
+            }
+          >
+            {t(`textModes.${appearance.textReadabilityMode}`)}
+          </Badge>
+        </div>
+        <CardDescription>{t("textSectionDescription")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {TEXT_READABILITY_MODES.map((mode) => {
+            const selected = appearance.textReadabilityMode === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => handleModeSelect(mode)}
+                className={cn(
+                  "flex flex-col justify-between gap-2 rounded-md border p-3.5 text-left transition-colors focus-ring",
+                  selected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border bg-background hover:bg-muted/50"
+                )}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <EyeIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                    <span className="text-body-sm font-semibold text-foreground">
+                      {t(`textModes.${mode}`)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {mode === "auto" && (
+                      <Badge variant="success">{t("recommendedBadge")}</Badge>
+                    )}
+                    {selected && <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />}
+                  </div>
+                </div>
+                <p className="text-caption text-muted-foreground">{t(`textModeDescs.${mode}`)}</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {!isOff && (
+          <>
+            <div className="flex flex-col gap-4 rounded-md border border-border bg-background p-4">
+              <div className="flex flex-col gap-2">
+                <Label>{t("textShadowLabel")}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={appearance.textShadowStrength}
+                  onValueChange={(val) => {
+                    if (
+                      val &&
+                      TEXT_SHADOW_STRENGTHS.includes(val as SettingsTextShadowStrength)
+                    ) {
+                      const nextShadow = val as SettingsTextShadowStrength
+                      const preset = TEXT_SHADOW_PRESETS[nextShadow]
+                      onPatchAppearance({
+                        textReadabilityMode:
+                          nextShadow === "auto" && appearance.textColorMode === "theme"
+                            ? "auto"
+                            : "custom",
+                        textShadowStrength: nextShadow,
+                        ...preset,
+                      })
+                    }
+                  }}
+                >
+                  {TEXT_SHADOW_STRENGTHS.map((strength) => (
+                    <ToggleGroupItem key={strength} value={strength}>
+                      {t(`textShadows.${strength}`)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label>{t("textColorModeLabel")}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={colorModeDraft}
+                  onValueChange={(val) => {
+                    if (val && TEXT_COLOR_MODES.includes(val as SettingsTextColorMode)) {
+                      const nextColorMode = val as SettingsTextColorMode
+                      setColorModeDraft(nextColorMode)
+                      const nextCustomHex =
+                        nextColorMode === "custom"
+                          ? (normalizeOptionalHexColor(customColorDraft) ??
+                            DEFAULT_CUSTOM_TEXT_COLOR)
+                          : appearance.textCustomColor
+                      onPatchAppearance({
+                        textReadabilityMode:
+                          nextColorMode === "theme" && appearance.textShadowStrength === "auto"
+                            ? "auto"
+                            : "custom",
+                        textColorMode: nextColorMode,
+                        ...(nextColorMode === "custom" ? { textCustomColor: nextCustomHex } : {}),
+                      })
+                    }
+                  }}
+                >
+                  {visibleColorModes.map((mode) => (
+                    <ToggleGroupItem key={mode} value={mode}>
+                      {t(`textColorModes.${mode}`)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-card/40 p-3 select-none">
+                <Checkbox
+                  checked={appearance.textBoostMuted}
+                  onCheckedChange={(val) => onPatchAppearance({ textBoostMuted: val === true })}
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-body-sm font-medium text-foreground">
+                    {t("textBoostMutedLabel")}
+                  </span>
+                  <span className="text-caption text-muted-foreground">
+                    {t("textBoostMutedDesc")}
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {advancedMode && (
+              <form
+                noValidate
+                onSubmit={handleAdvancedSubmit}
+                className="flex flex-col gap-4 rounded-md border border-border bg-background p-4"
+              >
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="text-custom-hex">{t("textCustomColorLabel")}</Label>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <input
+                      type="color"
+                      aria-label={t("textCustomColorLabel")}
+                      value={pickerHex}
+                      onChange={(e) => {
+                        const nextHex = e.target.value.toLowerCase()
+                        setCustomColorDraft(nextHex)
+                        setColorModeDraft("custom")
+                        previewLiveText({
+                          textReadabilityMode: "custom",
+                          textColorMode: "custom",
+                          textCustomColor: nextHex,
+                        })
+                      }}
+                      className="h-10 w-14 cursor-pointer rounded-md border border-input bg-background p-1"
+                    />
+                    <Input
+                      id="text-custom-hex"
+                      value={customColorDraft}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setCustomColorDraft(raw)
+                        const normalized = normalizeOptionalHexColor(raw)
+                        if (normalized) {
+                          setColorModeDraft("custom")
+                          previewLiveText({
+                            textReadabilityMode: "custom",
+                            textColorMode: "custom",
+                            textCustomColor: normalized,
+                          })
+                        }
+                      }}
+                      placeholder={DEFAULT_CUSTOM_TEXT_COLOR}
+                      aria-invalid={textErrors.textCustomColor ? true : undefined}
+                      className="w-40 font-mono"
+                    />
+                  </div>
+                  <p className="text-caption text-muted-foreground">{t("textCustomColorHint")}</p>
+                  {textErrors.textCustomColor && (
+                    <p role="alert" className="text-caption text-destructive">
+                      {tVal(textErrors.textCustomColor)}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="text-shadow-blur-num">{t("textShadowBlurLabel")}</Label>
+                    <UnitNumberInput
+                      id="text-shadow-blur-num"
+                      type="number"
+                      min={TEXT_SHADOW_BLUR_BOUNDS.min}
+                      max={TEXT_SHADOW_BLUR_BOUNDS.max}
+                      step={1}
+                      unit="px"
+                      hint="0–24 px"
+                      value={blurDraft}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setBlurDraft(raw)
+                        const parsed = Number(raw.trim())
+                        if (
+                          Number.isSafeInteger(parsed) &&
+                          parsed >= TEXT_SHADOW_BLUR_BOUNDS.min &&
+                          parsed <= TEXT_SHADOW_BLUR_BOUNDS.max
+                        ) {
+                          previewLiveText({ textShadowBlurPx: parsed })
+                        }
+                      }}
+                      error={textErrors.textShadowBlurPx ? tVal(textErrors.textShadowBlurPx) : null}
+                    />
+                    <input
+                      type="range"
+                      aria-label={t("textShadowBlurLabel")}
+                      className="app-range-slider h-2 w-full rounded-full"
+                      style={rangeProgressStyle(
+                        blurNum,
+                        TEXT_SHADOW_BLUR_BOUNDS.min,
+                        TEXT_SHADOW_BLUR_BOUNDS.max
+                      )}
+                      min={TEXT_SHADOW_BLUR_BOUNDS.min}
+                      max={TEXT_SHADOW_BLUR_BOUNDS.max}
+                      step={1}
+                      value={blurNum}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        setBlurDraft(String(next))
+                        previewLiveText({ textShadowBlurPx: next })
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="text-shadow-opacity-num">{t("textShadowOpacityLabel")}</Label>
+                    <UnitNumberInput
+                      id="text-shadow-opacity-num"
+                      type="number"
+                      min={TEXT_SHADOW_OPACITY_BOUNDS.min}
+                      max={TEXT_SHADOW_OPACITY_BOUNDS.max}
+                      step={1}
+                      unit="%"
+                      hint="0–100 %"
+                      value={opacityDraft}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setOpacityDraft(raw)
+                        const parsed = Number(raw.trim())
+                        if (
+                          Number.isSafeInteger(parsed) &&
+                          parsed >= TEXT_SHADOW_OPACITY_BOUNDS.min &&
+                          parsed <= TEXT_SHADOW_OPACITY_BOUNDS.max
+                        ) {
+                          previewLiveText({ textShadowOpacity: parsed })
+                        }
+                      }}
+                      error={
+                        textErrors.textShadowOpacity ? tVal(textErrors.textShadowOpacity) : null
+                      }
+                    />
+                    <input
+                      type="range"
+                      aria-label={t("textShadowOpacityLabel")}
+                      className="app-range-slider h-2 w-full rounded-full"
+                      style={rangeProgressStyle(
+                        opacityNum,
+                        TEXT_SHADOW_OPACITY_BOUNDS.min,
+                        TEXT_SHADOW_OPACITY_BOUNDS.max
+                      )}
+                      min={TEXT_SHADOW_OPACITY_BOUNDS.min}
+                      max={TEXT_SHADOW_OPACITY_BOUNDS.max}
+                      step={1}
+                      value={opacityNum}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        setOpacityDraft(String(next))
+                        previewLiveText({ textShadowOpacity: next })
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="text-outline-num">{t("textOutlineWidthLabel")}</Label>
+                    <UnitNumberInput
+                      id="text-outline-num"
+                      type="number"
+                      min={TEXT_OUTLINE_WIDTH_BOUNDS.min}
+                      max={TEXT_OUTLINE_WIDTH_BOUNDS.max}
+                      step={1}
+                      unit="px"
+                      hint="0–3 px"
+                      value={outlineDraft}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        setOutlineDraft(raw)
+                        const parsed = Number(raw.trim())
+                        if (
+                          Number.isSafeInteger(parsed) &&
+                          parsed >= TEXT_OUTLINE_WIDTH_BOUNDS.min &&
+                          parsed <= TEXT_OUTLINE_WIDTH_BOUNDS.max
+                        ) {
+                          previewLiveText({ textOutlineWidthPx: parsed })
+                        }
+                      }}
+                      error={
+                        textErrors.textOutlineWidthPx ? tVal(textErrors.textOutlineWidthPx) : null
+                      }
+                    />
+                    <input
+                      type="range"
+                      aria-label={t("textOutlineWidthLabel")}
+                      className="app-range-slider h-2 w-full rounded-full"
+                      style={rangeProgressStyle(
+                        outlineNum,
+                        TEXT_OUTLINE_WIDTH_BOUNDS.min,
+                        TEXT_OUTLINE_WIDTH_BOUNDS.max
+                      )}
+                      min={TEXT_OUTLINE_WIDTH_BOUNDS.min}
+                      max={TEXT_OUTLINE_WIDTH_BOUNDS.max}
+                      step={1}
+                      value={outlineNum}
+                      onChange={(e) => {
+                        const next = Number(e.target.value)
+                        setOutlineDraft(String(next))
+                        previewLiveText({ textOutlineWidthPx: next })
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Label>{t("textEffectScopeLabel")}</Label>
+                  <ToggleGroup
+                    type="single"
+                    value={scopeDraft}
+                    onValueChange={(val) => {
+                      if (val && TEXT_EFFECT_SCOPES.includes(val as SettingsTextEffectScope)) {
+                        const nextScope = val as SettingsTextEffectScope
+                        setScopeDraft(nextScope)
+                        previewLiveText({ textEffectScope: nextScope })
+                      }
+                    }}
+                  >
+                    {TEXT_EFFECT_SCOPES.map((scope) => (
+                      <ToggleGroupItem key={scope} value={scope}>
+                        {t(`textEffectScopes.${scope}`)}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onPatchAppearance({ ...DEFAULT_TEXT_READABILITY_PRESET })}
+                  >
+                    <RotateCcwIcon className="size-4" aria-hidden />
+                    {t("textResetRecommendedCta")}
+                  </Button>
+                  <Button type="submit" size="sm" variant="secondary" disabled={hasErrors}>
+                    {t("textApplyTuningCta")}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function AppearanceTab() {
   const t = useTranslations("settings.appearance")
   const tPresets = useTranslations("theme.presets")
@@ -989,14 +1507,22 @@ export function AppearanceTab() {
           <CardDescription>{t("previewDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="rounded-md border border-border bg-gradient-to-br from-primary/20 via-accent/35 to-success-soft/40 p-4">
+          <div
+            data-slot="text-preview-stage"
+            className="flex flex-col gap-3 rounded-md border border-border bg-gradient-to-br from-primary/20 via-accent/35 to-success-soft/40 p-4"
+          >
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-heading-md text-foreground">{t("previewFloatingTitle")}</h3>
+              <p className="text-caption text-muted-foreground">{t("previewFloatingDesc")}</p>
+            </div>
+
             <div
               data-slot="glass-preview-panel"
               className="rounded-md border border-border bg-card p-4 text-card-foreground"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-col gap-1">
-                  <h3 className="text-heading-md">{t("previewProjectTitle")}</h3>
+                  <h4 className="text-heading-md">{t("previewProjectTitle")}</h4>
                   <code className="font-mono text-caption text-muted-foreground">
                     D:\Coding\PkgSteward\apps\web
                   </code>
@@ -1077,6 +1603,7 @@ export function AppearanceTab() {
                     <div className="grid grid-cols-2 gap-2">
                       <div
                         data-theme={preset}
+                        data-surface-exempt="true"
                         className="flex items-center justify-between rounded-sm border border-border bg-background px-2.5 py-2"
                       >
                         <span className="text-caption font-medium text-foreground">Aa</span>
@@ -1087,6 +1614,7 @@ export function AppearanceTab() {
                       </div>
                       <div
                         data-theme={preset}
+                        data-surface-exempt="true"
                         className="dark flex items-center justify-between rounded-sm border border-border bg-background px-2.5 py-2"
                       >
                         <span className="text-caption font-medium text-foreground">Aa</span>
@@ -1112,6 +1640,24 @@ export function AppearanceTab() {
           appearance.surfaceBlurPx,
           appearance.surfaceSaturation,
           appearance.surfaceSpecularBorder,
+        ])}
+        appearance={appearance}
+        advancedMode={behavior.advancedMode}
+        onPatchAppearance={patchAppearance}
+      />
+
+      {/* Text Readability, Shadow & Custom Ink */}
+      <TextReadabilityCard
+        key={JSON.stringify([
+          appearance.textReadabilityMode,
+          appearance.textColorMode,
+          appearance.textCustomColor,
+          appearance.textShadowStrength,
+          appearance.textShadowBlurPx,
+          appearance.textShadowOpacity,
+          appearance.textOutlineWidthPx,
+          appearance.textBoostMuted,
+          appearance.textEffectScope,
         ])}
         appearance={appearance}
         advancedMode={behavior.advancedMode}

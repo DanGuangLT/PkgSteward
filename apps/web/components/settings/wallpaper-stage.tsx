@@ -1,9 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useSettingsOptional } from "@/components/settings/settings-provider"
 import { getBrowserPluginSandboxDocument } from "@/lib/api/settings/settings-browser"
+import {
+  blendLuminanceWithDim,
+  classifyWallpaperTone,
+  sampleElementAverageLuminance,
+  type WallpaperTone,
+} from "@/lib/settings/wallpaper-luminance"
 import { resolveActiveWallpaper } from "@/lib/settings/wallpaper-presets"
 
 interface ParticleNode {
@@ -252,6 +258,7 @@ export function WallpaperStage() {
   const [hidden, setHidden] = useState(false)
   const [sandboxState, setSandboxState] = useState<{ pluginId: string; html: string } | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
@@ -263,21 +270,72 @@ export function WallpaperStage() {
     return () => document.removeEventListener("visibilitychange", onVisibility)
   }, [])
 
+  const syncWallpaperTone = useCallback(() => {
+    if (typeof document === "undefined") return
+    const root = document.documentElement
+    if (!resolved.active) {
+      delete root.dataset.wallpaperTone
+      return
+    }
+
+    const themeIsDark = root.classList.contains("dark")
+    if (resolved.kind === "builtin-canvas") {
+      const tone: WallpaperTone =
+        resolved.builtinPreset === "matrix" || themeIsDark ? "dark" : "light"
+      root.dataset.wallpaperTone = tone
+      return
+    }
+
+    if (resolved.kind === "image" && imgRef.current) {
+      const avgLum = sampleElementAverageLuminance(imgRef.current)
+      if (avgLum === null) {
+        root.dataset.wallpaperTone = "unknown"
+      } else {
+        const blended = blendLuminanceWithDim(avgLum, resolved.dimOpacity, themeIsDark)
+        root.dataset.wallpaperTone = classifyWallpaperTone(blended)
+      }
+      return
+    }
+
+    if (resolved.kind === "video" && videoRef.current) {
+      const avgLum = sampleElementAverageLuminance(videoRef.current)
+      if (avgLum === null) {
+        root.dataset.wallpaperTone = "unknown"
+      } else {
+        const blended = blendLuminanceWithDim(avgLum, resolved.dimOpacity, themeIsDark)
+        root.dataset.wallpaperTone = classifyWallpaperTone(blended)
+      }
+      return
+    }
+
+    root.dataset.wallpaperTone = "unknown"
+  }, [resolved])
+
   useEffect(() => {
     if (typeof document === "undefined") return
     const root = document.documentElement
     if (resolved.active) {
       root.dataset.wallpaper = "active"
       root.style.setProperty("--wallpaper-surface-opacity", `${resolved.surfaceOpacity}%`)
+      syncWallpaperTone()
     } else {
       delete root.dataset.wallpaper
+      delete root.dataset.wallpaperTone
       root.style.removeProperty("--wallpaper-surface-opacity")
     }
+
+    const observer = new MutationObserver(() => {
+      syncWallpaperTone()
+    })
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] })
+
     return () => {
+      observer.disconnect()
       delete root.dataset.wallpaper
+      delete root.dataset.wallpaperTone
       root.style.removeProperty("--wallpaper-surface-opacity")
     }
-  }, [resolved])
+  }, [resolved, syncWallpaperTone])
 
   const sandboxPluginId = resolved.active && resolved.kind === "sandbox-html" ? resolved.sourcePluginId : null
 
@@ -353,9 +411,11 @@ export function WallpaperStage() {
         {resolved.kind === "image" && resolved.mediaUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            ref={imgRef}
             src={resolved.mediaUrl}
             alt=""
             referrerPolicy="no-referrer"
+            onLoad={syncWallpaperTone}
             className="h-full w-full object-cover"
           />
         )}
@@ -368,6 +428,7 @@ export function WallpaperStage() {
             loop
             muted
             playsInline
+            onLoadedData={syncWallpaperTone}
             className="h-full w-full object-cover"
           />
         )}

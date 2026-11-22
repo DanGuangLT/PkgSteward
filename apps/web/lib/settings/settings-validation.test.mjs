@@ -18,6 +18,7 @@ import {
   validateTimeoutInput,
   validateTrustedRegistriesInput,
   validateSurfaceGlassDraft,
+  validateTextReadabilityDraft,
   validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "./settings-validation.ts"
@@ -231,6 +232,61 @@ test("validateSurfaceGlassDraft validates opacity, blur, and saturation integer 
       surfaceOpacity: "SURFACE_OPACITY_RANGE",
       surfaceBlurPx: "SURFACE_BLUR_RANGE",
       surfaceSaturation: "SURFACE_SATURATION_RANGE",
+    }
+  )
+})
+
+test("validateTextReadabilityDraft checks custom HEX color and integer ranges", () => {
+  assert.deepEqual(
+    validateTextReadabilityDraft({
+      textColorMode: "theme",
+      textCustomColor: "",
+      textShadowBlurPx: "8",
+      textShadowOpacity: "78",
+      textOutlineWidthPx: "0",
+    }),
+    {}
+  )
+
+  assert.deepEqual(
+    validateTextReadabilityDraft({
+      textColorMode: "custom",
+      textCustomColor: "#fde68a",
+      textShadowBlurPx: "24",
+      textShadowOpacity: "100",
+      textOutlineWidthPx: "3",
+    }),
+    {}
+  )
+
+  assert.deepEqual(
+    validateTextReadabilityDraft({
+      textColorMode: "custom",
+      textCustomColor: "yellow",
+      textShadowBlurPx: "25",
+      textShadowOpacity: "-1",
+      textOutlineWidthPx: "4",
+    }),
+    {
+      textCustomColor: "TEXT_CUSTOM_COLOR_HEX",
+      textShadowBlurPx: "TEXT_SHADOW_BLUR_RANGE",
+      textShadowOpacity: "TEXT_SHADOW_OPACITY_RANGE",
+      textOutlineWidthPx: "TEXT_OUTLINE_RANGE",
+    }
+  )
+
+  assert.deepEqual(
+    validateTextReadabilityDraft({
+      textColorMode: "custom",
+      textCustomColor: "#fff",
+      textShadowBlurPx: "",
+      textShadowOpacity: "50",
+      textOutlineWidthPx: "1.5",
+    }),
+    {
+      textCustomColor: "TEXT_CUSTOM_COLOR_HEX",
+      textShadowBlurPx: "TEXT_SHADOW_BLUR_RANGE",
+      textOutlineWidthPx: "TEXT_OUTLINE_RANGE",
     }
   )
 })
