@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-PkgSteward is in early development (pre-1.0). Security fixes are made on the latest `main` branch only.
+Security fixes are released on the latest `1.x` release line (`main`).
 
 | Version | Supported |
 |---|---|
-| `main` (latest) | ✅ |
-| Anything older | ❌ |
+| `1.x` (latest on `main`) | ✅ |
+| `< 1.0` / older releases | ❌ |
 
 ## Reporting a vulnerability
 

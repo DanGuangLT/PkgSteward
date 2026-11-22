@@ -26,6 +26,14 @@ từng dự án) một cách an toàn.
   Nếu phiên trước chưa đóng sạch hoặc backend bị tắt đột ngột, **khoá khôi phục (recovery hold)** sẽ chặn thao tác
   mới cho tới khi bạn xác nhận dọn tiến trình và gỡ khoá.
 
+> [!WARNING]
+> Chỉ chạy các dự án bạn tin cậy. Lệnh sẽ thực thi mã dự án/script vòng đời và cấu hình (`.npmrc`, pnpmfile,
+> plugin) với quyền tài khoản của bạn mà không có sandbox; lệnh có thể truy cập mạng, bộ nhớ đệm dùng chung
+> và tệp bên ngoài dự án. Đầu ra tương tác nằm trong cửa sổ console Windows vừa mở. Không có cơ chế hoàn tác;
+> lệnh bị dừng hoặc thất bại có thể để lại thay đổi dở dang. Nút Dừng có thể bỏ sót tiến trình thoát khỏi cây
+> tiến trình theo dõi, và không thể ngăn hoàn toàn việc tráo junction đúng lúc khởi chạy.
+> Xem [Command runner API](apps/api/README.md#command-runner-api) để biết giới hạn công cụ/cấu hình và hành vi dọn tiến trình.
+
 ## Gói global
 
 Quản lý gói global bằng npm 10/11/12 hoặc pnpm 10/11/12 qua bước **xem trước → xác nhận**.
@@ -44,7 +52,7 @@ Xem [Gói global](apps/web/README.md#global-packages) để biết đầy đủ 
 
 - Windows 11
 - Node.js 22.18 trở lên (đã kiểm trên Node 22 và 24; phát triển dùng Node 24, xem [`.nvmrc`](.nvmrc)). Node cũ hơn sẽ in cảnh báo khi khởi động và có thể không chạy được.
-- pnpm 11 (khuyên dùng), pnpm 10, npm hoặc Yarn 1
+- pnpm 11 (khuyên dùng), pnpm 10/12, npm hoặc Yarn 1
 
 ## Bắt đầu
 

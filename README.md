@@ -51,7 +51,7 @@ See [Global packages](apps/web/README.md#global-packages) for the full workflow 
 
 - Windows 11
 - Node.js 22.18 or newer (tested on Node 22 and 24; development uses Node 24, see [`.nvmrc`](.nvmrc)). Older Node prints a warning at startup and may fail to run.
-- pnpm 11 (recommended), pnpm 10, npm or Yarn 1
+- pnpm 11 (recommended), pnpm 10/12, npm or Yarn 1
 
 ## Getting started
 
