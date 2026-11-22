@@ -15,7 +15,7 @@ next-themes and next-intl.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11. Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11 for installation (development uses pnpm 11). Target platform: Windows 11.
 
 ## Install
 
@@ -98,7 +98,7 @@ registry package entry at the chosen lock root, including other workspaces/impor
 root declarations. Supported audit locks are npm v2/v3, pnpm v9 and Yarn Classic v1. Yarn Berry/other unsupported,
 missing or mismatched locks have unavailable audit coverage, even when wanted/latest metadata is available.
 
-The desktop dependency table becomes cards on narrow screens, with no filtering, search, tabs or paging.
+The project detail page has Overview, Files, and Disk Usage tabs. The dependency list supports search, group and status filters, and optional pagination. It displays as cards on narrow screens.
 Outdated/vulnerable badges indicate available findings, including partial ones; absent badges do not assert
 clean results. Advisory findings sort by severity, package name and ID. Titles are text, and only backend-validated
 advisory URLs are links. A deprecated version is a row warning and does not alone make a check incomplete.
@@ -295,10 +295,13 @@ backend crash, inspect and end leftover processes in Windows Task Manager. There
   matching scoped registries or unsupported tool/plugin configuration disable change; remove can remain available.
   Public npm registry login tokens do not by themselves disable change. Package managers, Node/app files and
   protected command bins cannot be changed here, including `@pnpm/exe` and the pnpm tool itself.
+- **Global `npm` version:** the npm tab includes a dedicated **npm version** card to switch terminal npm to a stable
+  npm 10, 11 or 12 release, restore the Node-bundled npm, or repair a broken global npm installation in-process
+  while PkgSteward itself continues using the Node-bundled npm.
 - **Review and confirm:** the dialog shows manager/version, package, location, current → exact target (or removal),
   declared bin additions/removals/replacements, high risk, and lifecycle/consumer/partial-change/crash warnings.
   Tick the machine-wide risk acknowledgement and type the exact displayed text:
-  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`.
+  `REMOVE GLOBAL <manager> <name>`, `CHANGE GLOBAL <manager> <name> TO <version>` or `REPAIR GLOBAL npm npm`.
   Cancel has initial focus. Previews expire after five minutes; changing manager/package/action/target clears
   earlier consent. Expiry or a `409` conflict requires another preview; execution is never automatic.
 - **Track and stop:** the activity panel shows status, phase, exit code, signal, stop reason, warnings and plain-text
@@ -367,6 +370,12 @@ match the chosen manager cannot be changed here. A lost response is recovered fr
 the change again; if the result is unknown, open `package.json` to check it. Opening the page only reads; versions are
 fetched only when you ask. See [Package manager pin API](../api/README.md#package-manager-pin-api).
 
+## Settings
+
+Open **Settings** from the navigation bar. Themes, light/dark/system mode, typography, glass surfaces, layout, language, and list preferences apply as you change them. Runtime options include scan drives, depth, and timeouts. Turn on **Advanced** to show server and backup controls. Changes to runtime and server settings require preview and confirmation; server changes that need a restart are marked.
+
+The **Plugins** section manages the built-in Wallpaper Engine plugin and compatible local or downloaded plugins. Wallpaper sources include images, video, and supported HTML wallpapers, which run in a sandboxed frame. Install only plugins from sources you trust. Use the backup controls to export, import, or reset the settings document; a settings backup does not include plugin files.
+
 ## Theme system
 
 Three layers, so a component never hard-codes a color:
@@ -379,8 +388,7 @@ Three layers, so a component never hard-codes a color:
 ESLint (in `app/`, `components/`, `hooks/`) rejects fixed palette classes (`bg-red-500`), hex values in classes
 (`bg-[#fff]`) and `dark:` variants. Use `cn` from `@/lib/utils`, which knows the theme's custom tokens.
 
-Light / dark / system mode is handled by next-themes. The default preset is `default`; the selected preset is stored
-in a cookie so the server renders it directly.
+Light / dark / system mode is handled by next-themes. The default preset is `default`. Appearance settings are saved by the API; an appearance cookie lets the frontend render those preferences on the first paint.
 
 To add a preset: create `styles/themes/<id>.css` and import it in `app/globals.css`, add `<id>` to
 `lib/theme/presets.ts`, add its display name under `theme.presets.<id>` in `messages/*.json`, then run
@@ -401,21 +409,19 @@ Each translated key must have the same structure as the default catalog. A messa
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin scan, project analysis, disk usage and file operation Route Handlers
-components/ui/        shadcn/ui components (adapted to the theme tokens)
+app/api/              Same-origin Route Handlers (disk-usage, file-ops, global-packages, npm-runs, package-managers, projects, scans, settings)
+app/design-system/    Development-only style guide (adding a component or variant requires a showcase sample)
+components/ui/        shadcn/ui components (adapted to theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
-i18n/, messages/      next-intl config and translations
-hooks/                Client scan, project analysis, disk usage, file operation and file tree state
-lib/api/              Backend client, transport, contracts and feature requests
-lib/disk-usage/       Measurement polling and presentation policy
-lib/file-ops/         Selection, confirmation, deletion flow and list helpers
-lib/projects/         Project list helpers, analysis session/policy and detail presentation
-lib/scans/            Scan polling and completion policy
-lib/theme/            Theme preset registry
+components/shared/    Shared UI helpers (disabled-reason tooltips, filters, return links)
+components/features/  Feature panels (disk-usage, file-ops, global-packages, npm-runner, package-managers, project-detail, project-list, settings)
+i18n/, messages/      next-intl config and translations (vi, en)
+hooks/                Client hooks for scan, project analysis, disk usage (+ favorites), file ops (+ cleanup presets), runner, global packages, pins and navigation
+lib/                  Core client policy, session state machines and API helpers (api, config, disk-usage, file-ops, global-packages, npm-runner, package-managers, projects, scans, security, theme, ui)
 styles/               Theme presets and tokens
-scripts/              theme:check and i18n:check
+scripts/              theme:check, i18n:check and startup/runtime guards
 ```
 
 ## Contributing

@@ -1,5 +1,6 @@
 {
   "name": "pkgsteward",
+  "version": "1.0.0",
   "private": true,
   "description": "Repository root: install, run and build both apps with one command (npm, pnpm or yarn).",
   "license": "MIT",

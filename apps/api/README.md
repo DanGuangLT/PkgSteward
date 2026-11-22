@@ -17,7 +17,7 @@ machine. NestJS 12 + TypeScript.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11. Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11 for installation (development uses pnpm 11). Target platform: Windows 11.
 
 Use a current Node.js 24 release for the backend Jest unit and end-to-end tests. CI starts the built
 backend on Node 22 and runs the Jest suites on Node 24, which can load the ESM-only NestJS packages.
@@ -65,7 +65,7 @@ Full list in `.env.example`.
 | `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Folder for runtime data (logs, cache, `settings.json`): an absolute path, or a path relative to the project folder. The default is a `PkgStewardLog` folder inside the project folder |
 | `NPM_COMMAND_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop an npm or pnpm command after that long |
 
-Use a flat JSON object in `settings.json` inside the runtime data folder. Supported keys use their environment variable names and accept string, number, or boolean values. Settings override environment variables, and explicit CLI options take precedence over both. Set `PKGSTEWARD_DATA_DIR` through the environment or CLI because PkgSteward resolves the data folder before reading the settings file.
+See [Settings API](#settings-api) for the persisted format and how settings override environment variables.
 
 The frontend has its own `PORT` (default `24680`, integer `1`–`65535`) and `HOST` (default `127.0.0.1`,
 only `127.0.0.1`, `localhost` or `::1`), set in `apps/web/.env.local` or `apps/web/.env`.
@@ -73,6 +73,17 @@ For each frontend variable, the first nonempty value wins: real environment → 
 When changing the frontend address, update this backend's `LIST_ORIGIN_CORS` to match the origin used in the
 browser (for example, `http://localhost:24680`). Update the frontend's `API_BASE_URL` (default
 `http://127.0.0.1:24681/api/v1`) when changing this backend's `HOST`, `PORT`, `GLOBAL_PREFIX` or `VERSION`.
+
+## Settings API
+
+`settings.json` lives in the runtime data folder. Settings saved by the app use `schemaVersion: 1`, with sections such as `runtime`, `server`, `appearance`, `behavior`, and `plugins`. Legacy flat files using environment variable names are still accepted. Settings override environment variables, which override defaults. Set `PKGSTEWARD_DATA_DIR` through the environment: the app resolves the data folder before reading settings.
+
+- `GET /settings` returns effective values, configuration sources, and server fields requiring a restart.
+- `PATCH /settings/preferences` saves appearance and behavior without a preview. Use `POST /settings/preview` before `PATCH /settings` for changes to runtime or server fields. Send the returned `previewId`, `confirm: true`, and the codes of any high risks in `acknowledgedRisks`.
+- Runtime settings such as scan roots, depth, and timeouts apply without restarting. Changes to the listen address, port, and other server fields take effect after restarting the API.
+- `GET /settings/export` returns `{ exportedAt, document }` in `data`; the web UI saves the document as a backup file. Import and reset have separate preview and confirmation steps. Plugin installation and removal also require preview and confirmation; the API does not run plugin lifecycle scripts or load plugin code into the backend process.
+
+Paths above are relative to the API prefix (default `/api/v1`).
 
 ## Scan API
 
@@ -451,7 +462,7 @@ All routes below use `/api/v1/global-packages` and the standard response envelop
 | `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
 | `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
 
-`manager` is `npm` or `pnpm`; `action` is `remove` or `change`. `targetVersion` is required only for change and
+`manager` is `npm` or `pnpm`; `action` is `remove`, `change` or `repair` (in-process cleanup of broken global `npm` files with `manager: 'npm'` and `package: 'npm'`, without spawning npm). For `manager: 'npm'` and `package: 'npm'`, `change` switches terminal npm to a stable npm 10–12 release and `remove` restores Node-bundled npm. `targetVersion` is required only for `change` and
 must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
 Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
 are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
@@ -461,11 +472,11 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
 - **Confirmation:** a ready preview lasts five minutes. Review manager/version, global root, bin directory,
   current and resolved target version, declared bin changes and warnings. Every operation is high risk and
   requires `confirm: true`, acknowledgement of `MACHINE_WIDE`, and the exact, case-sensitive server text:
-  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`. Whitespace is not trimmed.
+  `REMOVE GLOBAL <manager> <name>`, `CHANGE GLOBAL <manager> <name> TO <version>` or `REPAIR GLOBAL npm npm`. Whitespace is not trimmed.
   Bin differences describe declared metadata, not all effects of scripts or transitive packages.
 - **pnpm 10 shared project:** all global packages live in one project. Changing or removing one reruns pnpm on
   that project. A preview's optional `sharedPackages: { name: string; version: string; linked: boolean }[]`
-  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT`. npm and pnpm 11
+  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT`. npm, pnpm 11 and pnpm 12
   previews omit this field. After execution, the app verifies that each listed package's spec, installed version,
   link destination and command shims are unchanged, and that no new direct package appeared. Failure means the
   result could not be verified (`POSTCONDITION_FAILED`, `refreshRequired`); refresh the inventory and inspect it
@@ -582,7 +593,7 @@ This controls launch configuration; it does not isolate lifecycle code.
   disk-size caches are not refreshed by this feature. Inspect lifecycle side effects separately and explicitly
   rescan, recheck or remeasure when needed.
 - **Audit:** `logs/dangerous-operations.jsonl` in the data folder records intent/result for
-  `global-packages.remove`, `global-packages.change` and `global-packages.cancel`, including job/target identity
+  `global-packages.remove`, `global-packages.change`, `global-packages.repair` and `global-packages.cancel`, including job/target identity
   and outcome/cleanup facts, without command output, environment or config secrets. Intent failure prevents
   mutation; result-write failure retains the lock. Cancellation still attempts to stop processes if auditing fails.
 - **Retention and bounds:** one inventory and the latest activity/log live in RAM; restart loses them. Up to

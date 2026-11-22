@@ -33,6 +33,12 @@ manager version) safely.
 > may miss processes that escape the tracked tree, and a junction swap at launch is not fully prevented.
 > See [Command runner API](apps/api/README.md#command-runner-api) for tool/config limits and cleanup behavior.
 
+## Settings
+
+Open **Settings** from the navigation bar to change themes, layout, wallpapers, scan roots, timeouts, and display preferences. Supported runtime changes take effect without restarting; server settings are marked when a restart is required. Use **Advanced → Backup & Reset** to export, import, or reset settings. Changes to runtime and server settings use preview and confirmation.
+
+See the [Settings guide](apps/web/README.md#settings) for appearance and plugins.
+
 ## Global packages
 
 Manage global packages with npm 10/11/12 or pnpm 10/11/12 through **preview → confirm**.
@@ -51,7 +57,7 @@ See [Global packages](apps/web/README.md#global-packages) for the full workflow 
 
 - Windows 11
 - Node.js 22.18 or newer (tested on Node 22 and 24; development uses Node 24, see [`.nvmrc`](.nvmrc)). Older Node prints a warning at startup and may fail to run.
-- pnpm 11 (recommended), pnpm 10, npm or Yarn 1
+- To install PkgSteward: pnpm 11 (recommended), pnpm 10, npm, or Yarn 1. Project commands and global package management also support pnpm 12 within their documented limits.
 
 ## Getting started
 

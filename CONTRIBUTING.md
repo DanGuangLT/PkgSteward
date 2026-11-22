@@ -77,8 +77,8 @@ These rules are not negotiable; reviews will ask for changes if they are not fol
   `@/lib/utils`. See [`apps/web/README.md`](apps/web/README.md#theme-system).
 - Every user-facing string goes through next-intl. Add new keys to **both** `messages/vi.json` (default locale) and
   `messages/en.json`.
-- Prefer Server Components; keep client components small. API calls will go through a shared `lib/api/*` client
-  (planned), not `fetch` scattered in components.
+- Prefer Server Components; keep client components small. API calls go through the shared `lib/api/*` client
+  and same-origin Route Handlers, not `fetch` scattered in components.
 - Next.js 16 has breaking changes; check `node_modules/next/dist/docs/` rather than relying on older examples.
 
 ### Language

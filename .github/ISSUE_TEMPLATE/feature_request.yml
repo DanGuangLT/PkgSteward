@@ -61,7 +61,7 @@ body:
     attributes:
       label: Checks
       options:
-        - label: I searched the existing issues and the roadmap.
+        - label: I searched the existing issues.
           required: true
         - label: The feature fits a local, single-user tool (no accounts, no database, no remote server).
           required: true
