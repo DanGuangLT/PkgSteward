@@ -42,7 +42,7 @@ describe('PluginRegistryService', () => {
       trustedRegistries: [],
       entries: {},
     });
-    expect(catalog.runtimeMode).toBe('manifest-only');
+    expect(catalog.runtimeMode).toBe('sandboxed-web');
     expect(catalog.apiVersion).toBe(1);
     expect(catalog.pluginsDir).toBe(pluginsDir);
     expect(catalog.discovered).toEqual([]);
@@ -81,6 +81,7 @@ describe('PluginRegistryService', () => {
       directory: null,
       allowLocalPlugins: true,
       trustedRegistries: [],
+      removedPreinstalled: [],
       entries: {
         'good-plugin': {
           enabled: true,
@@ -108,6 +109,7 @@ describe('PluginRegistryService', () => {
       directory: 'C:\\Windows\\System32\\plugins',
       allowLocalPlugins: true,
       trustedRegistries: [],
+      removedPreinstalled: [],
       entries: {},
     });
     expect(catalog.discovered).toEqual([]);
@@ -163,6 +165,7 @@ describe('PluginRegistryService', () => {
       directory: 'D:\\SafeAlias\\plugins',
       allowLocalPlugins: true,
       trustedRegistries: [],
+      removedPreinstalled: [],
       entries: {},
     });
 
@@ -196,5 +199,90 @@ describe('PluginRegistryService', () => {
 
     expect(catalog.discovered).toEqual([]);
     expect(catalog.invalid[0].error).toMatch(/Manifest exceeds/);
+  });
+
+  it('builds sandboxed HTML document with strict CSP and blocks asset traversal', async () => {
+    const pluginDir = join(pluginsDir, 'web-wp');
+    mkdirSync(join(pluginDir, 'scripts'), { recursive: true });
+    writeFileSync(
+      join(pluginDir, 'manifest.json'),
+      JSON.stringify({
+        id: 'web-wp',
+        name: 'Web Wallpaper',
+        version: '1.0.0',
+        capabilities: ['live-wallpaper'],
+        entry: { kind: 'web-sandbox', file: 'index.html' },
+      }),
+    );
+    writeFileSync(
+      join(pluginDir, 'scripts', 'app.js'),
+      'window.__testTag = "</script><script>alert(1)</script>"; window.__dollar = "$&$\'";',
+    );
+    writeFileSync(
+      join(pluginDir, 'index.html'),
+      '<!-- <head> --><script>evilEarly()</script><head></head><body><script src="scripts/app.js"></script></body>',
+    );
+
+    const enabledSettings = {
+      ...DEFAULT_PLUGINS_SETTINGS,
+      trustedRegistries: [],
+      removedPreinstalled: [],
+      entries: {
+        'web-wp': { enabled: true, config: {} },
+      },
+    };
+
+    const doc = await service.buildSandboxedHtmlDocument(
+      enabledSettings,
+      'web-wp',
+    );
+    const cspPos = doc.html.indexOf('http-equiv="Content-Security-Policy"');
+    const evilScriptPos = doc.html.indexOf('<script>evilEarly()</script>');
+    expect(cspPos).toBeGreaterThan(-1);
+    expect(evilScriptPos).toBeGreaterThan(cspPos);
+    expect(doc.html).toContain("connect-src 'none'");
+    expect(doc.html).toContain('<\\/script>');
+    expect(doc.html).toContain('window.__dollar = "$&$\'";');
+    expect(doc.html).toContain('pkgsteward:applyUserProperties');
+    expect(doc.html).not.toContain('pkgsteward-wallpaper-config');
+
+    const safeAsset = await service.resolveSafeAssetPath(
+      enabledSettings,
+      'web-wp',
+      'scripts/app.js',
+    );
+    expect(safeAsset.contentType).toContain('javascript');
+
+    await expect(
+      service.resolveSafeAssetPath(enabledSettings, 'web-wp', '../outside.txt'),
+    ).rejects.toThrow();
+
+    // Missing file maps cleanly to NotFoundException (404), disabled plugin is blocked
+    await expect(
+      service.resolveSafeAssetPath(
+        enabledSettings,
+        'web-wp',
+        'scripts/missing.js',
+      ),
+    ).rejects.toThrow(/not found/i);
+
+    const disabledSettings = {
+      ...DEFAULT_PLUGINS_SETTINGS,
+      trustedRegistries: [],
+      removedPreinstalled: [],
+      entries: {
+        'web-wp': { enabled: false, config: {} },
+      },
+    };
+    await expect(
+      service.buildSandboxedHtmlDocument(disabledSettings, 'web-wp'),
+    ).rejects.toThrow(/disabled/);
+    await expect(
+      service.resolveSafeAssetPath(
+        disabledSettings,
+        'web-wp',
+        'scripts/app.js',
+      ),
+    ).rejects.toThrow(/disabled/);
   });
 });

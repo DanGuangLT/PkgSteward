@@ -22,8 +22,10 @@ import type { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import type { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import type { FileOpsService } from '@/file-ops/file-ops.service';
+import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 import type { ProjectsService } from '@/projects/projects.service';
 import type { ScannerService } from '@/scanner/scanner.service';
+import { PluginInstallerService } from '@/settings/plugins/plugin-installer.service';
 import { PluginRegistryService } from '@/settings/plugins/plugin-registry.service';
 import { SettingsService } from '@/settings/settings.service';
 
@@ -94,6 +96,15 @@ describe('SettingsService', () => {
       appPaths,
       pathGuard as unknown as PathGuardService,
     );
+    const pluginInstaller = new PluginInstallerService(
+      pluginRegistry,
+      pathGuard as unknown as PathGuardService,
+      auditLog as unknown as AuditLogService,
+      gate,
+    );
+    const driveDetector: IDriveDetector = {
+      listFixedDrives: jest.fn(() => Promise.resolve(['C:\\', 'D:\\'])),
+    };
 
     const service = new SettingsService(
       appPaths,
@@ -106,6 +117,8 @@ describe('SettingsService', () => {
       fileOps as unknown as FileOpsService,
       projects as unknown as ProjectsService,
       pluginRegistry,
+      pluginInstaller,
+      driveDetector,
       env,
     );
 
@@ -120,6 +133,9 @@ describe('SettingsService', () => {
       diskUsage,
       fileOps,
       projects,
+      pluginRegistry,
+      pluginInstaller,
+      driveDetector,
     };
   };
 
@@ -359,5 +375,45 @@ describe('SettingsService', () => {
     await expect(
       f.service.updatePreferences({ desktop: secondBatch }),
     ).rejects.toThrow(ValidationException);
+  });
+
+  it('includes availableDrives in snapshot and supports uninstalling/restoring preinstalled wallpaper plugin', async () => {
+    const f = createFixture();
+    await f.service.initializePreinstalledPlugins();
+    const initial = await f.service.getSnapshot();
+    expect(initial.availableDrives).toEqual(['C:\\', 'D:\\']);
+    expect(
+      initial.plugins.discovered.some((p) => p.id === 'wallpaper-engine'),
+    ).toBe(true);
+    expect(initial.plugins.preinstalledAvailable).toBe(false);
+
+    const uninstallPreview =
+      await f.service.previewPluginUninstall('wallpaper-engine');
+    expect(uninstallPreview.preinstalled).toBe(true);
+
+    const afterUninstall = await f.service.executePluginUninstall({
+      previewId: uninstallPreview.previewId,
+      confirm: true,
+    });
+    expect(
+      afterUninstall.plugins.discovered.some(
+        (p) => p.id === 'wallpaper-engine',
+      ),
+    ).toBe(false);
+    expect(afterUninstall.plugins.preinstalledAvailable).toBe(true);
+    expect(afterUninstall.document.plugins.removedPreinstalled).toContain(
+      'wallpaper-engine',
+    );
+
+    // Calling initializePreinstalledPlugins again respects removedPreinstalled
+    await f.service.initializePreinstalledPlugins();
+    const stillRemoved = await f.service.getPluginsCatalog();
+    expect(stillRemoved.discovered).toHaveLength(0);
+
+    const restored = await f.service.restoreDefaultPlugins();
+    expect(
+      restored.plugins.discovered.some((p) => p.id === 'wallpaper-engine'),
+    ).toBe(true);
+    expect(restored.plugins.preinstalledAvailable).toBe(false);
   });
 });

@@ -1,5 +1,8 @@
 import type { RiskLevel } from '@/core/risk/interfaces/risk.types';
-import type { IPluginsCatalog } from '@/settings/plugins/interfaces/plugin.types';
+import type {
+  IPluginsCatalog,
+  PluginManifestFormat,
+} from '@/settings/plugins/interfaces/plugin.types';
 import type {
   ISettingsDocument,
   ISettingsOverrides,
@@ -10,7 +13,11 @@ export type SettingsRiskCode =
   | 'SCAN_SCOPE_CHANGED'
   | 'SERVER_RESTART_REQUIRED'
   | 'PLUGINS_LOCAL_ENABLED'
-  | 'SETTINGS_RESET';
+  | 'SETTINGS_RESET'
+  | 'PLUGIN_INSTALL_REMOTE'
+  | 'PLUGIN_SANDBOX_SCRIPT'
+  | 'PLUGIN_OVERWRITE'
+  | 'PLUGIN_UNINSTALL';
 
 export interface ISettingsRiskReason {
   code: SettingsRiskCode;
@@ -55,6 +62,7 @@ export interface ISettingsSnapshot {
     server: Record<keyof ISettingsDocument['server'], SettingValueSource>;
   };
   restartRequiredFields: (keyof ISettingsDocument['server'])[];
+  availableDrives: string[];
   systemPaths: ISystemPathsSummary;
   plugins: IPluginsCatalog;
 }
@@ -75,4 +83,38 @@ export interface ISettingsPreviewResponse {
 export interface ISettingsExportResponse {
   exportedAt: string;
   document: ISettingsDocument;
+}
+
+export interface IPluginInstallPreviewResponse {
+  previewId: string;
+  action: 'install';
+  expiresAt: string;
+  sourceKind: 'file' | 'url';
+  sourceLabel: string;
+  pluginId: string;
+  pluginName: string;
+  version: string;
+  format: PluginManifestFormat;
+  entryKind: string;
+  fileCount: number;
+  totalBytes: number;
+  willOverwrite: boolean;
+  risk: ISettingsRisk;
+}
+
+export interface IPluginUninstallPreviewResponse {
+  previewId: string;
+  action: 'uninstall';
+  expiresAt: string;
+  pluginId: string;
+  pluginName: string;
+  preinstalled: boolean;
+  targetDir: string;
+  risk: ISettingsRisk;
+}
+
+export interface IPluginSandboxDocumentResponse {
+  pluginId: string;
+  entryFile: string;
+  html: string;
 }

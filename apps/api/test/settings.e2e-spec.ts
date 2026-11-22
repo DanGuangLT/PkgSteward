@@ -22,6 +22,9 @@ import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { DRIVE_DETECTOR } from '@/platform/interfaces/drive-detector.interface';
 import type {
+  IPluginInstallPreviewResponse,
+  IPluginSandboxDocumentResponse,
+  IPluginUninstallPreviewResponse,
   ISettingsExportResponse,
   ISettingsPreviewResponse,
   ISettingsSnapshot,
@@ -29,6 +32,45 @@ import type {
 import type { IPluginsCatalog } from '@/settings/plugins/interfaces/plugin.types';
 import { PLUGIN_MANIFEST_FILE_NAME } from '@/settings/plugins/plugin-registry.service';
 import { createTestAppPaths } from './create-test-app-paths';
+
+function buildStoredZip(entries: { name: string; content: Buffer }[]): Buffer {
+  const localChunks: Buffer[] = [];
+  const centralChunks: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, 'utf8');
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(entry.content.length, 18);
+    local.writeUInt32LE(entry.content.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    localChunks.push(local, nameBuf, entry.content);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE((3 << 8) | 20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(entry.content.length, 20);
+    central.writeUInt32LE(entry.content.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centralChunks.push(central, nameBuf);
+
+    offset += local.length + nameBuf.length + entry.content.length;
+  }
+
+  const centralBuf = Buffer.concat(centralChunks);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...localChunks, centralBuf, eocd]);
+}
 
 describe('SettingsModule (e2e)', () => {
   let app: INestApplication<App>;
@@ -202,9 +244,10 @@ describe('SettingsModule (e2e)', () => {
       .expect(200);
     const body = res.body as IApiResponse<IPluginsCatalog>;
     expect(res.headers['cache-control']).toBe('no-store');
-    expect(body.data?.runtimeMode).toBe('manifest-only');
-    expect(body.data?.discovered).toHaveLength(1);
-    expect(body.data?.discovered[0].id).toBe('demo.plugin');
+    expect(body.data?.runtimeMode).toBe('sandboxed-web');
+    const discoveredIds = body.data?.discovered.map((p) => p.id) ?? [];
+    expect(discoveredIds).toContain('wallpaper-engine');
+    expect(discoveredIds).toContain('demo.plugin');
   });
 
   it('supports export -> import/preview -> import -> reset/preview -> reset', async () => {
@@ -273,5 +316,147 @@ describe('SettingsModule (e2e)', () => {
       .post('/api/v1/settings/preview')
       .send({ plugins: { directory: driveRoot } })
       .expect(400);
+  });
+
+  it('exposes availableDrives, uninstalls & restores preinstalled wallpaper plugin, installs ZIP plugin, and serves sandbox/assets safely', async () => {
+    const snapRes = await request(app.getHttpServer())
+      .get('/api/v1/settings')
+      .expect(200);
+    const snapBody = snapRes.body as IApiResponse<ISettingsSnapshot>;
+    expect(snapBody.data?.availableDrives).toEqual([
+      allowedProjectDir,
+      nextAllowedDir,
+    ]);
+
+    // Uninstall preinstalled wallpaper-engine and restore it
+    const uninstallPreview = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/uninstall/preview')
+      .send({ pluginId: 'wallpaper-engine' })
+      .expect(200);
+    const uninstallBody =
+      uninstallPreview.body as IApiResponse<IPluginUninstallPreviewResponse>;
+    expect(uninstallBody.data?.preinstalled).toBe(true);
+
+    const afterUninstall = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/uninstall')
+      .send({ previewId: uninstallBody.data!.previewId, confirm: true })
+      .expect(200);
+    const afterUninstallBody =
+      afterUninstall.body as IApiResponse<ISettingsSnapshot>;
+    expect(afterUninstallBody.data?.plugins.preinstalledAvailable).toBe(true);
+    expect(
+      afterUninstallBody.data?.plugins.discovered.some(
+        (p) => p.id === 'wallpaper-engine',
+      ),
+    ).toBe(false);
+
+    const restored = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/restore-defaults')
+      .send({})
+      .expect(200);
+    const restoredBody = restored.body as IApiResponse<ISettingsSnapshot>;
+    expect(restoredBody.data?.plugins.preinstalledAvailable).toBe(false);
+    expect(
+      restoredBody.data?.plugins.discovered.some(
+        (p) => p.id === 'wallpaper-engine',
+      ),
+    ).toBe(true);
+
+    // Install a web-wallpaper ZIP via octet-stream upload
+    const zipBytes = buildStoredZip([
+      {
+        name: 'neon-bg/project.json',
+        content: Buffer.from(
+          JSON.stringify({
+            title: 'Neon Grid',
+            type: 'web',
+            file: 'index.html',
+          }),
+          'utf8',
+        ),
+      },
+      {
+        name: 'neon-bg/index.html',
+        content: Buffer.from(
+          '<!doctype html><html><body><canvas id="c"></canvas></body></html>',
+          'utf8',
+        ),
+      },
+      {
+        name: 'neon-bg/assets/thumb.png',
+        content: Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d,
+        ]),
+      },
+    ]);
+
+    const installPreview = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/install/preview')
+      .set('Content-Type', 'application/octet-stream')
+      .set('x-plugin-filename', 'neon-bg.zip')
+      .send(zipBytes)
+      .expect(200);
+    const installPreviewBody =
+      installPreview.body as IApiResponse<IPluginInstallPreviewResponse>;
+    expect(installPreviewBody.data?.pluginId).toBe('neon-grid');
+    expect(installPreviewBody.data?.entryKind).toBe('web-sandbox');
+
+    const installed = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/install')
+      .send({
+        previewId: installPreviewBody.data!.previewId,
+        confirm: true,
+        acknowledgedRisks: ['PLUGIN_SANDBOX_SCRIPT'],
+      })
+      .expect(200);
+    const installedBody = installed.body as IApiResponse<ISettingsSnapshot>;
+    expect(
+      installedBody.data?.plugins.discovered.some((p) => p.id === 'neon-grid'),
+    ).toBe(true);
+
+    const sandboxDoc = await request(app.getHttpServer())
+      .get('/api/v1/settings/plugins/neon-grid/sandbox-document')
+      .expect(200);
+    const sandboxBody =
+      sandboxDoc.body as IApiResponse<IPluginSandboxDocumentResponse>;
+    expect(sandboxBody.data?.html).toContain("connect-src 'none'");
+
+    const assetRes = await request(app.getHttpServer())
+      .get('/api/v1/settings/plugins/neon-grid/assets/assets/thumb.png')
+      .expect(200);
+    expect(assetRes.headers['x-content-type-options']).toBe('nosniff');
+    expect(assetRes.headers['cache-control']).toBe('no-store');
+    expect(assetRes.headers['content-type']).toContain('image/png');
+
+    await request(app.getHttpServer())
+      .get('/api/v1/settings/plugins/neon-grid/assets/..%2F..%2Fsecret.txt')
+      .expect(400);
+
+    // Upload valid PNG media to wallpaper-engine
+    const pngBytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    ]);
+    const mediaRes = await request(app.getHttpServer())
+      .post('/api/v1/settings/plugins/wallpaper-media')
+      .set('Content-Type', 'application/octet-stream')
+      .set('x-plugin-filename', 'custom.png')
+      .send(pngBytes)
+      .expect(200);
+    const mediaBody = mediaRes.body as IApiResponse<ISettingsSnapshot>;
+    expect(
+      mediaBody.data?.document.plugins.entries['wallpaper-engine']?.config.mode,
+    ).toBe('image');
+
+    const savedMediaAsset = String(
+      mediaBody.data?.document.plugins.entries['wallpaper-engine']?.config
+        .mediaAsset ?? '',
+    );
+    const streamedMedia = await request(app.getHttpServer())
+      .get(
+        `/api/v1/settings/plugins/wallpaper-engine/assets/${savedMediaAsset}`,
+      )
+      .expect(200);
+    expect(streamedMedia.headers['x-content-type-options']).toBe('nosniff');
   });
 });

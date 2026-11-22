@@ -24,14 +24,29 @@ import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
+import {
+  DRIVE_DETECTOR,
+  type IDriveDetector,
+} from '@/platform/interfaces/drive-detector.interface';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import { FileOpsService } from '@/file-ops/file-ops.service';
 import { ProjectsService } from '@/projects/projects.service';
 import { ScannerService } from '@/scanner/scanner.service';
-import type { IPluginsCatalog } from '@/settings/plugins/interfaces/plugin.types';
+import type {
+  IPluginManifest,
+  IPluginsCatalog,
+} from '@/settings/plugins/interfaces/plugin.types';
+import { PluginInstallerService } from '@/settings/plugins/plugin-installer.service';
 import { PluginRegistryService } from '@/settings/plugins/plugin-registry.service';
+import {
+  DEFAULT_WALLPAPER_PLUGIN_ID,
+  ensurePreinstalledWallpaperPlugin,
+} from '@/settings/plugins/preinstalled-wallpaper';
 import type { ISettingsService } from '@/settings/interfaces/settings.service.interface';
 import type {
+  IPluginInstallPreviewResponse,
+  IPluginSandboxDocumentResponse,
+  IPluginUninstallPreviewResponse,
   ISettingDiffItem,
   ISettingsExportResponse,
   ISettingsPreviewResponse,
@@ -53,6 +68,7 @@ import type {
   IServerSettings,
   ISettingsDocument,
   ISettingsOverrides,
+  PrimitiveConfigValue,
 } from '@/settings/schema/settings.schema';
 
 export const SETTINGS_PROCESS_ENV = Symbol('SETTINGS_PROCESS_ENV');
@@ -115,10 +131,19 @@ export class SettingsService implements ISettingsService {
     private readonly fileOps: FileOpsService,
     private readonly projects: ProjectsService,
     private readonly pluginRegistry: PluginRegistryService,
+    private readonly pluginInstaller: PluginInstallerService,
+    @Optional()
+    @Inject(DRIVE_DETECTOR)
+    private readonly driveDetector?: IDriveDetector,
     @Optional()
     @Inject(SETTINGS_PROCESS_ENV)
     private readonly injectedEnv?: Readonly<Record<string, string | undefined>>,
   ) {}
+
+  async initializePreinstalledPlugins(): Promise<void> {
+    const { document } = await this.readCurrentState();
+    await this.pluginInstaller.ensurePreinstalled(document.plugins);
+  }
 
   private envSource(): Readonly<Record<string, string | undefined>> {
     return (
@@ -129,10 +154,20 @@ export class SettingsService implements ISettingsService {
   async getSnapshot(): Promise<ISettingsSnapshot> {
     const { document, sources } = await this.readCurrentState();
     const plugins = await this.pluginRegistry.discover(document.plugins);
+    let availableDrives: string[] = [];
+    try {
+      availableDrives = (await this.driveDetector?.listFixedDrives()) ?? [];
+    } catch (error) {
+      this.logger.warn(
+        'Could not detect fixed drives for settings snapshot',
+        error,
+      );
+    }
     return {
       document,
       sources,
       restartRequiredFields: this.computeRestartRequiredFields(document.server),
+      availableDrives,
       systemPaths: {
         settingsFilePath: this.appPaths.settingsFilePath,
         dataDir: this.appPaths.dataDir,
@@ -152,6 +187,233 @@ export class SettingsService implements ISettingsService {
   async getPluginsCatalog(): Promise<IPluginsCatalog> {
     const { document } = await this.readCurrentState();
     return this.pluginRegistry.discover(document.plugins);
+  }
+
+  async previewPluginInstallFromUrl(
+    url: string,
+  ): Promise<IPluginInstallPreviewResponse> {
+    const { document } = await this.readCurrentState();
+    return this.pluginInstaller.previewInstallFromUrl(document.plugins, url);
+  }
+
+  async previewPluginInstallFromFile(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<IPluginInstallPreviewResponse> {
+    const { document } = await this.readCurrentState();
+    return this.pluginInstaller.previewInstallFromFile(
+      document.plugins,
+      fileName,
+      buffer,
+    );
+  }
+
+  async executePluginInstall(input: {
+    previewId: string;
+    confirm: boolean;
+    acknowledgedRisks?: string[];
+  }): Promise<ISettingsSnapshot> {
+    const { document } = await this.readCurrentState();
+    await this.pluginInstaller.executeInstall(
+      document.plugins,
+      input,
+      async (manifest) => {
+        await this.enqueueWrite(async () => {
+          const latest = await this.readCurrentState();
+          const currentPlugins = latest.overrides.plugins ?? {};
+          const existingEntries = currentPlugins.entries ?? {};
+          const existingEntry = existingEntries[manifest.id];
+          const defaultsFromSchema = this.extractSchemaDefaults(manifest);
+          const existingConfig = existingEntry?.config ?? {};
+          const mergedConfig: Record<string, PrimitiveConfigValue> = {
+            ...defaultsFromSchema,
+            ...existingConfig,
+          };
+          const nextRemoved = (currentPlugins.removedPreinstalled ?? []).filter(
+            (id) => id !== manifest.id,
+          );
+          const nextOverrides: ISettingsOverrides = {
+            ...latest.overrides,
+            schemaVersion: SETTINGS_SCHEMA_VERSION,
+            plugins: {
+              ...currentPlugins,
+              removedPreinstalled: nextRemoved,
+              entries: {
+                ...structuredClone(existingEntries),
+                [manifest.id]: {
+                  enabled: true,
+                  source:
+                    existingEntry?.source ??
+                    (manifest.id === DEFAULT_WALLPAPER_PLUGIN_ID
+                      ? 'builtin'
+                      : 'local'),
+                  config: mergedConfig,
+                },
+              },
+            },
+          };
+          await this.writeOverridesAtomic(nextOverrides);
+        });
+      },
+    );
+    return this.getSnapshot();
+  }
+
+  async previewPluginUninstall(
+    pluginId: string,
+  ): Promise<IPluginUninstallPreviewResponse> {
+    const { document } = await this.readCurrentState();
+    return this.pluginInstaller.previewUninstall(document.plugins, pluginId);
+  }
+
+  async executePluginUninstall(input: {
+    previewId: string;
+    confirm: boolean;
+  }): Promise<ISettingsSnapshot> {
+    const { document } = await this.readCurrentState();
+    await this.pluginInstaller.executeUninstall(
+      document.plugins,
+      input,
+      async (pluginId, wasPreinstalled) => {
+        await this.enqueueWrite(async () => {
+          const latest = await this.readCurrentState();
+          const currentPlugins = latest.overrides.plugins ?? {};
+          const nextEntries = currentPlugins.entries
+            ? structuredClone(currentPlugins.entries)
+            : {};
+          delete nextEntries[pluginId];
+
+          const existingRemoved = new Set(
+            currentPlugins.removedPreinstalled ?? [],
+          );
+          if (wasPreinstalled) {
+            existingRemoved.add(pluginId);
+          }
+
+          const nextOverrides: ISettingsOverrides = {
+            ...latest.overrides,
+            schemaVersion: SETTINGS_SCHEMA_VERSION,
+            plugins: {
+              ...currentPlugins,
+              removedPreinstalled: [...existingRemoved],
+              entries: nextEntries,
+            },
+          };
+          await this.writeOverridesAtomic(nextOverrides);
+        });
+      },
+    );
+    return this.getSnapshot();
+  }
+
+  async restoreDefaultPlugins(): Promise<ISettingsSnapshot> {
+    let targetPlugins = (await this.readCurrentState()).document.plugins;
+    await this.enqueueWrite(async () => {
+      const latest = await this.readCurrentState();
+      const currentPlugins = latest.overrides.plugins ?? {};
+      const nextEntries = currentPlugins.entries
+        ? structuredClone(currentPlugins.entries)
+        : {};
+      const existingDefault = nextEntries[DEFAULT_WALLPAPER_PLUGIN_ID];
+      nextEntries[DEFAULT_WALLPAPER_PLUGIN_ID] = {
+        enabled: true,
+        source: existingDefault?.source ?? 'builtin',
+        config: existingDefault?.config ?? {},
+      };
+      const nextRemoved = (currentPlugins.removedPreinstalled ?? []).filter(
+        (id) => id !== DEFAULT_WALLPAPER_PLUGIN_ID,
+      );
+      const nextOverrides: ISettingsOverrides = {
+        ...latest.overrides,
+        schemaVersion: SETTINGS_SCHEMA_VERSION,
+        plugins: {
+          ...currentPlugins,
+          removedPreinstalled: nextRemoved,
+          entries: nextEntries,
+        },
+      };
+      await this.writeOverridesAtomic(nextOverrides);
+      targetPlugins = this.materializeDocument(nextOverrides).plugins;
+    });
+
+    await ensurePreinstalledWallpaperPlugin(
+      this.pluginRegistry.resolvePluginsDir(targetPlugins),
+      targetPlugins.removedPreinstalled,
+    );
+    return this.getSnapshot();
+  }
+
+  async uploadWallpaperMedia(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<ISettingsSnapshot> {
+    const { document } = await this.readCurrentState();
+    const saved = await this.pluginInstaller.saveWallpaperMedia(
+      document.plugins,
+      fileName,
+      buffer,
+    );
+
+    await this.enqueueWrite(async () => {
+      const latest = await this.readCurrentState();
+      const currentPlugins = latest.overrides.plugins ?? {};
+      const nextEntries = currentPlugins.entries
+        ? structuredClone(currentPlugins.entries)
+        : {};
+      const existingEntry = nextEntries[DEFAULT_WALLPAPER_PLUGIN_ID];
+      nextEntries[DEFAULT_WALLPAPER_PLUGIN_ID] = {
+        enabled: true,
+        source: 'builtin',
+        config: {
+          ...(existingEntry?.config ?? {}),
+          mode: saved.mediaType,
+          mediaAsset: saved.assetPath,
+        },
+      };
+      const nextRemoved = (currentPlugins.removedPreinstalled ?? []).filter(
+        (id) => id !== DEFAULT_WALLPAPER_PLUGIN_ID,
+      );
+      const nextOverrides: ISettingsOverrides = {
+        ...latest.overrides,
+        schemaVersion: SETTINGS_SCHEMA_VERSION,
+        plugins: {
+          ...currentPlugins,
+          removedPreinstalled: nextRemoved,
+          entries: nextEntries,
+        },
+      };
+      await this.writeOverridesAtomic(nextOverrides);
+    });
+
+    return this.getSnapshot();
+  }
+
+  async getPluginAsset(
+    pluginId: string,
+    relativePath: string,
+  ): Promise<{ absolutePath: string; contentType: string }> {
+    const { document } = await this.readCurrentState();
+    if (!document.plugins.enabled) {
+      throw new ValidationException('Plugin subsystem is disabled');
+    }
+    return this.pluginRegistry.resolveSafeAssetPath(
+      document.plugins,
+      pluginId,
+      relativePath,
+    );
+  }
+
+  async getPluginSandboxDocument(
+    pluginId: string,
+  ): Promise<IPluginSandboxDocumentResponse> {
+    const { document } = await this.readCurrentState();
+    if (!document.plugins.enabled) {
+      throw new ValidationException('Plugin subsystem is disabled');
+    }
+    return this.pluginRegistry.buildSandboxedHtmlDocument(
+      document.plugins,
+      pluginId,
+    );
   }
 
   async exportSettings(): Promise<ISettingsExportResponse> {
@@ -302,6 +564,7 @@ export class SettingsService implements ISettingsService {
       nextOverrides.plugins = {
         ...defaults.plugins,
         trustedRegistries: [],
+        removedPreinstalled: [],
         entries: {},
       };
     }
@@ -413,6 +676,11 @@ export class SettingsService implements ISettingsService {
             latest.document,
             preview.targetDocument,
           );
+          if (expectedAction === 'reset' && preview.targetOverrides.plugins) {
+            await this.pluginInstaller.ensurePreinstalled(
+              preview.targetDocument.plugins,
+            );
+          }
           await this.auditLog.append({
             operation,
             operationId: preview.previewId,
@@ -659,6 +927,15 @@ export class SettingsService implements ISettingsService {
                 patch.plugins?.trustedRegistries !== undefined
                   ? [...patch.plugins.trustedRegistries]
                   : [...(current.plugins?.trustedRegistries ?? [])],
+            }
+          : {}),
+        ...(current.plugins?.removedPreinstalled !== undefined ||
+        patch.plugins?.removedPreinstalled !== undefined
+          ? {
+              removedPreinstalled:
+                patch.plugins?.removedPreinstalled !== undefined
+                  ? [...patch.plugins.removedPreinstalled]
+                  : [...(current.plugins?.removedPreinstalled ?? [])],
             }
           : {}),
         ...(current.plugins?.entries !== undefined ||
@@ -994,6 +1271,18 @@ export class SettingsService implements ISettingsService {
       this.diskUsage.clearCache();
       this.projects.invalidateAllAfterMutation();
     }
+  }
+
+  private extractSchemaDefaults(
+    manifest: IPluginManifest,
+  ): Record<string, PrimitiveConfigValue> {
+    const defaults: Record<string, PrimitiveConfigValue> = {};
+    for (const field of manifest.settingsSchema) {
+      if (field.defaultValue !== undefined) {
+        defaults[field.key] = field.defaultValue;
+      }
+    }
+    return defaults;
   }
 
   private enqueueWrite<T>(task: () => Promise<T>): Promise<T> {

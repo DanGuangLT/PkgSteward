@@ -1,4 +1,7 @@
 import type {
+  IPluginInstallPreviewResponse,
+  IPluginSandboxDocumentResponse,
+  IPluginUninstallPreviewResponse,
   ISettingsExportResponse,
   ISettingsPreviewResponse,
   ISettingsSnapshot,
@@ -7,6 +10,7 @@ import type {
 import type { IPluginsCatalog } from '@/settings/plugins/interfaces/plugin.types';
 
 export interface ISettingsService {
+  initializePreinstalledPlugins(): Promise<void>;
   getSnapshot(): Promise<ISettingsSnapshot>;
   getPluginsCatalog(): Promise<IPluginsCatalog>;
   exportSettings(): Promise<ISettingsExportResponse>;
@@ -24,4 +28,35 @@ export interface ISettingsService {
       acknowledgedRisks?: string[];
     },
   ): Promise<ISettingsSnapshot>;
+  previewPluginInstallFromUrl(
+    url: string,
+  ): Promise<IPluginInstallPreviewResponse>;
+  previewPluginInstallFromFile(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<IPluginInstallPreviewResponse>;
+  executePluginInstall(input: {
+    previewId: string;
+    confirm: boolean;
+    acknowledgedRisks?: string[];
+  }): Promise<ISettingsSnapshot>;
+  previewPluginUninstall(
+    pluginId: string,
+  ): Promise<IPluginUninstallPreviewResponse>;
+  executePluginUninstall(input: {
+    previewId: string;
+    confirm: boolean;
+  }): Promise<ISettingsSnapshot>;
+  restoreDefaultPlugins(): Promise<ISettingsSnapshot>;
+  uploadWallpaperMedia(
+    fileName: string,
+    buffer: Buffer,
+  ): Promise<ISettingsSnapshot>;
+  getPluginAsset(
+    pluginId: string,
+    relativePath: string,
+  ): Promise<{ absolutePath: string; contentType: string }>;
+  getPluginSandboxDocument(
+    pluginId: string,
+  ): Promise<IPluginSandboxDocumentResponse>;
 }

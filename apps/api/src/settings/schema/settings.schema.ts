@@ -137,6 +137,7 @@ export interface IBehaviorSettings {
   confirmBeforeNavigation: boolean;
   dateFormat: SettingsDateFormat;
   showDesignSystemInNav: boolean;
+  advancedMode: boolean;
 }
 
 export interface IPluginEntrySetting {
@@ -151,6 +152,7 @@ export interface IPluginsSettings {
   directory: string | null;
   allowLocalPlugins: boolean;
   trustedRegistries: string[];
+  removedPreinstalled: string[];
   entries: Record<string, IPluginEntrySetting>;
 }
 
@@ -175,6 +177,7 @@ export interface ISettingsOverrides {
     directory?: string | null;
     allowLocalPlugins?: boolean;
     trustedRegistries?: string[];
+    removedPreinstalled?: string[];
     entries?: Record<string, IPluginEntrySetting>;
   };
   desktop?: Record<string, PrimitiveConfigValue>;
@@ -227,14 +230,16 @@ export const DEFAULT_BEHAVIOR_SETTINGS: Readonly<IBehaviorSettings> =
     confirmBeforeNavigation: true,
     dateFormat: 'relative',
     showDesignSystemInNav: true,
+    advancedMode: false,
   });
 
 export const DEFAULT_PLUGINS_SETTINGS: Readonly<IPluginsSettings> =
   Object.freeze({
-    enabled: false,
+    enabled: true,
     directory: null,
-    allowLocalPlugins: false,
+    allowLocalPlugins: true,
     trustedRegistries: [],
+    removedPreinstalled: [],
     entries: {},
   });
 
@@ -248,6 +253,7 @@ export function createDefaultSettingsDocument(): ISettingsDocument {
     plugins: {
       ...DEFAULT_PLUGINS_SETTINGS,
       trustedRegistries: [],
+      removedPreinstalled: [],
       entries: {},
     },
     desktop: {},
@@ -303,12 +309,14 @@ const BEHAVIOR_KEYS = new Set([
   'confirmBeforeNavigation',
   'dateFormat',
   'showDesignSystemInNav',
+  'advancedMode',
 ]);
 const PLUGINS_KEYS = new Set([
   'enabled',
   'directory',
   'allowLocalPlugins',
   'trustedRegistries',
+  'removedPreinstalled',
   'entries',
 ]);
 const PLUGIN_ENTRY_KEYS = new Set(['enabled', 'version', 'source', 'config']);
@@ -809,6 +817,13 @@ const parseBehaviorSection = (
           filePath,
         );
         break;
+      case 'advancedMode':
+        out.advancedMode = assertBoolean(
+          value,
+          'behavior.advancedMode',
+          filePath,
+        );
+        break;
     }
   }
   return out;
@@ -853,6 +868,24 @@ const parsePluginsSection = (
           `${formatContext(filePath)}"plugins.directory" must be an absolute path string or null`,
         );
       }
+    } else if (key === 'removedPreinstalled') {
+      if (!Array.isArray(value) || value.length > 50) {
+        throw new Error(
+          `${formatContext(filePath)}"plugins.removedPreinstalled" must be an array (<= 50 items)`,
+        );
+      }
+      out.removedPreinstalled = [
+        ...new Set(
+          value.map((item) => {
+            if (typeof item !== 'string' || !PLUGIN_ID_REGEX.test(item)) {
+              throw new Error(
+                `${formatContext(filePath)}invalid plugin id "${String(item)}" in plugins.removedPreinstalled`,
+              );
+            }
+            return item;
+          }),
+        ),
+      ];
     } else if (key === 'trustedRegistries') {
       if (!Array.isArray(value)) {
         throw new Error(
@@ -1056,6 +1089,10 @@ export function applyOverridesToDocument(
         overrides.plugins?.trustedRegistries !== undefined
           ? [...overrides.plugins.trustedRegistries]
           : [...base.plugins.trustedRegistries],
+      removedPreinstalled:
+        overrides.plugins?.removedPreinstalled !== undefined
+          ? [...overrides.plugins.removedPreinstalled]
+          : [...base.plugins.removedPreinstalled],
       entries:
         overrides.plugins?.entries !== undefined
           ? structuredClone(overrides.plugins.entries)

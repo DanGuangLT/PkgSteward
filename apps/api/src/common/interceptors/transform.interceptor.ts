@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   CallHandler,
   HttpStatus,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -31,6 +32,9 @@ export class TransformInterceptor<T> implements NestInterceptor<
 
     return next.handle().pipe(
       map((data: T): IApiResponse<T> => {
+        if (data instanceof StreamableFile) {
+          return data as unknown as IApiResponse<T>;
+        }
         // Nếu response đã chuẩn định dạng IApiResponse rồi thì giữ nguyên
         if (
           data &&

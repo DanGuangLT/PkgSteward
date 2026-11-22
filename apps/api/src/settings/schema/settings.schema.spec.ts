@@ -21,8 +21,10 @@ describe('settings.schema', () => {
     });
     expect(doc.appearance.themePreset).toBe('default');
     expect(doc.appearance.navigationLayout).toBe('topbar');
-    expect(doc.plugins.enabled).toBe(false);
-    expect(doc.plugins.allowLocalPlugins).toBe(false);
+    expect(doc.behavior.advancedMode).toBe(false);
+    expect(doc.plugins.enabled).toBe(true);
+    expect(doc.plugins.allowLocalPlugins).toBe(true);
+    expect(doc.plugins.removedPreinstalled).toEqual([]);
   });
 
   it('parses partial structured overrides without injecting unrelated defaults', () => {

@@ -39,6 +39,9 @@ function assertNoForbiddenKeys(value: unknown, depth: number): void {
 export class RejectPrototypePollutionGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
+    if (Buffer.isBuffer(request.body)) {
+      return true;
+    }
     assertNoForbiddenKeys(request.body, 0);
     return true;
   }

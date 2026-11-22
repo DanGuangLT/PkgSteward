@@ -1,4 +1,8 @@
-import { validatePluginManifest } from '@/settings/plugins/plugin-manifest.validator';
+import {
+  normalizeStandardPluginManifest,
+  sanitizeRelativeAssetRef,
+  validatePluginManifest,
+} from '@/settings/plugins/plugin-manifest.validator';
 
 describe('validatePluginManifest', () => {
   const valid = {
@@ -59,5 +63,71 @@ describe('validatePluginManifest', () => {
     expect(() => validatePluginManifest({ ...valid, id: '../evil' })).toThrow(
       /Manifest "id"/,
     );
+  });
+
+  it('normalizes standard manifest.json, package.json, and Wallpaper Engine project.json safely', () => {
+    const webExt = normalizeStandardPluginManifest('manifest.json', {
+      name: 'Neon Matrix',
+      version: '2.1.0',
+      main: 'index.html',
+    });
+    expect(webExt).toMatchObject({
+      id: 'neon-matrix',
+      name: 'Neon Matrix',
+      version: '2.1.0',
+      format: 'manifest.json',
+      entry: { kind: 'web-sandbox', file: 'index.html' },
+      capabilities: ['live-wallpaper'],
+    });
+
+    const npmPkg = normalizeStandardPluginManifest('package.json', {
+      name: '@community/pkgsteward-shader-bg',
+      version: '1.0.4',
+      main: 'dist/wall.html',
+      author: { name: 'Community Dev' },
+    });
+    expect(npmPkg).toMatchObject({
+      id: 'community.pkgsteward-shader-bg',
+      name: '@community/pkgsteward-shader-bg',
+      author: 'Community Dev',
+      format: 'package.json',
+      entry: { kind: 'web-sandbox', file: 'dist/wall.html' },
+    });
+
+    const weProject = normalizeStandardPluginManifest(
+      'project.json',
+      {
+        title: 'Cyber City Rain',
+        type: 'web',
+        file: './scene.html',
+        general: {
+          properties: {
+            rainSpeed: { type: 'slider', text: 'Rain Speed', value: 1.5 },
+            showClock: { type: 'bool', text: 'Show Clock', value: true },
+          },
+        },
+      },
+      'cyber-city',
+    );
+    expect(weProject).toMatchObject({
+      id: 'cyber-city',
+      name: 'Cyber City Rain',
+      format: 'project.json',
+      entry: { kind: 'web-sandbox', file: 'scene.html' },
+      capabilities: ['live-wallpaper'],
+    });
+    expect(weProject.settingsSchema).toHaveLength(2);
+
+    expect(() => sanitizeRelativeAssetRef('../secret.js')).toThrow(/traversal/);
+    expect(() => sanitizeRelativeAssetRef('https://evil.example/x.js')).toThrow(
+      /URL scheme/,
+    );
+    expect(() =>
+      normalizeStandardPluginManifest('project.json', {
+        title: 'Evil',
+        type: 'web',
+        file: '../../Windows/win.ini',
+      }),
+    ).toThrow(/traversal/);
   });
 });

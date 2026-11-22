@@ -1,5 +1,9 @@
 import { Module, RequestMethod } from '@nestjs/common';
-import type { MiddlewareConsumer, NestModule } from '@nestjs/common';
+import type {
+  MiddlewareConsumer,
+  NestModule,
+  OnModuleInit,
+} from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
 import { AuditLogModule } from '@/core/audit-log/audit-log.module';
@@ -10,6 +14,7 @@ import { FileOpsModule } from '@/file-ops/file-ops.module';
 import { ProjectsModule } from '@/projects/projects.module';
 import { ScannerModule } from '@/scanner/scanner.module';
 import { RejectPrototypePollutionGuard } from '@/settings/guards/reject-prototype-pollution.guard';
+import { PluginInstallerService } from '@/settings/plugins/plugin-installer.service';
 import { PluginRegistryService } from '@/settings/plugins/plugin-registry.service';
 import { SettingsController } from '@/settings/settings.controller';
 import { SettingsService } from '@/settings/settings.service';
@@ -29,11 +34,18 @@ import { SettingsService } from '@/settings/settings.service';
   providers: [
     RejectPrototypePollutionGuard,
     PluginRegistryService,
+    PluginInstallerService,
     SettingsService,
   ],
-  exports: [SettingsService, PluginRegistryService],
+  exports: [SettingsService, PluginRegistryService, PluginInstallerService],
 })
-export class SettingsModule implements NestModule {
+export class SettingsModule implements NestModule, OnModuleInit {
+  constructor(private readonly settingsService: SettingsService) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.settingsService.initializePreinstalledPlugins();
+  }
+
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply((_request: Request, response: Response, next: NextFunction) => {
