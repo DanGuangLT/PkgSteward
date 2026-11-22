@@ -86,3 +86,62 @@ export function parseImportSettingsJson(rawText: string): { ok: true; value: Rec
     return { ok: false }
   }
 }
+
+export function normalizeDrivePath(rawDrive: string): string {
+  const trimmed = rawDrive.trim()
+  if (/^[A-Za-z]:(?:[\\/])?$/.test(trimmed)) {
+    return `${trimmed[0].toUpperCase()}:\\`
+  }
+  return trimmed
+}
+
+export function inferScanRootMode(
+  scanRootPaths: string,
+  availableDrives: readonly string[]
+): {
+  mode: "all" | "drives" | "custom"
+  selectedDrives: string[]
+  customPaths: string[]
+} {
+  const trimmed = scanRootPaths.trim()
+  if (trimmed === "*") {
+    return { mode: "all", selectedDrives: [], customPaths: [] }
+  }
+
+  const tokens = trimmed
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (tokens.length === 0) {
+    return { mode: "all", selectedDrives: [], customPaths: [] }
+  }
+
+  const canonicalAvailable = new Map<string, string>()
+  for (const drive of availableDrives) {
+    canonicalAvailable.set(normalizeDrivePath(drive).toLowerCase(), drive)
+  }
+
+  const normalizedTokens = tokens.map((token) => normalizeDrivePath(token))
+  const everyTokenIsDrive =
+    canonicalAvailable.size > 0 &&
+    normalizedTokens.every(
+      (token) => /^[A-Za-z]:\\$/.test(token) || canonicalAvailable.has(token.toLowerCase())
+    )
+
+  if (everyTokenIsDrive) {
+    const matched = normalizedTokens.map(
+      (token) => canonicalAvailable.get(token.toLowerCase()) ?? token
+    )
+    return {
+      mode: "drives",
+      selectedDrives: [...new Set(matched)],
+      customPaths: [],
+    }
+  }
+
+  return {
+    mode: "custom",
+    selectedDrives: [],
+    customPaths: tokens,
+  }
+}

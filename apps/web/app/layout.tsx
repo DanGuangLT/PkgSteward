@@ -16,6 +16,7 @@ import { NpmRunnerProvider } from "@/components/features/npm-runner/npm-runner-p
 import { AppShell } from "@/components/layout/app-shell"
 import { TopNav } from "@/components/layout/top-nav"
 import { SettingsProvider } from "@/components/settings/settings-provider"
+import { WallpaperStage } from "@/components/settings/wallpaper-stage"
 import { ThemeProvider } from "@/components/theme/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -99,6 +100,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <ThemeProvider>
             <TooltipProvider>
               <SettingsProvider initialAppearance={initialAppearance} initialLocale={locale}>
+                <WallpaperStage />
                 <NavigationContinuityProvider>
                   <NpmRunnerProvider>
                     <a
@@ -107,7 +109,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                     >
                       {t("skipToContent")}
                     </a>
-                    <AppShell topNav={<TopNav />}>{children}</AppShell>
+                    <div className="relative z-10 flex min-h-full flex-1 flex-col">
+                      <AppShell topNav={<TopNav />}>{children}</AppShell>
+                    </div>
                     <NativeSessionStatus />
                     <Toaster />
                   </NpmRunnerProvider>

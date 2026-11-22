@@ -1,6 +1,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
+  inferScanRootMode,
+  normalizeDrivePath,
   parseImportSettingsJson,
   validateMaxDepthInput,
   validateScanRootInput,
@@ -64,4 +66,24 @@ test("parseImportSettingsJson rejects arrays/primitives and accepts UTF-8 BOM ob
   assert.equal(parseImportSettingsJson("{oops").ok, false)
   const parsed = parseImportSettingsJson('\uFEFF{"schemaVersion":1}')
   assert.equal(parsed.ok, true)
+})
+
+test("normalizeDrivePath and inferScanRootMode classify '*', drive selections, and custom paths", () => {
+  assert.equal(normalizeDrivePath("d:"), "D:\\")
+  assert.equal(normalizeDrivePath("E:/"), "E:\\")
+  assert.deepEqual(inferScanRootMode("*", ["C:\\", "D:\\"]), {
+    mode: "all",
+    selectedDrives: [],
+    customPaths: [],
+  })
+  assert.deepEqual(inferScanRootMode("d:\\, E:\\", ["C:\\", "D:\\", "E:\\"]), {
+    mode: "drives",
+    selectedDrives: ["D:\\", "E:\\"],
+    customPaths: [],
+  })
+  assert.deepEqual(inferScanRootMode("D:\\Coding\\Work", ["C:\\", "D:\\"]), {
+    mode: "custom",
+    selectedDrives: [],
+    customPaths: ["D:\\Coding\\Work"],
+  })
 })

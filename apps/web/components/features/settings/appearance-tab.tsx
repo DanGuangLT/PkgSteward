@@ -1,6 +1,19 @@
 "use client"
 
-import { CheckIcon, MonitorIcon, MoonIcon, PanelLeftIcon, PanelTopIcon, SunIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ImageIcon,
+  MonitorIcon,
+  MoonIcon,
+  PanelLeftIcon,
+  PanelTopIcon,
+  RotateCcwIcon,
+  SparklesIcon,
+  SunIcon,
+  UploadIcon,
+} from "lucide-react"
+import { useRef, useState } from "react"
+import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
 import { useSettings } from "@/components/settings/settings-provider"
@@ -8,8 +21,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import {
+  restoreBrowserDefaultPlugins,
+  uploadBrowserWallpaperMedia,
+} from "@/lib/api/settings/settings-browser"
 import {
   BODY_FONTS,
   CONTENT_WIDTHS,
@@ -23,7 +41,13 @@ import {
   THEME_MODES,
   THEME_PRESET_IDS,
 } from "@/lib/settings/appearance-prefs"
+import {
+  BUILTIN_WALLPAPER_MODES,
+  type BuiltinWallpaperMode,
+  DEFAULT_WALLPAPER_PLUGIN_ID,
+} from "@/lib/settings/wallpaper-presets"
 import type {
+  PrimitiveConfigValue,
   SettingsContentWidth,
   SettingsDensity,
   SettingsFontFamily,
@@ -38,14 +62,243 @@ import type {
 } from "@/lib/settings/types"
 import { cn } from "@/lib/utils"
 
+function WallpaperTuningForm({
+  wpConfig,
+  activeMode,
+  onSave,
+}: {
+  wpConfig: Record<string, PrimitiveConfigValue>
+  activeMode: BuiltinWallpaperMode
+  onSave: (tuning: {
+    mediaUrl: string
+    blurPx: number
+    dimOpacity: number
+    surfaceOpacity: number
+    speed: number
+    pauseWhenHidden: boolean
+    nextMode: BuiltinWallpaperMode
+  }) => void
+}) {
+  const t = useTranslations("settings.appearance")
+  const [mediaUrlDraft, setMediaUrlDraft] = useState(
+    typeof wpConfig.mediaUrl === "string" ? wpConfig.mediaUrl : ""
+  )
+  const [blurDraft, setBlurDraft] = useState(String(wpConfig.blurPx ?? 8))
+  const [dimDraft, setDimDraft] = useState(String(wpConfig.dimOpacity ?? 30))
+  const [surfaceDraft, setSurfaceDraft] = useState(String(wpConfig.surfaceOpacity ?? 86))
+  const [speedDraft, setSpeedDraft] = useState(String(wpConfig.speed ?? 100))
+  const [pauseHiddenDraft, setPauseHiddenDraft] = useState(wpConfig.pauseWhenHidden !== false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const cleanUrl = mediaUrlDraft.trim()
+    let nextMode: BuiltinWallpaperMode = activeMode
+    if (cleanUrl && nextMode === "off") {
+      const lowerUrl = cleanUrl.toLowerCase()
+      nextMode =
+        lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".webm") || lowerUrl.endsWith(".ogg")
+          ? "video"
+          : "image"
+    }
+    onSave({
+      mediaUrl: cleanUrl,
+      blurPx: Number.isFinite(Number(blurDraft)) ? Number(blurDraft) : 8,
+      dimOpacity: Number.isFinite(Number(dimDraft)) ? Number(dimDraft) : 30,
+      surfaceOpacity: Number.isFinite(Number(surfaceDraft)) ? Number(surfaceDraft) : 86,
+      speed: Number.isFinite(Number(speedDraft)) ? Number(speedDraft) : 100,
+      pauseWhenHidden: pauseHiddenDraft,
+      nextMode,
+    })
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 rounded-md border border-border bg-background p-4"
+    >
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="wp-media-url">{t("wallpaperMediaUrlLabel")}</Label>
+        <Input
+          id="wp-media-url"
+          value={mediaUrlDraft}
+          onChange={(e) => setMediaUrlDraft(e.target.value)}
+          placeholder="https://example.com/wallpaper.mp4"
+          className="font-mono"
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="wp-blur">{t("wallpaperBlurLabel")}</Label>
+          <Input
+            id="wp-blur"
+            type="number"
+            min={0}
+            max={32}
+            value={blurDraft}
+            onChange={(e) => setBlurDraft(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="wp-dim">{t("wallpaperDimLabel")}</Label>
+          <Input
+            id="wp-dim"
+            type="number"
+            min={0}
+            max={85}
+            value={dimDraft}
+            onChange={(e) => setDimDraft(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="wp-surface">{t("wallpaperSurfaceOpacityLabel")}</Label>
+          <Input
+            id="wp-surface"
+            type="number"
+            min={45}
+            max={100}
+            value={surfaceDraft}
+            onChange={(e) => setSurfaceDraft(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="wp-speed">{t("wallpaperSpeedLabel")}</Label>
+          <Input
+            id="wp-speed"
+            type="number"
+            min={25}
+            max={250}
+            value={speedDraft}
+            onChange={(e) => setSpeedDraft(e.target.value)}
+            className="font-mono"
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex cursor-pointer items-center gap-2.5 text-body-sm select-none">
+          <Checkbox
+            checked={pauseHiddenDraft}
+            onCheckedChange={(val) => setPauseHiddenDraft(val === true)}
+          />
+          <span>{t("wallpaperPauseHiddenLabel")}</span>
+        </label>
+        <Button type="submit" size="sm" variant="secondary">
+          {t("wallpaperApplyTuningCta")}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 export function AppearanceTab() {
   const t = useTranslations("settings.appearance")
   const tPresets = useTranslations("theme.presets")
   const tTheme = useTranslations("theme")
-  const { appearance, updatePreferences } = useSettings()
+  const { appearance, behavior, snapshot, updatePreferences, applySnapshot } = useSettings()
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
+  const [wallpaperBusy, setWallpaperBusy] = useState(false)
 
   const patchAppearance = (patch: Partial<typeof appearance>) => {
     void updatePreferences({ appearance: patch })
+  }
+
+  const wallpaperPlugin = snapshot?.plugins.discovered.find(
+    (plugin) => plugin.id === DEFAULT_WALLPAPER_PLUGIN_ID
+  )
+  const externalWallpaper = snapshot?.plugins.discovered.find(
+    (plugin) =>
+      plugin.id !== DEFAULT_WALLPAPER_PLUGIN_ID &&
+      plugin.enabled &&
+      plugin.capabilities.includes("live-wallpaper")
+  )
+  const wpConfig: Record<string, PrimitiveConfigValue> = {
+    ...(wallpaperPlugin?.config ?? {}),
+    ...(snapshot?.document.plugins.entries[DEFAULT_WALLPAPER_PLUGIN_ID]?.config ?? {}),
+  }
+  const rawMode =
+    typeof wpConfig.mode === "string" ? wpConfig.mode.trim().toLowerCase() : "off"
+  const activeMode: BuiltinWallpaperMode = BUILTIN_WALLPAPER_MODES.includes(
+    rawMode as BuiltinWallpaperMode
+  )
+    ? (rawMode as BuiltinWallpaperMode)
+    : "off"
+
+  const handleSelectWallpaperMode = (mode: string) => {
+    void updatePreferences({
+      plugins: {
+        enabled: true,
+        entries: {
+          [DEFAULT_WALLPAPER_PLUGIN_ID]: {
+            enabled: mode !== "off",
+            source: "builtin",
+            config: {
+              ...wpConfig,
+              mode,
+            },
+          },
+        },
+      },
+    })
+  }
+
+  const handleUploadWallpaperMedia = async (file: File) => {
+    setWallpaperBusy(true)
+    try {
+      const next = await uploadBrowserWallpaperMedia(file)
+      applySnapshot(next)
+      toast.success(t("wallpaperMediaUploaded"))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("wallpaperMediaUploadFailed"))
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }
+
+  const handleRestoreWallpaperPlugin = async () => {
+    setWallpaperBusy(true)
+    try {
+      const next = await restoreBrowserDefaultPlugins()
+      applySnapshot(next)
+      toast.success(t("wallpaperRestored"))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("wallpaperRestoreFailed"))
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }
+
+  const handleSaveWallpaperTuning = (tuning: {
+    mediaUrl: string
+    blurPx: number
+    dimOpacity: number
+    surfaceOpacity: number
+    speed: number
+    pauseWhenHidden: boolean
+    nextMode: BuiltinWallpaperMode
+  }) => {
+    void updatePreferences({
+      plugins: {
+        enabled: true,
+        entries: {
+          [DEFAULT_WALLPAPER_PLUGIN_ID]: {
+            enabled: tuning.nextMode !== "off",
+            source: "builtin",
+            config: {
+              ...wpConfig,
+              mode: tuning.nextMode,
+              mediaUrl: tuning.mediaUrl,
+              blurPx: tuning.blurPx,
+              dimOpacity: tuning.dimOpacity,
+              surfaceOpacity: tuning.surfaceOpacity,
+              speed: tuning.speed,
+              pauseWhenHidden: tuning.pauseWhenHidden,
+            },
+          },
+        },
+      },
+    })
   }
 
   return (
@@ -167,6 +420,123 @@ export function AppearanceTab() {
         </CardContent>
       </Card>
 
+      {/* Live Wallpaper Studio (Pre-installed Removable Plugin) */}
+      {snapshot && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="size-5 text-primary" aria-hidden />
+                <CardTitle>{t("wallpaperTitle")}</CardTitle>
+              </div>
+              {wallpaperPlugin ? (
+                <Badge variant={activeMode === "off" ? "secondary" : "success"}>
+                  {activeMode === "off" ? t("wallpaperOffBadge") : t(`wallpaperModes.${activeMode}`)}
+                </Badge>
+              ) : (
+                <Badge variant="outline">{t("wallpaperUninstalledBadge")}</Badge>
+              )}
+            </div>
+            <CardDescription>{t("wallpaperDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {externalWallpaper && (
+              <div className="flex items-center gap-2 rounded-md border border-border bg-primary/5 p-3 text-body-sm text-foreground">
+                <SparklesIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                <span>
+                  {t("externalWallpaperActiveNotice", { name: externalWallpaper.name })}
+                </span>
+              </div>
+            )}
+
+            {!wallpaperPlugin ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background p-4">
+                <p className="text-body-sm text-muted-foreground">
+                  {t("wallpaperUninstalledHint")}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={wallpaperBusy}
+                  onClick={() => void handleRestoreWallpaperPlugin()}
+                >
+                  <RotateCcwIcon className="size-4" aria-hidden />
+                  {t("restoreWallpaperCta")}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label>{t("wallpaperPresetLabel")}</Label>
+                  <ToggleGroup
+                    type="single"
+                    value={activeMode}
+                    onValueChange={(val) => {
+                      if (val) handleSelectWallpaperMode(val)
+                    }}
+                  >
+                    {BUILTIN_WALLPAPER_MODES.filter((mode) => mode !== "image" && mode !== "video").map(
+                      (mode) => (
+                        <ToggleGroupItem key={mode} value={mode}>
+                          {t(`wallpaperModes.${mode}`)}
+                        </ToggleGroupItem>
+                      )
+                    )}
+                    {(wpConfig.mediaAsset || wpConfig.mediaUrl) && (
+                      <ToggleGroupItem value={activeMode === "video" ? "video" : "image"}>
+                        <ImageIcon className="size-4" aria-hidden />
+                        {t("wallpaperModes.customMedia")}
+                      </ToggleGroupItem>
+                    )}
+                  </ToggleGroup>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm"
+                    className="hidden"
+                    onChange={(e) => {
+                      const picked = e.target.files?.[0]
+                      if (picked) {
+                        void handleUploadWallpaperMedia(picked)
+                      }
+                      e.target.value = ""
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={wallpaperBusy}
+                    onClick={() => mediaInputRef.current?.click()}
+                  >
+                    <UploadIcon className="size-4" aria-hidden />
+                    {t("uploadWallpaperMediaCta")}
+                  </Button>
+                  {typeof wpConfig.mediaAsset === "string" && wpConfig.mediaAsset && (
+                    <span className="font-mono text-caption text-muted-foreground">
+                      {wpConfig.mediaAsset}
+                    </span>
+                  )}
+                </div>
+
+                {behavior.advancedMode && (
+                  <WallpaperTuningForm
+                    key={JSON.stringify(wpConfig)}
+                    wpConfig={wpConfig}
+                    activeMode={activeMode}
+                    onSave={handleSaveWallpaperTuning}
+                  />
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Typography */}
       <Card>
         <CardHeader>
@@ -193,24 +563,26 @@ export function AppearanceTab() {
             </ToggleGroup>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("monoFontLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.monoFontFamily}
-              onValueChange={(val) => {
-                if (val && MONO_FONTS.includes(val as SettingsMonoFontFamily)) {
-                  patchAppearance({ monoFontFamily: val as SettingsMonoFontFamily })
-                }
-              }}
-            >
-              {MONO_FONTS.map((mono) => (
-                <ToggleGroupItem key={mono} value={mono} className="font-mono">
-                  {t(`monoFonts.${mono}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+          {behavior.advancedMode && (
+            <div className="flex flex-col gap-2">
+              <Label>{t("monoFontLabel")}</Label>
+              <ToggleGroup
+                type="single"
+                value={appearance.monoFontFamily}
+                onValueChange={(val) => {
+                  if (val && MONO_FONTS.includes(val as SettingsMonoFontFamily)) {
+                    patchAppearance({ monoFontFamily: val as SettingsMonoFontFamily })
+                  }
+                }}
+              >
+                {MONO_FONTS.map((mono) => (
+                  <ToggleGroupItem key={mono} value={mono} className="font-mono">
+                    {t(`monoFonts.${mono}`)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <Label>{t("fontScaleLabel")}</Label>
@@ -232,24 +604,26 @@ export function AppearanceTab() {
             </ToggleGroup>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("lineHeightLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.lineHeight}
-              onValueChange={(val) => {
-                if (val && LINE_HEIGHTS.includes(val as SettingsLineHeight)) {
-                  patchAppearance({ lineHeight: val as SettingsLineHeight })
-                }
-              }}
-            >
-              {LINE_HEIGHTS.map((lh) => (
-                <ToggleGroupItem key={lh} value={lh}>
-                  {t(`lineHeights.${lh}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+          {behavior.advancedMode && (
+            <div className="flex flex-col gap-2">
+              <Label>{t("lineHeightLabel")}</Label>
+              <ToggleGroup
+                type="single"
+                value={appearance.lineHeight}
+                onValueChange={(val) => {
+                  if (val && LINE_HEIGHTS.includes(val as SettingsLineHeight)) {
+                    patchAppearance({ lineHeight: val as SettingsLineHeight })
+                  }
+                }}
+              >
+                {LINE_HEIGHTS.map((lh) => (
+                  <ToggleGroupItem key={lh} value={lh}>
+                    {t(`lineHeights.${lh}`)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -301,7 +675,7 @@ export function AppearanceTab() {
             </div>
           </div>
 
-          {appearance.navigationLayout === "sidebar" && (
+          {behavior.advancedMode && appearance.navigationLayout === "sidebar" && (
             <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
               <Checkbox
                 checked={appearance.sidebarCollapsed}
@@ -318,122 +692,128 @@ export function AppearanceTab() {
             </label>
           )}
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("radiusLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.radius}
-              onValueChange={(val) => {
-                if (val && RADIUS_MODES.includes(val as SettingsRadius)) {
-                  patchAppearance({ radius: val as SettingsRadius })
-                }
-              }}
-            >
-              {RADIUS_MODES.map((rad) => (
-                <ToggleGroupItem key={rad} value={rad}>
-                  {t(`radii.${rad}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+          {behavior.advancedMode && (
+            <>
+              <div className="flex flex-col gap-2">
+                <Label>{t("radiusLabel")}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={appearance.radius}
+                  onValueChange={(val) => {
+                    if (val && RADIUS_MODES.includes(val as SettingsRadius)) {
+                      patchAppearance({ radius: val as SettingsRadius })
+                    }
+                  }}
+                >
+                  {RADIUS_MODES.map((rad) => (
+                    <ToggleGroupItem key={rad} value={rad}>
+                      {t(`radii.${rad}`)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("densityLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.density}
-              onValueChange={(val) => {
-                if (val && DENSITY_MODES.includes(val as SettingsDensity)) {
-                  patchAppearance({ density: val as SettingsDensity })
-                }
-              }}
-            >
-              {DENSITY_MODES.map((den) => (
-                <ToggleGroupItem key={den} value={den}>
-                  {t(`densities.${den}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+              <div className="flex flex-col gap-2">
+                <Label>{t("densityLabel")}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={appearance.density}
+                  onValueChange={(val) => {
+                    if (val && DENSITY_MODES.includes(val as SettingsDensity)) {
+                      patchAppearance({ density: val as SettingsDensity })
+                    }
+                  }}
+                >
+                  {DENSITY_MODES.map((den) => (
+                    <ToggleGroupItem key={den} value={den}>
+                      {t(`densities.${den}`)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("contentWidthLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.contentWidth}
-              onValueChange={(val) => {
-                if (val && CONTENT_WIDTHS.includes(val as SettingsContentWidth)) {
-                  patchAppearance({ contentWidth: val as SettingsContentWidth })
-                }
-              }}
-            >
-              {CONTENT_WIDTHS.map((width) => (
-                <ToggleGroupItem key={width} value={width}>
-                  {t(`widths.${width}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+              <div className="flex flex-col gap-2">
+                <Label>{t("contentWidthLabel")}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={appearance.contentWidth}
+                  onValueChange={(val) => {
+                    if (val && CONTENT_WIDTHS.includes(val as SettingsContentWidth)) {
+                      patchAppearance({ contentWidth: val as SettingsContentWidth })
+                    }
+                  }}
+                >
+                  {CONTENT_WIDTHS.map((width) => (
+                    <ToggleGroupItem key={width} value={width}>
+                      {t(`widths.${width}`)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
 
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-            <Checkbox
-              checked={appearance.showBreadcrumbs}
-              onCheckedChange={(val) => patchAppearance({ showBreadcrumbs: val === true })}
-            />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-body-sm font-medium text-foreground">
-                {t("showBreadcrumbsLabel")}
-              </span>
-              <span className="text-caption text-muted-foreground">
-                {t("showBreadcrumbsDesc")}
-              </span>
-            </div>
-          </label>
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+                <Checkbox
+                  checked={appearance.showBreadcrumbs}
+                  onCheckedChange={(val) => patchAppearance({ showBreadcrumbs: val === true })}
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-body-sm font-medium text-foreground">
+                    {t("showBreadcrumbsLabel")}
+                  </span>
+                  <span className="text-caption text-muted-foreground">
+                    {t("showBreadcrumbsDesc")}
+                  </span>
+                </div>
+              </label>
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Accessibility */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("accessibilityTitle")}</CardTitle>
-          <CardDescription>{t("accessibilityDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label>{t("reducedMotionLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={appearance.reducedMotion}
-              onValueChange={(val) => {
-                if (val && REDUCED_MOTION_MODES.includes(val as SettingsReducedMotion)) {
-                  patchAppearance({ reducedMotion: val as SettingsReducedMotion })
-                }
-              }}
-            >
-              {REDUCED_MOTION_MODES.map((motion) => (
-                <ToggleGroupItem key={motion} value={motion}>
-                  {t(`motions.${motion}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-            <Checkbox
-              checked={appearance.highContrastBorders}
-              onCheckedChange={(val) => patchAppearance({ highContrastBorders: val === true })}
-            />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-body-sm font-medium text-foreground">
-                {t("highContrastBordersLabel")}
-              </span>
-              <span className="text-caption text-muted-foreground">
-                {t("highContrastBordersDesc")}
-              </span>
+      {/* Accessibility (Advanced) */}
+      {behavior.advancedMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("accessibilityTitle")}</CardTitle>
+            <CardDescription>{t("accessibilityDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>{t("reducedMotionLabel")}</Label>
+              <ToggleGroup
+                type="single"
+                value={appearance.reducedMotion}
+                onValueChange={(val) => {
+                  if (val && REDUCED_MOTION_MODES.includes(val as SettingsReducedMotion)) {
+                    patchAppearance({ reducedMotion: val as SettingsReducedMotion })
+                  }
+                }}
+              >
+                {REDUCED_MOTION_MODES.map((motion) => (
+                  <ToggleGroupItem key={motion} value={motion}>
+                    {t(`motions.${motion}`)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
-          </label>
-        </CardContent>
-      </Card>
+
+            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+              <Checkbox
+                checked={appearance.highContrastBorders}
+                onCheckedChange={(val) => patchAppearance({ highContrastBorders: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("highContrastBordersLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("highContrastBordersDesc")}
+                </span>
+              </div>
+            </label>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

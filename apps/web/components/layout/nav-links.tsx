@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useTranslations } from "next-intl"
 
-import { getNavCurrent, type NavIconKey, navItems } from "@/components/layout/nav-items"
+import { getNavCurrent, IS_DEV_ENVIRONMENT, type NavIconKey, navItems } from "@/components/layout/nav-items"
 import { useSettingsOptional } from "@/components/settings/settings-provider"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -57,7 +57,8 @@ export function NavLinks({
   const t = useTranslations("nav")
   const pathname = usePathname()
   const settings = useSettingsOptional()
-  const showDesignSystem = settings ? settings.behavior.showDesignSystemInNav : true
+  const showDesignSystem =
+    IS_DEV_ENVIRONMENT && (settings ? settings.behavior.showDesignSystemInNav : true)
 
   const visibleItems = navItems.filter((item) => item.href !== "/design-system" || showDesignSystem)
 

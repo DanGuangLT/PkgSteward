@@ -1,9 +1,10 @@
 "use client"
 
-import { PlusIcon, Trash2Icon, ZapIcon } from "lucide-react"
+import { HardDriveIcon, PlusIcon, Trash2Icon, ZapIcon } from "lucide-react"
 import { useState } from "react"
 import { useTranslations } from "next-intl"
 
+import { useSettings } from "@/components/settings/settings-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
+  inferScanRootMode,
   validateMaxDepthInput,
   validateScanRootInput,
   validateTimeoutInput,
@@ -34,17 +36,14 @@ export function RuntimeTab({
 }) {
   const t = useTranslations("settings.runtime")
   const tVal = useTranslations("settings.validation")
+  const { behavior } = useSettings()
   const initial = snapshot.document.runtime
+  const availableDrives = snapshot.availableDrives ?? []
 
-  const [scanAllDrives, setScanAllDrives] = useState(initial.scanRootPaths.trim() === "*")
-  const [scanPaths, setScanPaths] = useState<string[]>(() =>
-    initial.scanRootPaths.trim() === "*"
-      ? []
-      : initial.scanRootPaths
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-  )
+  const initialInferred = inferScanRootMode(initial.scanRootPaths, availableDrives)
+  const [scanMode, setScanMode] = useState<"all" | "drives" | "custom">(initialInferred.mode)
+  const [selectedDrives, setSelectedDrives] = useState<string[]>(initialInferred.selectedDrives)
+  const [scanPaths, setScanPaths] = useState<string[]>(initialInferred.customPaths)
   const [newPathInput, setNewPathInput] = useState("")
   const [pathError, setPathError] = useState<string | null>(null)
 
@@ -64,23 +63,33 @@ export function RuntimeTab({
       return
     }
     if (trimmed === "*") {
-      setScanAllDrives(true)
+      setScanMode("all")
       setScanPaths([])
       setNewPathInput("")
       setPathError(null)
       return
     }
-    setScanAllDrives(false)
+    setScanMode("custom")
     setScanPaths((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
     setNewPathInput("")
     setPathError(null)
+  }
+
+  const toggleDrive = (drive: string, checked: boolean) => {
+    setSelectedDrives((prev) =>
+      checked ? (prev.includes(drive) ? prev : [...prev, drive]) : prev.filter((item) => item !== drive)
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
 
-    if (!scanAllDrives && scanPaths.length === 0) {
+    if (scanMode === "drives" && selectedDrives.length === 0) {
+      setFormError(t("drivesRequired"))
+      return
+    }
+    if (scanMode === "custom" && scanPaths.length === 0) {
       setFormError(t("customPathsRequired"))
       return
     }
@@ -100,9 +109,16 @@ export function RuntimeTab({
       return
     }
 
+    const nextScanRootPaths =
+      scanMode === "all"
+        ? "*"
+        : scanMode === "drives"
+          ? selectedDrives.join(", ")
+          : scanPaths.join(", ")
+
     await onPreviewUpdate({
       runtime: {
-        scanRootPaths: scanAllDrives ? "*" : scanPaths.join(", "),
+        scanRootPaths: nextScanRootPaths,
         maxScanDepth: Number(maxScanDepth.trim()),
         scanTimeoutMs: scanTimeoutEnabled ? Number(scanTimeoutMs.trim()) : null,
         npmCommandTimeoutMs: npmTimeoutEnabled ? Number(npmTimeoutMs.trim()) : null,
@@ -128,21 +144,86 @@ export function RuntimeTab({
         <CardContent className="flex flex-col gap-4">
           <ToggleGroup
             type="single"
-            value={scanAllDrives ? "all" : "custom"}
+            value={scanMode}
             onValueChange={(val) => {
-              if (val === "all") setScanAllDrives(true)
-              if (val === "custom") setScanAllDrives(false)
+              if (val === "drives" || val === "custom" || val === "all") {
+                setFormError(null)
+                setScanMode(val)
+              }
             }}
           >
+            <ToggleGroupItem value="drives">{t("modeDrives")}</ToggleGroupItem>
             <ToggleGroupItem value="custom">{t("modeCustom")}</ToggleGroupItem>
             <ToggleGroupItem value="all">{t("modeAllDrives")}</ToggleGroupItem>
           </ToggleGroup>
 
-          {scanAllDrives ? (
+          {scanMode === "all" && (
             <div className="rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
               {t("allDrivesWarning")}
             </div>
-          ) : (
+          )}
+
+          {scanMode === "drives" && (
+            <div className="flex flex-col gap-3 rounded-md border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-body-sm font-semibold text-foreground">
+                    {t("drivesPickerTitle")}
+                  </span>
+                  <span className="text-caption text-muted-foreground">
+                    {t("drivesPickerDescription")}
+                  </span>
+                </div>
+                {availableDrives.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setSelectedDrives([...availableDrives])}
+                    >
+                      {t("selectAllDrives")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedDrives([])}
+                    >
+                      {t("clearDrives")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {availableDrives.length === 0 ? (
+                <p className="text-body-sm text-muted-foreground">{t("noDrivesDetected")}</p>
+              ) : (
+                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {availableDrives.map((drive) => {
+                    const checked = selectedDrives.includes(drive)
+                    return (
+                      <label
+                        key={drive}
+                        className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-card px-3.5 py-2.5 select-none hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(val) => toggleDrive(drive, val === true)}
+                        />
+                        <HardDriveIcon className="size-4 shrink-0 text-primary" aria-hidden />
+                        <span className="font-mono text-body-sm font-semibold text-foreground">
+                          {drive}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {scanMode === "custom" && (
             <div className="flex flex-col gap-3">
               <div className="flex gap-2">
                 <Input
@@ -193,95 +274,110 @@ export function RuntimeTab({
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("limitsTitle")}</CardTitle>
-          <CardDescription>{t("limitsDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="max-scan-depth">{t("maxScanDepthLabel")}</Label>
-              <SourceBadge source={snapshot.sources.runtime.maxScanDepth} />
-            </div>
-            <Input
-              id="max-scan-depth"
-              type="number"
-              min={0}
-              max={20}
-              value={maxScanDepth}
-              onChange={(e) => setMaxScanDepth(e.target.value)}
-              className="max-w-44 font-mono"
-            />
-            <p className="text-caption text-muted-foreground">{t("maxScanDepthHint")}</p>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="scan-timeout-ms">{t("scanTimeoutLabel")}</Label>
-              <SourceBadge source={snapshot.sources.runtime.scanTimeoutMs} />
-            </div>
-            <label className="flex cursor-pointer items-center gap-2.5 select-none">
-              <Checkbox
-                checked={!scanTimeoutEnabled}
-                onCheckedChange={(val) => setScanTimeoutEnabled(val !== true)}
-              />
-              <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
-            </label>
-            {scanTimeoutEnabled && (
-              <Input
-                id="scan-timeout-ms"
-                type="number"
-                min={1000}
-                step={1000}
-                value={scanTimeoutMs}
-                onChange={(e) => setScanTimeoutMs(e.target.value)}
-                className="max-w-52 font-mono"
-              />
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="npm-timeout-ms">{t("npmTimeoutLabel")}</Label>
-              <SourceBadge source={snapshot.sources.runtime.npmCommandTimeoutMs} />
-            </div>
-            <label className="flex cursor-pointer items-center gap-2.5 select-none">
-              <Checkbox
-                checked={!npmTimeoutEnabled}
-                onCheckedChange={(val) => setNpmTimeoutEnabled(val !== true)}
-              />
-              <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
-            </label>
-            {npmTimeoutEnabled && (
-              <Input
-                id="npm-timeout-ms"
-                type="number"
-                min={1000}
-                step={1000}
-                value={npmTimeoutMs}
-                onChange={(e) => setNpmTimeoutMs(e.target.value)}
-                className="max-w-52 font-mono"
-              />
-            )}
-          </div>
-
-          {formError && (
+          {!behavior.advancedMode && formError && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
               {formError}
             </div>
           )}
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={busy}>
-              {t("previewSaveCta")}
-            </Button>
-          </div>
+          {!behavior.advancedMode && (
+            <div className="flex justify-end">
+              <Button type="submit" disabled={busy}>
+                {t("previewSaveCta")}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {behavior.advancedMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("limitsTitle")}</CardTitle>
+            <CardDescription>{t("limitsDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="max-scan-depth">{t("maxScanDepthLabel")}</Label>
+                <SourceBadge source={snapshot.sources.runtime.maxScanDepth} />
+              </div>
+              <Input
+                id="max-scan-depth"
+                type="number"
+                min={0}
+                max={20}
+                value={maxScanDepth}
+                onChange={(e) => setMaxScanDepth(e.target.value)}
+                className="max-w-44 font-mono"
+              />
+              <p className="text-caption text-muted-foreground">{t("maxScanDepthHint")}</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="scan-timeout-ms">{t("scanTimeoutLabel")}</Label>
+                <SourceBadge source={snapshot.sources.runtime.scanTimeoutMs} />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2.5 select-none">
+                <Checkbox
+                  checked={!scanTimeoutEnabled}
+                  onCheckedChange={(val) => setScanTimeoutEnabled(val !== true)}
+                />
+                <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
+              </label>
+              {scanTimeoutEnabled && (
+                <Input
+                  id="scan-timeout-ms"
+                  type="number"
+                  min={1000}
+                  step={1000}
+                  value={scanTimeoutMs}
+                  onChange={(e) => setScanTimeoutMs(e.target.value)}
+                  className="max-w-52 font-mono"
+                />
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="npm-timeout-ms">{t("npmTimeoutLabel")}</Label>
+                <SourceBadge source={snapshot.sources.runtime.npmCommandTimeoutMs} />
+              </div>
+              <label className="flex cursor-pointer items-center gap-2.5 select-none">
+                <Checkbox
+                  checked={!npmTimeoutEnabled}
+                  onCheckedChange={(val) => setNpmTimeoutEnabled(val !== true)}
+                />
+                <span className="text-body-sm text-foreground">{t("noTimeLimit")}</span>
+              </label>
+              {npmTimeoutEnabled && (
+                <Input
+                  id="npm-timeout-ms"
+                  type="number"
+                  min={1000}
+                  step={1000}
+                  value={npmTimeoutMs}
+                  onChange={(e) => setNpmTimeoutMs(e.target.value)}
+                  className="max-w-52 font-mono"
+                />
+              )}
+            </div>
+
+            {formError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive">
+                {formError}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={busy}>
+                {t("previewSaveCta")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </form>
   )
 }

@@ -41,6 +41,14 @@ function getRiskReasonText(
       return t("riskReason.SERVER_RESTART_REQUIRED")
     case "SETTINGS_RESET":
       return t("riskReason.SETTINGS_RESET")
+    case "PLUGIN_INSTALL_REMOTE":
+      return t("riskReason.PLUGIN_INSTALL_REMOTE")
+    case "PLUGIN_SANDBOX_SCRIPT":
+      return t("riskReason.PLUGIN_SANDBOX_SCRIPT")
+    case "PLUGIN_OVERWRITE":
+      return t("riskReason.PLUGIN_OVERWRITE")
+    case "PLUGIN_UNINSTALL":
+      return t("riskReason.PLUGIN_UNINSTALL")
     default:
       return fallback
   }

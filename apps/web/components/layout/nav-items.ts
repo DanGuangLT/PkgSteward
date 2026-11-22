@@ -18,6 +18,8 @@ export type NavItem = {
  * Các mục điều hướng chính. Thêm màn hình mới (Global packages, Node.js...)
  * → thêm 1 dòng ở đây + nhãn trong messages/*.json › nav.
  */
+export const IS_DEV_ENVIRONMENT = process.env.NODE_ENV !== "production"
+
 export const navItems = [
   { href: "/", labelKey: "projects", iconKey: "projects" },
   { href: "/disk-usage", labelKey: "diskUsage", iconKey: "diskUsage" },

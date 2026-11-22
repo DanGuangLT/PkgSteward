@@ -122,6 +122,17 @@ html[data-motion="reduce"] *::after {
   scroll-behavior: auto !important;
 }
 
+html[data-wallpaper="active"] [data-slot="card"] {
+  background-color: color-mix(in oklch, var(--card) var(--wallpaper-surface-opacity, 86%), transparent);
+  backdrop-filter: blur(14px);
+}
+
+html[data-wallpaper="active"] header,
+html[data-wallpaper="active"] aside {
+  background-color: color-mix(in oklch, var(--background) var(--wallpaper-surface-opacity, 86%), transparent);
+  backdrop-filter: blur(14px);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

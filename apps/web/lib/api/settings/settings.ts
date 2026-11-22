@@ -1,10 +1,13 @@
 import "server-only"
 
 import { apiFetchEnvelope } from "../client.ts"
-import { settingsPaths } from "./settings-paths.ts"
+import { pluginSandboxDocumentPath, settingsPaths } from "./settings-paths.ts"
 import type { ApiResponse } from "@/lib/api/types"
 import type {
+  PluginInstallPreviewResponse,
   PluginsCatalog,
+  PluginSandboxDocumentResponse,
+  PluginUninstallPreviewResponse,
   PreferencesPatch,
   PrivilegedSettingsPatch,
   SettingsExportResponse,
@@ -69,4 +72,93 @@ export function executeSettingsReset(input: {
 
 export function getPluginsCatalog(signal?: AbortSignal): Promise<ApiResponse<PluginsCatalog>> {
   return apiFetchEnvelope<PluginsCatalog>(settingsPaths.plugins, { method: "GET", signal })
+}
+
+export function previewPluginInstallJson(input: {
+  url?: string
+  fileName?: string
+  contentBase64?: string
+}): Promise<ApiResponse<PluginInstallPreviewResponse>> {
+  return apiFetchEnvelope<PluginInstallPreviewResponse>(
+    settingsPaths.pluginsInstallPreview,
+    jsonInit("POST", input),
+    null
+  )
+}
+
+export function previewPluginInstallBinary(
+  fileNameHeader: string,
+  bytes: ArrayBuffer
+): Promise<ApiResponse<PluginInstallPreviewResponse>> {
+  return apiFetchEnvelope<PluginInstallPreviewResponse>(
+    settingsPaths.pluginsInstallPreview,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "x-plugin-filename": fileNameHeader,
+      },
+      body: bytes,
+    },
+    null
+  )
+}
+
+export function executePluginInstall(input: {
+  previewId: string
+  confirm: boolean
+  acknowledgedRisks?: string[]
+}): Promise<ApiResponse<SettingsSnapshot>> {
+  return apiFetchEnvelope<SettingsSnapshot>(settingsPaths.pluginsInstallExecute, jsonInit("POST", input), null)
+}
+
+export function previewPluginUninstall(input: { pluginId: string }): Promise<ApiResponse<PluginUninstallPreviewResponse>> {
+  return apiFetchEnvelope<PluginUninstallPreviewResponse>(settingsPaths.pluginsUninstallPreview, jsonInit("POST", input))
+}
+
+export function executePluginUninstall(input: {
+  previewId: string
+  confirm: boolean
+}): Promise<ApiResponse<SettingsSnapshot>> {
+  return apiFetchEnvelope<SettingsSnapshot>(settingsPaths.pluginsUninstallExecute, jsonInit("POST", input), null)
+}
+
+export function restoreDefaultPlugins(): Promise<ApiResponse<SettingsSnapshot>> {
+  return apiFetchEnvelope<SettingsSnapshot>(settingsPaths.pluginsRestoreDefaults, jsonInit("POST", {}), null)
+}
+
+export function uploadWallpaperMediaJson(input: {
+  fileName: string
+  contentBase64: string
+}): Promise<ApiResponse<SettingsSnapshot>> {
+  return apiFetchEnvelope<SettingsSnapshot>(
+    settingsPaths.pluginsWallpaperMedia,
+    jsonInit("POST", input),
+    null
+  )
+}
+
+export function uploadWallpaperMediaBinary(
+  fileNameHeader: string,
+  bytes: ArrayBuffer
+): Promise<ApiResponse<SettingsSnapshot>> {
+  return apiFetchEnvelope<SettingsSnapshot>(
+    settingsPaths.pluginsWallpaperMedia,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "x-plugin-filename": fileNameHeader,
+      },
+      body: bytes,
+    },
+    null
+  )
+}
+
+export function getPluginSandboxDocument(
+  pluginId: string,
+  signal?: AbortSignal
+): Promise<ApiResponse<PluginSandboxDocumentResponse>> {
+  return apiFetchEnvelope<PluginSandboxDocumentResponse>(pluginSandboxDocumentPath(pluginId), { method: "GET", signal })
 }

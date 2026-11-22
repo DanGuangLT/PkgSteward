@@ -1,15 +1,22 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
+  buildBrowserPluginAssetUrl,
+  executeBrowserPluginInstall,
+  executeBrowserPluginUninstall,
   executeBrowserSettingsImport,
   executeBrowserSettingsReset,
   executeBrowserSettingsUpdate,
   exportBrowserSettings,
   getBrowserPluginsCatalog,
+  getBrowserPluginSandboxDocument,
   getBrowserSettings,
+  previewBrowserPluginInstallUrl,
+  previewBrowserPluginUninstall,
   previewBrowserSettingsImport,
   previewBrowserSettingsReset,
   previewBrowserSettingsUpdate,
+  restoreBrowserDefaultPlugins,
   updateBrowserPreferences,
 } from "./settings-browser.ts"
 
@@ -30,7 +37,20 @@ const cases = [
   [(s) => previewBrowserSettingsReset("appearance", s), "/api/settings/reset/preview", "POST", { scope: "appearance" }],
   [(s) => executeBrowserSettingsReset(confirmBody, s), "/api/settings/reset", "POST", confirmBody],
   [(s) => getBrowserPluginsCatalog(s), "/api/settings/plugins", "GET"],
+  [(s) => previewBrowserPluginInstallUrl("https://github.com/a/b", s), "/api/settings/plugins/install/preview", "POST", { url: "https://github.com/a/b" }],
+  [(s) => executeBrowserPluginInstall(confirmBody, s), "/api/settings/plugins/install", "POST", confirmBody],
+  [(s) => previewBrowserPluginUninstall("wallpaper-engine", s), "/api/settings/plugins/uninstall/preview", "POST", { pluginId: "wallpaper-engine" }],
+  [(s) => executeBrowserPluginUninstall({ previewId: id, confirm: true }, s), "/api/settings/plugins/uninstall", "POST", { previewId: id, confirm: true }],
+  [(s) => restoreBrowserDefaultPlugins(s), "/api/settings/plugins/restore-defaults", "POST", {}],
+  [(s) => getBrowserPluginSandboxDocument("wallpaper-engine", s), "/api/settings/plugins/wallpaper-engine/sandbox-document", "GET"],
 ]
+
+test("buildBrowserPluginAssetUrl encodes plugin and nested asset segments safely", () => {
+  assert.equal(
+    buildBrowserPluginAssetUrl("wallpaper-engine", "assets/my bg.png"),
+    "/api/settings/plugins/wallpaper-engine/assets/assets/my%20bg.png"
+  )
+})
 
 test("all 10 settings browser functions target same-origin /api/settings/* with no-store", async (t) => {
   for (const [call, url, method, body] of cases) {

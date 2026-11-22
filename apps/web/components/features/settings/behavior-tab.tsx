@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl"
 
+import { IS_DEV_ENVIRONMENT } from "@/components/layout/nav-items"
 import { useSettings } from "@/components/settings/settings-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -94,24 +95,26 @@ export function BehaviorTab() {
             </ToggleGroup>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("dateFormatLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={behavior.dateFormat}
-              onValueChange={(val) => {
-                if (val && DATE_FORMATS.includes(val as SettingsDateFormat)) {
-                  patchBehavior({ dateFormat: val as SettingsDateFormat })
-                }
-              }}
-            >
-              {DATE_FORMATS.map((fmt) => (
-                <ToggleGroupItem key={fmt} value={fmt}>
-                  {t(`dateFormats.${fmt}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+          {behavior.advancedMode && (
+            <div className="flex flex-col gap-2">
+              <Label>{t("dateFormatLabel")}</Label>
+              <ToggleGroup
+                type="single"
+                value={behavior.dateFormat}
+                onValueChange={(val) => {
+                  if (val && DATE_FORMATS.includes(val as SettingsDateFormat)) {
+                    patchBehavior({ dateFormat: val as SettingsDateFormat })
+                  }
+                }}
+              >
+                {DATE_FORMATS.map((fmt) => (
+                  <ToggleGroupItem key={fmt} value={fmt}>
+                    {t(`dateFormats.${fmt}`)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -134,35 +137,39 @@ export function BehaviorTab() {
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-            <Checkbox
-              checked={behavior.confirmBeforeNavigation}
-              onCheckedChange={(val) => patchBehavior({ confirmBeforeNavigation: val === true })}
-            />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-body-sm font-medium text-foreground">
-                {t("confirmNavigationLabel")}
-              </span>
-              <span className="text-caption text-muted-foreground">
-                {t("confirmNavigationDesc")}
-              </span>
-            </div>
-          </label>
+          {behavior.advancedMode && (
+            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+              <Checkbox
+                checked={behavior.confirmBeforeNavigation}
+                onCheckedChange={(val) => patchBehavior({ confirmBeforeNavigation: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("confirmNavigationLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("confirmNavigationDesc")}
+                </span>
+              </div>
+            </label>
+          )}
 
-          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-            <Checkbox
-              checked={behavior.showDesignSystemInNav}
-              onCheckedChange={(val) => patchBehavior({ showDesignSystemInNav: val === true })}
-            />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-body-sm font-medium text-foreground">
-                {t("showDesignSystemLabel")}
-              </span>
-              <span className="text-caption text-muted-foreground">
-                {t("showDesignSystemDesc")}
-              </span>
-            </div>
-          </label>
+          {behavior.advancedMode && IS_DEV_ENVIRONMENT && (
+            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+              <Checkbox
+                checked={behavior.showDesignSystemInNav}
+                onCheckedChange={(val) => patchBehavior({ showDesignSystemInNav: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("showDesignSystemLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("showDesignSystemDesc")}
+                </span>
+              </div>
+            </label>
+          )}
         </CardContent>
       </Card>
     </div>

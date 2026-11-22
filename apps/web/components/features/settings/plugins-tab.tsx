@@ -1,10 +1,21 @@
 "use client"
 
-import { CopyIcon, FolderCogIcon, PuzzleIcon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react"
-import { useState } from "react"
+import {
+  CopyIcon,
+  FolderCogIcon,
+  GlobeIcon,
+  PuzzleIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
+import { useSettings } from "@/components/settings/settings-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,6 +51,10 @@ export function PluginsTab({
   busy,
   onUpdatePreferences,
   onPreviewUpdate,
+  onPreviewInstallUrl,
+  onPreviewInstallFile,
+  onPreviewUninstall,
+  onRestoreDefaults,
   onRefresh,
 }: {
   snapshot: SettingsSnapshot
@@ -48,15 +63,23 @@ export function PluginsTab({
     plugins?: { enabled?: boolean; entries?: Record<string, PluginEntrySetting> }
   }) => Promise<unknown>
   onPreviewUpdate: (patch: PrivilegedSettingsPatch) => Promise<void>
+  onPreviewInstallUrl: (url: string) => Promise<void>
+  onPreviewInstallFile: (file: File) => Promise<void>
+  onPreviewUninstall: (pluginId: string) => Promise<void>
+  onRestoreDefaults: () => Promise<void>
   onRefresh: () => Promise<unknown>
 }) {
   const t = useTranslations("settings.plugins")
+  const { behavior } = useSettings()
   const pluginsState = snapshot.document.plugins
   const catalog = snapshot.plugins
 
   const [allowLocalPlugins, setAllowLocalPlugins] = useState(pluginsState.allowLocalPlugins)
   const [directoryInput, setDirectoryInput] = useState(pluginsState.directory ?? "")
   const [registriesInput, setRegistriesInput] = useState(pluginsState.trustedRegistries.join(", "))
+  const [installUrlInput, setInstallUrlInput] = useState("")
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [draftConfigs, setDraftConfigs] = useState<
     Record<string, Record<string, PrimitiveConfigValue>>
@@ -82,18 +105,31 @@ export function PluginsTab({
     })
   }
 
-  const handleTogglePlugin = async (pluginId: string, enabled: boolean, config: Record<string, PrimitiveConfigValue>) => {
+  const handleTogglePlugin = async (
+    pluginId: string,
+    enabled: boolean,
+    config: Record<string, PrimitiveConfigValue>,
+    preinstalled: boolean
+  ) => {
     await onUpdatePreferences({
       plugins: {
         entries: {
           [pluginId]: {
             enabled,
-            source: "local",
+            source: preinstalled ? "builtin" : "local",
             config,
           },
         },
       },
     })
+  }
+
+  const handleInstallUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = installUrlInput.trim()
+    if (!trimmed) return
+    await onPreviewInstallUrl(trimmed)
+    setInstallUrlInput("")
   }
 
   return (
@@ -108,7 +144,11 @@ export function PluginsTab({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary">API v{catalog.apiVersion}</Badge>
-              <Badge variant="warning">{t("manifestOnlyBadge")}</Badge>
+              <Badge variant="success">
+                {catalog.runtimeMode === "sandboxed-web"
+                  ? t("sandboxedRuntimeBadge")
+                  : t("manifestOnlyBadge")}
+              </Badge>
             </div>
           </div>
           <CardDescription>{t("foundationDescription")}</CardDescription>
@@ -127,82 +167,169 @@ export function PluginsTab({
             </div>
           </label>
 
-          <div className="flex flex-col gap-2">
-            <span className="text-body-sm font-semibold text-foreground">{t("extensionPointsTitle")}</span>
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {catalog.extensionPoints.map((ep) => (
-                <div
-                  key={ep.capability}
-                  className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
-                >
-                  <span className="font-mono text-caption text-foreground">{ep.capability}</span>
-                  <Badge variant="outline">{t("schemaReady")}</Badge>
-                </div>
-              ))}
+          {behavior.advancedMode && (
+            <div className="flex flex-col gap-2">
+              <span className="text-body-sm font-semibold text-foreground">{t("extensionPointsTitle")}</span>
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {catalog.extensionPoints.map((ep) => (
+                  <div
+                    key={ep.capability}
+                    className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
+                  >
+                    <span className="font-mono text-caption text-foreground">{ep.capability}</span>
+                    <Badge variant="outline">{t("schemaReady")}</Badge>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Tier B security settings */}
-      <form onSubmit={handleSaveSecurityPolicy}>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <ShieldCheckIcon className="size-5 text-primary" aria-hidden />
-              <CardTitle>{t("securityTitle")}</CardTitle>
-            </div>
-            <CardDescription>{t("securityDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
-              <Checkbox
-                checked={allowLocalPlugins}
-                onCheckedChange={(val) => setAllowLocalPlugins(val === true)}
-              />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-body-sm font-medium text-foreground">
-                  {t("allowLocalPluginsLabel")}
-                </span>
-                <span className="text-caption text-muted-foreground">
-                  {t("allowLocalPluginsDesc")}
-                </span>
+      {/* 1-step Plugin Installer */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <UploadIcon className="size-5 text-primary" aria-hidden />
+            <CardTitle>{t("quickInstallTitle")}</CardTitle>
+          </div>
+          <CardDescription>{t("quickInstallDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div
+            role="region"
+            aria-label={t("dropzoneLabel")}
+            onDragOver={(e) => {
+              e.preventDefault()
+              if (!dragging) setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              const dropped = e.dataTransfer.files?.[0]
+              if (dropped && !busy) {
+                void onPreviewInstallFile(dropped)
+              }
+            }}
+            className={
+              dragging
+                ? "flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-primary bg-primary/10 p-6 text-center transition-colors"
+                : "flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-border bg-background p-6 text-center transition-colors hover:border-primary/60"
+            }
+          >
+            <UploadIcon className="size-6 text-primary" aria-hidden />
+            <p className="text-body-sm font-medium text-foreground">{t("dropzoneHint")}</p>
+            <p className="text-caption text-muted-foreground">{t("supportedFormatsHint")}</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip,.tgz,.gz,.json,.html,.htm,.png,.jpg,.jpeg,.webp,.gif,.avif,.mp4,.webm"
+              className="hidden"
+              onChange={(e) => {
+                const picked = e.target.files?.[0]
+                if (picked) {
+                  void onPreviewInstallFile(picked)
+                }
+                e.target.value = ""
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t("choosePackageFileCta")}
+            </Button>
+          </div>
+
+          <form onSubmit={handleInstallUrlSubmit} className="flex flex-col gap-2">
+            <Label htmlFor="install-plugin-url">{t("installUrlLabel")}</Label>
+            <div className="flex flex-wrap gap-2">
+              <div className="relative min-w-64 flex-1">
+                <GlobeIcon
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  id="install-plugin-url"
+                  value={installUrlInput}
+                  onChange={(e) => setInstallUrlInput(e.target.value)}
+                  placeholder="https://github.com/user/wallpaper-repo | npm:pkg | https://..."
+                  className="pl-9 font-mono"
+                />
               </div>
-            </label>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="plugins-dir">{t("directoryLabel")}</Label>
-              <Input
-                id="plugins-dir"
-                value={directoryInput}
-                onChange={(e) => setDirectoryInput(e.target.value)}
-                placeholder={snapshot.systemPaths.pluginsDir}
-                className="font-mono"
-              />
-              <p className="text-caption text-muted-foreground">
-                {t("directoryHint", { defaultDir: snapshot.systemPaths.pluginsDir })}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="plugins-registries">{t("registriesLabel")}</Label>
-              <Input
-                id="plugins-registries"
-                value={registriesInput}
-                onChange={(e) => setRegistriesInput(e.target.value)}
-                placeholder="https://registry.npmjs.org"
-                className="font-mono"
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <Button type="submit" disabled={busy}>
-                {t("previewSavePolicyCta")}
+              <Button type="submit" disabled={busy || installUrlInput.trim() === ""}>
+                {t("installFromUrlCta")}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </form>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Tier B security settings (Advanced only) */}
+      {behavior.advancedMode && (
+        <form onSubmit={handleSaveSecurityPolicy}>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="size-5 text-primary" aria-hidden />
+                <CardTitle>{t("securityTitle")}</CardTitle>
+              </div>
+              <CardDescription>{t("securityDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+                <Checkbox
+                  checked={allowLocalPlugins}
+                  onCheckedChange={(val) => setAllowLocalPlugins(val === true)}
+                />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-body-sm font-medium text-foreground">
+                    {t("allowLocalPluginsLabel")}
+                  </span>
+                  <span className="text-caption text-muted-foreground">
+                    {t("allowLocalPluginsDesc")}
+                  </span>
+                </div>
+              </label>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="plugins-dir">{t("directoryLabel")}</Label>
+                <Input
+                  id="plugins-dir"
+                  value={directoryInput}
+                  onChange={(e) => setDirectoryInput(e.target.value)}
+                  placeholder={snapshot.systemPaths.pluginsDir}
+                  className="font-mono"
+                />
+                <p className="text-caption text-muted-foreground">
+                  {t("directoryHint", { defaultDir: snapshot.systemPaths.pluginsDir })}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="plugins-registries">{t("registriesLabel")}</Label>
+                <Input
+                  id="plugins-registries"
+                  value={registriesInput}
+                  onChange={(e) => setRegistriesInput(e.target.value)}
+                  placeholder="https://registry.npmjs.org"
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="submit" disabled={busy}>
+                  {t("previewSavePolicyCta")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </form>
+      )}
 
       {/* Discovered local manifests */}
       <Card>
@@ -212,22 +339,38 @@ export function PluginsTab({
               <FolderCogIcon className="size-5 text-primary" aria-hidden />
               <CardTitle>{t("discoveredTitle", { count: catalog.discovered.length })}</CardTitle>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={refreshing}
-              onClick={async () => {
-                setRefreshing(true)
-                await onRefresh()
-                setRefreshing(false)
-              }}
-            >
-              <RefreshCwIcon className="size-4" aria-hidden />
-              {t("refreshCta")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {catalog.preinstalledAvailable && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void onRestoreDefaults()}
+                >
+                  <RotateCcwIcon className="size-4" aria-hidden />
+                  {t("restoreDefaultsCta")}
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={refreshing}
+                onClick={async () => {
+                  setRefreshing(true)
+                  await onRefresh()
+                  setRefreshing(false)
+                }}
+              >
+                <RefreshCwIcon className="size-4" aria-hidden />
+                {t("refreshCta")}
+              </Button>
+            </div>
           </div>
-          <CardDescription className="font-mono">{catalog.pluginsDir}</CardDescription>
+          {behavior.advancedMode && (
+            <CardDescription className="font-mono">{catalog.pluginsDir}</CardDescription>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {catalog.discovered.length === 0 ? (
@@ -247,20 +390,49 @@ export function PluginsTab({
                       <Badge variant="outline" className="font-mono">
                         {plugin.id}@{plugin.version}
                       </Badge>
+                      {plugin.preinstalled && (
+                        <Badge variant="secondary">{t("preinstalledBadge")}</Badge>
+                      )}
+                      {behavior.advancedMode && (
+                        <Badge variant="outline" className="font-mono">
+                          {plugin.format} · {plugin.entry.kind}
+                        </Badge>
+                      )}
                     </div>
-                    <label className="flex cursor-pointer items-center gap-2 text-body-sm select-none">
-                      <Checkbox
-                        checked={snapshot.document.plugins.entries[plugin.id]?.enabled === true}
-                        onCheckedChange={(val) =>
-                          void handleTogglePlugin(
-                            plugin.id,
-                            val === true,
-                            draftConfigs[plugin.id] ?? plugin.config
-                          )
-                        }
-                      />
-                      <span>{t("enableEntry")}</span>
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex cursor-pointer items-center gap-2 text-body-sm select-none">
+                        <Checkbox
+                          checked={
+                            pluginsState.enabled &&
+                            pluginsState.allowLocalPlugins &&
+                            (snapshot.document.plugins.entries[plugin.id]?.enabled ??
+                              plugin.enabled)
+                          }
+                          onCheckedChange={(val) =>
+                            void handleTogglePlugin(
+                              plugin.id,
+                              val === true,
+                              draftConfigs[plugin.id] ?? plugin.config,
+                              plugin.preinstalled
+                            )
+                          }
+                        />
+                        <span>{t("enableEntry")}</span>
+                      </label>
+                      {plugin.removable && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => void onPreviewUninstall(plugin.id)}
+                          aria-label={t("uninstallAria", { name: plugin.name })}
+                        >
+                          <Trash2Icon className="size-4 text-destructive" aria-hidden />
+                          {t("uninstallCta")}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {plugin.description && (
                     <p className="text-body-sm text-muted-foreground">{plugin.description}</p>
@@ -332,8 +504,10 @@ export function PluginsTab({
                           onClick={() =>
                             void handleTogglePlugin(
                               plugin.id,
-                              snapshot.document.plugins.entries[plugin.id]?.enabled === true,
-                              draftConfigs[plugin.id] ?? plugin.config
+                              snapshot.document.plugins.entries[plugin.id]?.enabled ??
+                                plugin.enabled,
+                              draftConfigs[plugin.id] ?? plugin.config,
+                              plugin.preinstalled
                             )
                           }
                         >
@@ -347,7 +521,7 @@ export function PluginsTab({
             </ul>
           )}
 
-          {catalog.invalid.length > 0 && (
+          {behavior.advancedMode && catalog.invalid.length > 0 && (
             <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
               <span className="font-semibold">{t("invalidManifestsTitle")}</span>
               {catalog.invalid.map((bad) => (
@@ -358,30 +532,32 @@ export function PluginsTab({
             </div>
           )}
 
-          <div className="flex flex-col gap-2 pt-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-body-sm font-semibold text-foreground">{t("sampleManifestTitle")}</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(SAMPLE_MANIFEST)
-                    toast.success(t("sampleCopied"))
-                  } catch {
-                    toast.error(t("sampleCopyFailed"))
-                  }
-                }}
-              >
-                <CopyIcon className="size-4" aria-hidden />
-                {t("copySample")}
-              </Button>
+          {behavior.advancedMode && (
+            <div className="flex flex-col gap-2 pt-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-body-sm font-semibold text-foreground">{t("sampleManifestTitle")}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(SAMPLE_MANIFEST)
+                      toast.success(t("sampleCopied"))
+                    } catch {
+                      toast.error(t("sampleCopyFailed"))
+                    }
+                  }}
+                >
+                  <CopyIcon className="size-4" aria-hidden />
+                  {t("copySample")}
+                </Button>
+              </div>
+              <pre className="overflow-x-auto rounded-md border border-border bg-background p-3 font-mono text-caption text-foreground">
+                {SAMPLE_MANIFEST}
+              </pre>
             </div>
-            <pre className="overflow-x-auto rounded-md border border-border bg-background p-3 font-mono text-caption text-foreground">
-              {SAMPLE_MANIFEST}
-            </pre>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

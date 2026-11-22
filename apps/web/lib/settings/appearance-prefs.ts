@@ -71,6 +71,7 @@ export const DEFAULT_BEHAVIOR: Readonly<BehaviorSettings> = {
   confirmBeforeNavigation: true,
   dateFormat: "relative",
   showDesignSystemInNav: true,
+  advancedMode: false,
 }
 
 function pickEnum<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {

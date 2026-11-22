@@ -59,6 +59,7 @@ export interface BehaviorSettings {
   confirmBeforeNavigation: boolean
   dateFormat: SettingsDateFormat
   showDesignSystemInNav: boolean
+  advancedMode: boolean
 }
 
 export interface PluginEntrySetting {
@@ -73,6 +74,7 @@ export interface PluginsSettings {
   directory: string | null
   allowLocalPlugins: boolean
   trustedRegistries: string[]
+  removedPreinstalled: string[]
   entries: Record<string, PluginEntrySetting>
 }
 
@@ -101,8 +103,36 @@ export interface SystemPathsSummary {
   nodeVersion: string
 }
 
+export const PLUGIN_ID_REGEX = /^[a-z0-9][a-z0-9._-]{0,63}$/
+
+export type PluginManifestFormat =
+  | "manifest.json"
+  | "package.json"
+  | "project.json"
+  | "pkgsteward.plugin.json"
+
+export type PluginEntryKind =
+  | "none"
+  | "builtin-wallpaper"
+  | "web-sandbox"
+  | "media-image"
+  | "media-video"
+  | "css-theme"
+
+export interface PluginEntryPoint {
+  kind: PluginEntryKind
+  file: string | null
+}
+
+export interface PluginOrigin {
+  kind: "preinstalled" | "file" | "url" | "local"
+  sourceUrl: string | null
+  installedAt: string | null
+}
+
 export type PluginCapability =
   | "theme-preset"
+  | "live-wallpaper"
   | "project-analyzer"
   | "cleanup-rule"
   | "dashboard-widget"
@@ -121,6 +151,8 @@ export interface DiscoveredPlugin {
   name: string
   version: string
   apiVersion: 1
+  format: PluginManifestFormat
+  entry: PluginEntryPoint
   description: string | null
   author: string | null
   homepage: string | null
@@ -128,6 +160,9 @@ export interface DiscoveredPlugin {
   minAppVersion: string | null
   manifestPath: string
   source: "local"
+  preinstalled: boolean
+  removable: boolean
+  origin: PluginOrigin
   enabled: boolean
   config: Record<string, PrimitiveConfigValue>
   settingsSchema: PluginSettingFieldSchema[]
@@ -147,9 +182,10 @@ export interface PluginExtensionPoint {
 
 export interface PluginsCatalog {
   apiVersion: 1
-  runtimeMode: "manifest-only"
+  runtimeMode: "sandboxed-web" | "manifest-only"
   pluginsEnabled: boolean
   allowLocalPlugins: boolean
+  preinstalledAvailable: boolean
   pluginsDir: string
   extensionPoints: PluginExtensionPoint[]
   discovered: DiscoveredPlugin[]
@@ -163,8 +199,43 @@ export interface SettingsSnapshot {
     server: Record<keyof ServerSettings, SettingValueSource>
   }
   restartRequiredFields: (keyof ServerSettings)[]
+  availableDrives: string[]
   systemPaths: SystemPathsSummary
   plugins: PluginsCatalog
+}
+
+export interface PluginInstallPreviewResponse {
+  previewId: string
+  action: "install"
+  expiresAt: string
+  sourceKind: "file" | "url"
+  sourceLabel: string
+  pluginId: string
+  pluginName: string
+  version: string
+  format: PluginManifestFormat
+  entryKind: string
+  fileCount: number
+  totalBytes: number
+  willOverwrite: boolean
+  risk: SettingsRisk
+}
+
+export interface PluginUninstallPreviewResponse {
+  previewId: string
+  action: "uninstall"
+  expiresAt: string
+  pluginId: string
+  pluginName: string
+  preinstalled: boolean
+  targetDir: string
+  risk: SettingsRisk
+}
+
+export interface PluginSandboxDocumentResponse {
+  pluginId: string
+  entryFile: string
+  html: string
 }
 
 export interface SettingDiffItem {
