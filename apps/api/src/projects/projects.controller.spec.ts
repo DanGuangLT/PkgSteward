@@ -6,6 +6,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { AppModule } from '@/app.module';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import {
   AppException,
   NotFoundException,
@@ -413,6 +414,31 @@ describe('Projects production wiring', () => {
 
   it('reads the configured entire-job deadline', () => {
     expect(makeRuntime(1200).runtime.lifecycle.timeoutMs).toBe(1200);
+  });
+
+  it('reads live updates when RuntimeConfigService is supplied', () => {
+    const runtimeConfig = new RuntimeConfigService(
+      new ConfigService({ NPM_COMMAND_TIMEOUT_MS: 2000 }),
+    );
+    const runtime = createProjectsRuntime(
+      {} as never,
+      {} as never,
+      jest.fn(),
+      { getLatest: jest.fn() },
+      { assertIdle: jest.fn() },
+      { peekCompletedSize: jest.fn() },
+      { assertAllowed: jest.fn() },
+      new ConfigService({}),
+      runtimeConfig,
+    );
+    expect(runtime.lifecycle.timeoutMs).toBe(2000);
+    runtimeConfig.applyRuntimeUpdate({
+      scanRootPaths: '*',
+      maxScanDepth: 0,
+      scanTimeoutMs: null,
+      npmCommandTimeoutMs: 7500,
+    });
+    expect(runtime.lifecycle.timeoutMs).toBe(7500);
   });
 
   it.each([null, undefined])(

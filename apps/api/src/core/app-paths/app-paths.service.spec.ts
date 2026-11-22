@@ -35,6 +35,7 @@ describe('AppPathsService', () => {
     expect(paths.dataDir).toBe(tmp);
     expect(paths.logsDir).toBe(join(tmp, 'logs'));
     expect(paths.cacheDir).toBe(join(tmp, 'cache'));
+    expect(paths.pluginsDir).toBe(join(tmp, 'plugins'));
     expect(paths.settingsFilePath).toBe(join(tmp, 'settings.json'));
     expect(paths.auditLogFilePath).toBe(
       join(tmp, 'logs', 'dangerous-operations.jsonl'),
@@ -46,7 +47,7 @@ describe('AppPathsService', () => {
     expect(existsSync(join(tmp, 'data'))).toBe(false);
   });
 
-  it('creates logs/ and cache/ lazily and idempotently', async () => {
+  it('creates logs/, cache/, and plugins/ lazily and idempotently', async () => {
     const paths = new AppPathsService(fakeConfig(join(tmp, 'data')));
     await expect(paths.ensureDir('logs')).resolves.toBe(
       join(tmp, 'data', 'logs'),
@@ -57,8 +58,12 @@ describe('AppPathsService', () => {
     await expect(paths.ensureDir('cache')).resolves.toBe(
       join(tmp, 'data', 'cache'),
     );
+    await expect(paths.ensureDir('plugins')).resolves.toBe(
+      join(tmp, 'data', 'plugins'),
+    );
     expect(existsSync(join(tmp, 'data', 'logs'))).toBe(true);
     expect(existsSync(join(tmp, 'data', 'cache'))).toBe(true);
+    expect(existsSync(join(tmp, 'data', 'plugins'))).toBe(true);
   });
 
   it('derives appInstallDir from the backend package, not from cwd', () => {

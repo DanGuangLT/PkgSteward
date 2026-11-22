@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { win32 } from 'node:path';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import type { IProcessSnapshot } from '@/platform/interfaces/process-snapshot.interface';
 import type { IWindowsRunnerProcess } from '@/platform/windows/windows-runner-process';
 import { createNpmRunnerRuntime } from '@/npm-runner/npm-runner.module';
@@ -159,5 +160,30 @@ describe('createNpmRunnerRuntime native staging wiring', () => {
     expect(() => runtime.native!.createSession({} as never)).toThrow(
       'Runner process adapter unavailable',
     );
+  });
+
+  it('reads updated scanRoots and timeoutMs dynamically from RuntimeConfigService', () => {
+    const f = baseBindings();
+    const runtimeConfig = new RuntimeConfigService(
+      new ConfigService({
+        SCAN_ROOT_PATHS: 'D:\\Initial',
+        NPM_COMMAND_TIMEOUT_MS: 2500,
+      }),
+    );
+    const runtime = createNpmRunnerRuntime({
+      ...f.bindings,
+      runtimeConfig,
+    });
+    expect(runtime.input.scanRoots).toEqual(['D:\\Initial']);
+    expect(runtime.timeoutMs).toBe(2500);
+
+    runtimeConfig.applyRuntimeUpdate({
+      scanRootPaths: 'E:\\Updated',
+      maxScanDepth: 0,
+      scanTimeoutMs: null,
+      npmCommandTimeoutMs: 6500,
+    });
+    expect(runtime.input.scanRoots).toEqual(['E:\\Updated']);
+    expect(runtime.timeoutMs).toBe(6500);
   });
 });

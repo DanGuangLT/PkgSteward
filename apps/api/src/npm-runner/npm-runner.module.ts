@@ -9,6 +9,7 @@ import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { MutationGateModule } from '@/core/mutation-gate/mutation-gate.module';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { ScannerModule } from '@/scanner/scanner.module';
 import { ScannerService } from '@/scanner/scanner.service';
 import { DiskUsageModule } from '@/disk-usage/disk-usage.module';
@@ -92,6 +93,10 @@ export interface IRunnerRuntimeBindings {
   audit: Pick<AuditLogService, 'append'>;
   guard: Pick<PathGuardService, 'assertAllowed'>;
   config: ConfigService;
+  runtimeConfig?: Pick<
+    RuntimeConfigService,
+    'getScanRootPathsRaw' | 'getNpmCommandTimeoutMs'
+  >;
   host?: {
     platform: NodeJS.Platform;
     execPath: string;
@@ -179,9 +184,19 @@ export function createNativeRunnerAdapter(deps: {
 export function createNpmRunnerRuntime(
   bindings: IRunnerRuntimeBindings,
 ): INpmRunnerRuntime {
-  const { scanner, disk, fileOps, projects, gate, audit, guard, config, fs } =
-    bindings;
-  // Snapshot once at provider construction, after configuration has initialized.
+  const {
+    scanner,
+    disk,
+    fileOps,
+    projects,
+    gate,
+    audit,
+    guard,
+    config,
+    runtimeConfig,
+    fs,
+  } = bindings;
+  // Snapshot host environment once; runtime paths/timeouts stay live when RuntimeConfigService is present.
   const host = bindings.host ?? {
     platform: process.platform,
     execPath: process.execPath,
@@ -191,11 +206,17 @@ export function createNpmRunnerRuntime(
   const env = Object.freeze({ ...host.env });
   const platform = host.platform === 'win32' ? 'win32' : 'posix';
   const processes = host.platform === 'win32' ? bindings.processes : null;
-  const roots = parseScanRootPaths(
-    config.get<string>('SCAN_ROOT_PATHS'),
-    platform,
-  );
-  const timeout = config.get<unknown>('NPM_COMMAND_TIMEOUT_MS');
+  const getRoots = () =>
+    parseScanRootPaths(
+      runtimeConfig
+        ? runtimeConfig.getScanRootPathsRaw()
+        : config.get<string>('SCAN_ROOT_PATHS'),
+      platform,
+    );
+  const getFallbackTimeoutMs = () => {
+    const timeout = config.get<unknown>('NPM_COMMAND_TIMEOUT_MS');
+    return typeof timeout === 'number' ? timeout : undefined;
+  };
   const getScanSnapshot = (): ProjectScanSnapshot | null => {
     try {
       const latest = scanner.getLatest();
@@ -244,7 +265,10 @@ export function createNpmRunnerRuntime(
       platform,
       fs,
       signal,
-      scanRoots: roots.kind === 'paths' ? roots.paths : ['*'],
+      get scanRoots() {
+        const roots = getRoots();
+        return roots.kind === 'paths' ? roots.paths : ['*'];
+      },
       assertAllowed: async (path) => (await guard.assertAllowed(path)).realPath,
       getScanSnapshot,
       resolveTool: (manager) =>
@@ -264,7 +288,11 @@ export function createNpmRunnerRuntime(
     },
     env,
     processes,
-    timeoutMs: typeof timeout === 'number' ? timeout : undefined,
+    get timeoutMs() {
+      return runtimeConfig
+        ? runtimeConfig.getNpmCommandTimeoutMs()
+        : getFallbackTimeoutMs();
+    },
     gate: {
       tryEnter: () => gate.tryEnter(),
       leave: (token) => gate.leave(token),
@@ -387,6 +415,7 @@ export function createNpmRunnerRuntime(
         AuditLogService,
         PathGuardService,
         ConfigService,
+        { token: RuntimeConfigService, optional: true },
       ],
       useFactory: (
         fs: IRunnerFs,
@@ -401,6 +430,7 @@ export function createNpmRunnerRuntime(
         audit: AuditLogService,
         guard: PathGuardService,
         config: ConfigService,
+        runtimeConfig?: RuntimeConfigService,
       ) => {
         const platform = process.platform === 'win32' ? 'win32' : 'posix';
         const recoveryConsole = createWindowsNativeConsole({
@@ -440,6 +470,7 @@ export function createNpmRunnerRuntime(
           audit,
           guard,
           config,
+          runtimeConfig,
           native: {
             appInstallDir: appPaths.appInstallDir,
             snapshot,

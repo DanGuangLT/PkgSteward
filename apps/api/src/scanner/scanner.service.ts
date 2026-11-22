@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +10,10 @@ import {
   ScanResultEntity,
   ScanStartEntity,
 } from '@/scanner/entities/scan.entity';
-import { NotFoundException } from '@/common/exceptions/app.exception';
+import {
+  AppException,
+  NotFoundException,
+} from '@/common/exceptions/app.exception';
 import {
   isSameOrInside,
   pathApi,
@@ -39,6 +42,7 @@ import { SCAN_WALKER } from '@/scanner/discovery/scan-walker';
 import { inspectScanDirectory } from '@/scanner/discovery/project-metadata';
 import { makeScanCacheKey, ScannerCache } from '@/scanner/cache/scanner-cache';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 
 interface IActiveScan {
   job: IScanJob;
@@ -72,15 +76,26 @@ export class ScannerService
     private readonly cache: ScannerCache,
     private readonly diskUsage: DiskUsageService,
     private readonly gate: MutationGateService,
+    @Optional() private readonly runtimeConfig?: RuntimeConfigService,
   ) {}
 
   private configuration() {
-    const roots = parseScanRootPaths(
-      this.config.get<string>('SCAN_ROOT_PATHS'),
-      this.platform,
-    );
-    const maxDepth = Number(this.config.get<number>('MAX_SCAN_DEPTH') ?? 0);
+    const rawRoots = this.runtimeConfig
+      ? this.runtimeConfig.getScanRootPathsRaw()
+      : this.config.get<string>('SCAN_ROOT_PATHS');
+    const roots = parseScanRootPaths(rawRoots, this.platform);
+    const maxDepth = this.runtimeConfig
+      ? this.runtimeConfig.getMaxScanDepth()
+      : Number(this.config.get<number>('MAX_SCAN_DEPTH') ?? 0);
     return { roots, key: makeScanCacheKey(roots, maxDepth, this.platform) };
+  }
+
+  async invalidateForConfigChange(): Promise<void> {
+    if (this.hasRunningScan()) {
+      throw new AppException(409, 'A scan is currently running', 'CONFLICT');
+    }
+    this.latest = undefined;
+    await this.cache.clear();
   }
 
   async onModuleInit(): Promise<void> {
@@ -109,7 +124,9 @@ export class ScannerService
     };
     // Giữ slot và đặt timeout (nếu có) trước cả bước phát hiện ổ đĩa.
     this.current = active;
-    const timeout = this.config.get<number>('SCAN_TIMEOUT_MS');
+    const timeout = this.runtimeConfig
+      ? this.runtimeConfig.getScanTimeoutMs()
+      : this.config.get<number>('SCAN_TIMEOUT_MS');
     // Khi giá trị đã validate là undefined, ConfigService có thể trả lại chuỗi process.env.
     if (typeof timeout === 'number') {
       active.timer = setTimeout(

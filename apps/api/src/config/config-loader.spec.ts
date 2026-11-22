@@ -5,6 +5,7 @@ import path, { join } from 'path';
 import {
   loadAppConfig,
   mergeConfigSources,
+  readRawSettingsOverrides,
   readSettingsFile,
 } from '@/config/config-loader';
 import {
@@ -257,6 +258,60 @@ describe('loadAppConfig', () => {
       expect(readFile).toHaveBeenCalledWith(
         path.join(path.resolve(base as string, 'x-data'), 'settings.json'),
       );
+    });
+  });
+
+  describe('structured v1 settings.json', () => {
+    it('loads structured v1 runtime/server overrides above env while leaving unset fields to env', () => {
+      writeSettings({
+        schemaVersion: 1,
+        runtime: {
+          maxScanDepth: 4,
+          scanTimeoutMs: null,
+        },
+        appearance: {
+          themePreset: 'ocean',
+          fontScale: 105,
+        },
+      });
+      const config = loadAppConfig({
+        env: {
+          PKGSTEWARD_DATA_DIR: dataDir,
+          SCAN_ROOT_PATHS: 'D:\\Work',
+          MAX_SCAN_DEPTH: '9',
+          SCAN_TIMEOUT_MS: '5000',
+        },
+      });
+      expect(config.SCAN_ROOT_PATHS).toBe('D:\\Work');
+      expect(config.MAX_SCAN_DEPTH).toBe(4);
+      expect(config.SCAN_TIMEOUT_MS).toBeUndefined();
+    });
+
+    it('rejects unknown nested keys and prototype pollution in structured v1 files', () => {
+      writeSettings('{"schemaVersion":1,"appearance":{"badKey":true}}');
+      expect(() =>
+        loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } }),
+      ).toThrow(/unknown key "badKey"/);
+
+      writeSettings('{"schemaVersion":1,"__proto__":{"polluted":true}}');
+      expect(() =>
+        loadAppConfig({ env: { PKGSTEWARD_DATA_DIR: dataDir } }),
+      ).toThrow(/forbidden key "__proto__"/);
+    });
+
+    it('normalizes both legacy flat and structured v1 files via readRawSettingsOverrides', () => {
+      writeSettings('\uFEFF{"MAX_SCAN_DEPTH": 3, "PORT": 24690}');
+      expect(
+        readRawSettingsOverrides(
+          join(dataDir, 'settings.json'),
+          undefined,
+          'win32',
+        ),
+      ).toEqual({
+        schemaVersion: 1,
+        runtime: { maxScanDepth: 3 },
+        server: { port: 24690 },
+      });
     });
   });
 });

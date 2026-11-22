@@ -14,6 +14,7 @@ import { ProjectsService } from '@/projects/projects.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { ConfigService } from '@nestjs/config';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { ProjectRegistry } from '@/projects/registry/project-registry';
 import type { IPmFs } from '@/package-managers/interfaces/pm.runtime';
 import type { IProjectRegistry } from '@/projects/interfaces/projects.runtime';
@@ -95,6 +96,7 @@ describe('M9 module bindings', () => {
       AuditLogService,
       ConfigService,
       ProjectRegistry,
+      { token: RuntimeConfigService, optional: true },
     ]);
     const runtime = provider.useFactory(
       f.fs,

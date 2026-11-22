@@ -345,4 +345,17 @@ describe('scan cache', () => {
     await f.cache.flush();
     expect(await f.cache.load(entry().key)).toEqual(entry());
   });
+
+  it('clears the cache file cleanly and ignores ENOENT', async () => {
+    const f = fixture();
+    await f.cache.save(entry());
+    await f.cache.clear();
+    expect(f.files.has(f.cacheFilePath)).toBe(false);
+
+    f.fs.unlink.mockRejectedValueOnce(
+      Object.assign(new Error('missing'), { code: 'ENOENT' }),
+    );
+    await expect(f.cache.clear()).resolves.toBeUndefined();
+    expect(f.warn).not.toHaveBeenCalled();
+  });
 });

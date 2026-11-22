@@ -4,6 +4,7 @@ import * as path from 'path';
 export const APP_DATA_DIR_NAME = 'PkgSteward';
 export const SETTINGS_FILE_NAME = 'settings.json';
 export const AUDIT_LOG_FILE_NAME = 'dangerous-operations.jsonl';
+export const PLUGINS_DIR_NAME = 'plugins';
 
 export interface IDataDirSources {
   override?: string; // A validated absolute PKGSTEWARD_DATA_DIR, or undefined.

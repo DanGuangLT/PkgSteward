@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import * as nativeFs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import {
@@ -250,5 +251,34 @@ describe('M9 runtime composition', () => {
       }),
     });
     expect(runtime.timeoutMs).toBe(1500);
+  });
+
+  it('reads updated scanRoots and timeoutMs dynamically from RuntimeConfigService', () => {
+    const f = setup();
+    const runtimeConfig = new RuntimeConfigService(
+      new ConfigService({
+        SCAN_ROOT_PATHS: 'D:\\First',
+        NPM_COMMAND_TIMEOUT_MS: 2000,
+      }),
+    );
+    const runtime = createPmRuntime({
+      ...f.bindings,
+      runtimeConfig,
+    });
+    expect(runtime.timeoutMs).toBe(2000);
+    expect(runtime.projectDeps(new AbortController().signal).scanRoots).toEqual(
+      ['D:\\First'],
+    );
+
+    runtimeConfig.applyRuntimeUpdate({
+      scanRootPaths: 'E:\\Second',
+      maxScanDepth: 0,
+      scanTimeoutMs: null,
+      npmCommandTimeoutMs: 9000,
+    });
+    expect(runtime.timeoutMs).toBe(9000);
+    expect(runtime.projectDeps(new AbortController().signal).scanRoots).toEqual(
+      ['E:\\Second'],
+    );
   });
 });

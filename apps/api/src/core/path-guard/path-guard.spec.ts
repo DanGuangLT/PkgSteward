@@ -483,6 +483,23 @@ describe('PathGuard.checkMany', () => {
     expect(checkMany).toHaveBeenCalledTimes(1);
     expect(checkMany).toHaveBeenCalledWith(paths);
   });
+
+  it('reloads scan roots on PathGuardService without ever loosening the denylist', async () => {
+    const service = new PathGuardService(
+      new ConfigService({ SCAN_ROOT_PATHS: 'D:\\Projects' }),
+      {
+        appInstallDir: 'D:\\TEST\\install',
+        sourceCheckoutDir: null,
+        dataDir: 'D:\\TEST\\data',
+      } as AppPathsService,
+      { listFixedDrives: jest.fn() },
+    );
+
+    // Update scan roots to E:\Work and verify protected dirs remain blocked
+    service.reloadScanRoots('E:\\Work');
+    expect(await service.isInsideProtectedTree('D:\\TEST\\data')).toBe(true);
+    expect(await service.isInsideProtectedTree('D:\\TEST\\install')).toBe(true);
+  });
 });
 
 describe('PathGuard protected-tree matcher', () => {
@@ -1046,5 +1063,34 @@ describe('PathGuard lstat error regressions', () => {
     await expect(
       makeGuard({ fs }).guard.check('D:\\Scan\\app'),
     ).rejects.toBeInstanceOf(InternalServerException);
+  });
+
+  it('findDenyReason flags drive roots, user profile dirs, protected trees, and their parents', async () => {
+    const fs = makeFs();
+    const guard = new PathGuard({
+      platform: 'win32',
+      scanRoots: ALL,
+      driveDetector: {
+        listFixedDrives: jest.fn(() => Promise.resolve(['C:\\', 'D:\\'])),
+      },
+      denylist: buildDenylist({
+        platform: 'win32',
+        env: {},
+        homeDir: 'C:\\Users\\alice',
+        appInstallDir: 'D:\\Tools\\PkgSteward\\apps\\api',
+        sourceCheckoutDir: 'D:\\Tools\\PkgSteward',
+        dataDir: 'D:\\PkgData',
+      }),
+      fs,
+    });
+
+    expect(await guard.findDenyReason('C:\\')).toMatch(/drive root/);
+    expect(await guard.findDenyReason('C:\\Users')).toMatch(/user profiles/);
+    expect(await guard.findDenyReason('C:\\Users\\alice')).toMatch(
+      /user profile/,
+    );
+    expect(await guard.findDenyReason('D:\\PkgData')).toMatch(/data folder/);
+    expect(await guard.findDenyReason('D:\\')).toMatch(/drive root/);
+    expect(await guard.findDenyReason('D:\\MyPlugins')).toBeNull();
   });
 });

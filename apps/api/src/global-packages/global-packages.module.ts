@@ -16,6 +16,7 @@ import { AuditLogModule } from '@/core/audit-log/audit-log.module';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateModule } from '@/core/mutation-gate/mutation-gate.module';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { ScannerModule } from '@/scanner/scanner.module';
 import { ScannerService } from '@/scanner/scanner.service';
 import { PlatformModule } from '@/platform/platform.module';
@@ -61,6 +62,7 @@ export interface IGlobalRuntimeBindings {
   gate: IGlobalServiceRuntime['gate'];
   audit: IGlobalServiceRuntime['audit'];
   config: Pick<ConfigService, 'get'>;
+  runtimeConfig?: Pick<RuntimeConfigService, 'getNpmCommandTimeoutMs'>;
   host?: {
     platform: NodeJS.Platform;
     execPath: string;
@@ -74,7 +76,7 @@ export interface IGlobalRuntimeBindings {
 export function createGlobalPackagesRuntime(
   bindings: IGlobalRuntimeBindings,
 ): IGlobalServiceRuntime {
-  const { fs, scanner, gate, audit, config } = bindings;
+  const { fs, scanner, gate, audit, config, runtimeConfig } = bindings;
   const host = bindings.host ?? {
     platform: process.platform,
     execPath: process.execPath,
@@ -84,7 +86,11 @@ export function createGlobalPackagesRuntime(
   const environment = Object.freeze({ ...host.env });
   const processes = host.platform === 'win32' ? bindings.processes : null;
   const paths = { ...bindings.paths };
-  const timeout = config.get<unknown>('NPM_COMMAND_TIMEOUT_MS');
+  const getTimeoutMs = () => {
+    if (runtimeConfig) return runtimeConfig.getNpmCommandTimeoutMs();
+    const timeout = config.get<unknown>('NPM_COMMAND_TIMEOUT_MS');
+    return typeof timeout === 'number' ? timeout : undefined;
+  };
   const launchProcess = bindings.launchProcess ?? launchRun;
   const tools = new Map<string, IRunnerTool>();
   const retainedProbes = new Set<IRunProcess>();
@@ -257,7 +263,9 @@ export function createGlobalPackagesRuntime(
       );
     },
     verifyProbeTermination,
-    timeoutMs: typeof timeout === 'number' ? timeout : undefined,
+    get timeoutMs() {
+      return getTimeoutMs();
+    },
     gate: {
       tryEnter: () => gate.tryEnter(),
       leave: (token) => gate.leave(token),
@@ -314,6 +322,7 @@ export function createGlobalPackagesRuntime(
         MutationGateService,
         AuditLogService,
         ConfigService,
+        { token: RuntimeConfigService, optional: true },
       ],
       useFactory: (
         fs: IGlobalServiceRuntime['fs'],
@@ -323,6 +332,7 @@ export function createGlobalPackagesRuntime(
         gate: MutationGateService,
         audit: AuditLogService,
         config: ConfigService,
+        runtimeConfig?: RuntimeConfigService,
       ): IGlobalServiceRuntime => {
         const install = appPaths.appInstallDir;
         const parent = win32.dirname(install);
@@ -341,6 +351,7 @@ export function createGlobalPackagesRuntime(
           gate,
           audit,
           config,
+          runtimeConfig,
           paths: {
             cacheDir: appPaths.cacheDir,
             appInstallDir: install,

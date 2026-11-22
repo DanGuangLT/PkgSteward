@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
 import { win32 } from 'node:path';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import {
   AppException,
   NotFoundException,
@@ -528,5 +529,24 @@ describe('GlobalPackagesModule runtime bindings', () => {
     });
     expect(b.launchProcess).not.toHaveBeenCalled();
     expect(b.f.tryEnter).not.toHaveBeenCalled();
+  });
+
+  it('reads updated timeoutMs dynamically from RuntimeConfigService', () => {
+    const b = bindings();
+    const runtimeConfig = new RuntimeConfigService(
+      new ConfigService({ NPM_COMMAND_TIMEOUT_MS: 3000 }),
+    );
+    const runtime = createGlobalPackagesRuntime({
+      ...b.input,
+      runtimeConfig,
+    });
+    expect(runtime.timeoutMs).toBe(3000);
+    runtimeConfig.applyRuntimeUpdate({
+      scanRootPaths: '*',
+      maxScanDepth: 0,
+      scanTimeoutMs: null,
+      npmCommandTimeoutMs: 8000,
+    });
+    expect(runtime.timeoutMs).toBe(8000);
   });
 });
