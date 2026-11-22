@@ -36,6 +36,132 @@ describe('PluginRegistryService', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  it('uses the discovered location for nested assets and rejects disabled plugins', async () => {
+    const folder = join(pluginsDir, 'installed-folder');
+    const manifest = join(folder, PLUGIN_MANIFEST_FILE_NAME);
+    const asset = join(folder, 'media', 'photo.png');
+    const lstat = jest.fn((target: string) => {
+      const isDirectory = target === pluginsDir || target === folder;
+      if (!isDirectory && target !== manifest && target !== asset) {
+        return Promise.reject(
+          Object.assign(new Error('missing'), { code: 'ENOENT' }),
+        );
+      }
+      return Promise.resolve({
+        isDirectory: () => isDirectory,
+        isFile: () => !isDirectory,
+        isSymbolicLink: () => false,
+        size: 1,
+      });
+    });
+    const realpath = jest.fn((target: string) => Promise.resolve(target));
+    service.setFsAdapterForTest({
+      lstat,
+      realpath,
+      readdir: () =>
+        Promise.resolve([
+          { name: 'installed-folder', isDirectory: () => true } as never,
+        ]),
+      readFile: () =>
+        Promise.resolve(
+          JSON.stringify({
+            id: 'sample-plugin',
+            name: 'Sample Plugin',
+            version: '1.0.0',
+            apiVersion: 1,
+            capabilities: ['dashboard-widget'],
+          }),
+        ),
+    });
+
+    const settings = {
+      ...DEFAULT_PLUGINS_SETTINGS,
+      entries: { 'sample-plugin': { enabled: true, config: {} } },
+    };
+    await expect(
+      service.resolveSafeAssetPath(
+        settings,
+        'sample-plugin',
+        'media/photo.png',
+      ),
+    ).resolves.toEqual({ absolutePath: asset, contentType: 'image/png' });
+    expect(lstat).not.toHaveBeenCalledWith(join(pluginsDir, 'sample-plugin'));
+
+    await expect(
+      service.resolveSafeAssetPath(
+        {
+          ...DEFAULT_PLUGINS_SETTINGS,
+          entries: { 'sample-plugin': { enabled: false, config: {} } },
+        },
+        'sample-plugin',
+        'media/photo.png',
+      ),
+    ).rejects.toThrow(/disabled/);
+  });
+
+  it('rejects resolved asset and HTML entry paths outside the plugin folder', async () => {
+    const folder = join(pluginsDir, 'sample-plugin');
+    const manifest = join(folder, 'manifest.json');
+    const entry = join(folder, 'media', 'index.html');
+    const asset = join(folder, 'media', 'photo.png');
+    const readFile = jest.fn<Promise<string>, [string]>(() =>
+      Promise.resolve(
+        JSON.stringify({
+          id: 'sample-plugin',
+          name: 'Sample Plugin',
+          version: '1.0.0',
+          capabilities: ['live-wallpaper'],
+          entry: { kind: 'web-sandbox', file: 'media/index.html' },
+        }),
+      ),
+    );
+    service.setFsAdapterForTest({
+      lstat: (target) => {
+        const isDirectory = target === pluginsDir || target === folder;
+        if (!isDirectory && ![manifest, entry, asset].includes(target)) {
+          return Promise.reject(
+            Object.assign(new Error('missing'), { code: 'ENOENT' }),
+          );
+        }
+        return Promise.resolve({
+          isDirectory: () => isDirectory,
+          isFile: () => !isDirectory,
+          isSymbolicLink: () => false,
+          size: 1,
+        });
+      },
+      realpath: (target) =>
+        Promise.resolve(
+          target === asset
+            ? join(root, 'outside.png')
+            : target === entry
+              ? join(root, 'outside.html')
+              : target,
+        ),
+      readdir: () =>
+        Promise.resolve([
+          { name: 'sample-plugin', isDirectory: () => true } as never,
+        ]),
+      readFile,
+    });
+
+    const settings = {
+      ...DEFAULT_PLUGINS_SETTINGS,
+      entries: { 'sample-plugin': { enabled: true, config: {} } },
+    };
+    await expect(
+      service.resolveSafeAssetPath(
+        settings,
+        'sample-plugin',
+        'media/photo.png',
+      ),
+    ).rejects.toThrow('Plugin asset resolves outside plugin directory');
+    await expect(
+      service.buildSandboxedHtmlDocument(settings, 'sample-plugin'),
+    ).rejects.toThrow('Plugin HTML entry escapes plugin folder');
+    expect(readFile.mock.calls).toEqual([[manifest], [manifest]]);
+  });
+
   it('returns an empty catalog gracefully when plugins directory does not exist', async () => {
     const catalog = await service.discover({
       ...DEFAULT_PLUGINS_SETTINGS,

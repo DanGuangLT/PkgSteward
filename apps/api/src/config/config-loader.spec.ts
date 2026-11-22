@@ -263,6 +263,7 @@ describe('loadAppConfig', () => {
 
   describe('structured v1 settings.json', () => {
     it('loads structured v1 runtime/server overrides above env while leaving unset fields to env', () => {
+      const scanRoot = join(dataDir, 'work');
       writeSettings({
         schemaVersion: 1,
         runtime: {
@@ -277,12 +278,12 @@ describe('loadAppConfig', () => {
       const config = loadAppConfig({
         env: {
           PKGSTEWARD_DATA_DIR: dataDir,
-          SCAN_ROOT_PATHS: 'D:\\Work',
+          SCAN_ROOT_PATHS: scanRoot,
           MAX_SCAN_DEPTH: '9',
           SCAN_TIMEOUT_MS: '5000',
         },
       });
-      expect(config.SCAN_ROOT_PATHS).toBe('D:\\Work');
+      expect(config.SCAN_ROOT_PATHS).toBe(scanRoot);
       expect(config.MAX_SCAN_DEPTH).toBe(4);
       expect(config.SCAN_TIMEOUT_MS).toBeUndefined();
     });

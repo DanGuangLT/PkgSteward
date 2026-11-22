@@ -146,9 +146,9 @@ describe('SettingsService', () => {
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
   it('tracks accurate value sources (env vs default vs settings) and preserves env when saving UI preferences', async () => {
-    const f = createFixture({ SCAN_ROOT_PATHS: 'D:\\Projects' });
+    const f = createFixture({ SCAN_ROOT_PATHS: join(root, 'Projects') });
     const initial = await f.service.getSnapshot();
-    expect(initial.document.runtime.scanRootPaths).toBe('D:\\Projects');
+    expect(initial.document.runtime.scanRootPaths).toBe(join(root, 'Projects'));
     expect(initial.sources.runtime.scanRootPaths).toBe('env');
     expect(initial.sources.runtime.maxScanDepth).toBe('default');
 
@@ -165,7 +165,7 @@ describe('SettingsService', () => {
     expect(updated.document.appearance.navigationLayout).toBe('sidebar');
     expect(updated.document.behavior.defaultPageSize).toBe(50);
     // Env override must still be preserved because runtime was untouched
-    expect(updated.document.runtime.scanRootPaths).toBe('D:\\Projects');
+    expect(updated.document.runtime.scanRootPaths).toBe(join(root, 'Projects'));
     expect(updated.sources.runtime.scanRootPaths).toBe('env');
 
     const rawOnDisk = JSON.parse(
@@ -188,7 +188,7 @@ describe('SettingsService', () => {
   });
 
   it('enforces Tier B preview -> confirm -> risk ack, reloads PathGuard & RuntimeConfig, invalidates caches, and writes intent+result audit log', async () => {
-    const f = createFixture({ SCAN_ROOT_PATHS: 'D:\\Work' });
+    const f = createFixture({ SCAN_ROOT_PATHS: join(root, 'Work') });
 
     // Expanding back to "*" carries BROAD_SCAN_ROOTS high risk
     const preview = await f.service.previewUpdate({
@@ -253,7 +253,7 @@ describe('SettingsService', () => {
   });
 
   it('blocks Tier B execute with 409 CONFLICT when MutationGate or a running job is active', async () => {
-    const f = createFixture({ SCAN_ROOT_PATHS: 'D:\\Initial' });
+    const f = createFixture({ SCAN_ROOT_PATHS: join(root, 'Initial') });
     const preview = await f.service.previewUpdate({
       runtime: { maxScanDepth: 2 },
     });
@@ -279,15 +279,19 @@ describe('SettingsService', () => {
 
   it('blocks protected plugin directories and supports export/import (including legacy flat) & reset flows', async () => {
     const f = createFixture();
+    const protectedDir =
+      process.platform === 'win32'
+        ? 'C:\\Windows\\Plugins'
+        : join(root, 'fake-windows-dir', 'plugins');
     await expect(
-      f.service.previewUpdate({
-        plugins: { directory: 'C:\\Windows\\Plugins' },
-      }),
-    ).rejects.toThrow(ValidationException);
+      f.service.previewUpdate({ plugins: { directory: protectedDir } }),
+    ).rejects.toThrow(
+      'plugins.directory cannot point inside a protected system or application directory',
+    );
 
     // Legacy flat import preview + execute
     const importPreview = await f.service.previewImport({
-      SCAN_ROOT_PATHS: 'D:\\LegacyRoot',
+      SCAN_ROOT_PATHS: join(root, 'LegacyRoot'),
       MAX_SCAN_DEPTH: 3,
       PORT: 24700,
     });
@@ -297,10 +301,12 @@ describe('SettingsService', () => {
       previewId: importPreview.previewId,
       confirm: true,
     });
-    expect(imported.document.runtime.scanRootPaths).toBe('D:\\LegacyRoot');
+    expect(imported.document.runtime.scanRootPaths).toBe(
+      join(root, 'LegacyRoot'),
+    );
     expect(imported.restartRequiredFields).toContain('port');
 
-    // Reset appearance + runtime (widens D:\LegacyRoot back to '*' -> high risk)
+    // Reset appearance + runtime (widens the legacy scan root back to '*' -> high risk)
     await f.service.updatePreferences({ appearance: { themePreset: 'slate' } });
     const resetPreview = await f.service.previewReset('all');
     expect(resetPreview.action).toBe('reset');
@@ -332,7 +338,7 @@ describe('SettingsService', () => {
   });
 
   it('normalizes comma-only scanRootPaths to "*" with BROAD_SCAN_ROOTS risk and blocks junctions targeting protected dirs', async () => {
-    const f = createFixture({ SCAN_ROOT_PATHS: 'D:\\Work' });
+    const f = createFixture({ SCAN_ROOT_PATHS: join(root, 'Work') });
     const preview = await f.service.previewUpdate({
       runtime: { scanRootPaths: ' , , ' },
     });
@@ -355,7 +361,9 @@ describe('SettingsService', () => {
       f.service.previewUpdate({
         plugins: { directory: join(junctionPath, 'nested') },
       }),
-    ).rejects.toThrow(ValidationException);
+    ).rejects.toThrow(
+      'plugins.directory cannot resolve inside a protected system or application directory',
+    );
 
     // Drive/filesystem root is blocked by findDenyReason
     await expect(

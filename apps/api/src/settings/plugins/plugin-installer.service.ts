@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { lookup as nodeDnsLookup } from 'node:dns/promises';
-import * as http from 'node:http';
 import * as https from 'node:https';
 import {
   lstat,
@@ -14,7 +13,6 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { isIP } from 'node:net';
-import type { LookupFunction } from 'node:net';
 import { basename, extname, join } from 'node:path';
 import {
   ConflictException,
@@ -235,8 +233,9 @@ export function isForbiddenIpAddress(rawIp: string): boolean {
 
 export function hasMatchingMediaMagic(
   fileName: string,
-  buffer: Buffer,
+  buffer: unknown,
 ): boolean {
+  if (typeof buffer !== 'object' || !Buffer.isBuffer(buffer)) return false;
   const ext = extname(fileName).toLowerCase();
   if (ext === '.png') {
     return (
@@ -302,7 +301,7 @@ export class PluginInstallerService {
   private readonly previews = new Map<string, IStoredPluginPreview>();
   private lookupImpl: DnsLookupFn = (host) =>
     nodeDnsLookup(host, { all: true });
-  private fetchImpl: FetchFn = fetch;
+  private fetchImplForTest?: FetchFn;
 
   constructor(
     private readonly registry: PluginRegistryService,
@@ -316,7 +315,7 @@ export class PluginInstallerService {
     fetchImpl?: FetchFn;
   }): void {
     if (adapters.lookup) this.lookupImpl = adapters.lookup;
-    if (adapters.fetchImpl) this.fetchImpl = adapters.fetchImpl;
+    if (adapters.fetchImpl) this.fetchImplForTest = adapters.fetchImpl;
   }
 
   async ensurePreinstalled(pluginsSettings: IPluginsSettings): Promise<void> {
@@ -333,7 +332,10 @@ export class PluginInstallerService {
     buffer: Buffer,
   ): Promise<IPluginInstallPreviewResponse> {
     this.assertCanModifyPlugins(pluginsSettings);
-    if (!buffer || buffer.length === 0) {
+    if (typeof buffer !== 'object' || !Buffer.isBuffer(buffer)) {
+      throw new ValidationException('Plugin file payload must be a Buffer');
+    }
+    if (buffer.length === 0) {
       throw new ValidationException('Plugin file payload cannot be empty');
     }
     if (buffer.length > MAX_PLUGIN_ARCHIVE_BYTES) {
@@ -666,7 +668,10 @@ export class PluginInstallerService {
     fileName: string,
     buffer: Buffer,
   ): Promise<{ assetPath: string; mediaType: 'image' | 'video' }> {
-    if (!buffer || buffer.length === 0) {
+    if (typeof buffer !== 'object' || !Buffer.isBuffer(buffer)) {
+      throw new ValidationException('Wallpaper media file must be a Buffer');
+    }
+    if (buffer.length === 0) {
       throw new ValidationException('Wallpaper media file is empty');
     }
     if (buffer.length > MAX_PLUGIN_ARCHIVE_BYTES) {
@@ -831,8 +836,7 @@ export class PluginInstallerService {
     trustedRegistries: readonly string[],
   ): Promise<{
     url: URL;
-    isLoopbackHttp: boolean;
-    pinnedAddress: { address: string; family: 4 | 6 } | null;
+    destination: { kind: 'loopback' } | { kind: 'https'; address: string };
   }> {
     let url: URL;
     try {
@@ -857,47 +861,38 @@ export class PluginInstallerService {
       );
     }
 
-    let pinnedAddress: { address: string; family: 4 | 6 } | null = null;
-    if (!isLoopbackHttp) {
-      const hostBare = url.hostname.replace(/^\[|\]$/g, '');
-      const literalFamily = isIP(hostBare);
-      if (literalFamily === 4 || literalFamily === 6) {
-        if (isForbiddenIpAddress(hostBare)) {
-          throw new ValidationException(
-            'Blocked plugin URL targeting private or loopback IP address',
-          );
-        }
-        pinnedAddress = { address: hostBare, family: literalFamily };
-      } else {
-        let records: ReadonlyArray<{ address: string }>;
-        try {
-          records = await this.lookupImpl(hostBare);
-        } catch (error) {
-          throw new ValidationException(
-            `Could not resolve plugin host "${hostBare}": ${(error as Error).message}`,
-          );
-        }
-        if (records.length === 0) {
-          throw new ValidationException(
-            `Host "${hostBare}" resolved no addresses`,
-          );
-        }
-        for (const rec of records) {
-          if (isForbiddenIpAddress(rec.address)) {
-            throw new ValidationException(
-              `Blocked plugin host "${hostBare}" resolving to private IP (${rec.address})`,
-            );
-          }
-        }
-        const firstAddr = records[0].address;
-        const firstFamily = isIP(firstAddr);
-        if (firstFamily === 4 || firstFamily === 6) {
-          pinnedAddress = { address: firstAddr, family: firstFamily };
-        }
+    if (isLoopbackHttp) return { url, destination: { kind: 'loopback' } };
+
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(host)) {
+      if (isForbiddenIpAddress(host)) {
+        throw new ValidationException(
+          'Blocked plugin URL targeting private or loopback IP address',
+        );
       }
+      return { url, destination: { kind: 'https', address: host } };
     }
 
-    return { url, isLoopbackHttp, pinnedAddress };
+    let records: ReadonlyArray<{ address: string }>;
+    try {
+      records = await this.lookupImpl(host);
+    } catch (error) {
+      throw new ValidationException(
+        `Could not resolve plugin host "${host}": ${(error as Error).message}`,
+      );
+    }
+    const [first] = records;
+    if (!first) {
+      throw new ValidationException(`Host "${host}" resolved no addresses`);
+    }
+    for (const { address } of records) {
+      if (!isIP(address) || isForbiddenIpAddress(address)) {
+        throw new ValidationException(
+          `Blocked plugin host "${host}" with an invalid or non-public IP address`,
+        );
+      }
+    }
+    return { url, destination: { kind: 'https', address: first.address } };
   }
 
   private async downloadRemoteBytes(
@@ -913,26 +908,22 @@ export class PluginInstallerService {
         currentUrl,
         trustedRegistries,
       );
-      const usePinnedSocket =
-        this.fetchImpl === fetch &&
-        !validated.isLoopbackHttp &&
-        validated.pinnedAddress !== null;
 
       let status: number;
       let headers: Headers;
       let pinnedBodyBuffer: Buffer | null = null;
       let fetchResponse: Response | null = null;
 
-      if (usePinnedSocket) {
-        const res = await this.performPinnedHttpGet(
+      if (validated.destination.kind === 'https' && !this.fetchImplForTest) {
+        const res = await this.performPinnedHttpsGet(
           validated.url,
-          validated.pinnedAddress!,
+          validated.destination.address,
         );
         status = res.status;
         headers = res.headers;
         pinnedBodyBuffer = res.bodyBuffer;
       } else {
-        fetchResponse = await this.fetchImpl(currentUrl, {
+        fetchResponse = await (this.fetchImplForTest ?? fetch)(validated.url, {
           method: 'GET',
           redirect: 'manual',
           signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
@@ -944,7 +935,7 @@ export class PluginInstallerService {
       const location = headers.get('location');
       if (status >= 300 && status < 400 && location) {
         try {
-          currentUrl = new URL(location, currentUrl).toString();
+          currentUrl = new URL(location, validated.url).toString();
         } catch {
           throw new ValidationException(
             'Invalid redirect URL returned while downloading plugin',
@@ -1001,25 +992,22 @@ export class PluginInstallerService {
     );
   }
 
-  private performPinnedHttpGet(
+  private performPinnedHttpsGet(
     url: URL,
-    pinned: { address: string; family: 4 | 6 },
+    address: string,
   ): Promise<{ status: number; headers: Headers; bodyBuffer: Buffer }> {
     return new Promise((resolve, reject) => {
-      const client = url.protocol === 'https:' ? https : http;
-      const customLookup: LookupFunction = (_hostname, options, cb) => {
-        if (typeof options === 'object' && options !== null && options.all) {
-          cb(null, [{ address: pinned.address, family: pinned.family }]);
-          return;
-        }
-        cb(null, pinned.address, pinned.family);
-      };
-
-      const req = client.request(
-        url,
+      const hostname = url.hostname.replace(/^\[|\]$/g, '');
+      // Connect to the checked IP without a second DNS lookup; verify the original HTTPS identity.
+      const req = https.request(
         {
+          hostname: address,
+          port: Number(url.port || '443'),
+          path: `${url.pathname}${url.search}`,
+          servername: isIP(hostname) ? '' : hostname,
+          rejectUnauthorized: true,
+          agent: false,
           method: 'GET',
-          lookup: customLookup,
           timeout: REMOTE_FETCH_TIMEOUT_MS,
           headers: {
             Host: url.host,
@@ -1205,7 +1193,12 @@ export class PluginInstallerService {
       throw new ValidationException((error as Error).message);
     }
 
-    const totalBytes = files.reduce((acc, f) => acc + f.content.length, 0);
+    const totalBytes = files.reduce((acc, { content }) => {
+      if (typeof content !== 'object' || !Buffer.isBuffer(content)) {
+        throw new ValidationException('Plugin entry content must be a Buffer');
+      }
+      return acc + content.length;
+    }, 0);
     if (totalBytes > MAX_PLUGIN_UNCOMPRESSED_BYTES) {
       throw new ValidationException(
         `Extracted plugin exceeds ${MAX_PLUGIN_UNCOMPRESSED_BYTES} bytes`,

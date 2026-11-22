@@ -101,6 +101,18 @@ function buildTestTarGz(
 }
 
 describe('safe-archive.util', () => {
+  it.each([extractZipBuffer, extractTarGzBuffer])(
+    'rejects non-Buffer input before reading the archive (%p)',
+    (extract) => {
+      const input = {
+        get length(): number {
+          throw new Error('must not inspect non-Buffer input');
+        },
+      };
+      expect(() => extract(input)).toThrow(/must be a Buffer/);
+    },
+  );
+
   it('extracts valid ZIP and TAR.GZ archives and strips single root wrapper dir', () => {
     const zip = buildTestZip([
       { name: 'cool-wallpaper-main/project.json', content: Buffer.from('{}') },

@@ -1,4 +1,6 @@
+import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import https from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateRawSync, gzipSync } from 'node:zlib';
@@ -8,6 +10,7 @@ import type { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import type { PathGuardService } from '@/core/path-guard/path-guard.service';
 import {
+  hasMatchingMediaMagic,
   isForbiddenIpAddress,
   PluginInstallerService,
 } from '@/settings/plugins/plugin-installer.service';
@@ -106,6 +109,37 @@ describe('PluginInstallerService', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  it('does not inspect byte properties on non-Buffer media', () => {
+    const input = {
+      get length(): number {
+        throw new Error('must not inspect non-Buffer input');
+      },
+    };
+    expect(hasMatchingMediaMagic('photo.png', input)).toBe(false);
+  });
+
+  it('rejects non-Buffer uploads before reading them', async () => {
+    const input = {
+      get length(): number {
+        throw new Error('must not inspect non-Buffer input');
+      },
+    } as unknown as Buffer;
+    await expect(
+      installer.previewInstallFromFile(
+        DEFAULT_PLUGINS_SETTINGS,
+        'plugin.zip',
+        input,
+      ),
+    ).rejects.toThrow(ValidationException);
+    await expect(
+      installer.saveWallpaperMedia(
+        DEFAULT_PLUGINS_SETTINGS,
+        'photo.png',
+        input,
+      ),
+    ).rejects.toThrow(ValidationException);
+  });
+
   it('blocks private, loopback, metadata, and IPv4-mapped IPv6 addresses in SSRF guard', async () => {
     expect(isForbiddenIpAddress('127.0.0.1')).toBe(true);
     expect(isForbiddenIpAddress('169.254.169.254')).toBe(true);
@@ -129,6 +163,108 @@ describe('PluginInstallerService', () => {
         'https://internal.evil.example/plugin.zip',
       ),
     ).rejects.toThrow(ValidationException);
+  });
+
+  it('uses the approved IP for HTTPS but keeps the original Host and TLS identity', async () => {
+    const request = jest.spyOn(https, 'request').mockImplementation(() => {
+      throw new Error('stop before connecting');
+    });
+    try {
+      installer.setNetworkAdaptersForTest({
+        lookup: () => Promise.resolve([{ address: '93.184.216.34' }]),
+      });
+      await expect(
+        installer.previewInstallFromUrl(
+          DEFAULT_PLUGINS_SETTINGS,
+          'https://plugins.example:8443/sample.zip?rev=1',
+        ),
+      ).rejects.toThrow('stop before connecting');
+      expect(request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostname: '93.184.216.34',
+          port: 8443,
+          path: '/sample.zip?rev=1',
+          servername: 'plugins.example',
+          rejectUnauthorized: true,
+          headers: {
+            Host: 'plugins.example:8443',
+            'User-Agent': 'PkgSteward-PluginInstaller/1.0',
+          },
+        }),
+        expect.any(Function),
+      );
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it('rejects a lookup result without a usable address before downloading', async () => {
+    const fetchMock = jest.fn(() =>
+      Promise.reject(new Error('unexpected download')),
+    );
+    installer.setNetworkAdaptersForTest({
+      lookup: () => Promise.resolve([{ address: ' 93.184.216.34 ' }]),
+      fetchImpl: fetchMock,
+    });
+    await expect(
+      installer.previewInstallFromUrl(
+        DEFAULT_PLUGINS_SETTINGS,
+        'https://plugins.example/sample.zip',
+      ),
+    ).rejects.toThrow(ValidationException);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses a newly approved HTTPS address after a redirect', async () => {
+    const lookup = jest.fn((host: string) =>
+      Promise.resolve([
+        { address: host === 'plugins.example' ? '93.184.216.34' : '8.8.8.8' },
+      ]),
+    );
+    installer.setNetworkAdaptersForTest({ lookup });
+
+    const request = jest
+      .spyOn(https, 'request')
+      .mockImplementation((...args: unknown[]) => {
+        const [options, respond] = args as [
+          https.RequestOptions,
+          (res: EventEmitter) => void,
+        ];
+        const redirect = options.servername === 'plugins.example';
+        const response = Object.assign(new EventEmitter(), {
+          statusCode: redirect ? 302 : 404,
+          headers: redirect
+            ? { location: 'https://download.example/sample.zip' }
+            : {},
+        });
+        return Object.assign(new EventEmitter(), {
+          end: () => {
+            respond(response);
+            response.emit('end');
+          },
+        }) as ReturnType<typeof https.request>;
+      });
+    try {
+      await expect(
+        installer.previewInstallFromUrl(
+          DEFAULT_PLUGINS_SETTINGS,
+          'https://plugins.example/sample.zip',
+        ),
+      ).rejects.toThrow('Remote plugin download failed with HTTP 404');
+      expect(lookup).toHaveBeenLastCalledWith('download.example');
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          hostname: '8.8.8.8',
+          servername: 'download.example',
+          path: '/sample.zip',
+        }),
+        expect.any(Function),
+      );
+    } finally {
+      request.mockRestore();
+    }
   });
 
   it('installs a Wallpaper Engine ZIP via preview -> confirm with high-risk ack and uninstalls cleanly', async () => {

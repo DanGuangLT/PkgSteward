@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import type { Dirent, Stats } from 'node:fs';
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import {
   NotFoundException,
   ValidationException,
 } from '@/common/exceptions/app.exception';
-import { isSameOrInside, toPathPlatform } from '@/common/utils/path.util';
+import {
+  isSameOrInside,
+  toComparable,
+  toPathPlatform,
+} from '@/common/utils/path.util';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import {
@@ -193,7 +197,7 @@ export class PluginRegistryService {
           continue;
         }
         const subReal = await this.fsAdapter.realpath(pluginDir);
-        if (!isSameOrInside(subReal, dirReal, this.platform)) {
+        if (!this.isInside(subReal, dirReal)) {
           invalid.push({
             directoryName: subdir.name,
             manifestPath: fallbackManifestPath,
@@ -309,7 +313,7 @@ export class PluginRegistryService {
     const pluginsDir = this.resolvePluginsDir(settings);
     let pluginsReal: string;
     try {
-      pluginsReal = await realpath(pluginsDir);
+      pluginsReal = await this.fsAdapter.realpath(pluginsDir);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT' || code === 'ENOTDIR') {
@@ -324,21 +328,21 @@ export class PluginRegistryService {
       throw new ValidationException('Plugins directory is protected');
     }
 
-    const pluginDirReal = await this.findPluginFolderRealById(
-      settings,
-      pluginId,
-      pluginsReal,
-      true,
-    );
-    const candidatePath = join(pluginDirReal, ...cleanRel.split('/'));
-    let fileStat: Pick<Stats, 'isFile' | 'isSymbolicLink'>;
+    const { discovered } = await this.discover(settings);
+    const plugin = discovered.find((item) => item.id === pluginId);
+    if (!plugin) throw new NotFoundException('Plugin', pluginId);
+    if (!plugin.enabled) {
+      throw new ValidationException(`Plugin "${pluginId}" is disabled`);
+    }
+    const pluginDirReal = this.getDiscoveredPluginDir(plugin, pluginsReal);
+    const candidatePath = this.resolveContainedPath(pluginDirReal, cleanRel);
     let candidateReal: string;
     try {
-      fileStat = await lstat(candidatePath);
+      const fileStat = await this.fsAdapter.lstat(candidatePath);
       if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
         throw new ValidationException('Plugin asset must be a regular file');
       }
-      candidateReal = await realpath(candidatePath);
+      candidateReal = await this.fsAdapter.realpath(candidatePath);
     } catch (error) {
       if (error instanceof ValidationException) throw error;
       const code = (error as NodeJS.ErrnoException).code;
@@ -347,7 +351,7 @@ export class PluginRegistryService {
       }
       throw error;
     }
-    if (!isSameOrInside(candidateReal, pluginDirReal, this.platform)) {
+    if (!this.isInside(candidateReal, pluginDirReal)) {
       throw new ValidationException(
         'Plugin asset resolves outside plugin directory',
       );
@@ -377,7 +381,7 @@ export class PluginRegistryService {
     const pluginsDir = this.resolvePluginsDir(settings);
     let pluginsReal: string;
     try {
-      pluginsReal = await realpath(pluginsDir);
+      pluginsReal = await this.fsAdapter.realpath(pluginsDir);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT' || code === 'ENOTDIR') {
@@ -385,18 +389,13 @@ export class PluginRegistryService {
       }
       throw error;
     }
-    const pluginDirReal = await this.findPluginFolderRealById(
-      settings,
-      pluginId,
-      pluginsReal,
-      true,
-    );
+    const pluginDirReal = this.getDiscoveredPluginDir(plugin, pluginsReal);
     const entryRel = sanitizeRelativeAssetRef(plugin.entry.file, 'entry.file');
-    const entryPath = join(pluginDirReal, ...entryRel.split('/'));
+    const entryPath = this.resolveContainedPath(pluginDirReal, entryRel);
     let entryStat: Pick<Stats, 'isFile' | 'isSymbolicLink' | 'size'>;
     let entryReal: string;
     try {
-      entryStat = await lstat(entryPath);
+      entryStat = await this.fsAdapter.lstat(entryPath);
       if (entryStat.isSymbolicLink() || !entryStat.isFile()) {
         throw new ValidationException(
           'Plugin HTML entry must be a regular file',
@@ -407,7 +406,7 @@ export class PluginRegistryService {
           `Plugin HTML entry exceeds ${MAX_SANDBOX_HTML_BYTES} bytes`,
         );
       }
-      entryReal = await realpath(entryPath);
+      entryReal = await this.fsAdapter.realpath(entryPath);
     } catch (error) {
       if (error instanceof ValidationException) throw error;
       const code = (error as NodeJS.ErrnoException).code;
@@ -416,11 +415,14 @@ export class PluginRegistryService {
       }
       throw error;
     }
-    if (!isSameOrInside(entryReal, pluginDirReal, this.platform)) {
+    if (!this.isInside(entryReal, pluginDirReal)) {
       throw new ValidationException('Plugin HTML entry escapes plugin folder');
     }
 
-    let html = (await readFile(entryReal, 'utf8')).replace(/^\uFEFF/, '');
+    let html = (await this.fsAdapter.readFile(entryReal)).replace(
+      /^\uFEFF/,
+      '',
+    );
     let remainingBudget = MAX_SANDBOX_TOTAL_INLINED_BYTES;
 
     const readRelativeTextAsset = async (
@@ -431,15 +433,15 @@ export class PluginRegistryService {
       }
       try {
         const clean = sanitizeRelativeAssetRef(refPath, 'asset');
-        const target = join(pluginDirReal, ...clean.split('/'));
-        const st = await lstat(target);
+        const target = this.resolveContainedPath(pluginDirReal, clean);
+        const st = await this.fsAdapter.lstat(target);
         if (st.isSymbolicLink() || !st.isFile()) return null;
         if (st.size > remainingBudget) return null;
-        const targetReal = await realpath(target);
-        if (!isSameOrInside(targetReal, pluginDirReal, this.platform)) {
+        const targetReal = await this.fsAdapter.realpath(target);
+        if (!this.isInside(targetReal, pluginDirReal)) {
           return null;
         }
-        const content = await readFile(targetReal, 'utf8');
+        const content = await this.fsAdapter.readFile(targetReal);
         remainingBudget -= Buffer.byteLength(content, 'utf8');
         return content;
       } catch {
@@ -493,59 +495,38 @@ export class PluginRegistryService {
     return { pluginId, entryFile: entryRel, html };
   }
 
-  private async findPluginFolderRealById(
-    settings: IPluginsSettings,
-    pluginId: string,
+  private getDiscoveredPluginDir(
+    plugin: IDiscoveredPlugin,
     pluginsReal: string,
-    requireEnabled = false,
-  ): Promise<string> {
-    const catalog = await this.discover(settings);
-    const match = catalog.discovered.find((item) => item.id === pluginId);
-    if (!match) {
-      throw new NotFoundException('Plugin', pluginId);
+  ): string {
+    // Discovery only returns canonical manifests from regular plugin directories.
+    const directory = dirname(plugin.manifestPath);
+    if (!this.isInside(directory, pluginsReal)) {
+      throw new NotFoundException('Plugin folder', plugin.id);
     }
-    if (requireEnabled && !match.enabled) {
-      throw new ValidationException(`Plugin "${pluginId}" is disabled`);
+    return directory;
+  }
+
+  private resolveContainedPath(
+    directory: string,
+    relativePath: string,
+  ): string {
+    const candidate = resolve(directory, ...relativePath.split('/'));
+    if (!this.isInside(candidate, directory)) {
+      throw new ValidationException(
+        'Plugin path falls outside plugin directory',
+      );
     }
-    const directCandidate = join(pluginsReal, pluginId);
-    try {
-      const st = await lstat(directCandidate);
-      if (!st.isSymbolicLink() && st.isDirectory()) {
-        const folderReal = await realpath(directCandidate);
-        if (isSameOrInside(folderReal, pluginsReal, this.platform)) {
-          const located = await this.readPluginManifestFromDir(
-            folderReal,
-            pluginId,
-          );
-          if (located && located.manifest.id === pluginId) {
-            return folderReal;
-          }
-        }
-      }
-    } catch {
-      // Fallback: search real subdirectories by manifest id
-    }
-    const entries = await readdir(pluginsReal, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const folder = join(pluginsReal, entry.name);
-      try {
-        const st = await lstat(folder);
-        if (st.isSymbolicLink() || !st.isDirectory()) continue;
-        const folderReal = await realpath(folder);
-        if (!isSameOrInside(folderReal, pluginsReal, this.platform)) continue;
-        const located = await this.readPluginManifestFromDir(
-          folderReal,
-          entry.name,
-        );
-        if (located && located.manifest.id === pluginId) {
-          return folderReal;
-        }
-      } catch {
-        continue;
-      }
-    }
-    throw new NotFoundException('Plugin folder', pluginId);
+    return candidate;
+  }
+
+  private isInside(child: string, parent: string): boolean {
+    const childComparable = toComparable(child, this.platform);
+    const parentComparable = toComparable(parent, this.platform);
+    return (
+      childComparable !== parentComparable &&
+      isSameOrInside(childComparable, parentComparable, this.platform)
+    );
   }
 
   private async readPluginManifestFromDir(
@@ -585,7 +566,7 @@ export class PluginRegistryService {
       }
 
       const manifestReal = await this.fsAdapter.realpath(manifestPath);
-      if (!isSameOrInside(manifestReal, pluginDirReal, this.platform)) {
+      if (!this.isInside(manifestReal, pluginDirReal)) {
         throw Object.assign(
           new Error('Manifest resolves outside plugin directory'),
           { manifestPath },

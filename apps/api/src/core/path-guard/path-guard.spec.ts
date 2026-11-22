@@ -485,20 +485,24 @@ describe('PathGuard.checkMany', () => {
   });
 
   it('reloads scan roots on PathGuardService without ever loosening the denylist', async () => {
+    const win = process.platform === 'win32';
+    const installDir = win ? 'D:\\TEST\\install' : '/test/install';
+    const dataDir = win ? 'D:\\TEST\\data' : '/test/data';
     const service = new PathGuardService(
-      new ConfigService({ SCAN_ROOT_PATHS: 'D:\\Projects' }),
+      new ConfigService({
+        SCAN_ROOT_PATHS: win ? 'D:\\Projects' : '/projects',
+      }),
       {
-        appInstallDir: 'D:\\TEST\\install',
+        appInstallDir: installDir,
         sourceCheckoutDir: null,
-        dataDir: 'D:\\TEST\\data',
+        dataDir,
       } as AppPathsService,
       { listFixedDrives: jest.fn() },
     );
 
-    // Update scan roots to E:\Work and verify protected dirs remain blocked
-    service.reloadScanRoots('E:\\Work');
-    expect(await service.isInsideProtectedTree('D:\\TEST\\data')).toBe(true);
-    expect(await service.isInsideProtectedTree('D:\\TEST\\install')).toBe(true);
+    service.reloadScanRoots(win ? 'E:\\Work' : '/work');
+    expect(await service.isInsideProtectedTree(dataDir)).toBe(true);
+    expect(await service.isInsideProtectedTree(installDir)).toBe(true);
   });
 });
 

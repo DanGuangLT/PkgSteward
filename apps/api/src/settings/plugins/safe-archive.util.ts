@@ -134,7 +134,10 @@ function assertSizeAndRatio(
   }
 }
 
-export function extractZipBuffer(buffer: Buffer): IExtractedArchiveFile[] {
+export function extractZipBuffer(buffer: unknown): IExtractedArchiveFile[] {
+  if (typeof buffer !== 'object' || !Buffer.isBuffer(buffer)) {
+    throw new Error('Archive input must be a Buffer');
+  }
   if (buffer.length > MAX_PLUGIN_ARCHIVE_BYTES) {
     throw new Error(
       `ZIP archive exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes limit`,
@@ -304,7 +307,10 @@ function readTarString(buf: Buffer): string {
   return buf.toString('utf8').replace(/\0.*$/g, '');
 }
 
-export function extractTarGzBuffer(buffer: Buffer): IExtractedArchiveFile[] {
+export function extractTarGzBuffer(buffer: unknown): IExtractedArchiveFile[] {
+  if (typeof buffer !== 'object' || !Buffer.isBuffer(buffer)) {
+    throw new Error('Archive input must be a Buffer');
+  }
   if (buffer.length > MAX_PLUGIN_ARCHIVE_BYTES) {
     throw new Error(
       `TGZ archive exceeds ${MAX_PLUGIN_ARCHIVE_BYTES} bytes limit`,
