@@ -15,7 +15,7 @@ next-themes and next-intl.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11. Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10, 11 or 12 (development uses pnpm 11). Target platform: Windows 11.
 
 ## Install
 
@@ -98,7 +98,7 @@ registry package entry at the chosen lock root, including other workspaces/impor
 root declarations. Supported audit locks are npm v2/v3, pnpm v9 and Yarn Classic v1. Yarn Berry/other unsupported,
 missing or mismatched locks have unavailable audit coverage, even when wanted/latest metadata is available.
 
-The desktop dependency table becomes cards on narrow screens, with no filtering, search, tabs or paging.
+The project detail page groups Overview, Files and Disk Usage under tabs, and the dependency list supports search and status/type filters (becoming cards on narrow screens, with no paging).
 Outdated/vulnerable badges indicate available findings, including partial ones; absent badges do not assert
 clean results. Advisory findings sort by severity, package name and ID. Titles are text, and only backend-validated
 advisory URLs are links. A deprecated version is a row warning and does not alone make a check incomplete.
@@ -295,10 +295,13 @@ backend crash, inspect and end leftover processes in Windows Task Manager. There
   matching scoped registries or unsupported tool/plugin configuration disable change; remove can remain available.
   Public npm registry login tokens do not by themselves disable change. Package managers, Node/app files and
   protected command bins cannot be changed here, including `@pnpm/exe` and the pnpm tool itself.
+- **Global `npm` version:** the npm tab includes a dedicated **npm version** card to switch terminal npm to a stable
+  npm 10, 11 or 12 release, restore the Node-bundled npm, or repair a broken global npm installation in-process
+  while PkgSteward itself continues using the Node-bundled npm.
 - **Review and confirm:** the dialog shows manager/version, package, location, current → exact target (or removal),
   declared bin additions/removals/replacements, high risk, and lifecycle/consumer/partial-change/crash warnings.
   Tick the machine-wide risk acknowledgement and type the exact displayed text:
-  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`.
+  `REMOVE GLOBAL <manager> <name>`, `CHANGE GLOBAL <manager> <name> TO <version>` or `REPAIR GLOBAL npm npm`.
   Cancel has initial focus. Previews expire after five minutes; changing manager/package/action/target clears
   earlier consent. Expiry or a `409` conflict requires another preview; execution is never automatic.
 - **Track and stop:** the activity panel shows status, phase, exit code, signal, stop reason, warnings and plain-text
@@ -401,21 +404,19 @@ Each translated key must have the same structure as the default catalog. A messa
 
 ```
 app/                  Routes, root layout, global styles
-app/api/              Same-origin scan, project analysis, disk usage and file operation Route Handlers
-components/ui/        shadcn/ui components (adapted to the theme tokens)
+app/api/              Same-origin Route Handlers (disk-usage, file-ops, global-packages, npm-runs, package-managers, projects, scans)
+app/design-system/    Living style guide (adding a component or variant requires adding a showcase sample)
+components/ui/        shadcn/ui components (adapted to theme tokens)
 components/layout/    Top / mobile navigation, container, nav items
 components/theme/     Theme provider, mode toggle
 components/i18n/      Language switcher
-i18n/, messages/      next-intl config and translations
-hooks/                Client scan, project analysis, disk usage, file operation and file tree state
-lib/api/              Backend client, transport, contracts and feature requests
-lib/disk-usage/       Measurement polling and presentation policy
-lib/file-ops/         Selection, confirmation, deletion flow and list helpers
-lib/projects/         Project list helpers, analysis session/policy and detail presentation
-lib/scans/            Scan polling and completion policy
-lib/theme/            Theme preset registry
+components/shared/    Shared UI helpers (disabled-reason tooltips, filters, return links)
+components/features/  Feature panels (disk-usage, file-ops, global-packages, npm-runner, package-managers, project-detail, project-list)
+i18n/, messages/      next-intl config and translations (vi, en)
+hooks/                Client hooks for scan, project analysis, disk usage (+ favorites), file ops (+ cleanup presets), runner, global packages, pins and navigation
+lib/                  Core client policy, session state machines and API helpers (api, config, disk-usage, file-ops, global-packages, npm-runner, package-managers, projects, scans, security, theme, ui)
 styles/               Theme presets and tokens
-scripts/              theme:check and i18n:check
+scripts/              theme:check, i18n:check and startup/runtime guards
 ```
 
 ## Contributing
