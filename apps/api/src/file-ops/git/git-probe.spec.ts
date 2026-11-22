@@ -123,6 +123,86 @@ describe('GitProbe executable resolution', () => {
     await expect(probe.status(root)).resolves.toEqual({ state: 'clean' });
     expect(resolveGitMock).toHaveBeenCalledTimes(2);
   });
+
+  it('deduplicates concurrent initial executable lookups', async () => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    let resolveLookup!: (value: string | null) => void;
+    resolveGitMock.mockImplementationOnce(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+
+    const probe = new GitProbe();
+    const pending = Promise.all([
+      probe.status(root),
+      probe.trackedNames(root, ['coverage']),
+      probe.status(root),
+      probe.trackedNames(root, ['.next']),
+    ]);
+    await nextTurn();
+    expect(resolveGitMock).toHaveBeenCalledTimes(1);
+
+    resolveLookup(GIT);
+    await expect(pending).resolves.toEqual([
+      { state: 'clean' },
+      { state: 'ok', tracked: [] },
+      { state: 'clean' },
+      { state: 'ok', tracked: [] },
+    ]);
+    expect(resolveGitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries lookup after concurrent calls saw missing git', async () => {
+    execaMock.mockResolvedValue({ stdout: '' });
+    let resolveLookup!: (value: string | null) => void;
+    resolveGitMock.mockImplementationOnce(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+
+    const probe = new GitProbe();
+    const firstWave = Promise.all([probe.status(root), probe.status(root)]);
+    await nextTurn();
+    expect(resolveGitMock).toHaveBeenCalledTimes(1);
+
+    resolveLookup(null);
+    await expect(firstWave).resolves.toEqual([
+      { state: 'unknown', reason: 'git_missing' },
+      { state: 'unknown', reason: 'git_missing' },
+    ]);
+
+    resolveGitMock.mockResolvedValueOnce(GIT);
+    await expect(probe.status(root)).resolves.toEqual({ state: 'clean' });
+    expect(resolveGitMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels cleanly when aborted while executable lookup is pending', async () => {
+    let resolveLookup!: (value: string | null) => void;
+    resolveGitMock.mockImplementationOnce(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveLookup = resolve;
+        }),
+    );
+
+    const controller = new AbortController();
+    const probe = new GitProbe();
+    const pending = probe.status(root, controller.signal);
+    await nextTurn();
+
+    controller.abort(new Error('TEST aborted mid lookup'));
+    resolveLookup(null);
+
+    await expect(pending).resolves.toEqual({
+      state: 'unknown',
+      reason: 'cancelled',
+    });
+    expect(execaMock).not.toHaveBeenCalled();
+  });
 });
 
 // git-lfs runs lfs.extension.<name>.clean from repository config when status cleans a file.
