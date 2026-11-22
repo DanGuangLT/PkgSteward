@@ -7,6 +7,7 @@ import { TransformInterceptor } from '@/common/interceptors/transform.intercepto
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { EnvConfigModule } from '@/core/env-config.module';
+import { RuntimeConfigModule } from '@/core/runtime-config/runtime-config.module';
 import { ThrottlerConfigModule } from '@/core/throttler-config.module';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
 import { AuditLogModule } from '@/core/audit-log/audit-log.module';
@@ -19,10 +20,12 @@ import { ProjectsModule } from '@/projects/projects.module';
 import { NpmRunnerModule } from '@/npm-runner/npm-runner.module';
 import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
 import { PackageManagersModule } from '@/package-managers/package-managers.module';
+import { SettingsModule } from '@/settings/settings.module';
 
 @Module({
   imports: [
     EnvConfigModule,
+    RuntimeConfigModule,
     ThrottlerConfigModule,
     AppPathsModule,
     AuditLogModule,
@@ -35,6 +38,7 @@ import { PackageManagersModule } from '@/package-managers/package-managers.modul
     NpmRunnerModule,
     GlobalPackagesModule,
     PackageManagersModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [

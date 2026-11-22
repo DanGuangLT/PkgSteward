@@ -1,9 +1,10 @@
 "use client"
 
 import { AlertTriangleIcon, ArrowUpIcon } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { ListPagination, useListPagination } from "@/components/shared/list-pagination"
 import { useViewState } from "@/hooks/use-navigation-continuity"
 import { makeViewStateKey } from "@/lib/ui/navigation-targets"
 import { DEPENDENCY_GROUP_FILTERS, DEPENDENCY_STATUS_FILTERS, selectDependencies, createDependencyStatusReader } from "@/lib/projects/detail-filters"
@@ -62,11 +63,17 @@ export function ProjectDependencies({ dependencies, job, resourceKey }: {
   const [view, setView, reset] = resourceKey ? persisted : [local, setLocal, () => setLocal(DEPENDENCY_DISCOVERY)] as const
   const visible = useMemo(() => selectDependencies(dependencies, job, view.query, view.sort, locale, view), [dependencies, job, view, locale])
   const readStatus = createDependencyStatusReader(job)
+  const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const depsResetKey = useMemo(() => JSON.stringify([resourceKey ?? "", view]), [resourceKey, view])
+  const depsPagination = useListPagination(visible, {
+    resetKey: depsResetKey,
+    scrollTargetRef: listAnchorRef,
+  })
   const items = useMemo(() => {
     const readBadges = createProjectDependencyBadgeReader(job)
     const readRows = createProjectDependencyRowsReader(job?.outdated.items ?? [])
-    return visible.map(dependency => ({ dependency, badges: readBadges(dependency.name), rows: readRows(dependency) }))
-  }, [visible, job])
+    return depsPagination.items.map(dependency => ({ dependency, badges: readBadges(dependency.name), rows: readRows(dependency) }))
+  }, [depsPagination.items, job])
   return (
     <section className="min-w-0 space-y-4" aria-label={t("dependencies.title")}>
       <h2 className="text-heading-md">{t("dependencies.title")}</h2>
@@ -77,7 +84,7 @@ export function ProjectDependencies({ dependencies, job, resourceKey }: {
       </DiscoveryControls>
       <p className="text-body-sm text-muted-foreground">{t("dependencies.count", { count: dependencies.length, formattedCount: format.number(dependencies.length) })}</p>
       {visible.length === 0 ? <DiscoveryEmpty total={dependencies.length} /> : (
-        <>
+        <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 space-y-4">
           <div className="hidden min-w-0 rounded-md bg-card text-card-foreground lg:block">
             <Table className="table-fixed">
               <TableCaption className="sr-only">{t("dependencies.title")}</TableCaption>
@@ -124,7 +131,14 @@ export function ProjectDependencies({ dependencies, job, resourceKey }: {
               </CardContent>
             </Card></li>
           ))}</ul>
-        </>
+          <ListPagination
+            meta={depsPagination.meta}
+            pageSize={depsPagination.pageSize}
+            showPageSizeSelector={depsPagination.showPageSizeSelector}
+            onPageChange={depsPagination.setPage}
+            onPageSizeChange={depsPagination.setPageSize}
+          />
+        </div>
       )}
     </section>
   )

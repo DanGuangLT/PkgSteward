@@ -7,6 +7,7 @@ import {
   AUDIT_LOG_FILE_NAME,
   findPackageRoot,
   findSourceCheckoutDir,
+  PLUGINS_DIR_NAME,
   resolveDataDir,
   SETTINGS_FILE_NAME,
 } from '@/core/app-paths/app-paths.util';
@@ -23,6 +24,7 @@ export class AppPathsService implements IAppPathsService {
   readonly dataDir: string;
   readonly logsDir: string;
   readonly cacheDir: string;
+  readonly pluginsDir: string;
   readonly settingsFilePath: string;
   readonly auditLogFilePath: string;
 
@@ -37,12 +39,18 @@ export class AppPathsService implements IAppPathsService {
     this.sourceCheckoutDir = findSourceCheckoutDir(this.appInstallDir);
     this.logsDir = path.join(this.dataDir, 'logs');
     this.cacheDir = path.join(this.dataDir, 'cache');
+    this.pluginsDir = path.join(this.dataDir, PLUGINS_DIR_NAME);
     this.settingsFilePath = path.join(this.dataDir, SETTINGS_FILE_NAME);
     this.auditLogFilePath = path.join(this.logsDir, AUDIT_LOG_FILE_NAME);
   }
 
   async ensureDir(subdir: AppDataSubdir): Promise<string> {
-    const dir = subdir === 'logs' ? this.logsDir : this.cacheDir;
+    const dir =
+      subdir === 'logs'
+        ? this.logsDir
+        : subdir === 'cache'
+          ? this.cacheDir
+          : this.pluginsDir;
     await mkdir(dir, { recursive: true });
     return dir;
   }

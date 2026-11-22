@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 
 import { Container } from "@/components/layout/container"
@@ -14,7 +15,12 @@ import { OverlaysSection } from "@/app/design-system/_components/overlays-sectio
 import { ShapeSection } from "@/app/design-system/_components/shape-section"
 import { TypographySection } from "@/app/design-system/_components/typography-section"
 
+export const dynamic = "force-dynamic"
+
 export async function generateMetadata(): Promise<Metadata> {
+  if (process.env.NODE_ENV === "production") {
+    notFound()
+  }
   const t = await getTranslations("designSystem")
   return { title: t("metaTitle") }
 }
@@ -35,6 +41,9 @@ const SECTIONS = [
 
 /** Style guide sống: token + component đọc thẳng từ theme đang chọn. */
 export default async function DesignSystemPage() {
+  if (process.env.NODE_ENV === "production") {
+    notFound()
+  }
   const t = await getTranslations("designSystem")
 
   return (

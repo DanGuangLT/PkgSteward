@@ -11,7 +11,14 @@
  *   3. Thêm tên hiển thị vào messages/*.json → theme.presets.<id>.
  *   4. Chạy `pnpm theme:check`.
  */
-export const themePresets = ["default"] as const
+export const themePresets = [
+  "default",
+  "ocean",
+  "emerald",
+  "slate",
+  "amber",
+  "violet",
+] as const
 
 export type ThemePreset = (typeof themePresets)[number]
 

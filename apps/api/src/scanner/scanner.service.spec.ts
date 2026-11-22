@@ -12,6 +12,7 @@ import {
 } from '@/common/exceptions/app.exception';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import type { IDriveDetector } from '@/platform/interfaces/drive-detector.interface';
 import { UnsupportedDriveDetector } from '@/platform/drives/unsupported-drive-detector';
 import { ScannerCache, makeScanCacheKey } from '@/scanner/cache/scanner-cache';
@@ -291,6 +292,7 @@ function fixture(
   const load = jest.spyOn(cache, 'load').mockResolvedValue(null);
   const save = jest.spyOn(cache, 'save').mockResolvedValue();
   const flush = jest.spyOn(cache, 'flush').mockResolvedValue();
+  const clear = jest.spyOn(cache, 'clear').mockResolvedValue();
   const detector = options.detector ?? {
     listFixedDrives: jest.fn(() => Promise.resolve([root])),
   };
@@ -330,6 +332,7 @@ function fixture(
     load,
     save,
     flush,
+    clear,
     detector,
     detect,
     guard,
@@ -1611,5 +1614,50 @@ describe('ScannerService', () => {
     await destroying;
     expect(destroyed).toBe(true);
     expect(f.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads live RuntimeConfigService values and invalidates cached scans on config change', async () => {
+    const f = fixture();
+    const runtimeConfig = new RuntimeConfigService(
+      new ConfigService({
+        SCAN_ROOT_PATHS: root,
+        MAX_SCAN_DEPTH: 1,
+        SCAN_TIMEOUT_MS: 5000,
+      }),
+    );
+    const service = new ScannerService(
+      f.config,
+      f.guard as unknown as PathGuardService,
+      f.detector,
+      f.walker,
+      f.cache,
+      { peekCompletedSize: () => null } as unknown as DiskUsageService,
+      f.gate,
+      runtimeConfig,
+    );
+    const nextRoot = pathApi(toPathPlatform()).resolve('/scan-next');
+    runtimeConfig.applyRuntimeUpdate({
+      scanRootPaths: nextRoot,
+      maxScanDepth: 3,
+      scanTimeoutMs: null,
+      npmCommandTimeoutMs: null,
+    });
+    const scan = service.startScan();
+    await tick();
+    expect(f.walks[0].deps).toBeDefined();
+    expect(jest.getTimerCount()).toBe(0);
+    await expect(service.invalidateForConfigChange()).rejects.toThrow(
+      AppException,
+    );
+    f.walks[0].task.resolve({
+      ...snapshot(),
+      roots: [nextRoot],
+    });
+    await tick();
+    expect(service.getLatest().maxDepth).toBe(3);
+    await service.invalidateForConfigChange();
+    expect(f.clear).toHaveBeenCalledTimes(1);
+    expect(() => service.getLatest()).toThrow(NotFoundException);
+    expect(scan.status).toBe('running');
   });
 });

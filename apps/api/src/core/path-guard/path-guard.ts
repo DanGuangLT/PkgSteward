@@ -198,6 +198,16 @@ export class PathGuard {
     return (await this.createProtectedTreeMatcher())(absolutePath);
   }
 
+  async findDenyReason(absolutePath: string): Promise<string | null> {
+    const { platform } = this.deps;
+    const denylist = await this.effectiveDenylist();
+    return findDenyMatch(
+      toComparable(absolutePath, platform),
+      denylist,
+      platform,
+    );
+  }
+
   private evaluate(
     absolutePath: string,
     roots: string[],

@@ -145,4 +145,17 @@ export class ScannerCache {
   async flush(): Promise<void> {
     await this.pending;
   }
+
+  clear(): Promise<void> {
+    this.pending = this.pending.then(async () => {
+      try {
+        await this.deps.fs.unlink(this.deps.cacheFilePath);
+      } catch (error) {
+        if (!record(error) || error.code !== 'ENOENT') {
+          this.deps.warn('Could not clear scan cache', error);
+        }
+      }
+    });
+    return this.pending;
+  }
 }

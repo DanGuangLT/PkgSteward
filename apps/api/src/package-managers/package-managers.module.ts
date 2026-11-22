@@ -9,6 +9,7 @@ import { MutationGateModule } from '@/core/mutation-gate/mutation-gate.module';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardModule } from '@/core/path-guard/path-guard.module';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { ScannerModule } from '@/scanner/scanner.module';
 import { ScannerService } from '@/scanner/scanner.service';
 import { DiskUsageModule } from '@/disk-usage/disk-usage.module';
@@ -61,6 +62,7 @@ import { PackageManagersController } from '@/package-managers/package-managers.c
         AuditLogService,
         ConfigService,
         ProjectRegistry,
+        { token: RuntimeConfigService, optional: true },
       ],
       useFactory: (
         fs: IPmFs,
@@ -73,6 +75,7 @@ import { PackageManagersController } from '@/package-managers/package-managers.c
         audit: AuditLogService,
         config: ConfigService,
         registry: ProjectRegistry,
+        runtimeConfig?: RuntimeConfigService,
       ): IPmRuntime =>
         createPmRuntime({
           fs,
@@ -85,6 +88,7 @@ import { PackageManagersController } from '@/package-managers/package-managers.c
           audit,
           config,
           registry,
+          runtimeConfig,
         }),
     },
   ],

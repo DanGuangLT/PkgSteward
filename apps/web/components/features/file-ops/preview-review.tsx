@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type RefObject } from "react"
+import { useMemo, useRef, useState, type RefObject } from "react"
 import {
   CheckSquareIcon,
   ChevronDownIcon,
@@ -20,6 +20,7 @@ import { CleanupItems } from "@/components/features/file-ops/cleanup-items"
 import { CleanupKpiStrip } from "@/components/features/file-ops/cleanup-kpi-strip"
 import { RiskBadge } from "@/components/features/file-ops/risk-badge"
 import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
+import { ListPagination, useListPagination } from "@/components/shared/list-pagination"
 import {
   DiscoveryControls,
   DiscoveryEmpty,
@@ -130,6 +131,17 @@ function ReviewSelection({
     () => selectCleanupTargets(preview.targets, effectiveDiscovery, locale, selected),
     [preview.targets, effectiveDiscovery, locale, selected],
   )
+  const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const cleanupResetKey = useMemo(
+    () => JSON.stringify([preview.previewId, effectiveDiscovery]),
+    [preview.previewId, effectiveDiscovery],
+  )
+  const cleanupPagination = useListPagination(visibleTargets, {
+    resetKey: cleanupResetKey,
+    scrollTargetRef: listAnchorRef,
+  })
+  const displayedTargets =
+    effectiveDiscovery.viewMode === "list" ? cleanupPagination.items : visibleTargets
   const visiblePathList = useMemo(() => visibleTargets.map((target) => target.path), [visibleTargets])
   const visiblePathSet = useMemo(() => new Set(visiblePathList), [visiblePathList])
   const eligiblePathSet = useMemo(
@@ -514,24 +526,35 @@ function ReviewSelection({
       </div>
 
       {visibleTargets.length > 0 ? (
-        <CleanupItems
-          targets={visibleTargets}
-          selected={selected}
-          disabled={busy}
-          referenceTime={previewTime(preview)}
-          maxTargetBytes={metrics.maxTargetBytes}
-          sort={effectiveDiscovery.sort}
-          sortDir={effectiveDiscovery.sortDir}
-          viewMode={effectiveDiscovery.viewMode}
-          visibleCheckState={visibleCheckState}
-          showInspectLinks={isCleanup}
-          returnTo="/cleanup"
-          onToggle={toggle}
-          onRangeSelect={handleRangeSelect}
-          onToggleAllVisible={handleToggleAllVisible}
-          onToggleGroup={handleToggleGroup}
-          onSortChange={handleSortChange}
-        />
+        <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 space-y-4">
+          <CleanupItems
+            targets={displayedTargets}
+            selected={selected}
+            disabled={busy}
+            referenceTime={previewTime(preview)}
+            maxTargetBytes={metrics.maxTargetBytes}
+            sort={effectiveDiscovery.sort}
+            sortDir={effectiveDiscovery.sortDir}
+            viewMode={effectiveDiscovery.viewMode}
+            visibleCheckState={visibleCheckState}
+            showInspectLinks={isCleanup}
+            returnTo="/cleanup"
+            onToggle={toggle}
+            onRangeSelect={handleRangeSelect}
+            onToggleAllVisible={handleToggleAllVisible}
+            onToggleGroup={handleToggleGroup}
+            onSortChange={handleSortChange}
+          />
+          {effectiveDiscovery.viewMode === "list" && (
+            <ListPagination
+              meta={cleanupPagination.meta}
+              pageSize={cleanupPagination.pageSize}
+              showPageSizeSelector={cleanupPagination.showPageSizeSelector}
+              onPageChange={cleanupPagination.setPage}
+              onPageSizeChange={cleanupPagination.setPageSize}
+            />
+          )}
+        </div>
       ) : (
         <DiscoveryEmpty total={preview.targets.length} />
       )}

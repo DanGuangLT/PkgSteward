@@ -16,6 +16,7 @@ import {
 import type { ProjectScanSnapshot } from '@/projects/interfaces/projects.types';
 import type { IProjectRegistry } from '@/projects/interfaces/projects.runtime';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
+import type { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { PmRegistry } from '@/package-managers/discovery/pm-registry';
 import {
   readPmProject,
@@ -93,6 +94,10 @@ export interface IPmRuntimeBindings {
   audit: { append(record: IAuditRecord): Promise<void> };
   registry: Pick<IProjectRegistry, 'getPackageMetadata'>;
   config: Pick<ConfigService, 'get'>;
+  runtimeConfig?: Pick<
+    RuntimeConfigService,
+    'getScanRootPathsRaw' | 'getNpmCommandTimeoutMs'
+  >;
   host?: {
     platform: NodeJS.Platform;
     execPath: string;
@@ -109,19 +114,26 @@ export function createPmRuntime(bindings: IPmRuntimeBindings): IPmRuntime {
   const platform = host.platform === 'win32' ? 'win32' : 'posix';
   const execPath = host.execPath;
   const env = Object.freeze({ ...host.env });
-  const roots = parseScanRootPaths(
-    bindings.config.get<string>('SCAN_ROOT_PATHS'),
-    platform,
-  );
-  const configured: unknown = bindings.config.get('NPM_COMMAND_TIMEOUT_MS');
-  const timeout =
-    configured === '' || configured === undefined || configured === null
-      ? undefined
-      : Number(configured);
-  const timeoutMs =
-    timeout !== undefined && Number.isFinite(timeout) && timeout > 0
+  const getRoots = () =>
+    parseScanRootPaths(
+      bindings.runtimeConfig
+        ? bindings.runtimeConfig.getScanRootPathsRaw()
+        : bindings.config.get<string>('SCAN_ROOT_PATHS'),
+      platform,
+    );
+  const getTimeoutMs = (): number | undefined => {
+    if (bindings.runtimeConfig) {
+      return bindings.runtimeConfig.getNpmCommandTimeoutMs();
+    }
+    const configured: unknown = bindings.config.get('NPM_COMMAND_TIMEOUT_MS');
+    const timeout =
+      configured === '' || configured === undefined || configured === null
+        ? undefined
+        : Number(configured);
+    return timeout !== undefined && Number.isFinite(timeout) && timeout > 0
       ? timeout
       : undefined;
+  };
   const getScanSnapshot = (): ProjectScanSnapshot | null => {
     try {
       const scan = bindings.scanner.getLatest();
@@ -133,30 +145,33 @@ export function createPmRuntime(bindings: IPmRuntimeBindings): IPmRuntime {
       throw error;
     }
   };
-  const projectDeps = (signal: AbortSignal): IPmProjectDeps => ({
-    platform,
-    fs: bindings.fs,
-    signal,
-    scanRoots: roots.kind === 'paths' ? roots.paths : ['*'],
-    assertAllowed: async (file) =>
-      (await bindings.guard.assertAllowed(file)).realPath,
-    getScanSnapshot,
-    resolveTool: (manager) =>
-      resolveRunnerTool(
-        manager,
-        {
-          platform,
-          execPath,
-          env,
-          signal,
-          projectPaths:
-            getScanSnapshot()?.projects.map((project) => project.path) ?? [],
-        },
-        bindings.fs,
-      ),
-    now: () => new Date(),
-    uuid: randomUUID,
-  });
+  const projectDeps = (signal: AbortSignal): IPmProjectDeps => {
+    const roots = getRoots();
+    return {
+      platform,
+      fs: bindings.fs,
+      signal,
+      scanRoots: roots.kind === 'paths' ? roots.paths : ['*'],
+      assertAllowed: async (file) =>
+        (await bindings.guard.assertAllowed(file)).realPath,
+      getScanSnapshot,
+      resolveTool: (manager) =>
+        resolveRunnerTool(
+          manager,
+          {
+            platform,
+            execPath,
+            env,
+            signal,
+            projectPaths:
+              getScanSnapshot()?.projects.map((project) => project.path) ?? [],
+          },
+          bindings.fs,
+        ),
+      now: () => new Date(),
+      uuid: randomUUID,
+    };
+  };
   const declaredPin = (pin: string | null) =>
     pin !== null && parsePmPin(pin).parsedPin ? pin : null;
   return {
@@ -173,7 +188,9 @@ export function createPmRuntime(bindings: IPmRuntimeBindings): IPmRuntime {
     cleanupTemp: (temp) =>
       cleanupPmTemp(temp, projectDeps(new AbortController().signal)),
     registry: new PmRegistry(bindings.registry),
-    timeoutMs,
+    get timeoutMs() {
+      return getTimeoutMs();
+    },
     gate: {
       tryEnter: () => bindings.gate.tryEnter(),
       leave: (token) => bindings.gate.leave(token),

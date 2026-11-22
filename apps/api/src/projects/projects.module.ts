@@ -8,6 +8,7 @@ import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service'
 import type { IMutationGateService } from '@/core/mutation-gate/interfaces/mutation-gate.types';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import type { IPathGuardService } from '@/core/path-guard/interfaces/path-guard.service.interface';
+import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import { DiskUsageModule } from '@/disk-usage/disk-usage.module';
 import { DiskUsageService } from '@/disk-usage/disk-usage.service';
 import { ScannerModule } from '@/scanner/scanner.module';
@@ -52,9 +53,10 @@ export const createProjectsRuntime = (
   disk: { peekCompletedSize: (path: string) => IProjectDetail['diskUsage'] },
   guard: Pick<IPathGuardService, 'assertAllowed'>,
   config: ConfigService,
+  runtimeConfig?: Pick<RuntimeConfigService, 'getNpmCommandTimeoutMs'>,
 ): IProjectsRuntime => {
   const configured = config.get<number | string>('NPM_COMMAND_TIMEOUT_MS');
-  const timeoutMs =
+  const fallbackTimeoutMs =
     configured === undefined || configured === ''
       ? undefined
       : Number(configured);
@@ -74,7 +76,11 @@ export const createProjectsRuntime = (
       assertIdle: () => gate.assertIdle(),
       peekCompletedSize: (path) => disk.peekCompletedSize(path),
       now: () => new Date(),
-      timeoutMs,
+      get timeoutMs() {
+        return runtimeConfig
+          ? runtimeConfig.getNpmCommandTimeoutMs()
+          : fallbackTimeoutMs;
+      },
     },
     registry,
     analyze,
@@ -101,6 +107,7 @@ export const createProjectsRuntime = (
         DiskUsageService,
         PathGuardService,
         ConfigService,
+        { token: RuntimeConfigService, optional: true },
       ],
     },
   ],

@@ -1,21 +1,31 @@
 import type { Messages } from "next-intl"
 
-type NavItem = {
+export type NavIconKey =
+  | "projects"
+  | "diskUsage"
+  | "cleanup"
+  | "globalPackages"
+  | "designSystem"
+
+export type NavItem = {
   href: string
   /** Key trong namespace `nav` của messages/*.json */
   labelKey: keyof Messages["nav"]
+  iconKey: NavIconKey
 }
 
 /**
  * Các mục điều hướng chính. Thêm màn hình mới (Global packages, Node.js...)
  * → thêm 1 dòng ở đây + nhãn trong messages/*.json › nav.
  */
+export const IS_DEV_ENVIRONMENT = process.env.NODE_ENV !== "production"
+
 export const navItems = [
-  { href: "/", labelKey: "projects" },
-  { href: "/disk-usage", labelKey: "diskUsage" },
-  { href: "/cleanup", labelKey: "cleanup" },
-  { href: "/global-packages", labelKey: "globalPackages" },
-  { href: "/design-system", labelKey: "designSystem" },
+  { href: "/", labelKey: "projects", iconKey: "projects" },
+  { href: "/disk-usage", labelKey: "diskUsage", iconKey: "diskUsage" },
+  { href: "/cleanup", labelKey: "cleanup", iconKey: "cleanup" },
+  { href: "/global-packages", labelKey: "globalPackages", iconKey: "globalPackages" },
+  { href: "/design-system", labelKey: "designSystem", iconKey: "designSystem" },
 ] as const satisfies readonly NavItem[]
 
 export function getNavCurrent(pathname: string, href: string): "page" | "true" | undefined {

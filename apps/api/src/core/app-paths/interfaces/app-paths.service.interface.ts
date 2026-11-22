@@ -1,4 +1,4 @@
-export type AppDataSubdir = 'logs' | 'cache';
+export type AppDataSubdir = 'logs' | 'cache' | 'plugins';
 
 export interface IAppPathsService {
   readonly appInstallDir: string;
@@ -6,6 +6,7 @@ export interface IAppPathsService {
   readonly dataDir: string;
   readonly logsDir: string;
   readonly cacheDir: string;
+  readonly pluginsDir: string;
   readonly settingsFilePath: string;
   readonly auditLogFilePath: string;
   ensureDir(subdir: AppDataSubdir): Promise<string>;

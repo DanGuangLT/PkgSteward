@@ -1,4 +1,4 @@
-import type { RiskCode, RiskLevel } from '@/core/risk/interfaces/risk.types';
+import type { RiskLevel } from '@/core/risk/interfaces/risk.types';
 
 export interface IAuditRecord {
   operation: string;
@@ -6,7 +6,7 @@ export interface IAuditRecord {
   phase: 'intent' | 'result';
   targets: string[];
   method?: string;
-  risk: { level: RiskLevel; codes: RiskCode[] };
+  risk: { level: RiskLevel; codes: string[] };
   result: string;
   errorCode?: string | null;
 }

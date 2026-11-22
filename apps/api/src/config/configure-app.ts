@@ -36,6 +36,10 @@ export const configureApp = (app: INestApplication): IConfiguredApp => {
   (app as NestExpressApplication).useBodyParser('json', {
     limit: JSON_BODY_LIMIT,
   });
+  (app as NestExpressApplication).useBodyParser('raw', {
+    limit: '25mb',
+    type: 'application/octet-stream',
+  });
 
   // The startup Swagger export reads the prefix and version immediately.
   const { globalPrefix, version } = setupAppConfig(app);
