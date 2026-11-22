@@ -24,6 +24,11 @@ describe('settings.schema', () => {
     expect(doc.appearance.themePreset).toBe('default');
     expect(doc.appearance.navigationLayout).toBe('topbar');
     expect(doc.appearance.showBreadcrumbs).toBe(false);
+    expect(doc.appearance.surfaceStyle).toBe('solid');
+    expect(doc.appearance.surfaceOpacity).toBe(100);
+    expect(doc.appearance.surfaceBlurPx).toBe(0);
+    expect(doc.appearance.surfaceSaturation).toBe(100);
+    expect(doc.appearance.surfaceSpecularBorder).toBe(false);
     expect(doc.behavior.paginationEnabled).toBe(true);
     expect(doc.behavior.showPageSizeSelector).toBe(true);
     expect(doc.behavior.scrollToTopOnPageChange).toBe(true);
@@ -298,5 +303,65 @@ describe('settings.schema', () => {
         behavior: { paginationEnabled: 'yes' },
       }),
     ).toThrow(/behavior\.paginationEnabled/);
+
+    const withLiquidGlass = parseStructuredSettingsOverrides({
+      schemaVersion: 1,
+      appearance: {
+        surfaceStyle: 'liquid-glass',
+        surfaceOpacity: 68,
+        surfaceBlurPx: 24,
+        surfaceSaturation: 185,
+        surfaceSpecularBorder: true,
+      },
+    });
+    expect(withLiquidGlass.appearance).toEqual({
+      surfaceStyle: 'liquid-glass',
+      surfaceOpacity: 68,
+      surfaceBlurPx: 24,
+      surfaceSaturation: 185,
+      surfaceSpecularBorder: true,
+    });
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceStyle: 'acrylic-bad' },
+      }),
+    ).toThrow(/appearance\.surfaceStyle/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceOpacity: 34 },
+      }),
+    ).toThrow(/appearance\.surfaceOpacity/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceOpacity: 101 },
+      }),
+    ).toThrow(/appearance\.surfaceOpacity/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceBlurPx: 41 },
+      }),
+    ).toThrow(/appearance\.surfaceBlurPx/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceSaturation: 99 },
+      }),
+    ).toThrow(/appearance\.surfaceSaturation/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { surfaceSpecularBorder: 'true' },
+      }),
+    ).toThrow(/appearance\.surfaceSpecularBorder/);
   });
 });

@@ -80,6 +80,17 @@ export type SettingsNavigationLayout = (typeof NAVIGATION_LAYOUTS)[number];
 export const REDUCED_MOTION_MODES = ['system', 'reduce', 'normal'] as const;
 export type SettingsReducedMotion = (typeof REDUCED_MOTION_MODES)[number];
 
+export const SURFACE_STYLES = [
+  'solid',
+  'frosted',
+  'liquid-glass',
+  'crystal',
+] as const;
+export type SettingsSurfaceStyle = (typeof SURFACE_STYLES)[number];
+export const SURFACE_OPACITY_RANGE = { min: 35, max: 100 } as const;
+export const SURFACE_BLUR_RANGE = { min: 0, max: 40 } as const;
+export const SURFACE_SATURATION_RANGE = { min: 100, max: 220 } as const;
+
 export const APP_LOCALES = ['vi', 'en'] as const;
 export type SettingsLocale = (typeof APP_LOCALES)[number];
 
@@ -129,6 +140,11 @@ export interface IAppearanceSettings {
   reducedMotion: SettingsReducedMotion;
   highContrastBorders: boolean;
   showBreadcrumbs: boolean;
+  surfaceStyle: SettingsSurfaceStyle;
+  surfaceOpacity: number;
+  surfaceBlurPx: number;
+  surfaceSaturation: number;
+  surfaceSpecularBorder: boolean;
 }
 
 export interface IBehaviorSettings {
@@ -224,6 +240,11 @@ export const DEFAULT_APPEARANCE_SETTINGS: Readonly<IAppearanceSettings> =
     reducedMotion: 'system',
     highContrastBorders: false,
     showBreadcrumbs: false,
+    surfaceStyle: 'solid',
+    surfaceOpacity: 100,
+    surfaceBlurPx: 0,
+    surfaceSaturation: 100,
+    surfaceSpecularBorder: false,
   });
 
 export const DEFAULT_BEHAVIOR_SETTINGS: Readonly<IBehaviorSettings> =
@@ -308,6 +329,11 @@ const APPEARANCE_KEYS = new Set([
   'reducedMotion',
   'highContrastBorders',
   'showBreadcrumbs',
+  'surfaceStyle',
+  'surfaceOpacity',
+  'surfaceBlurPx',
+  'surfaceSaturation',
+  'surfaceSpecularBorder',
 ]);
 const BEHAVIOR_KEYS = new Set([
   'locale',
@@ -383,6 +409,26 @@ const assertBoolean = (
 ): boolean => {
   if (typeof value !== 'boolean') {
     throw new Error(`${formatContext(filePath)}"${field}" must be a boolean`);
+  }
+  return value;
+};
+
+const assertIntInRange = (
+  value: unknown,
+  min: number,
+  max: number,
+  field: string,
+  filePath?: string,
+): number => {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < min ||
+    value > max
+  ) {
+    throw new Error(
+      `${formatContext(filePath)}"${field}" must be an integer between ${min} and ${max}`,
+    );
   }
   return value;
 };
@@ -759,6 +805,48 @@ const parseAppearanceSection = (
         out.showBreadcrumbs = assertBoolean(
           value,
           'appearance.showBreadcrumbs',
+          filePath,
+        );
+        break;
+      case 'surfaceStyle':
+        out.surfaceStyle = assertEnum(
+          value,
+          SURFACE_STYLES,
+          'appearance.surfaceStyle',
+          filePath,
+        );
+        break;
+      case 'surfaceOpacity':
+        out.surfaceOpacity = assertIntInRange(
+          value,
+          SURFACE_OPACITY_RANGE.min,
+          SURFACE_OPACITY_RANGE.max,
+          'appearance.surfaceOpacity',
+          filePath,
+        );
+        break;
+      case 'surfaceBlurPx':
+        out.surfaceBlurPx = assertIntInRange(
+          value,
+          SURFACE_BLUR_RANGE.min,
+          SURFACE_BLUR_RANGE.max,
+          'appearance.surfaceBlurPx',
+          filePath,
+        );
+        break;
+      case 'surfaceSaturation':
+        out.surfaceSaturation = assertIntInRange(
+          value,
+          SURFACE_SATURATION_RANGE.min,
+          SURFACE_SATURATION_RANGE.max,
+          'appearance.surfaceSaturation',
+          filePath,
+        );
+        break;
+      case 'surfaceSpecularBorder':
+        out.surfaceSpecularBorder = assertBoolean(
+          value,
+          'appearance.surfaceSpecularBorder',
           filePath,
         );
         break;
