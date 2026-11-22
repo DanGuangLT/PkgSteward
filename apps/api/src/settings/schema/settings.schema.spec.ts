@@ -29,6 +29,15 @@ describe('settings.schema', () => {
     expect(doc.appearance.surfaceBlurPx).toBe(0);
     expect(doc.appearance.surfaceSaturation).toBe(100);
     expect(doc.appearance.surfaceSpecularBorder).toBe(false);
+    expect(doc.appearance.textReadabilityMode).toBe('auto');
+    expect(doc.appearance.textColorMode).toBe('theme');
+    expect(doc.appearance.textCustomColor).toBeNull();
+    expect(doc.appearance.textShadowStrength).toBe('auto');
+    expect(doc.appearance.textShadowBlurPx).toBe(8);
+    expect(doc.appearance.textShadowOpacity).toBe(78);
+    expect(doc.appearance.textOutlineWidthPx).toBe(0);
+    expect(doc.appearance.textBoostMuted).toBe(true);
+    expect(doc.appearance.textEffectScope).toBe('wallpaper-only');
     expect(doc.behavior.paginationEnabled).toBe(true);
     expect(doc.behavior.showPageSizeSelector).toBe(true);
     expect(doc.behavior.scrollToTopOnPageChange).toBe(true);
@@ -363,5 +372,87 @@ describe('settings.schema', () => {
         appearance: { surfaceSpecularBorder: 'true' },
       }),
     ).toThrow(/appearance\.surfaceSpecularBorder/);
+
+    const withTextReadability = parseStructuredSettingsOverrides({
+      schemaVersion: 1,
+      appearance: {
+        textReadabilityMode: 'custom',
+        textColorMode: 'custom',
+        textCustomColor: '#FDE68A',
+        textShadowStrength: 'halo',
+        textShadowBlurPx: 14,
+        textShadowOpacity: 90,
+        textOutlineWidthPx: 2,
+        textBoostMuted: true,
+        textEffectScope: 'always',
+      },
+    });
+    expect(withTextReadability.appearance).toEqual({
+      textReadabilityMode: 'custom',
+      textColorMode: 'custom',
+      textCustomColor: '#fde68a',
+      textShadowStrength: 'halo',
+      textShadowBlurPx: 14,
+      textShadowOpacity: 90,
+      textOutlineWidthPx: 2,
+      textBoostMuted: true,
+      textEffectScope: 'always',
+    });
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textReadabilityMode: 'invalid-mode' },
+      }),
+    ).toThrow(/appearance\.textReadabilityMode/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textCustomColor: 'red' },
+      }),
+    ).toThrow(/appearance\.textCustomColor/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textCustomColor: '#fff' },
+      }),
+    ).toThrow(/appearance\.textCustomColor/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textCustomColor: 'javascript:1' },
+      }),
+    ).toThrow(/appearance\.textCustomColor/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textShadowBlurPx: 25 },
+      }),
+    ).toThrow(/appearance\.textShadowBlurPx/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textShadowOpacity: 101 },
+      }),
+    ).toThrow(/appearance\.textShadowOpacity/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textOutlineWidthPx: 4 },
+      }),
+    ).toThrow(/appearance\.textOutlineWidthPx/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        appearance: { textBoostMuted: 'yes' },
+      }),
+    ).toThrow(/appearance\.textBoostMuted/);
   });
 });

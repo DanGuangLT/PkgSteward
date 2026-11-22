@@ -91,6 +91,32 @@ export const SURFACE_OPACITY_RANGE = { min: 35, max: 100 } as const;
 export const SURFACE_BLUR_RANGE = { min: 0, max: 40 } as const;
 export const SURFACE_SATURATION_RANGE = { min: 100, max: 220 } as const;
 
+export const TEXT_READABILITY_MODES = ['auto', 'off', 'custom'] as const;
+export type SettingsTextReadabilityMode =
+  (typeof TEXT_READABILITY_MODES)[number];
+export const TEXT_COLOR_MODES = [
+  'theme',
+  'auto-wallpaper',
+  'light',
+  'dark',
+  'custom',
+] as const;
+export type SettingsTextColorMode = (typeof TEXT_COLOR_MODES)[number];
+export const TEXT_SHADOW_STRENGTHS = [
+  'auto',
+  'none',
+  'subtle',
+  'strong',
+  'halo',
+] as const;
+export type SettingsTextShadowStrength = (typeof TEXT_SHADOW_STRENGTHS)[number];
+export const TEXT_EFFECT_SCOPES = ['wallpaper-only', 'always'] as const;
+export type SettingsTextEffectScope = (typeof TEXT_EFFECT_SCOPES)[number];
+export const TEXT_SHADOW_BLUR_RANGE = { min: 0, max: 24 } as const;
+export const TEXT_SHADOW_OPACITY_RANGE = { min: 0, max: 100 } as const;
+export const TEXT_OUTLINE_WIDTH_RANGE = { min: 0, max: 3 } as const;
+export const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+
 export const APP_LOCALES = ['vi', 'en'] as const;
 export type SettingsLocale = (typeof APP_LOCALES)[number];
 
@@ -145,6 +171,15 @@ export interface IAppearanceSettings {
   surfaceBlurPx: number;
   surfaceSaturation: number;
   surfaceSpecularBorder: boolean;
+  textReadabilityMode: SettingsTextReadabilityMode;
+  textColorMode: SettingsTextColorMode;
+  textCustomColor: string | null;
+  textShadowStrength: SettingsTextShadowStrength;
+  textShadowBlurPx: number;
+  textShadowOpacity: number;
+  textOutlineWidthPx: number;
+  textBoostMuted: boolean;
+  textEffectScope: SettingsTextEffectScope;
 }
 
 export interface IBehaviorSettings {
@@ -245,6 +280,15 @@ export const DEFAULT_APPEARANCE_SETTINGS: Readonly<IAppearanceSettings> =
     surfaceBlurPx: 0,
     surfaceSaturation: 100,
     surfaceSpecularBorder: false,
+    textReadabilityMode: 'auto',
+    textColorMode: 'theme',
+    textCustomColor: null,
+    textShadowStrength: 'auto',
+    textShadowBlurPx: 8,
+    textShadowOpacity: 78,
+    textOutlineWidthPx: 0,
+    textBoostMuted: true,
+    textEffectScope: 'wallpaper-only',
   });
 
 export const DEFAULT_BEHAVIOR_SETTINGS: Readonly<IBehaviorSettings> =
@@ -334,6 +378,15 @@ const APPEARANCE_KEYS = new Set([
   'surfaceBlurPx',
   'surfaceSaturation',
   'surfaceSpecularBorder',
+  'textReadabilityMode',
+  'textColorMode',
+  'textCustomColor',
+  'textShadowStrength',
+  'textShadowBlurPx',
+  'textShadowOpacity',
+  'textOutlineWidthPx',
+  'textBoostMuted',
+  'textEffectScope',
 ]);
 const BEHAVIOR_KEYS = new Set([
   'locale',
@@ -431,6 +484,27 @@ const assertIntInRange = (
     );
   }
   return value;
+};
+
+const assertOptionalHexColor = (
+  value: unknown,
+  field: string,
+  filePath?: string,
+): string | null => {
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new Error(
+      `${formatContext(filePath)}"${field}" must be a #RRGGBB hex string or null`,
+    );
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  if (!HEX_COLOR_REGEX.test(trimmed)) {
+    throw new Error(
+      `${formatContext(filePath)}"${field}" must match #RRGGBB hex format`,
+    );
+  }
+  return trimmed.toLowerCase();
 };
 
 const assertTimeout = (
@@ -847,6 +921,79 @@ const parseAppearanceSection = (
         out.surfaceSpecularBorder = assertBoolean(
           value,
           'appearance.surfaceSpecularBorder',
+          filePath,
+        );
+        break;
+      case 'textReadabilityMode':
+        out.textReadabilityMode = assertEnum(
+          value,
+          TEXT_READABILITY_MODES,
+          'appearance.textReadabilityMode',
+          filePath,
+        );
+        break;
+      case 'textColorMode':
+        out.textColorMode = assertEnum(
+          value,
+          TEXT_COLOR_MODES,
+          'appearance.textColorMode',
+          filePath,
+        );
+        break;
+      case 'textCustomColor':
+        out.textCustomColor = assertOptionalHexColor(
+          value,
+          'appearance.textCustomColor',
+          filePath,
+        );
+        break;
+      case 'textShadowStrength':
+        out.textShadowStrength = assertEnum(
+          value,
+          TEXT_SHADOW_STRENGTHS,
+          'appearance.textShadowStrength',
+          filePath,
+        );
+        break;
+      case 'textShadowBlurPx':
+        out.textShadowBlurPx = assertIntInRange(
+          value,
+          TEXT_SHADOW_BLUR_RANGE.min,
+          TEXT_SHADOW_BLUR_RANGE.max,
+          'appearance.textShadowBlurPx',
+          filePath,
+        );
+        break;
+      case 'textShadowOpacity':
+        out.textShadowOpacity = assertIntInRange(
+          value,
+          TEXT_SHADOW_OPACITY_RANGE.min,
+          TEXT_SHADOW_OPACITY_RANGE.max,
+          'appearance.textShadowOpacity',
+          filePath,
+        );
+        break;
+      case 'textOutlineWidthPx':
+        out.textOutlineWidthPx = assertIntInRange(
+          value,
+          TEXT_OUTLINE_WIDTH_RANGE.min,
+          TEXT_OUTLINE_WIDTH_RANGE.max,
+          'appearance.textOutlineWidthPx',
+          filePath,
+        );
+        break;
+      case 'textBoostMuted':
+        out.textBoostMuted = assertBoolean(
+          value,
+          'appearance.textBoostMuted',
+          filePath,
+        );
+        break;
+      case 'textEffectScope':
+        out.textEffectScope = assertEnum(
+          value,
+          TEXT_EFFECT_SCOPES,
+          'appearance.textEffectScope',
           filePath,
         );
         break;
