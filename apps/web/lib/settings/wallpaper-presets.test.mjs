@@ -36,6 +36,11 @@ function makeSnapshot(overrides = {}) {
         reducedMotion: "system",
         highContrastBorders: false,
         showBreadcrumbs: true,
+        surfaceStyle: "solid",
+        surfaceOpacity: 100,
+        surfaceBlurPx: 0,
+        surfaceSaturation: 100,
+        surfaceSpecularBorder: false,
       },
       behavior: {
         locale: "vi",

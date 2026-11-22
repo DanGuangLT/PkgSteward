@@ -17,6 +17,7 @@ import {
   validateServerDraftFields,
   validateTimeoutInput,
   validateTrustedRegistriesInput,
+  validateSurfaceGlassDraft,
   validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "./settings-validation.ts"
@@ -186,4 +187,50 @@ test("normalizeDrivePath and inferScanRootMode classify '*', drive selections, a
     selectedDrives: [],
     customPaths: ["D:\\Coding\\Work"],
   })
+})
+
+test("validateSurfaceGlassDraft validates opacity, blur, and saturation integer ranges", () => {
+  assert.deepEqual(
+    validateSurfaceGlassDraft({
+      surfaceOpacity: "68",
+      surfaceBlurPx: "24",
+      surfaceSaturation: "185",
+    }),
+    {}
+  )
+
+  assert.deepEqual(
+    validateSurfaceGlassDraft({
+      surfaceOpacity: "35",
+      surfaceBlurPx: "0",
+      surfaceSaturation: "100",
+    }),
+    {}
+  )
+
+  assert.deepEqual(
+    validateSurfaceGlassDraft({
+      surfaceOpacity: "34",
+      surfaceBlurPx: "41",
+      surfaceSaturation: "221",
+    }),
+    {
+      surfaceOpacity: "SURFACE_OPACITY_RANGE",
+      surfaceBlurPx: "SURFACE_BLUR_RANGE",
+      surfaceSaturation: "SURFACE_SATURATION_RANGE",
+    }
+  )
+
+  assert.deepEqual(
+    validateSurfaceGlassDraft({
+      surfaceOpacity: "",
+      surfaceBlurPx: "12.5",
+      surfaceSaturation: "99",
+    }),
+    {
+      surfaceOpacity: "SURFACE_OPACITY_RANGE",
+      surfaceBlurPx: "SURFACE_BLUR_RANGE",
+      surfaceSaturation: "SURFACE_SATURATION_RANGE",
+    }
+  )
 })

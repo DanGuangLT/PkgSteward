@@ -1687,6 +1687,9 @@
       "WALLPAPER_DIM_RANGE": "Backdrop dim must be an integer between 0 and 85 %.",
       "WALLPAPER_SURFACE_RANGE": "Card glass opacity must be an integer between 45 and 100 %.",
       "WALLPAPER_SPEED_RANGE": "Animation speed must be an integer between 25 and 250 %.",
+      "SURFACE_OPACITY_RANGE": "Surface translucency must be an integer between 35 and 100 %.",
+      "SURFACE_BLUR_RANGE": "Glass blur radius must be an integer between 0 and 40 px.",
+      "SURFACE_SATURATION_RANGE": "Backdrop color saturation must be an integer between 100 and 220 %.",
       "PLUGIN_URL_REQUIRED": "Enter a GitHub URL, npm:package specifier, or HTTPS link first.",
       "PLUGIN_URL_TOO_LONG": "Plugin link exceeds 2048 characters.",
       "PLUGIN_NPM_SPEC": "npm specifier must match npm:package or npm:@scope/package (optional @tag).",
@@ -1877,7 +1880,34 @@
       "wallpaperSurfaceOpacityLabel": "Card glass opacity",
       "wallpaperSpeedLabel": "Animation speed",
       "wallpaperPauseHiddenLabel": "Pause wallpaper animation when window is hidden",
-      "wallpaperApplyTuningCta": "Apply wallpaper tuning"
+      "wallpaperApplyTuningCta": "Apply wallpaper tuning",
+      "surfaceSectionTitle": "Surface Translucency & Liquid Glass",
+      "surfaceSectionDescription": "Adjust component translucency, frosted blur, backdrop color saturation, and Apple Liquid Glass specular edge highlights across cards, navigation bars, and dialogs.",
+      "surfaceStyles": {
+        "solid": "Solid",
+        "frosted": "Frosted Glass",
+        "liquid-glass": "Liquid Glass",
+        "crystal": "Crystal Clear"
+      },
+      "surfaceStyleDescs": {
+        "solid": "Opaque panels with crisp classic contrast.",
+        "frosted": "Balanced translucent surface with subtle backdrop blur.",
+        "liquid-glass": "Apple-style refractive glass with rich saturation and luminous rims.",
+        "crystal": "Ultra-clear translucent panels maximizing background depth."
+      },
+      "surfacePresetSummary": "{opacity}% · {blur} px",
+      "surfaceSolidHint": "Choose Frosted Glass, Liquid Glass, or Crystal Clear above to activate translucent surfaces and live transparency tuning.",
+      "surfaceOpacityLabel": "Component surface opacity",
+      "surfaceOpacityMinLabel": "35% (More translucent)",
+      "surfaceOpacityMaxLabel": "100% (Opaque)",
+      "surfaceSolidDisabledHint": "Select a glass preset above before tuning blur, saturation, or edge highlights.",
+      "surfaceTuningTitle": "Fine-tune glass optics",
+      "surfaceBlurLabel": "Backdrop blur radius",
+      "surfaceSaturationLabel": "Backdrop color saturation",
+      "surfaceSpecularLabel": "Specular glass rim & diagonal sheen",
+      "surfaceSpecularDesc": "Render Apple Liquid Glass crisp highlight edges, inner specular reflection, and soft layered depth.",
+      "surfaceResetPresetCta": "Reset to preset",
+      "surfaceApplyTuningCta": "Apply glass tuning"
     },
     "behavior": {
       "generalTitle": "Behavior Defaults",

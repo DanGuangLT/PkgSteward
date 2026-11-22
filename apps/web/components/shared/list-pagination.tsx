@@ -157,6 +157,7 @@ export function ListPagination({
 
   return (
     <nav
+      data-slot="list-pagination"
       aria-label={ariaLabel ?? t("navLabel")}
       className={cn(
         "flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card/85 px-3.5 py-2.5 text-body-sm text-foreground backdrop-blur-xs",

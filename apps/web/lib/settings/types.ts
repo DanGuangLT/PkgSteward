@@ -9,6 +9,7 @@ export type SettingsDensity = "compact" | "comfortable" | "spacious"
 export type SettingsContentWidth = "narrow" | "standard" | "wide" | "full"
 export type SettingsNavigationLayout = "topbar" | "sidebar"
 export type SettingsReducedMotion = "system" | "reduce" | "normal"
+export type SettingsSurfaceStyle = "solid" | "frosted" | "liquid-glass" | "crystal"
 
 export type SettingsLocale = "vi" | "en"
 export type SettingsConsoleShell = "cmd" | "powershell"
@@ -49,6 +50,11 @@ export interface AppearanceSettings {
   reducedMotion: SettingsReducedMotion
   highContrastBorders: boolean
   showBreadcrumbs: boolean
+  surfaceStyle: SettingsSurfaceStyle
+  surfaceOpacity: number
+  surfaceBlurPx: number
+  surfaceSaturation: number
+  surfaceSpecularBorder: boolean
 }
 
 export interface BehaviorSettings {

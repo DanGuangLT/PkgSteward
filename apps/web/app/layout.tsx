@@ -77,13 +77,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     getTranslations("nav"),
   ])
 
-  const { attributes, fontSizePercent } = getHtmlAttributesForAppearance(initialAppearance)
+  const { attributes, fontSizePercent, cssVars } = getHtmlAttributesForAppearance(initialAppearance)
 
   return (
     <html
       lang={locale}
       {...attributes}
-      style={{ fontSize: fontSizePercent }}
+      style={{ fontSize: fontSizePercent, ...cssVars } as React.CSSProperties}
       suppressHydrationWarning
       className={cn(
         "h-full",

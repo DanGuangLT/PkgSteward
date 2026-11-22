@@ -14,6 +14,12 @@ export const WALLPAPER_BOUNDS = {
   speed: { min: 25, max: 250 },
 } as const
 
+export const SURFACE_GLASS_BOUNDS = {
+  surfaceOpacity: { min: 35, max: 100 },
+  surfaceBlurPx: { min: 0, max: 40 },
+  surfaceSaturation: { min: 100, max: 220 },
+} as const
+
 export type ScanRootValidationCode =
   | "SCAN_ROOTS_WILDCARD"
   | "SCAN_ROOTS_ABSOLUTE"
@@ -36,6 +42,11 @@ export type WallpaperValidationCode =
   | "WALLPAPER_DIM_RANGE"
   | "WALLPAPER_SURFACE_RANGE"
   | "WALLPAPER_SPEED_RANGE"
+
+export type SurfaceGlassValidationCode =
+  | "SURFACE_OPACITY_RANGE"
+  | "SURFACE_BLUR_RANGE"
+  | "SURFACE_SATURATION_RANGE"
 
 export type PluginValidationCode =
   | "PLUGIN_URL_REQUIRED"
@@ -63,6 +74,7 @@ export type AnySettingsValidationCode =
   | DepthValidationCode
   | ServerValidationCode
   | WallpaperValidationCode
+  | SurfaceGlassValidationCode
   | PluginValidationCode
   | BackupValidationCode
 
@@ -263,6 +275,53 @@ export function validateWallpaperTuningDraft(input: {
     "WALLPAPER_SPEED_RANGE"
   )
   if (speedErr) errors.speed = speedErr
+
+  return errors
+}
+
+export function validateSurfaceGlassDraft(input: {
+  surfaceOpacity: string
+  surfaceBlurPx: string
+  surfaceSaturation: string
+}): Partial<
+  Record<"surfaceOpacity" | "surfaceBlurPx" | "surfaceSaturation", SurfaceGlassValidationCode>
+> {
+  const errors: Partial<
+    Record<"surfaceOpacity" | "surfaceBlurPx" | "surfaceSaturation", SurfaceGlassValidationCode>
+  > = {}
+
+  const opacityTrimmed = input.surfaceOpacity.trim()
+  const opacityNum = Number(opacityTrimmed)
+  if (
+    opacityTrimmed === "" ||
+    !Number.isSafeInteger(opacityNum) ||
+    opacityNum < SURFACE_GLASS_BOUNDS.surfaceOpacity.min ||
+    opacityNum > SURFACE_GLASS_BOUNDS.surfaceOpacity.max
+  ) {
+    errors.surfaceOpacity = "SURFACE_OPACITY_RANGE"
+  }
+
+  const blurTrimmed = input.surfaceBlurPx.trim()
+  const blurNum = Number(blurTrimmed)
+  if (
+    blurTrimmed === "" ||
+    !Number.isSafeInteger(blurNum) ||
+    blurNum < SURFACE_GLASS_BOUNDS.surfaceBlurPx.min ||
+    blurNum > SURFACE_GLASS_BOUNDS.surfaceBlurPx.max
+  ) {
+    errors.surfaceBlurPx = "SURFACE_BLUR_RANGE"
+  }
+
+  const satTrimmed = input.surfaceSaturation.trim()
+  const satNum = Number(satTrimmed)
+  if (
+    satTrimmed === "" ||
+    !Number.isSafeInteger(satNum) ||
+    satNum < SURFACE_GLASS_BOUNDS.surfaceSaturation.min ||
+    satNum > SURFACE_GLASS_BOUNDS.surfaceSaturation.max
+  ) {
+    errors.surfaceSaturation = "SURFACE_SATURATION_RANGE"
+  }
 
   return errors
 }

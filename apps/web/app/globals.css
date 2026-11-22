@@ -72,11 +72,34 @@ html[data-width="full"] {
   --app-content-width: 100%;
 }
 
+:root {
+  --in-oklab: ;
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  :root {
+    --in-oklab: in oklab;
+  }
+}
+
 html {
   --app-content-width: 80rem;
   --app-density-pad: 1.5rem;
   --app-density-gap: 1.5rem;
   --app-line-height: 1.5;
+  --glass-rim-light: var(--background);
+  --glass-rim-dark: var(--foreground);
+  --glass-rim-top-alpha: 70%;
+  --glass-sheen-alpha: 26%;
+  --glass-shadow-alpha: 55%;
+}
+
+html.dark {
+  --glass-rim-light: var(--foreground);
+  --glass-rim-dark: var(--background);
+  --glass-rim-top-alpha: 24%;
+  --glass-sheen-alpha: 11%;
+  --glass-shadow-alpha: 75%;
 }
 html[data-density="compact"] {
   --app-density-pad: 1rem;
@@ -122,15 +145,214 @@ html[data-motion="reduce"] *::after {
   scroll-behavior: auto !important;
 }
 
-html[data-wallpaper="active"] [data-slot="card"] {
-  background-color: color-mix(in oklch, var(--card) var(--wallpaper-surface-opacity, 86%), transparent);
+/* Fallback translucency when live wallpaper runs alongside Solid surface mode (in oklab prevents neutral magenta shift) */
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) [data-slot="card"] {
+  background-color: color-mix(in oklab, var(--card) var(--wallpaper-surface-opacity, 86%), transparent);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
 
-html[data-wallpaper="active"] header,
-html[data-wallpaper="active"] aside {
-  background-color: color-mix(in oklch, var(--background) var(--wallpaper-surface-opacity, 86%), transparent);
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) header:not([data-slot="dialog-content"] *),
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) aside:not([data-slot="dialog-content"] *) {
+  background-color: color-mix(in oklab, var(--background) var(--wallpaper-surface-opacity, 86%), transparent);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
+}
+
+/* Apple Liquid Glass & Frosted surface materials across cards, navigation chrome, and floating overlays */
+html:is([data-surface-style="liquid-glass"], [data-surface-style="crystal"]):not([data-wallpaper="active"]) body {
+  background-image:
+    radial-gradient(
+      900px circle at 14% 8%,
+      color-mix(in oklab, var(--primary) 9%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      820px circle at 88% 82%,
+      color-mix(in oklab, var(--accent) 22%, transparent) 0%,
+      transparent 62%
+    );
+  background-attachment: fixed;
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+  background-color: color-mix(in oklab, var(--card) var(--app-glass-opacity, 84%), transparent);
+  -webkit-backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+  backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(header, aside):not([data-slot="dialog-content"] *) {
+  background-color: color-mix(in oklab, var(--background) var(--app-glass-chrome-opacity, 90%), transparent);
+  -webkit-backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+  backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="sheet-content"]
+  ) {
+  background-color: color-mix(in oklab, var(--popover) var(--app-glass-popover-opacity, 92%), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 1.15)) saturate(var(--app-glass-saturation, 140%));
+  backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 1.15)) saturate(var(--app-glass-saturation, 140%));
+}
+
+/* Prevent double backdrop-filter stacking on cards inside glass dialogs while keeping live preview panels reactive */
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  [data-slot="dialog-content"]
+  [data-slot="card"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(
+    [data-slot="card"],
+    [data-slot="list-pagination"],
+    [data-slot="glass-preview-panel"],
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="sheet-content"]
+  ) {
+  background-image: linear-gradient(
+    135deg var(--in-oklab),
+    color-mix(in oklab, var(--glass-rim-light) var(--glass-sheen-alpha), transparent) 0%,
+    transparent 58%
+  );
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, var(--glass-rim-light) var(--glass-rim-top-alpha), transparent),
+    inset 0 -1px 0 0 color-mix(in oklab, var(--glass-rim-dark) 10%, transparent),
+    0 8px 24px -10px color-mix(in oklab, var(--shadow-color) var(--glass-shadow-alpha), transparent);
+}
+
+html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(
+    [data-slot="card"],
+    [data-slot="list-pagination"],
+    [data-slot="glass-preview-panel"],
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-content"],
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="sheet-content"]
+  ) {
+  border-color: color-mix(in oklab, var(--glass-rim-light) 34%, var(--border));
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+    background-color: color-mix(in oklab, var(--card) 95%, transparent);
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(header, aside):not([data-slot="dialog-content"] *) {
+    background-color: color-mix(in oklab, var(--background) 95%, transparent);
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(
+      [data-slot="dialog-content"],
+      [data-slot="alert-dialog-content"],
+      [data-slot="popover-content"],
+      [data-slot="dropdown-menu-content"],
+      [data-slot="select-content"],
+      [data-slot="sheet-content"]
+    ) {
+    background-color: color-mix(in oklab, var(--popover) 95%, transparent);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"]) {
+    background-color: var(--card);
+    background-image: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(header, aside):not([data-slot="dialog-content"] *) {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(
+      [data-slot="dialog-content"],
+      [data-slot="alert-dialog-content"],
+      [data-slot="popover-content"],
+      [data-slot="dropdown-menu-content"],
+      [data-slot="select-content"],
+      [data-slot="sheet-content"]
+    ) {
+    background-color: var(--popover);
+    background-image: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Theme-aligned range slider with @supports fallback */
+.app-range-slider {
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.app-range-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@supports not (accent-color: auto) {
+  .app-range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+  .app-range-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: var(--radius-full, 9999px);
+    background: linear-gradient(
+      to right var(--in-oklab),
+      var(--primary) var(--progress, 50%),
+      var(--border) var(--progress, 50%)
+    );
+  }
+  .app-range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 16px;
+    width: 16px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+  .app-range-slider::-moz-range-track {
+    height: 6px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--border);
+  }
+  .app-range-slider::-moz-range-progress {
+    height: 6px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--primary);
+  }
+  .app-range-slider::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--primary);
+  }
 }
 
 @layer base {

@@ -2,9 +2,11 @@
 
 import {
   CheckIcon,
+  DropletsIcon,
   GlobeIcon,
   HardDriveIcon,
   ImageIcon,
+  LayersIcon,
   MonitorIcon,
   MoonIcon,
   PanelLeftIcon,
@@ -15,6 +17,7 @@ import {
   UploadIcon,
 } from "lucide-react"
 import { useRef, useState } from "react"
+import type { CSSProperties } from "react"
 import { toast } from "sonner"
 import { useTranslations } from "next-intl"
 
@@ -32,6 +35,7 @@ import {
   uploadBrowserWallpaperMedia,
 } from "@/lib/api/settings/settings-browser"
 import {
+  applyAppearanceToDocument,
   BODY_FONTS,
   CONTENT_WIDTHS,
   DENSITY_MODES,
@@ -41,10 +45,16 @@ import {
   NAV_LAYOUTS,
   RADIUS_MODES,
   REDUCED_MOTION_MODES,
+  SURFACE_BLUR_BOUNDS,
+  SURFACE_OPACITY_BOUNDS,
+  SURFACE_SATURATION_BOUNDS,
+  SURFACE_STYLE_PRESETS,
+  SURFACE_STYLES,
   THEME_MODES,
   THEME_PRESET_IDS,
 } from "@/lib/settings/appearance-prefs"
 import {
+  validateSurfaceGlassDraft,
   validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "@/lib/settings/settings-validation"
@@ -61,6 +71,7 @@ import {
   type WallpaperMediaSource,
 } from "@/lib/settings/wallpaper-presets"
 import type {
+  AppearanceSettings,
   PrimitiveConfigValue,
   SettingsContentWidth,
   SettingsDensity,
@@ -71,6 +82,7 @@ import type {
   SettingsNavigationLayout,
   SettingsRadius,
   SettingsReducedMotion,
+  SettingsSurfaceStyle,
   SettingsThemeMode,
   SettingsThemePreset,
 } from "@/lib/settings/types"
@@ -416,6 +428,412 @@ function WallpaperTuningForm({
   )
 }
 
+function rangeProgressStyle(value: number, min: number, max: number): CSSProperties {
+  const pct = max > min ? Math.round(((value - min) / (max - min)) * 100) : 0
+  return { "--progress": `${Math.min(Math.max(pct, 0), 100)}%` } as CSSProperties
+}
+
+function parseIntInBounds(raw: string, min: number, max: number, fallback: number): number {
+  const parsed = Number(raw.trim())
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) return fallback
+  return parsed
+}
+
+function SurfaceMaterialCard({
+  appearance,
+  advancedMode,
+  onPatchAppearance,
+}: {
+  appearance: AppearanceSettings
+  advancedMode: boolean
+  onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
+}) {
+  const t = useTranslations("settings.appearance")
+  const tVal = useTranslations("settings.validation")
+
+  const isSolid = appearance.surfaceStyle === "solid"
+  const [opacityDraft, setOpacityDraft] = useState(String(appearance.surfaceOpacity))
+  const [blurDraft, setBlurDraft] = useState(String(appearance.surfaceBlurPx))
+  const [saturationDraft, setSaturationDraft] = useState(String(appearance.surfaceSaturation))
+  const [specularDraft, setSpecularDraft] = useState(appearance.surfaceSpecularBorder)
+
+  const opacityNum = parseIntInBounds(
+    opacityDraft,
+    SURFACE_OPACITY_BOUNDS.min,
+    SURFACE_OPACITY_BOUNDS.max,
+    appearance.surfaceOpacity
+  )
+  const blurNum = parseIntInBounds(
+    blurDraft,
+    SURFACE_BLUR_BOUNDS.min,
+    SURFACE_BLUR_BOUNDS.max,
+    appearance.surfaceBlurPx
+  )
+  const saturationNum = parseIntInBounds(
+    saturationDraft,
+    SURFACE_SATURATION_BOUNDS.min,
+    SURFACE_SATURATION_BOUNDS.max,
+    appearance.surfaceSaturation
+  )
+
+  const glassErrors = validateSurfaceGlassDraft({
+    surfaceOpacity: opacityDraft,
+    surfaceBlurPx: blurDraft,
+    surfaceSaturation: saturationDraft,
+  })
+  const hasErrors = Object.keys(glassErrors).length > 0
+
+  const previewLiveGlass = (next: {
+    surfaceOpacity?: number
+    surfaceBlurPx?: number
+    surfaceSaturation?: number
+    surfaceSpecularBorder?: boolean
+  }) => {
+    if (typeof document === "undefined") return
+    applyAppearanceToDocument(document, {
+      ...appearance,
+      surfaceOpacity: next.surfaceOpacity ?? opacityNum,
+      surfaceBlurPx: next.surfaceBlurPx ?? blurNum,
+      surfaceSaturation: next.surfaceSaturation ?? saturationNum,
+      surfaceSpecularBorder: next.surfaceSpecularBorder ?? specularDraft,
+    })
+  }
+
+  const commitOpacityRelease = (val: number) => {
+    if (isSolid) return
+    if (val !== appearance.surfaceOpacity) {
+      onPatchAppearance({ surfaceOpacity: val })
+    }
+  }
+
+  const renderPresetIcon = (style: SettingsSurfaceStyle) => {
+    switch (style) {
+      case "solid":
+        return <LayersIcon className="size-4 shrink-0 text-primary" aria-hidden />
+      case "frosted":
+        return <SunIcon className="size-4 shrink-0 text-primary" aria-hidden />
+      case "liquid-glass":
+        return <DropletsIcon className="size-4 shrink-0 text-primary" aria-hidden />
+      case "crystal":
+        return <SparklesIcon className="size-4 shrink-0 text-primary" aria-hidden />
+    }
+  }
+
+  const handleAdvancedSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isSolid || hasErrors) return
+    onPatchAppearance({
+      surfaceOpacity: Number(opacityDraft.trim()),
+      surfaceBlurPx: Number(blurDraft.trim()),
+      surfaceSaturation: Number(saturationDraft.trim()),
+      surfaceSpecularBorder: specularDraft,
+    })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <DropletsIcon className="size-5 text-primary" aria-hidden />
+            <CardTitle>{t("surfaceSectionTitle")}</CardTitle>
+          </div>
+          <Badge variant={isSolid ? "secondary" : "success"}>
+            {t(`surfaceStyles.${appearance.surfaceStyle}`)} · {appearance.surfaceOpacity}%
+          </Badge>
+        </div>
+        <CardDescription>{t("surfaceSectionDescription")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {SURFACE_STYLES.map((style) => {
+            const preset = SURFACE_STYLE_PRESETS[style]
+            const selected = appearance.surfaceStyle === style
+            return (
+              <button
+                key={style}
+                type="button"
+                aria-pressed={selected}
+                onClick={() =>
+                  onPatchAppearance({
+                    surfaceStyle: style,
+                    ...preset,
+                  })
+                }
+                className={cn(
+                  "flex flex-col justify-between gap-2 rounded-md border p-3.5 text-left transition-colors focus-ring",
+                  selected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border bg-background hover:bg-muted/50"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {renderPresetIcon(style)}
+                    <span className="text-body-sm font-semibold text-foreground">
+                      {t(`surfaceStyles.${style}`)}
+                    </span>
+                  </div>
+                  {selected && <CheckIcon className="size-4 shrink-0 text-primary" aria-hidden />}
+                </div>
+                <p className="text-caption text-muted-foreground">
+                  {t(`surfaceStyleDescs.${style}`)}
+                </p>
+                <span className="font-mono text-caption text-muted-foreground">
+                  {t("surfacePresetSummary", {
+                    opacity: preset.surfaceOpacity,
+                    blur: preset.surfaceBlurPx,
+                  })}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {isSolid ? (
+          <p className="rounded-md border border-border bg-muted/40 p-3 text-caption text-muted-foreground">
+            {t("surfaceSolidHint")}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-md border border-border bg-background p-4">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="surface-opacity-slider">{t("surfaceOpacityLabel")}</Label>
+              <Badge variant="outline" className="font-mono tabular-nums">
+                {opacityNum} %
+              </Badge>
+            </div>
+            <input
+              id="surface-opacity-slider"
+              type="range"
+              className="app-range-slider h-2 w-full rounded-full"
+              style={rangeProgressStyle(
+                opacityNum,
+                SURFACE_OPACITY_BOUNDS.min,
+                SURFACE_OPACITY_BOUNDS.max
+              )}
+              min={SURFACE_OPACITY_BOUNDS.min}
+              max={SURFACE_OPACITY_BOUNDS.max}
+              step={1}
+              value={opacityNum}
+              onChange={(e) => {
+                const next = Number(e.target.value)
+                setOpacityDraft(String(next))
+                previewLiveGlass({ surfaceOpacity: next })
+              }}
+              onPointerUp={(e) => commitOpacityRelease(Number((e.target as HTMLInputElement).value))}
+              onTouchEnd={(e) => commitOpacityRelease(Number((e.target as HTMLInputElement).value))}
+              onKeyUp={(e) => {
+                if (
+                  e.key === "ArrowLeft" ||
+                  e.key === "ArrowRight" ||
+                  e.key === "ArrowUp" ||
+                  e.key === "ArrowDown" ||
+                  e.key === "Home" ||
+                  e.key === "End" ||
+                  e.key === "PageUp" ||
+                  e.key === "PageDown"
+                ) {
+                  commitOpacityRelease(Number((e.target as HTMLInputElement).value))
+                }
+              }}
+              onBlur={(e) => commitOpacityRelease(Number(e.target.value))}
+            />
+            <div className="flex items-center justify-between text-caption text-muted-foreground">
+              <span>{t("surfaceOpacityMinLabel")}</span>
+              <span>{t("surfaceOpacityMaxLabel")}</span>
+            </div>
+          </div>
+        )}
+
+        {advancedMode && (
+          <form
+            noValidate
+            onSubmit={handleAdvancedSubmit}
+            className={cn(
+              "flex flex-col gap-4 rounded-md border border-border bg-background p-4",
+              isSolid && "opacity-60"
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-body-sm font-semibold text-foreground">
+                {t("surfaceTuningTitle")}
+              </span>
+              {isSolid && (
+                <span className="text-caption text-muted-foreground">
+                  {t("surfaceSolidDisabledHint")}
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="surface-opacity-num">{t("surfaceOpacityLabel")}</Label>
+                <UnitNumberInput
+                  id="surface-opacity-num"
+                  type="number"
+                  min={SURFACE_OPACITY_BOUNDS.min}
+                  max={SURFACE_OPACITY_BOUNDS.max}
+                  step={1}
+                  unit="%"
+                  hint="35–100 %"
+                  disabled={isSolid}
+                  value={opacityDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    setOpacityDraft(raw)
+                    const parsed = Number(raw.trim())
+                    if (
+                      Number.isSafeInteger(parsed) &&
+                      parsed >= SURFACE_OPACITY_BOUNDS.min &&
+                      parsed <= SURFACE_OPACITY_BOUNDS.max
+                    ) {
+                      previewLiveGlass({ surfaceOpacity: parsed })
+                    }
+                  }}
+                  error={glassErrors.surfaceOpacity ? tVal(glassErrors.surfaceOpacity) : null}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="surface-blur-num">{t("surfaceBlurLabel")}</Label>
+                <UnitNumberInput
+                  id="surface-blur-num"
+                  type="number"
+                  min={SURFACE_BLUR_BOUNDS.min}
+                  max={SURFACE_BLUR_BOUNDS.max}
+                  step={1}
+                  unit="px"
+                  hint="0–40 px"
+                  disabled={isSolid}
+                  value={blurDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    setBlurDraft(raw)
+                    const parsed = Number(raw.trim())
+                    if (
+                      Number.isSafeInteger(parsed) &&
+                      parsed >= SURFACE_BLUR_BOUNDS.min &&
+                      parsed <= SURFACE_BLUR_BOUNDS.max
+                    ) {
+                      previewLiveGlass({ surfaceBlurPx: parsed })
+                    }
+                  }}
+                  error={glassErrors.surfaceBlurPx ? tVal(glassErrors.surfaceBlurPx) : null}
+                />
+                <input
+                  type="range"
+                  aria-label={t("surfaceBlurLabel")}
+                  className="app-range-slider h-2 w-full rounded-full"
+                  style={rangeProgressStyle(blurNum, SURFACE_BLUR_BOUNDS.min, SURFACE_BLUR_BOUNDS.max)}
+                  min={SURFACE_BLUR_BOUNDS.min}
+                  max={SURFACE_BLUR_BOUNDS.max}
+                  step={1}
+                  disabled={isSolid}
+                  value={blurNum}
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
+                    setBlurDraft(String(next))
+                    previewLiveGlass({ surfaceBlurPx: next })
+                  }}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="surface-saturation-num">{t("surfaceSaturationLabel")}</Label>
+                <UnitNumberInput
+                  id="surface-saturation-num"
+                  type="number"
+                  min={SURFACE_SATURATION_BOUNDS.min}
+                  max={SURFACE_SATURATION_BOUNDS.max}
+                  step={5}
+                  unit="%"
+                  hint="100–220 %"
+                  disabled={isSolid}
+                  value={saturationDraft}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    setSaturationDraft(raw)
+                    const parsed = Number(raw.trim())
+                    if (
+                      Number.isSafeInteger(parsed) &&
+                      parsed >= SURFACE_SATURATION_BOUNDS.min &&
+                      parsed <= SURFACE_SATURATION_BOUNDS.max
+                    ) {
+                      previewLiveGlass({ surfaceSaturation: parsed })
+                    }
+                  }}
+                  error={glassErrors.surfaceSaturation ? tVal(glassErrors.surfaceSaturation) : null}
+                />
+                <input
+                  type="range"
+                  aria-label={t("surfaceSaturationLabel")}
+                  className="app-range-slider h-2 w-full rounded-full"
+                  style={rangeProgressStyle(
+                    saturationNum,
+                    SURFACE_SATURATION_BOUNDS.min,
+                    SURFACE_SATURATION_BOUNDS.max
+                  )}
+                  min={SURFACE_SATURATION_BOUNDS.min}
+                  max={SURFACE_SATURATION_BOUNDS.max}
+                  step={5}
+                  disabled={isSolid}
+                  value={saturationNum}
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
+                    setSaturationDraft(String(next))
+                    previewLiveGlass({ surfaceSaturation: next })
+                  }}
+                />
+              </div>
+            </div>
+
+            <label
+              className={cn(
+                "flex items-center gap-3 rounded-md border border-border bg-card/40 p-3 select-none",
+                isSolid ? "cursor-not-allowed" : "cursor-pointer"
+              )}
+            >
+              <Checkbox
+                disabled={isSolid}
+                checked={specularDraft}
+                onCheckedChange={(val) => {
+                  const nextSpec = val === true
+                  setSpecularDraft(nextSpec)
+                  previewLiveGlass({ surfaceSpecularBorder: nextSpec })
+                }}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("surfaceSpecularLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("surfaceSpecularDesc")}
+                </span>
+              </div>
+            </label>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={isSolid}
+                onClick={() => onPatchAppearance({ ...SURFACE_STYLE_PRESETS[appearance.surfaceStyle] })}
+              >
+                <RotateCcwIcon className="size-4" aria-hidden />
+                {t("surfaceResetPresetCta")}
+              </Button>
+              <Button type="submit" size="sm" variant="secondary" disabled={isSolid || hasErrors}>
+                {t("surfaceApplyTuningCta")}
+              </Button>
+            </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function AppearanceTab() {
   const t = useTranslations("settings.appearance")
   const tPresets = useTranslations("theme.presets")
@@ -571,23 +989,28 @@ export function AppearanceTab() {
           <CardDescription>{t("previewDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="rounded-md border border-border bg-background p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-heading-md">{t("previewProjectTitle")}</h3>
-                <code className="font-mono text-caption text-muted-foreground">
-                  D:\Coding\PkgSteward\apps\web
-                </code>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="success">{t("previewCleanBadge")}</Badge>
-                <Badge variant="warning">{t("previewWarningBadge")}</Badge>
-                <Button type="button" size="sm" variant="secondary">
-                  {t("previewSecondaryCta")}
-                </Button>
-                <Button type="button" size="sm">
-                  {t("previewPrimaryCta")}
-                </Button>
+          <div className="rounded-md border border-border bg-gradient-to-br from-primary/20 via-accent/35 to-success-soft/40 p-4">
+            <div
+              data-slot="glass-preview-panel"
+              className="rounded-md border border-border bg-card p-4 text-card-foreground"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-heading-md">{t("previewProjectTitle")}</h3>
+                  <code className="font-mono text-caption text-muted-foreground">
+                    D:\Coding\PkgSteward\apps\web
+                  </code>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="success">{t("previewCleanBadge")}</Badge>
+                  <Badge variant="warning">{t("previewWarningBadge")}</Badge>
+                  <Button type="button" size="sm" variant="secondary">
+                    {t("previewSecondaryCta")}
+                  </Button>
+                  <Button type="button" size="sm">
+                    {t("previewPrimaryCta")}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -680,6 +1103,20 @@ export function AppearanceTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Surface Translucency & Apple Liquid Glass */}
+      <SurfaceMaterialCard
+        key={JSON.stringify([
+          appearance.surfaceStyle,
+          appearance.surfaceOpacity,
+          appearance.surfaceBlurPx,
+          appearance.surfaceSaturation,
+          appearance.surfaceSpecularBorder,
+        ])}
+        appearance={appearance}
+        advancedMode={behavior.advancedMode}
+        onPatchAppearance={patchAppearance}
+      />
 
       {/* Live Wallpaper Studio (Pre-installed Removable Plugin) */}
       {snapshot && (

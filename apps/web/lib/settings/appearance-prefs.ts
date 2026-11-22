@@ -10,6 +10,7 @@ import type {
   SettingsNavigationLayout,
   SettingsRadius,
   SettingsReducedMotion,
+  SettingsSurfaceStyle,
   SettingsThemeMode,
   SettingsThemePreset,
 } from "./types.ts"
@@ -45,6 +46,51 @@ export const DENSITY_MODES: readonly SettingsDensity[] = ["compact", "comfortabl
 export const CONTENT_WIDTHS: readonly SettingsContentWidth[] = ["narrow", "standard", "wide", "full"]
 export const NAV_LAYOUTS: readonly SettingsNavigationLayout[] = ["topbar", "sidebar"]
 export const REDUCED_MOTION_MODES: readonly SettingsReducedMotion[] = ["system", "reduce", "normal"]
+export const SURFACE_STYLES: readonly SettingsSurfaceStyle[] = [
+  "solid",
+  "frosted",
+  "liquid-glass",
+  "crystal",
+]
+
+export const SURFACE_OPACITY_BOUNDS = { min: 35, max: 100 } as const
+export const SURFACE_BLUR_BOUNDS = { min: 0, max: 40 } as const
+export const SURFACE_SATURATION_BOUNDS = { min: 100, max: 220 } as const
+
+export const SURFACE_STYLE_PRESETS: Readonly<
+  Record<
+    SettingsSurfaceStyle,
+    Pick<
+      AppearanceSettings,
+      "surfaceOpacity" | "surfaceBlurPx" | "surfaceSaturation" | "surfaceSpecularBorder"
+    >
+  >
+> = {
+  solid: {
+    surfaceOpacity: 100,
+    surfaceBlurPx: 0,
+    surfaceSaturation: 100,
+    surfaceSpecularBorder: false,
+  },
+  frosted: {
+    surfaceOpacity: 84,
+    surfaceBlurPx: 14,
+    surfaceSaturation: 140,
+    surfaceSpecularBorder: false,
+  },
+  "liquid-glass": {
+    surfaceOpacity: 68,
+    surfaceBlurPx: 24,
+    surfaceSaturation: 185,
+    surfaceSpecularBorder: true,
+  },
+  crystal: {
+    surfaceOpacity: 52,
+    surfaceBlurPx: 28,
+    surfaceSaturation: 200,
+    surfaceSpecularBorder: true,
+  },
+}
 
 export const DEFAULT_APPEARANCE: Readonly<AppearanceSettings> = {
   themeMode: "system",
@@ -61,6 +107,11 @@ export const DEFAULT_APPEARANCE: Readonly<AppearanceSettings> = {
   reducedMotion: "system",
   highContrastBorders: false,
   showBreadcrumbs: false,
+  surfaceStyle: "solid",
+  surfaceOpacity: 100,
+  surfaceBlurPx: 0,
+  surfaceSaturation: 100,
+  surfaceSpecularBorder: false,
 }
 
 export const DEFAULT_BEHAVIOR: Readonly<BehaviorSettings> = {
@@ -81,12 +132,20 @@ function pickEnum<T extends string | number>(value: unknown, allowed: readonly T
   return allowed.includes(value as T) ? (value as T) : fallback
 }
 
+function pickIntInRange(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max
+    ? value
+    : fallback
+}
+
 export function sanitizeAppearance(
   raw: Partial<AppearanceSettings> | Record<string, unknown> | null | undefined,
   fallbackPreset?: string | null
 ): AppearanceSettings {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}
   const presetFallback = pickEnum(fallbackPreset, THEME_PRESET_IDS, DEFAULT_APPEARANCE.themePreset)
+  const surfaceStyle = pickEnum(input.surfaceStyle, SURFACE_STYLES, DEFAULT_APPEARANCE.surfaceStyle)
+  const surfacePreset = SURFACE_STYLE_PRESETS[surfaceStyle]
 
   return {
     themeMode: pickEnum(input.themeMode, THEME_MODES, DEFAULT_APPEARANCE.themeMode),
@@ -108,6 +167,29 @@ export function sanitizeAppearance(
         : DEFAULT_APPEARANCE.highContrastBorders,
     showBreadcrumbs:
       typeof input.showBreadcrumbs === "boolean" ? input.showBreadcrumbs : DEFAULT_APPEARANCE.showBreadcrumbs,
+    surfaceStyle,
+    surfaceOpacity: pickIntInRange(
+      input.surfaceOpacity,
+      SURFACE_OPACITY_BOUNDS.min,
+      SURFACE_OPACITY_BOUNDS.max,
+      surfacePreset.surfaceOpacity
+    ),
+    surfaceBlurPx: pickIntInRange(
+      input.surfaceBlurPx,
+      SURFACE_BLUR_BOUNDS.min,
+      SURFACE_BLUR_BOUNDS.max,
+      surfacePreset.surfaceBlurPx
+    ),
+    surfaceSaturation: pickIntInRange(
+      input.surfaceSaturation,
+      SURFACE_SATURATION_BOUNDS.min,
+      SURFACE_SATURATION_BOUNDS.max,
+      surfacePreset.surfaceSaturation
+    ),
+    surfaceSpecularBorder:
+      typeof input.surfaceSpecularBorder === "boolean"
+        ? input.surfaceSpecularBorder
+        : surfacePreset.surfaceSpecularBorder,
   }
 }
 
@@ -127,6 +209,11 @@ export function serializeAppearanceCookie(prefs: AppearanceSettings): string {
     reducedMotion: prefs.reducedMotion,
     highContrastBorders: prefs.highContrastBorders,
     showBreadcrumbs: prefs.showBreadcrumbs,
+    surfaceStyle: prefs.surfaceStyle,
+    surfaceOpacity: prefs.surfaceOpacity,
+    surfaceBlurPx: prefs.surfaceBlurPx,
+    surfaceSaturation: prefs.surfaceSaturation,
+    surfaceSpecularBorder: prefs.surfaceSpecularBorder,
   })
 }
 
@@ -150,9 +237,40 @@ export function appearanceEquals(a: AppearanceSettings, b: AppearanceSettings): 
   return serializeAppearanceCookie(a) === serializeAppearanceCookie(b)
 }
 
+export function computeSurfaceGlassCssVars(
+  prefs: Pick<AppearanceSettings, "surfaceOpacity" | "surfaceBlurPx" | "surfaceSaturation">
+): Record<string, string> {
+  const opacity = pickIntInRange(
+    prefs.surfaceOpacity,
+    SURFACE_OPACITY_BOUNDS.min,
+    SURFACE_OPACITY_BOUNDS.max,
+    DEFAULT_APPEARANCE.surfaceOpacity
+  )
+  const blurPx = pickIntInRange(
+    prefs.surfaceBlurPx,
+    SURFACE_BLUR_BOUNDS.min,
+    SURFACE_BLUR_BOUNDS.max,
+    DEFAULT_APPEARANCE.surfaceBlurPx
+  )
+  const saturation = pickIntInRange(
+    prefs.surfaceSaturation,
+    SURFACE_SATURATION_BOUNDS.min,
+    SURFACE_SATURATION_BOUNDS.max,
+    DEFAULT_APPEARANCE.surfaceSaturation
+  )
+  return {
+    "--app-glass-opacity": `${opacity}%`,
+    "--app-glass-chrome-opacity": `${Math.min(opacity + 6, 96)}%`,
+    "--app-glass-popover-opacity": `${Math.min(opacity + 10, 96)}%`,
+    "--app-glass-blur": `${blurPx}px`,
+    "--app-glass-saturation": `${saturation}%`,
+  }
+}
+
 export function getHtmlAttributesForAppearance(prefs: AppearanceSettings): {
   attributes: Record<string, string>
   fontSizePercent: string
+  cssVars: Record<string, string>
 } {
   return {
     attributes: {
@@ -165,16 +283,23 @@ export function getHtmlAttributesForAppearance(prefs: AppearanceSettings): {
       "data-width": prefs.contentWidth,
       "data-motion": prefs.reducedMotion,
       "data-contrast": prefs.highContrastBorders ? "high" : "normal",
+      "data-surface-style": prefs.surfaceStyle,
+      "data-surface-specular":
+        prefs.surfaceStyle !== "solid" && prefs.surfaceSpecularBorder ? "on" : "off",
     },
     fontSizePercent: `${prefs.fontScale}%`,
+    cssVars: computeSurfaceGlassCssVars(prefs),
   }
 }
 
 export function applyAppearanceToDocument(doc: Document, prefs: AppearanceSettings): void {
   const root = doc.documentElement
-  const { attributes, fontSizePercent } = getHtmlAttributesForAppearance(prefs)
+  const { attributes, fontSizePercent, cssVars } = getHtmlAttributesForAppearance(prefs)
   for (const [attr, value] of Object.entries(attributes)) {
     root.setAttribute(attr, value)
   }
   root.style.fontSize = fontSizePercent
+  for (const [cssVar, value] of Object.entries(cssVars)) {
+    root.style.setProperty(cssVar, value)
+  }
 }

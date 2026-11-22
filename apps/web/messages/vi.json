@@ -1697,6 +1697,9 @@
       "WALLPAPER_DIM_RANGE": "Độ phủ tối phải là số nguyên từ 0 đến 85 %.",
       "WALLPAPER_SURFACE_RANGE": "Độ đục kính thẻ phải là số nguyên từ 45 đến 100 %.",
       "WALLPAPER_SPEED_RANGE": "Tốc độ chuyển động phải là số nguyên từ 25 đến 250 %.",
+      "SURFACE_OPACITY_RANGE": "Độ trong suốt nền thành phần phải là số nguyên từ 35 đến 100 %.",
+      "SURFACE_BLUR_RANGE": "Độ mờ kính (backdrop blur) phải là số nguyên từ 0 đến 40 px.",
+      "SURFACE_SATURATION_RANGE": "Độ rực màu sau kính phải là số nguyên từ 100 đến 220 %.",
       "PLUGIN_URL_REQUIRED": "Hãy nhập liên kết GitHub, gói npm:tên-gói hoặc URL HTTPS trước.",
       "PLUGIN_URL_TOO_LONG": "Liên kết plugin vượt quá 2048 ký tự.",
       "PLUGIN_NPM_SPEC": "Gói npm phải có dạng npm:tên-gói hoặc npm:@scope/tên-gói (có thể kèm @nhãn).",
@@ -1887,7 +1890,34 @@
       "wallpaperSurfaceOpacityLabel": "Độ đục kính thẻ",
       "wallpaperSpeedLabel": "Tốc độ chuyển động",
       "wallpaperPauseHiddenLabel": "Tạm dừng chuyển động nền khi ẩn cửa sổ",
-      "wallpaperApplyTuningCta": "Áp dụng tinh chỉnh hình nền"
+      "wallpaperApplyTuningCta": "Áp dụng tinh chỉnh hình nền",
+      "surfaceSectionTitle": "Độ trong suốt & Kính lỏng (Liquid Glass)",
+      "surfaceSectionDescription": "Chỉnh động độ trong suốt, độ mờ hậu cảnh, độ rực màu và viền phản chiếu kiểu Apple Liquid Glass cho các thẻ, thanh điều hướng và hộp thoại.",
+      "surfaceStyles": {
+        "solid": "Đặc chuẩn (Solid)",
+        "frosted": "Kính mờ nhẹ",
+        "liquid-glass": "Kính lỏng (Liquid Glass)",
+        "crystal": "Trong suốt cao"
+      },
+      "surfaceStyleDescs": {
+        "solid": "Bề mặt đặc truyền thống với độ tương phản tối đa.",
+        "frosted": "Kính mờ cân bằng, dễ đọc trên mọi nền.",
+        "liquid-glass": "Hiệu ứng khúc xạ kính kiểu Apple với độ rực màu và viền sáng nổi bật.",
+        "crystal": "Độ trong suốt sâu để nhìn rõ hình nền phía sau."
+      },
+      "surfacePresetSummary": "{opacity}% · {blur} px",
+      "surfaceSolidHint": "Chọn Kính mờ nhẹ, Kính lỏng (Liquid Glass) hoặc Trong suốt cao ở trên để bật hiệu ứng trong suốt và thanh kéo chỉnh nhanh.",
+      "surfaceOpacityLabel": "Độ đục bề mặt thành phần",
+      "surfaceOpacityMinLabel": "35% (Trong nhiều)",
+      "surfaceOpacityMaxLabel": "100% (Đặc hoàn toàn)",
+      "surfaceSolidDisabledHint": "Hãy chọn một kiểu kính phía trên trước khi tinh chỉnh độ mờ, độ rực hoặc viền phản chiếu.",
+      "surfaceTuningTitle": "Tinh chỉnh quang học kính (Nâng cao)",
+      "surfaceBlurLabel": "Độ mờ kính (Blur)",
+      "surfaceSaturationLabel": "Độ rực màu hậu cảnh",
+      "surfaceSpecularLabel": "Viền phản chiếu & ánh sáng kính lỏng",
+      "surfaceSpecularDesc": "Hiển thị đường viền phản quang sắc nét, ánh lướt chéo bề mặt và bóng chiều sâu kiểu Apple Liquid Glass.",
+      "surfaceResetPresetCta": "Theo mặc định kiểu kính",
+      "surfaceApplyTuningCta": "Áp dụng tinh chỉnh kính"
     },
     "behavior": {
       "generalTitle": "Tùy chọn hành vi mặc định",
