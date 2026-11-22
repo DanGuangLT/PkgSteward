@@ -47,6 +47,7 @@ export interface IPluginSettingFieldSchema {
   label: string;
   type: 'string' | 'number' | 'boolean';
   defaultValue: string | number | boolean | null;
+  unit?: string;
   description?: string;
 }
 

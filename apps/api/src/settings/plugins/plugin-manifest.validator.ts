@@ -30,6 +30,7 @@ const FIELD_KEYS = new Set([
   'label',
   'type',
   'defaultValue',
+  'unit',
   'description',
 ]);
 const ENTRY_KINDS = new Set<PluginEntryKind>([
@@ -221,6 +222,7 @@ const validateSettingField = (
       throw new Error(`"${scope}.defaultValue" must match type "${raw.type}"`);
     }
   }
+  const unit = optionalText(raw.unit, `${scope}.unit`, 16);
   const description = optionalText(
     raw.description,
     `${scope}.description`,
@@ -231,6 +233,7 @@ const validateSettingField = (
     label: raw.label.trim(),
     type: raw.type,
     defaultValue,
+    ...(unit ? { unit } : {}),
     ...(description ? { description } : {}),
   };
 };

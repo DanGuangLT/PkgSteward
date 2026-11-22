@@ -28,6 +28,13 @@ describe('validatePluginManifest', () => {
         type: 'boolean',
         defaultValue: false,
       },
+      {
+        key: 'blurPx',
+        label: 'Backdrop blur',
+        type: 'number',
+        defaultValue: 8,
+        unit: 'px',
+      },
     ],
   };
 
@@ -35,10 +42,25 @@ describe('validatePluginManifest', () => {
     expect(validatePluginManifest(valid)).toEqual(valid);
   });
 
-  it('rejects unsupported apiVersion, prototype keys, javascript URLs, and unknown keys', () => {
+  it('rejects unsupported apiVersion, prototype keys, javascript URLs, overly long unit, and unknown keys', () => {
     expect(() => validatePluginManifest({ ...valid, apiVersion: 2 })).toThrow(
       /apiVersion/,
     );
+
+    expect(() =>
+      validatePluginManifest({
+        ...valid,
+        settingsSchema: [
+          {
+            key: 'interval',
+            label: 'Interval',
+            type: 'number',
+            defaultValue: 10,
+            unit: 'x'.repeat(17),
+          },
+        ],
+      }),
+    ).toThrow(/unit.*exceeds 16/);
 
     expect(() =>
       validatePluginManifest({ ...valid, entry: './malicious.js' }),

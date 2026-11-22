@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import {
   applyOverridesToDocument,
   createDefaultSettingsDocument,
+  MAX_TIMEOUT_MS,
   migrateLegacyFlatSettings,
   parseStructuredSettingsDocument,
   parseStructuredSettingsOverrides,
@@ -21,6 +22,7 @@ describe('settings.schema', () => {
     });
     expect(doc.appearance.themePreset).toBe('default');
     expect(doc.appearance.navigationLayout).toBe('topbar');
+    expect(doc.appearance.showBreadcrumbs).toBe(false);
     expect(doc.behavior.advancedMode).toBe(false);
     expect(doc.plugins.enabled).toBe(true);
     expect(doc.plugins.allowLocalPlugins).toBe(true);
@@ -220,7 +222,7 @@ describe('settings.schema', () => {
     expect(full.runtime.scanRootPaths).toBe('D:\\Projects');
   });
 
-  it('normalizes comma-only scanRootPaths to "*" and formats invalid trustedRegistries URL errors clearly', () => {
+  it('normalizes comma-only scanRootPaths to "*" and enforces timeout / traversal limits', () => {
     const parsed = parseStructuredSettingsOverrides(
       {
         schemaVersion: 1,
@@ -229,6 +231,23 @@ describe('settings.schema', () => {
       { platform: 'win32' },
     );
     expect(parsed.runtime?.scanRootPaths).toBe('*');
+
+    expect(() =>
+      parseStructuredSettingsOverrides({
+        schemaVersion: 1,
+        runtime: { scanTimeoutMs: MAX_TIMEOUT_MS + 1 },
+      }),
+    ).toThrow(/between 1000 and/);
+
+    expect(() =>
+      parseStructuredSettingsOverrides(
+        {
+          schemaVersion: 1,
+          plugins: { directory: 'D:\\Plugins\\..\\Escape' },
+        },
+        { platform: 'win32' },
+      ),
+    ).toThrow(/path traversal/);
 
     expect(() =>
       parseStructuredSettingsOverrides({

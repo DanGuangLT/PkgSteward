@@ -12,6 +12,7 @@ export const MAX_SETTINGS_PLUGIN_CONFIG_KEYS = 50;
 export const MAX_SETTINGS_TRUSTED_REGISTRIES = 20;
 export const MAX_SETTINGS_DESKTOP_KEYS = 50;
 export const MAX_SCAN_DEPTH_LIMIT = 20;
+export const MAX_TIMEOUT_MS = 86_400_000;
 
 export const PLUGIN_ID_REGEX = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export const SERVER_PREFIX_OR_VERSION_REGEX = /^[a-zA-Z0-9_-]{1,32}$/;
@@ -218,7 +219,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: Readonly<IAppearanceSettings> =
     sidebarCollapsed: false,
     reducedMotion: 'system',
     highContrastBorders: false,
-    showBreadcrumbs: true,
+    showBreadcrumbs: false,
   });
 
 export const DEFAULT_BEHAVIOR_SETTINGS: Readonly<IBehaviorSettings> =
@@ -387,10 +388,11 @@ const assertTimeout = (
   if (
     typeof value !== 'number' ||
     !Number.isSafeInteger(value) ||
-    value < 1000
+    value < 1000 ||
+    value > MAX_TIMEOUT_MS
   ) {
     throw new Error(
-      `${formatContext(filePath)}"${field}" must be null (no time limit) or an integer >= 1000`,
+      `${formatContext(filePath)}"${field}" must be null (no time limit) or an integer between 1000 and ${MAX_TIMEOUT_MS}`,
     );
   }
   return value;
@@ -857,6 +859,11 @@ const parsePluginsSection = (
         out.directory = null;
       } else if (typeof value === 'string') {
         const trimmed = value.trim();
+        if (trimmed.includes('\0') || trimmed.split(/[\\/]+/).includes('..')) {
+          throw new Error(
+            `${formatContext(filePath)}"plugins.directory" must not contain path traversal segments`,
+          );
+        }
         if (!isFullyQualifiedPath(trimmed, platform)) {
           throw new Error(
             `${formatContext(filePath)}"plugins.directory" must be an absolute path`,
