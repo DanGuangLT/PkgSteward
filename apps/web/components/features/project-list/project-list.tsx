@@ -8,6 +8,7 @@ import { ProjectItems } from "@/components/features/project-list/project-items"
 import { ProjectListKpiStrip } from "@/components/features/project-list/project-list-kpi-strip"
 import { ScanControls } from "@/components/features/project-list/scan-controls"
 import { ListDiscoveryFilter } from "@/components/shared/list-discovery"
+import { ListPagination, useListPagination } from "@/components/shared/list-pagination"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -216,6 +217,15 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
     () => filterProjectsByQuickView(baseProjects, quickView, now),
     [baseProjects, quickView, now],
   )
+  const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const projectsResetKey = useMemo(
+    () => JSON.stringify([query, sort, filters, quickView]),
+    [query, sort, filters, quickView],
+  )
+  const projectsPagination = useListPagination(projects, {
+    resetKey: projectsResetKey,
+    scrollTargetRef: listAnchorRef,
+  })
   const counts = useMemo(() => countProjectFilters(snapshot?.projects ?? [], now), [snapshot?.projects, now])
   const hasActiveFilters = filters.managers.length > 0
     || filters.nodeModules.length > 0
@@ -436,11 +446,20 @@ export function ProjectList({ initial, activeScan, referenceTime }: ProjectListP
               <Button type="button" variant="secondary" onClick={resetAll}>{t("search.clearAll")}</Button>
             </ProjectEmpty>
           ) : (
-            <ProjectItems
-              projects={projects}
-              referenceTime={referenceTime}
-              maxNodeModulesBytes={metrics?.maxNodeModulesBytes ?? 0}
-            />
+            <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 space-y-4">
+              <ProjectItems
+                projects={projectsPagination.items}
+                referenceTime={referenceTime}
+                maxNodeModulesBytes={metrics?.maxNodeModulesBytes ?? 0}
+              />
+              <ListPagination
+                meta={projectsPagination.meta}
+                pageSize={projectsPagination.pageSize}
+                showPageSizeSelector={projectsPagination.showPageSizeSelector}
+                onPageChange={projectsPagination.setPage}
+                onPageSizeChange={projectsPagination.setPageSize}
+              />
+            </div>
           )}
         </>
       )}

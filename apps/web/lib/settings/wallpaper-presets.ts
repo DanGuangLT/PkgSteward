@@ -1,4 +1,4 @@
-import type { PrimitiveConfigValue, SettingsSnapshot } from "@/lib/settings/types"
+import type { PrimitiveConfigValue, SettingsSnapshot } from "./types.ts"
 
 export const DEFAULT_WALLPAPER_PLUGIN_ID = "wallpaper-engine"
 
@@ -13,7 +13,17 @@ export const BUILTIN_WALLPAPER_MODES = [
   "video",
 ] as const
 
+export const BUILTIN_WALLPAPER_ANIMATION_MODES = [
+  "off",
+  "aurora",
+  "particles",
+  "waves",
+  "matrix",
+  "mesh",
+] as const
+
 export type BuiltinWallpaperMode = (typeof BUILTIN_WALLPAPER_MODES)[number]
+export type WallpaperMediaSource = "local" | "url"
 
 export type ResolvedWallpaper =
   | { active: false }
@@ -23,6 +33,7 @@ export type ResolvedWallpaper =
       kind: "builtin-canvas" | "image" | "video" | "sandbox-html"
       builtinPreset?: "aurora" | "particles" | "waves" | "matrix" | "mesh"
       mediaUrl?: string
+      mediaSource?: WallpaperMediaSource
       blurPx: number
       dimOpacity: number
       surfaceOpacity: number
@@ -37,27 +48,90 @@ function clampNumber(raw: unknown, min: number, max: number, fallback: number): 
   return Math.min(max, Math.max(min, num))
 }
 
-function isAllowedMediaRef(pluginId: string, assetPath: string, externalUrl: string): string | null {
-  const trimmedAsset = assetPath.trim()
-  if (trimmedAsset) {
-    const clean = trimmedAsset.replace(/\\/g, "/").replace(/^\/+/, "")
-    if (!clean.includes("..") && !clean.includes(":")) {
-      const segments = clean.split("/").map((seg) => encodeURIComponent(seg))
-      return `/api/settings/plugins/${encodeURIComponent(pluginId)}/assets/${segments.join("/")}`
+export function normalizeWallpaperMediaUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return ""
+  try {
+    const parsed = new URL(trimmed)
+    const isGoogleImgres =
+      /(^|\.)google\.[a-z.]+$/i.test(parsed.hostname) && parsed.pathname === "/imgres"
+    if (isGoogleImgres) {
+      const directImgUrl = parsed.searchParams.get("imgurl")?.trim()
+      if (directImgUrl) {
+        const directParsed = new URL(directImgUrl)
+        if (
+          directParsed.protocol === "https:" &&
+          directParsed.username === "" &&
+          directParsed.password === ""
+        ) {
+          return directParsed.toString()
+        }
+      }
     }
+  } catch {
+    return trimmed
   }
-  const trimmedUrl = externalUrl.trim()
-  if (trimmedUrl) {
+  return trimmed
+}
+
+export function inferMediaKindFromUrl(url: string): "image" | "video" {
+  try {
+    const parsed = new URL(normalizeWallpaperMediaUrl(url))
+    return /\.(mp4|webm|ogg)$/i.test(parsed.pathname) ? "video" : "image"
+  } catch {
+    return /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(url.trim()) ? "video" : "image"
+  }
+}
+
+export function inferMediaKindFromAsset(assetPath: string): "image" | "video" {
+  return /\.(mp4|webm|ogg)$/i.test(assetPath.trim()) ? "video" : "image"
+}
+
+export function resolveWallpaperMediaSource(
+  config: Record<string, PrimitiveConfigValue>
+): WallpaperMediaSource {
+  if (config.mediaSource === "url") return "url"
+  if (config.mediaSource === "local") return "local"
+  const asset = typeof config.mediaAsset === "string" ? config.mediaAsset.trim() : ""
+  if (asset) return "local"
+  const url = typeof config.mediaUrl === "string" ? config.mediaUrl.trim() : ""
+  if (url) return "url"
+  return "local"
+}
+
+export function buildPluginAssetUrl(pluginId: string, assetPath: string): string | null {
+  const trimmedAsset = assetPath.trim()
+  if (!trimmedAsset) return null
+  const clean = trimmedAsset.replace(/\\/g, "/").replace(/^\/+/, "")
+  if (clean.includes("..") || clean.includes(":")) return null
+  const segments = clean.split("/").map((seg) => encodeURIComponent(seg))
+  return `/api/settings/plugins/${encodeURIComponent(pluginId)}/assets/${segments.join("/")}`
+}
+
+function isAllowedMediaRef(
+  pluginId: string,
+  assetPath: string,
+  externalUrl: string,
+  preferredSource?: WallpaperMediaSource
+): string | null {
+  const resolveLocal = () => buildPluginAssetUrl(pluginId, assetPath)
+  const resolveUrl = () => {
+    const normalizedUrl = normalizeWallpaperMediaUrl(externalUrl)
+    if (!normalizedUrl) return null
     try {
-      const parsed = new URL(trimmedUrl)
-      if (parsed.protocol === "https:") {
+      const parsed = new URL(normalizedUrl)
+      if (parsed.protocol === "https:" && parsed.username === "" && parsed.password === "") {
         return parsed.toString()
       }
     } catch {
       return null
     }
+    return null
   }
-  return null
+
+  if (preferredSource === "url") return resolveUrl()
+  if (preferredSource === "local") return resolveLocal()
+  return resolveLocal() ?? resolveUrl()
 }
 
 function resolveVisualTuning(config: Record<string, PrimitiveConfigValue>) {
@@ -152,13 +226,17 @@ export function resolveActiveWallpaper(snapshot: SettingsSnapshot | null): Resol
   if (mode === "image" || mode === "video") {
     const asset = typeof cfg.mediaAsset === "string" ? cfg.mediaAsset : ""
     const url = typeof cfg.mediaUrl === "string" ? cfg.mediaUrl : ""
-    const src = isAllowedMediaRef(builtin.id, asset, url)
+    const preferredSource = resolveWallpaperMediaSource(cfg)
+    const src = isAllowedMediaRef(builtin.id, asset, url, preferredSource)
     if (!src) return { active: false }
+    const kind =
+      preferredSource === "url" ? inferMediaKindFromUrl(src) : inferMediaKindFromAsset(asset)
     return {
       active: true,
       sourcePluginId: builtin.id,
-      kind: mode,
+      kind,
       mediaUrl: src,
+      mediaSource: preferredSource,
       ...tuning,
       pluginConfig: cfg,
     }

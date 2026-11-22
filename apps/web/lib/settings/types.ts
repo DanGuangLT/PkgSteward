@@ -55,6 +55,9 @@ export interface BehaviorSettings {
   locale: SettingsLocale
   defaultConsoleShell: SettingsConsoleShell
   defaultPageSize: SettingsPageSize
+  paginationEnabled: boolean
+  showPageSizeSelector: boolean
+  scrollToTopOnPageChange: boolean
   autoRefreshOnFocus: boolean
   confirmBeforeNavigation: boolean
   dateFormat: SettingsDateFormat

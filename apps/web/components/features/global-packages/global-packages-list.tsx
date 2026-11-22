@@ -1,7 +1,9 @@
 "use client"
 
+import { useMemo, useRef } from "react"
 import { useLocale, useTranslations } from "next-intl"
 import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { ListPagination, useListPagination } from "@/components/shared/list-pagination"
 import { useViewState } from "@/hooks/use-navigation-continuity"
 import { makeViewStateKey } from "@/lib/ui/navigation-targets"
 import { GLOBAL_DISCOVERY, GLOBAL_STATUSES, globalDiscoveryCodec, selectGlobalPackages } from "@/lib/global-packages/discovery"
@@ -23,6 +25,15 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
   const locale = useLocale()
   const [view, setView, reset] = useViewState(makeViewStateKey("global-packages", JSON.stringify([inventory.manager, inventory.globalRoot])), globalDiscoveryCodec, GLOBAL_DISCOVERY)
   const rows = selectGlobalPackages(inventory.packages, view, locale)
+  const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const globalResetKey = useMemo(
+    () => JSON.stringify([inventory.manager, inventory.globalRoot, view]),
+    [inventory.manager, inventory.globalRoot, view],
+  )
+  const globalPagination = useListPagination(rows, {
+    resetKey: globalResetKey,
+    scrollTargetRef: listAnchorRef,
+  })
 
   return (
     <div className="min-w-0 space-y-4">
@@ -30,13 +41,13 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
         <DiscoveryFilter label={d("statuses")} value={view.statuses} options={GLOBAL_STATUSES.map(value => ({ value, label: d(`values.${value}`), count: inventory.packages.filter(row => row.status === value).length }))} onValueChange={statuses => setView({ ...view, statuses })} />
         <DiscoverySort value={view.sort} options={[{ value: "name", label: d("name") }, { value: "version", label: d("version") }]} onValueChange={sort => setView({ ...view, sort })} />
       </DiscoveryControls>
-      <div className="min-w-0 overflow-hidden rounded-md border border-border bg-card text-card-foreground">
+      <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 overflow-hidden rounded-md border border-border bg-card text-card-foreground">
         <div aria-hidden="true" className="hidden min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-4 border-b border-border bg-muted px-4 py-3 text-caption font-semibold md:grid">
           <span>{t("package")}</span><span>{t("version")}</span><span>{t("statusLabel")}</span><span>{t("actions")}</span>
         </div>
         {rows.length ? (
           <ul role="list" className="min-w-0 divide-y divide-border" aria-label={t("inventory")}>
-            {rows.map(pkg => {
+            {globalPagination.items.map(pkg => {
               const manageable = pkg.status === "manageable" && pkg.reason === null
               // npm itself is managed by the npm version card above the list (M9G).
               const npmSelf = inventory.manager === "npm" && pkg.name === "npm"
@@ -79,6 +90,13 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
           <div className="p-4"><DiscoveryEmpty total={inventory.packages.length} /></div>
         )}
       </div>
+      <ListPagination
+        meta={globalPagination.meta}
+        pageSize={globalPagination.pageSize}
+        showPageSizeSelector={globalPagination.showPageSizeSelector}
+        onPageChange={globalPagination.setPage}
+        onPageSizeChange={globalPagination.setPageSize}
+      />
     </div>
   )
 }

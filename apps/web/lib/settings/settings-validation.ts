@@ -1,8 +1,9 @@
 import type { PluginSettingFieldSchema, PrimitiveConfigValue } from "./types.ts"
+import { normalizeWallpaperMediaUrl } from "./wallpaper-presets.ts"
 
 export const MAX_TIMEOUT_MS = 86_400_000
 export const MAX_BACKUP_JSON_BYTES = 256 * 1024
-export const MAX_CONFIG_STRING_LENGTH = 1024
+export const MAX_CONFIG_STRING_LENGTH = 2048
 export const MAX_PLUGIN_URL_LENGTH = 2048
 export const MAX_TRUSTED_REGISTRIES = 20
 
@@ -28,6 +29,7 @@ export type ServerValidationCode =
   | "SERVER_CORS"
 
 export type WallpaperValidationCode =
+  | "WALLPAPER_URL_REQUIRED"
   | "WALLPAPER_URL_HTTPS"
   | "WALLPAPER_URL_TOO_LONG"
   | "WALLPAPER_BLUR_RANGE"
@@ -181,9 +183,12 @@ export function validateServerDraft(input: {
   return first ?? null
 }
 
-export function validateWallpaperMediaUrl(rawUrl: string): WallpaperValidationCode | null {
-  const clean = rawUrl.trim()
-  if (clean === "") return null
+export function validateWallpaperMediaUrl(
+  rawUrl: string,
+  options?: { required?: boolean }
+): WallpaperValidationCode | null {
+  const clean = normalizeWallpaperMediaUrl(rawUrl)
+  if (clean === "") return options?.required ? "WALLPAPER_URL_REQUIRED" : null
   if (clean.length > MAX_CONFIG_STRING_LENGTH) return "WALLPAPER_URL_TOO_LONG"
   try {
     const parsed = new URL(clean)
@@ -210,7 +215,7 @@ function validateSafeIntegerRange(
 }
 
 export function validateWallpaperTuningDraft(input: {
-  mediaUrl: string
+  mediaUrl?: string
   blurPx: string
   dimOpacity: string
   surfaceOpacity: string
@@ -222,8 +227,10 @@ export function validateWallpaperTuningDraft(input: {
     Record<"mediaUrl" | "blurPx" | "dimOpacity" | "surfaceOpacity" | "speed", WallpaperValidationCode>
   > = {}
 
-  const urlErr = validateWallpaperMediaUrl(input.mediaUrl)
-  if (urlErr) errors.mediaUrl = urlErr
+  if (input.mediaUrl !== undefined) {
+    const urlErr = validateWallpaperMediaUrl(input.mediaUrl)
+    if (urlErr) errors.mediaUrl = urlErr
+  }
 
   const blurErr = validateSafeIntegerRange(
     input.blurPx,

@@ -17,6 +17,7 @@ import {
   validateServerDraftFields,
   validateTimeoutInput,
   validateTrustedRegistriesInput,
+  validateWallpaperMediaUrl,
   validateWallpaperTuningDraft,
 } from "./settings-validation.ts"
 
@@ -75,7 +76,6 @@ test("validateServerDraft and validateServerDraftFields enforce loopback host, p
 test("validateWallpaperTuningDraft checks HTTPS mediaUrl and all 4 numeric bounds", () => {
   assert.deepEqual(
     validateWallpaperTuningDraft({
-      mediaUrl: "https://cdn.example.com/bg.webm",
       blurPx: "8",
       dimOpacity: "30",
       surfaceOpacity: "86",
@@ -100,6 +100,10 @@ test("validateWallpaperTuningDraft checks HTTPS mediaUrl and all 4 numeric bound
       speed: "WALLPAPER_SPEED_RANGE",
     }
   )
+
+  assert.equal(validateWallpaperMediaUrl("", { required: true }), "WALLPAPER_URL_REQUIRED")
+  assert.equal(validateWallpaperMediaUrl("https://www.google.com/imgres?imgurl=https%3A%2F%2Fcdn.example.com%2Fa.jpg"), null)
+  assert.equal(validateWallpaperMediaUrl(`https://cdn.example.com/${"a".repeat(2040)}.jpg`), "WALLPAPER_URL_TOO_LONG")
 })
 
 test("plugin validators validate install URLs, directories, registries, and schema configs", () => {

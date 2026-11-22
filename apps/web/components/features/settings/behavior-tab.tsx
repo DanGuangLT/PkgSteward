@@ -75,26 +75,6 @@ export function BehaviorTab() {
             <p className="text-caption text-muted-foreground">{t("defaultShellHint")}</p>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>{t("defaultPageSizeLabel")}</Label>
-            <ToggleGroup
-              type="single"
-              value={String(behavior.defaultPageSize)}
-              onValueChange={(val) => {
-                const parsed = Number(val)
-                if (val && PAGE_SIZES.includes(parsed as SettingsPageSize)) {
-                  patchBehavior({ defaultPageSize: parsed as SettingsPageSize })
-                }
-              }}
-            >
-              {PAGE_SIZES.map((size) => (
-                <ToggleGroupItem key={size} value={String(size)}>
-                  {t("pageSizeOption", { count: size })}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-
           {behavior.advancedMode && (
             <div className="flex flex-col gap-2">
               <Label>{t("dateFormatLabel")}</Label>
@@ -172,6 +152,93 @@ export function BehaviorTab() {
           )}
         </CardContent>
       </Card>
+
+      {behavior.advancedMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("paginationTitle")}</CardTitle>
+            <CardDescription>{t("paginationDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <label className="flex cursor-pointer items-center gap-3 rounded-md border border-border bg-background p-3 select-none">
+              <Checkbox
+                checked={behavior.paginationEnabled}
+                onCheckedChange={(val) => patchBehavior({ paginationEnabled: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("paginationEnabledLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("paginationEnabledDesc")}
+                </span>
+              </div>
+            </label>
+
+            <div className={behavior.paginationEnabled ? "flex flex-col gap-2" : "flex flex-col gap-2 opacity-60"}>
+              <Label>{t("defaultPageSizeLabel")}</Label>
+              <ToggleGroup
+                type="single"
+                disabled={!behavior.paginationEnabled}
+                value={String(behavior.defaultPageSize)}
+                onValueChange={(val) => {
+                  const parsed = Number(val)
+                  if (val && PAGE_SIZES.includes(parsed as SettingsPageSize)) {
+                    patchBehavior({ defaultPageSize: parsed as SettingsPageSize })
+                  }
+                }}
+              >
+                {PAGE_SIZES.map((size) => (
+                  <ToggleGroupItem key={size} value={String(size)}>
+                    {t("pageSizeOption", { count: size })}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-caption text-muted-foreground">{t("defaultPageSizeHint")}</p>
+            </div>
+
+            <label
+              className={`flex items-center gap-3 rounded-md border border-border bg-background p-3 select-none ${
+                behavior.paginationEnabled ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
+            >
+              <Checkbox
+                checked={behavior.showPageSizeSelector}
+                disabled={!behavior.paginationEnabled}
+                onCheckedChange={(val) => patchBehavior({ showPageSizeSelector: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("showPageSizeSelectorLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("showPageSizeSelectorDesc")}
+                </span>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-center gap-3 rounded-md border border-border bg-background p-3 select-none ${
+                behavior.paginationEnabled ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+              }`}
+            >
+              <Checkbox
+                checked={behavior.scrollToTopOnPageChange}
+                disabled={!behavior.paginationEnabled}
+                onCheckedChange={(val) => patchBehavior({ scrollToTopOnPageChange: val === true })}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-body-sm font-medium text-foreground">
+                  {t("scrollToTopLabel")}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {t("scrollToTopDesc")}
+                </span>
+              </div>
+            </label>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

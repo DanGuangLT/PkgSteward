@@ -316,70 +316,106 @@ export function SettingsWorkspace({
     }
   }
 
-  const headerBar = (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/60",
-        variant === "modal" ? "px-4 py-3 sm:px-6" : "rounded-t-xl border-x border-t p-4 sm:px-6"
-      )}
-    >
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <div className="flex items-center gap-2.5">
-          <Settings2Icon className="size-5 shrink-0 text-primary" aria-hidden />
-          {variant === "modal" ? (
-            <h2 className="truncate text-heading-lg text-foreground">{t("title")}</h2>
-          ) : (
-            <h1 className="truncate text-heading-xl text-foreground">{t("title")}</h1>
+  const headerBar =
+    variant === "modal" ? (
+      <div className="flex shrink-0 flex-col border-b border-border bg-card/60">
+        <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/35 px-4 py-2.5 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Settings2Icon className="size-4 shrink-0 text-primary" aria-hidden />
+            <h2 className="truncate text-body-md font-semibold text-foreground">{t("title")}</h2>
+          </div>
+          {onClose && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label={tCommon("close")}
+              onClick={onClose}
+              className="-mr-1 shrink-0"
+            >
+              <XIcon aria-hidden />
+            </Button>
           )}
         </div>
-        <p className="truncate text-caption text-muted-foreground">{t("description")}</p>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
+          <p className="min-w-0 flex-1 text-caption text-muted-foreground">{t("description")}</p>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ToggleGroup
+              type="single"
+              value={advancedMode ? "advanced" : "basic"}
+              onValueChange={(val) => {
+                if (val === "basic" || val === "advanced") {
+                  void updatePreferences({ behavior: { advancedMode: val === "advanced" } })
+                }
+              }}
+              aria-label={t("experienceLevelLabel")}
+            >
+              <ToggleGroupItem value="basic">
+                <SlidersHorizontalIcon className="size-4" aria-hidden />
+                {t("experienceBasic")}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="advanced">
+                <WrenchIcon className="size-4" aria-hidden />
+                {t("experienceAdvanced")}
+              </ToggleGroupItem>
+            </ToggleGroup>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => void refreshSettings()}
+            >
+              <RefreshCwIcon className="size-4" aria-hidden />
+              {t("refreshCta")}
+            </Button>
+          </div>
+        </div>
       </div>
+    ) : (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-x border-t border-b border-border bg-card/60 p-4 sm:px-6">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-center gap-2.5">
+            <Settings2Icon className="size-5 shrink-0 text-primary" aria-hidden />
+            <h1 className="truncate text-heading-xl text-foreground">{t("title")}</h1>
+          </div>
+          <p className="truncate text-caption text-muted-foreground">{t("description")}</p>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          type="single"
-          value={advancedMode ? "advanced" : "basic"}
-          onValueChange={(val) => {
-            if (val === "basic" || val === "advanced") {
-              void updatePreferences({ behavior: { advancedMode: val === "advanced" } })
-            }
-          }}
-          aria-label={t("experienceLevelLabel")}
-        >
-          <ToggleGroupItem value="basic">
-            <SlidersHorizontalIcon className="size-4" aria-hidden />
-            {t("experienceBasic")}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="advanced">
-            <WrenchIcon className="size-4" aria-hidden />
-            {t("experienceAdvanced")}
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            value={advancedMode ? "advanced" : "basic"}
+            onValueChange={(val) => {
+              if (val === "basic" || val === "advanced") {
+                void updatePreferences({ behavior: { advancedMode: val === "advanced" } })
+              }
+            }}
+            aria-label={t("experienceLevelLabel")}
+          >
+            <ToggleGroupItem value="basic">
+              <SlidersHorizontalIcon className="size-4" aria-hidden />
+              {t("experienceBasic")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="advanced">
+              <WrenchIcon className="size-4" aria-hidden />
+              {t("experienceAdvanced")}
+            </ToggleGroupItem>
+          </ToggleGroup>
 
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => void refreshSettings()}
-        >
-          <RefreshCwIcon className="size-4" aria-hidden />
-          {t("refreshCta")}
-        </Button>
-
-        {variant === "modal" && onClose && (
           <Button
             type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={tCommon("close")}
-            onClick={onClose}
+            size="sm"
+            variant="secondary"
+            onClick={() => void refreshSettings()}
           >
-            <XIcon aria-hidden />
+            <RefreshCwIcon className="size-4" aria-hidden />
+            {t("refreshCta")}
           </Button>
-        )}
+        </div>
       </div>
-    </div>
-  )
+    )
 
   const splitWorkspace = (
     <div

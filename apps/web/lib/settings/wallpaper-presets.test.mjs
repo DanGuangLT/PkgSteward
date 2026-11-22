@@ -1,6 +1,11 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { resolveActiveWallpaper } from "./wallpaper-presets.ts"
+import {
+  inferMediaKindFromUrl,
+  normalizeWallpaperMediaUrl,
+  resolveActiveWallpaper,
+  resolveWallpaperMediaSource,
+} from "./wallpaper-presets.ts"
 
 function makeSnapshot(overrides = {}) {
   return {
@@ -36,6 +41,9 @@ function makeSnapshot(overrides = {}) {
         locale: "vi",
         defaultConsoleShell: "powershell",
         defaultPageSize: 25,
+        paginationEnabled: true,
+        showPageSizeSelector: true,
+        scrollToTopOnPageChange: true,
         autoRefreshOnFocus: true,
         confirmBeforeNavigation: true,
         dateFormat: "relative",
@@ -111,6 +119,61 @@ test("resolveActiveWallpaper clamps visual bounds for active built-in preset", (
 test("resolveActiveWallpaper returns inactive when wallpaper-engine is uninstalled or plugins disabled", () => {
   assert.deepEqual(resolveActiveWallpaper(makeSnapshot({ discovered: [] })), { active: false })
   assert.deepEqual(resolveActiveWallpaper(makeSnapshot({ plugins: { enabled: false } })), { active: false })
+})
+
+test("resolveActiveWallpaper switches cleanly between local upload and external URL via mediaSource", () => {
+  const urlSelected = makeSnapshot()
+  urlSelected.document.plugins.entries["wallpaper-engine"] = {
+    enabled: true,
+    source: "builtin",
+    config: {
+      mode: "image",
+      mediaSource: "url",
+      mediaAsset: "media/local-wall.png",
+      mediaUrl: "https://cdn.example.com/photo.jpg?size=large",
+    },
+  }
+  const urlRes = resolveActiveWallpaper(urlSelected)
+  assert.equal(urlRes.active, true)
+  if (urlRes.active) {
+    assert.equal(urlRes.kind, "image")
+    assert.equal(urlRes.mediaSource, "url")
+    assert.equal(urlRes.mediaUrl, "https://cdn.example.com/photo.jpg?size=large")
+  }
+
+  const localSelected = makeSnapshot()
+  localSelected.document.plugins.entries["wallpaper-engine"] = {
+    enabled: true,
+    source: "builtin",
+    config: {
+      mode: "video",
+      mediaSource: "local",
+      mediaAsset: "media/wall.mp4",
+      mediaUrl: "https://cdn.example.com/photo.jpg",
+    },
+  }
+  const localRes = resolveActiveWallpaper(localSelected)
+  assert.equal(localRes.active, true)
+  if (localRes.active) {
+    assert.equal(localRes.kind, "video")
+    assert.equal(localRes.mediaSource, "local")
+    assert.equal(
+      localRes.mediaUrl,
+      "/api/settings/plugins/wallpaper-engine/assets/media/wall.mp4"
+    )
+  }
+})
+
+test("normalizeWallpaperMediaUrl unwraps Google /imgres links and inferMediaKindFromUrl handles query strings", () => {
+  assert.equal(
+    normalizeWallpaperMediaUrl(
+      "https://www.google.com/imgres?imgurl=https%3A%2F%2Fimages.example.com%2Fsky.jpg&tbnid=123"
+    ),
+    "https://images.example.com/sky.jpg"
+  )
+  assert.equal(inferMediaKindFromUrl("https://cdn.example.com/loop.mp4?token=abc"), "video")
+  assert.equal(inferMediaKindFromUrl("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9Gc"), "image")
+  assert.equal(resolveWallpaperMediaSource({ mediaUrl: "https://example.com/a.jpg" }), "url")
 })
 
 test("resolveActiveWallpaper prioritizes enabled external web-sandbox wallpaper plugin", () => {

@@ -2,6 +2,8 @@
 
 import {
   CheckIcon,
+  GlobeIcon,
+  HardDriveIcon,
   ImageIcon,
   MonitorIcon,
   MoonIcon,
@@ -42,11 +44,21 @@ import {
   THEME_MODES,
   THEME_PRESET_IDS,
 } from "@/lib/settings/appearance-prefs"
-import { validateWallpaperTuningDraft } from "@/lib/settings/settings-validation"
 import {
+  validateWallpaperMediaUrl,
+  validateWallpaperTuningDraft,
+} from "@/lib/settings/settings-validation"
+import {
+  buildPluginAssetUrl,
+  BUILTIN_WALLPAPER_ANIMATION_MODES,
   BUILTIN_WALLPAPER_MODES,
   type BuiltinWallpaperMode,
   DEFAULT_WALLPAPER_PLUGIN_ID,
+  inferMediaKindFromAsset,
+  inferMediaKindFromUrl,
+  normalizeWallpaperMediaUrl,
+  resolveWallpaperMediaSource,
+  type WallpaperMediaSource,
 } from "@/lib/settings/wallpaper-presets"
 import type {
   PrimitiveConfigValue,
@@ -64,28 +76,234 @@ import type {
 } from "@/lib/settings/types"
 import { cn } from "@/lib/utils"
 
-function WallpaperTuningForm({
+function CustomWallpaperMediaPanel({
   wpConfig,
   activeMode,
-  onSave,
+  busy,
+  onUploadLocalFile,
+  onUseLocalMedia,
+  onApplyMediaUrl,
 }: {
   wpConfig: Record<string, PrimitiveConfigValue>
   activeMode: BuiltinWallpaperMode
+  busy: boolean
+  onUploadLocalFile: (file: File) => Promise<void>
+  onUseLocalMedia: (assetPath: string) => void
+  onApplyMediaUrl: (url: string) => void
+}) {
+  const t = useTranslations("settings.appearance")
+  const tVal = useTranslations("settings.validation")
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
+
+  const activeSource = resolveWallpaperMediaSource(wpConfig)
+  const savedUrl = typeof wpConfig.mediaUrl === "string" ? wpConfig.mediaUrl : ""
+  const savedAsset = typeof wpConfig.mediaAsset === "string" ? wpConfig.mediaAsset : ""
+
+  const [sourceTab, setSourceTab] = useState<WallpaperMediaSource>(activeSource)
+  const [urlDraft, setUrlDraft] = useState(savedUrl)
+  const [urlSubmitted, setUrlSubmitted] = useState(false)
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null)
+
+  const normalizedUrl = normalizeWallpaperMediaUrl(urlDraft)
+  const rawUrlError =
+    urlDraft.trim() !== "" || urlSubmitted
+      ? validateWallpaperMediaUrl(urlDraft, { required: true })
+      : null
+  const canPreviewImage =
+    normalizedUrl !== "" &&
+    !validateWallpaperMediaUrl(urlDraft, { required: true }) &&
+    inferMediaKindFromUrl(normalizedUrl) === "image"
+  const urlLoadFailed = canPreviewImage && failedPreviewUrl === normalizedUrl
+
+  const isCustomMediaActive = activeMode === "image" || activeMode === "video"
+  const isLocalActive = isCustomMediaActive && activeSource === "local" && savedAsset !== ""
+  const isUrlActive = isCustomMediaActive && activeSource === "url" && savedUrl !== ""
+  const localAssetUrl = savedAsset ? buildPluginAssetUrl(DEFAULT_WALLPAPER_PLUGIN_ID, savedAsset) : null
+  const isLocalVideo = savedAsset ? inferMediaKindFromAsset(savedAsset) === "video" : false
+
+  return (
+    <div className="flex flex-col gap-4 rounded-md border border-border bg-background p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-body-sm font-semibold text-foreground">
+            {t("wallpaperCustomSectionTitle")}
+          </span>
+          <span className="text-caption text-muted-foreground">
+            {t("wallpaperCustomSectionDesc")}
+          </span>
+        </div>
+        {isLocalActive && <Badge variant="success">{t("wallpaperLocalActiveBadge")}</Badge>}
+        {isUrlActive && <Badge variant="success">{t("wallpaperUrlActiveBadge")}</Badge>}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{t("wallpaperSourceLabel")}</Label>
+        <ToggleGroup
+          type="single"
+          value={sourceTab}
+          onValueChange={(val) => {
+            if (val === "local" || val === "url") setSourceTab(val)
+          }}
+          aria-label={t("wallpaperSourceLabel")}
+        >
+          <ToggleGroupItem value="local">
+            <HardDriveIcon className="size-4" aria-hidden />
+            {t("wallpaperSourceLocal")}
+          </ToggleGroupItem>
+          <ToggleGroupItem value="url">
+            <GlobeIcon className="size-4" aria-hidden />
+            {t("wallpaperSourceUrl")}
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {sourceTab === "local" ? (
+        <div className="flex flex-col gap-3 rounded-md border border-border bg-card/40 p-3.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <input
+              ref={mediaInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm"
+              className="hidden"
+              onChange={(e) => {
+                const picked = e.target.files?.[0]
+                if (picked) {
+                  void onUploadLocalFile(picked)
+                }
+                e.target.value = ""
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => mediaInputRef.current?.click()}
+            >
+              <UploadIcon className="size-4" aria-hidden />
+              {t("uploadWallpaperMediaCta")}
+            </Button>
+            {savedAsset && (
+              <Button
+                type="button"
+                size="sm"
+                variant={isLocalActive ? "secondary" : "default"}
+                disabled={busy || isLocalActive}
+                onClick={() => onUseLocalMedia(savedAsset)}
+              >
+                <ImageIcon className="size-4" aria-hidden />
+                {t("wallpaperUseLocalCta")}
+              </Button>
+            )}
+          </div>
+
+          {savedAsset && localAssetUrl ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {!isLocalVideo && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={localAssetUrl}
+                  alt=""
+                  className="h-16 w-28 rounded-sm border border-border object-cover"
+                />
+              )}
+              <span className="truncate font-mono text-caption text-muted-foreground">
+                {savedAsset}
+              </span>
+            </div>
+          ) : (
+            <p className="text-caption text-muted-foreground">{t("wallpaperNoLocalUploaded")}</p>
+          )}
+        </div>
+      ) : (
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault()
+            setUrlSubmitted(true)
+            const err = validateWallpaperMediaUrl(urlDraft, { required: true })
+            if (err) return
+            onApplyMediaUrl(normalizedUrl)
+          }}
+          className="flex flex-col gap-3 rounded-md border border-border bg-card/40 p-3.5"
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="wp-media-url">{t("wallpaperMediaUrlLabel")}</Label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id="wp-media-url"
+                value={urlDraft}
+                onChange={(e) => {
+                  setUrlDraft(e.target.value)
+                  if (urlSubmitted) setUrlSubmitted(false)
+                  setFailedPreviewUrl(null)
+                }}
+                placeholder={t("wallpaperMediaUrlPlaceholder")}
+                aria-invalid={rawUrlError ? true : undefined}
+                className="min-w-60 flex-1 font-mono"
+              />
+              <Button type="submit" disabled={busy || Boolean(rawUrlError)}>
+                {t("wallpaperApplyUrlCta")}
+              </Button>
+            </div>
+            <p className="text-caption text-muted-foreground">{t("wallpaperMediaUrlHint")}</p>
+            {rawUrlError && (
+              <p role="alert" className="text-caption text-destructive">
+                {tVal(rawUrlError)}
+              </p>
+            )}
+          </div>
+
+          {canPreviewImage && (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-caption text-muted-foreground">
+                  {t("wallpaperUrlPreviewLabel")}
+                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  key={normalizedUrl}
+                  src={normalizedUrl}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  onLoad={() => {
+                    if (failedPreviewUrl) setFailedPreviewUrl(null)
+                  }}
+                  onError={() => setFailedPreviewUrl(normalizedUrl)}
+                  className="h-20 w-36 rounded-sm border border-border bg-background object-cover"
+                />
+              </div>
+              {urlLoadFailed && (
+                <p
+                  role="alert"
+                  className="flex-1 rounded-md border border-warning/40 bg-warning-soft p-2.5 text-caption text-warning"
+                >
+                  {t("wallpaperUrlLoadError")}
+                </p>
+              )}
+            </div>
+          )}
+        </form>
+      )}
+    </div>
+  )
+}
+
+function WallpaperTuningForm({
+  wpConfig,
+  onSave,
+}: {
+  wpConfig: Record<string, PrimitiveConfigValue>
   onSave: (tuning: {
-    mediaUrl: string
     blurPx: number
     dimOpacity: number
     surfaceOpacity: number
     speed: number
     pauseWhenHidden: boolean
-    nextMode: BuiltinWallpaperMode
   }) => void
 }) {
   const t = useTranslations("settings.appearance")
   const tVal = useTranslations("settings.validation")
-  const [mediaUrlDraft, setMediaUrlDraft] = useState(
-    typeof wpConfig.mediaUrl === "string" ? wpConfig.mediaUrl : ""
-  )
   const [blurDraft, setBlurDraft] = useState(String(wpConfig.blurPx ?? 8))
   const [dimDraft, setDimDraft] = useState(String(wpConfig.dimOpacity ?? 30))
   const [surfaceDraft, setSurfaceDraft] = useState(String(wpConfig.surfaceOpacity ?? 86))
@@ -93,7 +311,6 @@ function WallpaperTuningForm({
   const [pauseHiddenDraft, setPauseHiddenDraft] = useState(wpConfig.pauseWhenHidden !== false)
 
   const fieldErrors = validateWallpaperTuningDraft({
-    mediaUrl: mediaUrlDraft,
     blurPx: blurDraft,
     dimOpacity: dimDraft,
     surfaceOpacity: surfaceDraft,
@@ -105,23 +322,12 @@ function WallpaperTuningForm({
     e.preventDefault()
     if (hasErrors) return
 
-    const cleanUrl = mediaUrlDraft.trim()
-    let nextMode: BuiltinWallpaperMode = activeMode
-    if (cleanUrl && nextMode === "off") {
-      const lowerUrl = cleanUrl.toLowerCase()
-      nextMode =
-        lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".webm") || lowerUrl.endsWith(".ogg")
-          ? "video"
-          : "image"
-    }
     onSave({
-      mediaUrl: cleanUrl,
       blurPx: Number(blurDraft.trim()),
       dimOpacity: Number(dimDraft.trim()),
       surfaceOpacity: Number(surfaceDraft.trim()),
       speed: Number(speedDraft.trim()),
       pauseWhenHidden: pauseHiddenDraft,
-      nextMode,
     })
   }
 
@@ -131,22 +337,7 @@ function WallpaperTuningForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-4 rounded-md border border-border bg-background p-4"
     >
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="wp-media-url">{t("wallpaperMediaUrlLabel")}</Label>
-        <Input
-          id="wp-media-url"
-          value={mediaUrlDraft}
-          onChange={(e) => setMediaUrlDraft(e.target.value)}
-          placeholder="https://example.com/wallpaper.mp4"
-          aria-invalid={fieldErrors.mediaUrl ? true : undefined}
-          className="font-mono"
-        />
-        {fieldErrors.mediaUrl && (
-          <p role="alert" className="text-caption text-destructive">
-            {tVal(fieldErrors.mediaUrl)}
-          </p>
-        )}
-      </div>
+      <span className="text-body-sm font-semibold text-foreground">{t("wallpaperTuningTitle")}</span>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-blur">{t("wallpaperBlurLabel")}</Label>
@@ -230,7 +421,6 @@ export function AppearanceTab() {
   const tPresets = useTranslations("theme.presets")
   const tTheme = useTranslations("theme")
   const { appearance, behavior, snapshot, updatePreferences, applySnapshot } = useSettings()
-  const mediaInputRef = useRef<HTMLInputElement | null>(null)
   const [wallpaperBusy, setWallpaperBusy] = useState(false)
 
   const patchAppearance = (patch: Partial<typeof appearance>) => {
@@ -302,26 +492,64 @@ export function AppearanceTab() {
     }
   }
 
+  const handleUseLocalMedia = (assetPath: string) => {
+    const nextMode = inferMediaKindFromAsset(assetPath)
+    void updatePreferences({
+      plugins: {
+        enabled: true,
+        entries: {
+          [DEFAULT_WALLPAPER_PLUGIN_ID]: {
+            enabled: true,
+            source: "builtin",
+            config: {
+              ...wpConfig,
+              mode: nextMode,
+              mediaSource: "local",
+              mediaAsset: assetPath,
+            },
+          },
+        },
+      },
+    })
+  }
+
+  const handleApplyMediaUrl = (url: string) => {
+    const nextMode = inferMediaKindFromUrl(url)
+    void updatePreferences({
+      plugins: {
+        enabled: true,
+        entries: {
+          [DEFAULT_WALLPAPER_PLUGIN_ID]: {
+            enabled: true,
+            source: "builtin",
+            config: {
+              ...wpConfig,
+              mode: nextMode,
+              mediaSource: "url",
+              mediaUrl: url,
+            },
+          },
+        },
+      },
+    })
+  }
+
   const handleSaveWallpaperTuning = (tuning: {
-    mediaUrl: string
     blurPx: number
     dimOpacity: number
     surfaceOpacity: number
     speed: number
     pauseWhenHidden: boolean
-    nextMode: BuiltinWallpaperMode
   }) => {
     void updatePreferences({
       plugins: {
         enabled: true,
         entries: {
           [DEFAULT_WALLPAPER_PLUGIN_ID]: {
-            enabled: tuning.nextMode !== "off",
+            enabled: activeMode !== "off",
             source: "builtin",
             config: {
               ...wpConfig,
-              mode: tuning.nextMode,
-              mediaUrl: tuning.mediaUrl,
               blurPx: tuning.blurPx,
               dimOpacity: tuning.dimOpacity,
               surfaceOpacity: tuning.surfaceOpacity,
@@ -500,67 +728,50 @@ export function AppearanceTab() {
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-2">
-                  <Label>{t("wallpaperPresetLabel")}</Label>
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-background p-4">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-body-sm font-semibold text-foreground">
+                      {t("wallpaperBuiltinSectionTitle")}
+                    </span>
+                    <span className="text-caption text-muted-foreground">
+                      {t("wallpaperBuiltinSectionDesc")}
+                    </span>
+                  </div>
                   <ToggleGroup
                     type="single"
-                    value={activeMode}
+                    value={activeMode === "image" || activeMode === "video" ? "" : activeMode}
                     onValueChange={(val) => {
                       if (val) handleSelectWallpaperMode(val)
                     }}
                   >
-                    {BUILTIN_WALLPAPER_MODES.filter((mode) => mode !== "image" && mode !== "video").map(
-                      (mode) => (
-                        <ToggleGroupItem key={mode} value={mode}>
-                          {t(`wallpaperModes.${mode}`)}
-                        </ToggleGroupItem>
-                      )
-                    )}
-                    {(wpConfig.mediaAsset || wpConfig.mediaUrl) && (
-                      <ToggleGroupItem value={activeMode === "video" ? "video" : "image"}>
-                        <ImageIcon className="size-4" aria-hidden />
-                        {t("wallpaperModes.customMedia")}
+                    {BUILTIN_WALLPAPER_ANIMATION_MODES.map((mode) => (
+                      <ToggleGroupItem key={mode} value={mode}>
+                        {t(`wallpaperModes.${mode}`)}
                       </ToggleGroupItem>
-                    )}
+                    ))}
                   </ToggleGroup>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    ref={mediaInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,video/mp4,video/webm"
-                    className="hidden"
-                    onChange={(e) => {
-                      const picked = e.target.files?.[0]
-                      if (picked) {
-                        void handleUploadWallpaperMedia(picked)
-                      }
-                      e.target.value = ""
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={wallpaperBusy}
-                    onClick={() => mediaInputRef.current?.click()}
-                  >
-                    <UploadIcon className="size-4" aria-hidden />
-                    {t("uploadWallpaperMediaCta")}
-                  </Button>
-                  {typeof wpConfig.mediaAsset === "string" && wpConfig.mediaAsset && (
-                    <span className="font-mono text-caption text-muted-foreground">
-                      {wpConfig.mediaAsset}
-                    </span>
-                  )}
-                </div>
+                <CustomWallpaperMediaPanel
+                  key={`${resolveWallpaperMediaSource(wpConfig)}|${String(wpConfig.mediaAsset ?? "")}|${String(wpConfig.mediaUrl ?? "")}`}
+                  wpConfig={wpConfig}
+                  activeMode={activeMode}
+                  busy={wallpaperBusy}
+                  onUploadLocalFile={handleUploadWallpaperMedia}
+                  onUseLocalMedia={handleUseLocalMedia}
+                  onApplyMediaUrl={handleApplyMediaUrl}
+                />
 
                 {behavior.advancedMode && (
                   <WallpaperTuningForm
-                    key={JSON.stringify(wpConfig)}
+                    key={JSON.stringify([
+                      wpConfig.blurPx,
+                      wpConfig.dimOpacity,
+                      wpConfig.surfaceOpacity,
+                      wpConfig.speed,
+                      wpConfig.pauseWhenHidden,
+                    ])}
                     wpConfig={wpConfig}
-                    activeMode={activeMode}
                     onSave={handleSaveWallpaperTuning}
                   />
                 )}

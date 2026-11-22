@@ -1,9 +1,10 @@
 "use client"
 
 import { AlertTriangleIcon } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useFormatter, useLocale, useTranslations } from "next-intl"
 import { DiscoveryControls, DiscoveryFilter, DiscoverySort, DiscoveryEmpty } from "@/components/shared/list-discovery"
+import { ListPagination, useListPagination } from "@/components/shared/list-pagination"
 import { useViewState } from "@/hooks/use-navigation-continuity"
 import { makeViewStateKey } from "@/lib/ui/navigation-targets"
 
@@ -22,6 +23,12 @@ export function ProjectAdvisories({ items, resourceKey }: { items: readonly Proj
   const [local, setLocal] = useState(ADVISORY_DISCOVERY)
   const [view, setView, reset] = resourceKey ? persisted : [local, setLocal, () => setLocal(ADVISORY_DISCOVERY)] as const
   const sorted = useMemo(() => selectAdvisories(items, view.query, view.sort, locale, view), [items, view, locale])
+  const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const advisoriesResetKey = useMemo(() => JSON.stringify([resourceKey ?? "", view]), [resourceKey, view])
+  const advisoriesPagination = useListPagination(sorted, {
+    resetKey: advisoriesResetKey,
+    scrollTargetRef: listAnchorRef,
+  })
   return (
     <section className="min-w-0 space-y-4" aria-label={t("audit.title")}>
       <h2 className="text-heading-md">{t("audit.title")}</h2>
@@ -34,20 +41,29 @@ export function ProjectAdvisories({ items, resourceKey }: { items: readonly Proj
         <DiscoverySort value={view.sort} options={[{ value: "severity", label: d("severity") }, { value: "name", label: d("name") }]} onValueChange={sort => setView({ ...view, sort })} />
       </DiscoveryControls>
       {sorted.length === 0 ? <DiscoveryEmpty total={items.length} /> : (
-        <ul className="min-w-0 space-y-4">{sorted.map(item => (
-          <li key={JSON.stringify([item.name, item.id, item.range])} className="min-w-0 space-y-3 rounded-md border border-border bg-card p-4 text-body-sm text-card-foreground [overflow-wrap:anywhere]">
-            <Badge variant="outline" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("audit.severity")}: {t(`audit.severities.${item.severity}`)}</Badge>
-            <h3 className="text-heading-md">{item.url !== null ? (
-              <a href={item.url} rel="noreferrer" target="_blank" className="rounded-sm text-ink-soft underline focus-ring">{item.title}</a>
-            ) : item.title}</h3>
-            <p className="font-mono">{item.name}</p>
-            <p>{t(item.direct ? "audit.direct" : "audit.transitive")}</p>
-            <dl className="space-y-2">
-              <div><dt className="text-muted-foreground">{t("audit.affectedVersions")}</dt><dd className="font-mono">{item.affectedVersions.length ? item.affectedVersions.join(", ") : t("dependencies.unknown")}</dd></div>
-              <div><dt className="text-muted-foreground">{t("audit.range")}</dt><dd className="font-mono">{item.range}</dd></div>
-            </dl>
-          </li>
-        ))}</ul>
+        <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 space-y-4">
+          <ul className="min-w-0 space-y-4">{advisoriesPagination.items.map(item => (
+            <li key={JSON.stringify([item.name, item.id, item.range])} className="min-w-0 space-y-3 rounded-md border border-border bg-card p-4 text-body-sm text-card-foreground [overflow-wrap:anywhere]">
+              <Badge variant="outline" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("audit.severity")}: {t(`audit.severities.${item.severity}`)}</Badge>
+              <h3 className="text-heading-md">{item.url !== null ? (
+                <a href={item.url} rel="noreferrer" target="_blank" className="rounded-sm text-ink-soft underline focus-ring">{item.title}</a>
+              ) : item.title}</h3>
+              <p className="font-mono">{item.name}</p>
+              <p>{t(item.direct ? "audit.direct" : "audit.transitive")}</p>
+              <dl className="space-y-2">
+                <div><dt className="text-muted-foreground">{t("audit.affectedVersions")}</dt><dd className="font-mono">{item.affectedVersions.length ? item.affectedVersions.join(", ") : t("dependencies.unknown")}</dd></div>
+                <div><dt className="text-muted-foreground">{t("audit.range")}</dt><dd className="font-mono">{item.range}</dd></div>
+              </dl>
+            </li>
+          ))}</ul>
+          <ListPagination
+            meta={advisoriesPagination.meta}
+            pageSize={advisoriesPagination.pageSize}
+            showPageSizeSelector={advisoriesPagination.showPageSizeSelector}
+            onPageChange={advisoriesPagination.setPage}
+            onPageSizeChange={advisoriesPagination.setPageSize}
+          />
+        </div>
       )}
     </section>
   )
