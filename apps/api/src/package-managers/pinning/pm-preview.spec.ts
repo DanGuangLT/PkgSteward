@@ -3,6 +3,7 @@ import {
   createPmPreview,
   assertPmPreviewUnchanged,
 } from '@/package-managers/pinning/pm-preview';
+import { expectPmAppError } from '@/package-managers/__fixtures__/pm-error.fixture';
 import {
   pmLifecycleFixture,
   pmUuid,
@@ -55,26 +56,26 @@ describe('M9 private preview store', () => {
     expect(store.get(publicValue.previewId).facts.bytes[0]).toBe(123);
     f.advance(299_999);
     store.consume(publicValue.previewId);
-    expect(() => store.get(publicValue.previewId)).toThrow(
-      expect.objectContaining({ details: { reason: 'PREVIEW_CONSUMED' } }),
-    );
+    expectPmAppError(() => store.get(publicValue.previewId), {
+      details: { reason: 'PREVIEW_CONSUMED' },
+    });
     store.assertFresh(publicValue.previewId);
     f.advance(1);
-    expect(() => store.assertFresh(publicValue.previewId)).toThrow(
-      expect.objectContaining({ details: { reason: 'PREVIEW_EXPIRED' } }),
-    );
+    expectPmAppError(() => store.assertFresh(publicValue.previewId), {
+      details: { reason: 'PREVIEW_EXPIRED' },
+    });
   });
   it('bounds private bytes and evicts the oldest of 16', async () => {
     const { facts, proof, built, store } = await setup();
-    expect(() =>
-      store.put(
-        built.preview,
-        { ...facts, bytes: Buffer.alloc(262_145) },
-        proof,
-        built.edit,
-      ),
-    ).toThrow(
-      expect.objectContaining({ details: { reason: 'LIMIT_EXCEEDED' } }),
+    expectPmAppError(
+      () =>
+        store.put(
+          built.preview,
+          { ...facts, bytes: Buffer.alloc(262_145) },
+          proof,
+          built.edit,
+        ),
+      { details: { reason: 'LIMIT_EXCEEDED' } },
     );
     for (let i = 0; i < 17; i++)
       store.put(
@@ -83,9 +84,7 @@ describe('M9 private preview store', () => {
         proof,
         built.edit,
       );
-    expect(() => store.get(pmUuid(20))).toThrow(
-      expect.objectContaining({ statusCode: 404 }),
-    );
+    expectPmAppError(() => store.get(pmUuid(20)), { statusCode: 404 });
   });
   it('rejects tag, scan, input/config/tool and increased risk changes', async () => {
     const { f, facts, proof, built } = await setup();

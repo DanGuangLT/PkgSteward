@@ -8,6 +8,7 @@ import {
 } from '@/package-managers/pinning/pm-policy';
 import type { IPmInstalledTool } from '@/package-managers/interfaces/pm.types';
 import type { IPmPinChangeInput } from '@/package-managers/pinning/pm-policy';
+import { expectPmAppError } from '@/package-managers/__fixtures__/pm-error.fixture';
 import { validateConfirmation } from '@/core/risk/confirmation';
 
 const tool: IPmInstalledTool = {
@@ -213,12 +214,9 @@ describe('public target policy', () => {
       '11.22.0',
     );
     for (const requested of ['missing', '11.99.0', '11.21.0', 'next', '10.9.0'])
-      expect(() =>
-        resolvePmTarget('pnpm', requested, '11.22.0', catalog),
-      ).toThrow(
-        expect.objectContaining({
-          details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
-        }),
+      expectPmAppError(
+        () => resolvePmTarget('pnpm', requested, '11.22.0', catalog),
+        { details: { reason: 'TARGET_VERSION_UNSUPPORTED' } },
       );
   });
   it('refuses malformed/overflow catalog facts without silently substituting latest', () => {
@@ -228,20 +226,17 @@ describe('public target policy', () => {
       { ...catalog, deprecatedVersions: ['11.99.0'] },
       { ...catalog, versions: ['11.22.0', '11.22.0'] },
     ])
-      expect(() =>
-        resolvePmTarget('pnpm', 'latest', '11.22.0', metadata),
-      ).toThrow(
-        expect.objectContaining({
-          details: { reason: 'REGISTRY_INVALID_RESPONSE' },
-        }),
+      expectPmAppError(
+        () => resolvePmTarget('pnpm', 'latest', '11.22.0', metadata),
+        { details: { reason: 'REGISTRY_INVALID_RESPONSE' } },
       );
-    expect(() =>
-      resolvePmTarget('pnpm', 'latest', '11.22.0', {
-        ...catalog,
-        versions: Array<string>(10001).fill('11.22.0'),
-      }),
-    ).toThrow(
-      expect.objectContaining({ details: { reason: 'LIMIT_EXCEEDED' } }),
+    expectPmAppError(
+      () =>
+        resolvePmTarget('pnpm', 'latest', '11.22.0', {
+          ...catalog,
+          versions: Array<string>(10001).fill('11.22.0'),
+        }),
+      { details: { reason: 'LIMIT_EXCEEDED' } },
     );
   });
 });

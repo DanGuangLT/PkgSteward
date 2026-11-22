@@ -1,4 +1,5 @@
 import { PmRegistry } from '@/package-managers/discovery/pm-registry';
+import { expectPmAppError } from '@/package-managers/__fixtures__/pm-error.fixture';
 import { ProjectRegistry } from '@/projects/registry/project-registry';
 import type { IRegistryPackageMetadata } from '@/projects/interfaces/projects.runtime';
 import type { PmManager } from '@/package-managers/interfaces/pm.types';
@@ -68,10 +69,9 @@ describe('M9 public declaration catalog', () => {
           f.registry.resolveTarget(catalog, tag, installed).targetVersion,
         ).toBe(target);
       else
-        expect(() => f.registry.resolveTarget(catalog, tag, installed)).toThrow(
-          expect.objectContaining({
-            details: { reason: 'TARGET_VERSION_UNSUPPORTED' },
-          }),
+        expectPmAppError(
+          () => f.registry.resolveTarget(catalog, tag, installed),
+          { details: { reason: 'TARGET_VERSION_UNSUPPORTED' } },
         );
     },
   );
