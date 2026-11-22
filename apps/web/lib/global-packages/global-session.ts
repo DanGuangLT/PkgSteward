@@ -88,6 +88,10 @@ export function globalMutationSucceeded(job: GlobalJob): boolean {
   return job.kind === "mutation" && job.status === "completed" && job.phase === "done" && executed
     && job.auditWritten && job.terminationVerified && !job.failureCode && !job.gateHeld && !job.refreshRequired
 }
+export function isGlobalLateCancel(job: GlobalJob | null): boolean {
+  return job !== null && job.kind === "mutation" && job.status === "cancelled"
+    && job.exitCode === 0 && (job.mutationSpawned || job.mayHaveChanged)
+}
 export function globalActionPending(state: GlobalState, kind: GlobalJobKind, selection?: Pick<GlobalSelection, "manager" | "package"> & { action?: GlobalSelection["action"] }): boolean {
   const activity = state.activity
   return activity?.kind === kind && (state.phase === "starting" || state.phase === "tracking" || (kind === "inventory" && state.refreshing))

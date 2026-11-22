@@ -9,7 +9,7 @@ const RADII = [
   { id: "sm", token: "rounded-sm", scale: "0.5 × --radius", className: "rounded-sm" },
   { id: "md", token: "rounded-md", scale: "--radius", className: "rounded-md" },
   { id: "xl", token: "rounded-xl", scale: "2 × --radius", className: "rounded-xl" },
-  { id: "full", token: "rounded-full", scale: "9999px", className: "rounded-full" },
+  { id: "full", token: "rounded-full", scale: "calc(infinity * 1px)", className: "rounded-full" },
 ] as const
 
 // Khoảng cách theo thiết kế: 4 · 6 · 8 · 12 · 16 · 24 · 32 · 64px (1 bước Tailwind = 4px).
@@ -36,13 +36,13 @@ export async function ShapeSection() {
           className="grid grid-cols-2 items-start gap-6 sm:grid-cols-4"
         >
           {RADII.map((radius) => (
-            <div key={radius.id} className="flex flex-col gap-2">
+            <div key={radius.id} className="flex min-w-0 flex-col gap-2">
               <div
                 aria-hidden
                 className={cn("size-20 border border-border bg-secondary", radius.className)}
               />
               <TokenName className="text-foreground">{radius.token}</TokenName>
-              <TokenName className="whitespace-nowrap">{radius.scale}</TokenName>
+              <TokenName>{radius.scale}</TokenName>
               <p className="text-body-sm">{t(`radius.${radius.id}`)}</p>
             </div>
           ))}

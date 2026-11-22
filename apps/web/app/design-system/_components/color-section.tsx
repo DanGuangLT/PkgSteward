@@ -58,7 +58,7 @@ async function ThemePanel({
           <h4 className="text-body-sm font-semibold">{t(group.id)}</h4>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {group.swatches.map((swatch) => (
-              <Swatch key={swatch.token} swatch={swatch} />
+              <Swatch key={swatch.token} swatch={swatch} sampleText={group.id === "lines" ? null : "Aa"} />
             ))}
           </ul>
         </div>
@@ -67,7 +67,7 @@ async function ThemePanel({
   )
 }
 
-function Swatch({ swatch }: { swatch: ColorSwatch }) {
+function Swatch({ swatch, sampleText = "Aa" }: { swatch: ColorSwatch; sampleText?: string | null }) {
   return (
     <li className="flex min-w-0 flex-col gap-2">
       <div
@@ -77,7 +77,7 @@ function Swatch({ swatch }: { swatch: ColorSwatch }) {
           swatch.className
         )}
       >
-        Aa
+        {sampleText}
       </div>
       <div className="flex min-w-0 flex-col">
         <TokenName className="break-all text-foreground">{swatch.token}</TokenName>

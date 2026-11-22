@@ -1,7 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ApiError } from "../api/response.ts"
-import { createGlobalSession, initialGlobalState, globalActionPending, globalMutationSucceeded } from "./global-session.ts"
+import { createGlobalSession, initialGlobalState, globalActionPending, globalMutationSucceeded, isGlobalLateCancel } from "./global-session.ts"
 import { RUNNER_LOG_MAX_BYTES, RUNNER_LOG_MAX_CHUNKS } from "../npm-runner/runner-log-view.ts"
 
 // TEST data; không phải yêu cầu nghiệp vụ. All IO, timers and visibility are fakes.
@@ -806,5 +806,51 @@ test("selection edits fence late ready previews; dispose fences pending start/la
     assert.equal(b.changes.length, count)
     assert.equal(b.listeners.size, 0)
     assert.equal(b.timers.size, 0)
+  }
+})
+
+test("isGlobalLateCancel identifies late-cancelled mutations that exited 0 while keeping succeeded false", () => {
+  const lateSpawned = terminal({
+    kind: "mutation",
+    action: "change",
+    manager: "npm",
+    package: "@test/tool",
+    status: "cancelled",
+    phase: "done",
+    exitCode: 0,
+    mutationSpawned: true,
+    mayHaveChanged: true,
+    refreshRequired: true,
+  })
+  const lateMayChangeOnly = terminal({
+    kind: "mutation",
+    action: "repair",
+    manager: "npm",
+    package: "npm",
+    status: "cancelled",
+    phase: "done",
+    exitCode: 0,
+    mutationSpawned: false,
+    mayHaveChanged: true,
+    refreshRequired: true,
+  })
+  assert.equal(isGlobalLateCancel(lateSpawned), true)
+  assert.equal(isGlobalLateCancel(lateMayChangeOnly), true)
+  assert.equal(globalMutationSucceeded(lateSpawned), false)
+  assert.equal(globalMutationSucceeded(lateMayChangeOnly), false)
+
+  for (const negative of [
+    null,
+    terminal({ kind: "inventory", status: "cancelled", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "versions", status: "cancelled", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "preview", status: "cancelled", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "completed", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "failed", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "timed_out", exitCode: 0, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "cancelled", exitCode: null, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "cancelled", exitCode: 1, mutationSpawned: true, mayHaveChanged: true }),
+    terminal({ kind: "mutation", status: "cancelled", exitCode: 0, mutationSpawned: false, mayHaveChanged: false }),
+  ]) {
+    assert.equal(isGlobalLateCancel(negative), false)
   }
 })

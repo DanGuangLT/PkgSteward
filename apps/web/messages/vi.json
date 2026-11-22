@@ -1021,7 +1021,7 @@
       "description": "Bo góc, bóng, khoảng cách và bề rộng nội dung dùng chung cho mọi màn hình.",
       "radius": {
         "title": "Bo góc",
-        "description": "Cả thang suy ra từ biến --radius (16px): đổi một biến là mọi góc đổi theo.",
+        "description": "Cả thang suy ra từ biến --radius của preset đang chọn: đổi một biến là mọi góc đổi theo.",
         "sm": "Tooltip, mục trong menu",
         "md": "Nút, ô nhập, card",
         "xl": "Modal, card lớn",
@@ -1044,10 +1044,10 @@
     },
     "actions": {
       "title": "Nút và nhãn",
-      "description": "Nút cao 40px, bo 16px. Nhãn (badge) bo tròn, chữ 12px đậm.",
+      "description": "Nút cao 40px, bo theo --radius. Nhãn (badge) bo tròn, chữ 12px đậm.",
       "buttons": {
         "title": "Button",
-        "description": "Mỗi màn hình có tối đa một nút default (đỏ) cho hành động chính; hành động khác dùng secondary. Mỗi hàng gồm size sm, default, lg, icon-sm, icon, icon-lg và trạng thái disabled.",
+        "description": "Mỗi màn hình có tối đa một nút default (đỏ) cho hành động chính; hành động khác dùng secondary. Mỗi hàng gồm size sm, default, lg, icon-sm, icon, icon-lg và trạng thái disabled. Trên màn hình thật, luôn bọc nút chỉ có icon trong Tooltip.",
         "labels": {
           "default": "Quét lại",
           "secondary": "Xem chi tiết",
@@ -1161,7 +1161,7 @@
     },
     "overlays": {
       "title": "Lớp nổi",
-      "description": "Tooltip và menu nổi trên trang, bo góc 8–16px; chỉ lớp nổi mới có bóng.",
+      "description": "Tooltip và menu nổi trên trang, bo góc theo thang --radius; chỉ lớp nổi mới có bóng.",
       "tooltip": {
         "title": "Tooltip",
         "description": "Rê chuột hoặc focus vào nút để xem. Nút chỉ có icon luôn cần tooltip.",
@@ -1273,6 +1273,7 @@
     "outcome": {
       "success": "Đã hoàn tất thao tác với {name}.",
       "failure": "Chưa hoàn tất thao tác với {name}.",
+      "cancelledLate": "Lệnh cho {name} đã thoát với mã 0 trước khi yêu cầu hủy kịp dừng — phiên bản có thể đã thay đổi.",
       "unchanged": "Lệnh thay đổi chưa được khởi chạy; thao tác này chưa thay đổi gói. Dòng gói được giữ nguyên.",
       "refreshHint": "Danh sách sẽ tự làm mới một lần. Nếu làm mới thất bại, hãy chủ động làm mới trước khi dựa vào danh sách."
     },
@@ -1345,7 +1346,7 @@
     "risk": { "MACHINE_WIDE": "Thao tác này ảnh hưởng toàn máy, không chỉ một dự án." },
     "status": {
       "idle": "Chưa có tác vụ", "starting": "Đang gửi yêu cầu", "running": "Đang chạy", "stopping": "Đang dừng",
-      "completed": "Đã hoàn tất", "failed": "Thất bại", "cancelled": "Đã hủy", "timed_out": "Đã dừng do hết thời gian",
+      "completed": "Đã hoàn tất", "failed": "Thất bại", "cancelled": "Đã hủy", "cancelledLate": "Đã hủy muộn (lệnh đã thoát 0)", "timed_out": "Đã dừng do hết thời gian",
       "termination_failed": "Chưa xác nhận đã dừng tiến trình", "startUnknown": "Chưa xác nhận yêu cầu được tiếp nhận",
       "cancelUnknown": "Chưa xác nhận kết quả dừng", "lost": "Không còn theo dõi được tác vụ"
     },
