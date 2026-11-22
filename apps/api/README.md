@@ -17,7 +17,7 @@ machine. NestJS 12 + TypeScript.
 
 ## Requirements
 
-Node 22.18 or newer (tested on Node 22 and 24), pnpm 10 or 11. Target platform: Windows 11.
+Node 22.18 or newer (tested on Node 22 and 24), pnpm 10, 11 or 12 (development uses pnpm 11). Target platform: Windows 11.
 
 Use a current Node.js 24 release for the backend Jest unit and end-to-end tests. CI starts the built
 backend on Node 22 and runs the Jest suites on Node 24, which can load the ESM-only NestJS packages.
@@ -451,7 +451,7 @@ All routes below use `/api/v1/global-packages` and the standard response envelop
 | `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
 | `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
 
-`manager` is `npm` or `pnpm`; `action` is `remove` or `change`. `targetVersion` is required only for change and
+`manager` is `npm` or `pnpm`; `action` is `remove`, `change` or `repair` (in-process cleanup of broken global `npm` files with `manager: 'npm'` and `package: 'npm'`, without spawning npm). For `manager: 'npm'` and `package: 'npm'`, `change` switches terminal npm to a stable npm 10–12 release and `remove` restores Node-bundled npm. `targetVersion` is required only for `change` and
 must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
 Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
 are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
@@ -461,11 +461,11 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
 - **Confirmation:** a ready preview lasts five minutes. Review manager/version, global root, bin directory,
   current and resolved target version, declared bin changes and warnings. Every operation is high risk and
   requires `confirm: true`, acknowledgement of `MACHINE_WIDE`, and the exact, case-sensitive server text:
-  `REMOVE GLOBAL <manager> <name>` or `CHANGE GLOBAL <manager> <name> TO <version>`. Whitespace is not trimmed.
+  `REMOVE GLOBAL <manager> <name>`, `CHANGE GLOBAL <manager> <name> TO <version>` or `REPAIR GLOBAL npm npm`. Whitespace is not trimmed.
   Bin differences describe declared metadata, not all effects of scripts or transitive packages.
 - **pnpm 10 shared project:** all global packages live in one project. Changing or removing one reruns pnpm on
   that project. A preview's optional `sharedPackages: { name: string; version: string; linked: boolean }[]`
-  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT`. npm and pnpm 11
+  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT`. npm, pnpm 11 and pnpm 12
   previews omit this field. After execution, the app verifies that each listed package's spec, installed version,
   link destination and command shims are unchanged, and that no new direct package appeared. Failure means the
   result could not be verified (`POSTCONDITION_FAILED`, `refreshRequired`); refresh the inventory and inspect it
@@ -582,7 +582,7 @@ This controls launch configuration; it does not isolate lifecycle code.
   disk-size caches are not refreshed by this feature. Inspect lifecycle side effects separately and explicitly
   rescan, recheck or remeasure when needed.
 - **Audit:** `logs/dangerous-operations.jsonl` in the data folder records intent/result for
-  `global-packages.remove`, `global-packages.change` and `global-packages.cancel`, including job/target identity
+  `global-packages.remove`, `global-packages.change`, `global-packages.repair` and `global-packages.cancel`, including job/target identity
   and outcome/cleanup facts, without command output, environment or config secrets. Intent failure prevents
   mutation; result-write failure retains the lock. Cancellation still attempts to stop processes if auditing fails.
 - **Retention and bounds:** one inventory and the latest activity/log live in RAM; restart loses them. Up to
