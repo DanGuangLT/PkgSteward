@@ -10,6 +10,7 @@ import { Container } from "@/components/layout/container"
 import { Logo } from "@/components/layout/logo"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { getNavCurrent, navItems } from "@/components/layout/nav-items"
+import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
 import { useSettings } from "@/components/settings/settings-provider"
 import { ModeToggle } from "@/components/theme/mode-toggle"
@@ -22,9 +23,11 @@ function BreadcrumbBar() {
   const activeNav = navItems.find((item) => item.href !== "/" && getNavCurrent(pathname, item.href))
   const label = activeNav
     ? t(activeNav.labelKey)
-    : pathname.startsWith("/projects")
-      ? t("projects")
-      : pathname.replace(/^\//, "")
+    : pathname === "/settings" || pathname.startsWith("/settings/")
+      ? t("settings")
+      : pathname.startsWith("/projects")
+        ? t("projects")
+        : pathname.replace(/^\//, "")
 
   return (
     <div className="border-b border-border bg-muted/40">
@@ -78,6 +81,7 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-1">
             <LocaleSwitcher />
             <ModeToggle />
+            <SettingsNavButton />
           </div>
         </header>
         {appearance.showBreadcrumbs ? <BreadcrumbBar /> : null}

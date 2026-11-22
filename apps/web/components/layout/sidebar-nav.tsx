@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl"
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher"
 import { Logo } from "@/components/layout/logo"
 import { NavLinks } from "@/components/layout/nav-links"
+import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { useSettings } from "@/components/settings/settings-provider"
 import { ModeToggle } from "@/components/theme/mode-toggle"
 import { Button } from "@/components/ui/button"
@@ -66,6 +67,7 @@ export function SidebarNav() {
       >
         <LocaleSwitcher />
         <ModeToggle />
+        <SettingsNavButton tooltipSide={collapsed ? "right" : "top"} />
       </div>
     </aside>
   )

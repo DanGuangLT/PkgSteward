@@ -6,6 +6,7 @@ import { Container } from "@/components/layout/container"
 import { Logo } from "@/components/layout/logo"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { NavLinks } from "@/components/layout/nav-links"
+import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { ModeToggle } from "@/components/theme/mode-toggle"
 
 /** Primary nav: sticky, cao 64px, viền dưới hairline, logo + wordmark đỏ bên trái. */
@@ -29,6 +30,7 @@ export async function TopNav() {
         <div className="ml-auto flex items-center gap-1">
           <LocaleSwitcher />
           <ModeToggle />
+          <SettingsNavButton />
         </div>
       </Container>
     </header>

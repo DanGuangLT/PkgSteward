@@ -9,7 +9,6 @@ import {
   HardDriveIcon,
   type LucideIcon,
   PaletteIcon,
-  SettingsIcon,
   Trash2Icon,
 } from "lucide-react"
 import { useTranslations } from "next-intl"
@@ -25,7 +24,6 @@ const NAV_ICONS = {
   cleanup: Trash2Icon,
   globalPackages: GlobeIcon,
   designSystem: PaletteIcon,
-  settings: SettingsIcon,
 } satisfies Record<NavIconKey, LucideIcon>
 
 // Mục đang chọn có gạch chân đỏ (topbar) hoặc nền nổi (sidebar/mobile).
@@ -60,7 +58,6 @@ export function NavLinks({
   const pathname = usePathname()
   const settings = useSettingsOptional()
   const showDesignSystem = settings ? settings.behavior.showDesignSystemInNav : true
-  const hasRestartPending = (settings?.restartRequiredFields.length ?? 0) > 0
 
   const visibleItems = navItems.filter((item) => item.href !== "/design-system" || showDesignSystem)
 
@@ -75,7 +72,6 @@ export function NavLinks({
         const current = getNavCurrent(pathname, item.href)
         const Icon = NAV_ICONS[item.iconKey]
         const label = t(item.labelKey)
-        const showRestartDot = item.href === "/settings" && hasRestartPending
 
         const link = (
           <Link
@@ -89,17 +85,8 @@ export function NavLinks({
               collapsed && orientation === "vertical" && "justify-center px-0"
             )}
           >
-            {(showIcons || collapsed || item.href === "/settings") && (
-              <Icon className="size-4 shrink-0" aria-hidden />
-            )}
+            {(showIcons || collapsed) && <Icon className="size-4 shrink-0" aria-hidden />}
             {!collapsed && <span>{label}</span>}
-            {showRestartDot && (
-              <span
-                className="size-2 shrink-0 rounded-full bg-warning"
-                title={t("restartBadge")}
-                aria-label={t("restartBadge")}
-              />
-            )}
           </Link>
         )
 

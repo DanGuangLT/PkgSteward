@@ -6,7 +6,6 @@ export type NavIconKey =
   | "cleanup"
   | "globalPackages"
   | "designSystem"
-  | "settings"
 
 export type NavItem = {
   href: string
@@ -25,7 +24,6 @@ export const navItems = [
   { href: "/cleanup", labelKey: "cleanup", iconKey: "cleanup" },
   { href: "/global-packages", labelKey: "globalPackages", iconKey: "globalPackages" },
   { href: "/design-system", labelKey: "designSystem", iconKey: "designSystem" },
-  { href: "/settings", labelKey: "settings", iconKey: "settings" },
 ] as const satisfies readonly NavItem[]
 
 export function getNavCurrent(pathname: string, href: string): "page" | "true" | undefined {
