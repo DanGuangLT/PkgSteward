@@ -290,7 +290,11 @@
     "diskUsage": "Disk usage",
     "cleanup": "Cleanup",
     "globalPackages": "Global packages",
-    "designSystem": "Design system"
+    "designSystem": "Design system",
+    "settings": "Settings",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "restartBadge": "Server settings require a restart"
   },
   "theme": {
     "label": "Appearance",
@@ -298,7 +302,12 @@
     "dark": "Dark",
     "system": "System",
     "presets": {
-      "default": "Default"
+      "default": "Default (npm Red)",
+      "ocean": "Ocean Blue",
+      "emerald": "Emerald Green",
+      "slate": "Slate Monochrome",
+      "amber": "Warm Amber",
+      "violet": "Indigo Violet"
     }
   },
   "locale": {
@@ -1627,5 +1636,289 @@
     "autoPolling": "Task status is updating automatically.",
     "noMatchingVersions": "No versions match the current filters. Adjust the filters or reload the version list.",
     "shellLockedWhileRunning": "A command is currently running, so switching terminals is temporarily locked."
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Customize appearance, defaults, runtime scanning, and server options — stored cleanly inside one portable settings.json file.",
+    "refreshCta": "Reload from settings.json",
+    "restartRequiredGlobalBanner": "Some persisted server settings ({fields}) differ from the running backend configuration. Restart the backend process to apply them.",
+    "apiUnavailableHint": "Backend API is currently unavailable to load or save this section. Start the backend and click Reload.",
+    "tabs": {
+      "appearance": "Appearance & Layout",
+      "behavior": "Behavior & Defaults",
+      "runtime": "Scan & Runner",
+      "server": "Server & Paths",
+      "plugins": "Plugins",
+      "backup": "Backup & Reset"
+    },
+    "sources": {
+      "default": "Default",
+      "env": ".env / Environment",
+      "settings": "settings.json"
+    },
+    "messages": {
+      "saveFailed": "Could not save preference.",
+      "previewFailed": "Could not build settings preview.",
+      "applyFailed": "Could not apply settings changes.",
+      "appliedSuccess": "Settings saved and applied."
+    },
+    "validation": {
+      "SCAN_ROOTS_WILDCARD": "\"*\" must stand alone and cannot be mixed with directory paths.",
+      "SCAN_ROOTS_ABSOLUTE": "Paths must be absolute (for example D:\\Projects or /home/user/projects).",
+      "TIMEOUT_MIN_1000": "Timeout must be an integer >= 1000 ms (1 second).",
+      "DEPTH_RANGE": "Scan depth must be an integer between 0 (unlimited) and 20.",
+      "SERVER_HOST": "HOST must be a loopback address: 127.0.0.1, localhost, or ::1.",
+      "SERVER_PORT": "PORT must be an integer between 1 and 65535.",
+      "SERVER_PREFIX": "GLOBAL_PREFIX must match 1–32 alphanumeric/underscore/dash characters.",
+      "SERVER_VERSION": "VERSION must match 1–32 alphanumeric/underscore/dash characters.",
+      "SERVER_CORS": "Each CORS origin must be a valid http:// or https:// scheme://host[:port] URL without wildcard * or path."
+    },
+    "confirmDialog": {
+      "updateTitle": "Review & confirm settings update",
+      "importTitle": "Review & confirm settings import",
+      "resetTitle": "Review & confirm settings reset",
+      "description": "Inspect the field diff, runtime scope, and risk notices before writing to settings.json.",
+      "clearsScanCache": "Changing scan roots or depth clears cached scan and disk-usage results when idle. Run a fresh scan afterward.",
+      "restartRequired": "Fields requiring a backend restart to take effect: {fields}.",
+      "acknowledgeHighRisk": "I understand this risk and confirm applying these settings.",
+      "changesTitle": "Pending changes ({count})",
+      "noChanges": "No settings differ from the current effective configuration.",
+      "colField": "Field",
+      "colBefore": "Before",
+      "colAfter": "After",
+      "colEffect": "Effect",
+      "riskLevel": {
+        "low": "Low risk",
+        "medium": "Review carefully",
+        "high": "High risk"
+      },
+      "riskReason": {
+        "BROAD_SCAN_ROOTS": "Scanning all fixed drives (\"*\") grants path access across every non-protected directory on all fixed drives.",
+        "PLUGINS_LOCAL_ENABLED": "Allowing local plugin discovery reads plugin manifests from disk (executable plugins remain disabled in v1.0).",
+        "SCAN_SCOPE_CHANGED": "Changing scan root paths or depth clears existing scan and disk-usage caches.",
+        "SERVER_RESTART_REQUIRED": "Server listener, CORS, or API settings require restarting the backend process to take effect.",
+        "SETTINGS_RESET": "Resets selected settings sections to defaults or startup environment values."
+      },
+      "effect": {
+        "instant": "Instant",
+        "hot-reload": "Hot reload",
+        "restart-required": "Restart required"
+      }
+    },
+    "appearance": {
+      "previewTitle": "Live interactive preview",
+      "previewDescription": "Changes to palette, fonts, scale, corner radius, and layout apply live across the entire workspace.",
+      "previewProjectTitle": "Sample Project · @pkgsteward/web",
+      "previewCleanBadge": "Healthy",
+      "previewWarningBadge": "Sample warning",
+      "previewSecondaryCta": "Secondary action",
+      "previewPrimaryCta": "Primary action",
+      "themeSectionTitle": "Color Mode & Presets",
+      "themeSectionDescription": "Every color preset is verified against WCAG 2.1 AA contrast rules in both Light and Dark modes.",
+      "presetLabel": "Color preset",
+      "typographySectionTitle": "Typography & Scale",
+      "typographySectionDescription": "Fonts are bundled locally with full Latin + Vietnamese diacritics support.",
+      "fontFamilyLabel": "Interface font",
+      "monoFontLabel": "Code & path font (Monospace)",
+      "fontScaleLabel": "Global scale",
+      "lineHeightLabel": "Line height",
+      "fonts": {
+        "inter": "Inter (Default)",
+        "be-vietnam-pro": "Be Vietnam Pro",
+        "plus-jakarta-sans": "Plus Jakarta Sans",
+        "roboto": "Roboto",
+        "system": "System UI"
+      },
+      "monoFonts": {
+        "geist-mono": "Geist Mono",
+        "jetbrains-mono": "JetBrains Mono",
+        "fira-code": "Fira Code",
+        "system": "System Mono"
+      },
+      "lineHeights": {
+        "tight": "Tight (1.35)",
+        "normal": "Normal (1.5)",
+        "relaxed": "Relaxed (1.7)"
+      },
+      "layoutSectionTitle": "Layout, Shape & Density",
+      "layoutSectionDescription": "Switch between the classic Topbar and a collapsible Desktop/Electron-style Sidebar.",
+      "navigationLayoutLabel": "Navigation shell",
+      "navLayouts": {
+        "topbar": "Top Navigation (Topbar)",
+        "topbarDesc": "Compact horizontal bar along the top edge.",
+        "sidebar": "Left Sidebar (Desktop style)",
+        "sidebarDesc": "Collapsible vertical sidebar optimized for widescreen & future Electron window."
+      },
+      "sidebarCollapsedLabel": "Collapse sidebar by default",
+      "sidebarCollapsedDesc": "Display icon-only rail in desktop sidebar mode.",
+      "radiusLabel": "Corner radius",
+      "radii": {
+        "none": "Sharp 0px",
+        "sharp": "Subtle (6px)",
+        "compact": "Compact (10px)",
+        "default": "Standard (16px)",
+        "rounded": "Rounded (22px)"
+      },
+      "densityLabel": "Layout density",
+      "densities": {
+        "compact": "Compact",
+        "comfortable": "Comfortable",
+        "spacious": "Spacious"
+      },
+      "contentWidthLabel": "Content container width",
+      "widths": {
+        "narrow": "Narrow (1024px)",
+        "standard": "Standard (1280px)",
+        "wide": "Wide (1536px)",
+        "full": "Full width"
+      },
+      "showBreadcrumbsLabel": "Show breadcrumb bar",
+      "showBreadcrumbsDesc": "Display the current route trail below the navigation bar.",
+      "accessibilityTitle": "Accessibility & Contrast",
+      "accessibilityDescription": "Tune motion and border emphasis for readability.",
+      "reducedMotionLabel": "Motion preference",
+      "motions": {
+        "system": "Match OS",
+        "reduce": "Reduce motion",
+        "normal": "Normal"
+      },
+      "highContrastBordersLabel": "High-contrast borders",
+      "highContrastBordersDesc": "Strengthen card and input borders for clearer visual separation."
+    },
+    "behavior": {
+      "generalTitle": "Behavior Defaults",
+      "generalDescription": "Configure default language, runner terminal, and list behavior.",
+      "localeLabel": "Interface language",
+      "locales": {
+        "vi": "Tiếng Việt",
+        "en": "English"
+      },
+      "defaultShellLabel": "Default console shell for project runs",
+      "shells": {
+        "cmd": "cmd",
+        "powershell": "powershell"
+      },
+      "defaultShellHint": "Used when a project has not saved a per-project shell choice.",
+      "defaultPageSizeLabel": "Default items per section / page",
+      "dateFormatLabel": "Timestamp display format",
+      "dateFormats": {
+        "relative": "Relative (2 min ago)",
+        "absolute": "Full date & time",
+        "iso": "ISO-8601"
+      },
+      "workflowTitle": "Navigation & Focus Behavior",
+      "workflowDescription": "Control how the workspace responds to navigation and focus changes.",
+      "autoRefreshLabel": "Refresh status on window focus",
+      "autoRefreshDesc": "Sync active job and scan status when returning to the window.",
+      "confirmNavigationLabel": "Warn before leaving sensitive tasks",
+      "confirmNavigationDesc": "Keep safety confirmations active while destructive actions are in progress.",
+      "showDesignSystemLabel": "Show Design system in main navigation",
+      "showDesignSystemDesc": "Turn off to hide the Design system showcase link from navigation menus."
+    },
+    "runtime": {
+      "hotReloadBanner": "Settings below hot-reload immediately across PathGuard, Scanner, Projects, NpmRunner, Global Packages, and Package Managers without restarting the backend.",
+      "scanRootsTitle": "Scan Root Paths (SCAN_ROOT_PATHS)",
+      "scanRootsDescription": "Restrict which folders PkgSteward is allowed to scan and manage (protected system folders always remain blocked).",
+      "modeCustom": "Specific folders",
+      "modeAllDrives": "All fixed drives (*)",
+      "allDrivesWarning": "Wildcard \"*\" allows path access across all fixed drives (excluding protected system paths) and requires explicit high-risk confirmation.",
+      "pathPlaceholder": "D:\\Coding\\Projects",
+      "addPath": "Add folder",
+      "noCustomPaths": "No folders added yet.",
+      "removePath": "Remove {path}",
+      "customPathsRequired": "Add at least one valid folder or switch to \"*\" mode.",
+      "limitsTitle": "Depth & Execution Timeouts",
+      "limitsDescription": "Configure directory walk depth and command timeout deadlines.",
+      "maxScanDepthLabel": "Max scan depth (MAX_SCAN_DEPTH)",
+      "maxScanDepthHint": "Set to 0 for unlimited depth; max 20.",
+      "scanTimeoutLabel": "Scan timeout (SCAN_TIMEOUT_MS)",
+      "npmTimeoutLabel": "Command runner timeout (NPM_COMMAND_TIMEOUT_MS)",
+      "noTimeLimit": "No time limit (default)",
+      "previewSaveCta": "Preview & apply changes"
+    },
+    "server": {
+      "restartPendingBanner": "Saved server settings ({fields}) differ from the running process. Restart the backend to apply.",
+      "restartInfoBanner": "Edit server startup options directly in settings.json instead of maintaining .env manually. Restart the backend after saving for changes here to take effect.",
+      "configTitle": "Server Listener & API Configuration",
+      "configDescription": "PkgSteward restricts network listeners to local loopback addresses only.",
+      "modeLabel": "Runtime mode (MODE)",
+      "hostLabel": "Bind host (HOST)",
+      "portLabel": "API port (PORT)",
+      "prefixLabel": "Route prefix (GLOBAL_PREFIX)",
+      "versionLabel": "API version (VERSION)",
+      "corsLabel": "Allowed CORS origins (LIST_ORIGIN_CORS)",
+      "swaggerLabel": "Export OpenAPI JSON during development (EXPORT_SWAGGER_API_JSON)",
+      "previewSaveCta": "Preview & save server config",
+      "systemPathsTitle": "System Paths & Diagnostics (Read-Only)",
+      "systemPathsDescription": "Exact resolved locations for settings.json, audit logs, cache, and runtime directories.",
+      "copied": "Copied to clipboard.",
+      "copyFailed": "Clipboard access failed.",
+      "copyValue": "Copy {label}",
+      "paths": {
+        "settingsFilePath": "settings.json file",
+        "dataDir": "Data directory (dataDir)",
+        "pluginsDir": "Default plugins directory",
+        "auditLogFilePath": "Dangerous operations audit log",
+        "cacheDir": "Cache directory",
+        "appInstallDir": "API install directory",
+        "sourceCheckoutDir": "Repository checkout directory",
+        "runtimeEnv": "Node runtime & platform"
+      }
+    },
+    "plugins": {
+      "foundationTitle": "Plugin Extensibility Foundation",
+      "manifestOnlyBadge": "Manifest-only mode (v1)",
+      "foundationDescription": "Provides versioned extension-point contracts and safe discovery of pkgsteward.plugin.json manifests. External plugin code execution remains disabled in v1.0 for local security.",
+      "masterEnableLabel": "Enable plugin subsystem configuration",
+      "masterEnableDesc": "Persist plugin preferences and per-plugin config maps inside settings.json.",
+      "extensionPointsTitle": "API v1 Extension Points",
+      "schemaReady": "Schema ready",
+      "securityTitle": "Local Plugin Discovery Policy (Tier B)",
+      "securityDescription": "Changing local discovery or custom directory permissions requires preview, PathGuard check, and audit logging.",
+      "allowLocalPluginsLabel": "Allow discovering manifests from local plugin directories",
+      "allowLocalPluginsDesc": "Reads top-level pkgsteward.plugin.json manifests only (symlink escapes blocked).",
+      "directoryLabel": "Custom plugins directory (blank = default)",
+      "directoryHint": "Default directory: {defaultDir}",
+      "registriesLabel": "Trusted registries (comma-separated HTTPS or loopback URLs)",
+      "previewSavePolicyCta": "Preview & save plugin policy",
+      "discoveredTitle": "Discovered Local Plugins ({count})",
+      "refreshCta": "Rescan manifests",
+      "noDiscovered": "No valid pkgsteward.plugin.json manifests found in the active plugins directory.",
+      "enableEntry": "Enabled",
+      "saveConfigCta": "Save plugin config",
+      "invalidManifestsTitle": "Invalid plugin manifests safely ignored:",
+      "sampleManifestTitle": "Sample pkgsteward.plugin.json for future extension authors",
+      "copySample": "Copy sample JSON",
+      "sampleCopied": "Copied sample manifest.",
+      "sampleCopyFailed": "Could not copy sample manifest."
+    },
+    "backup": {
+      "exportTitle": "Export Portable settings.json",
+      "exportDescription": "Download or copy a full settings.json snapshot (appearance, behavior, runtime, server, plugins) to back up or migrate to another machine / Electron desktop.",
+      "downloadJsonCta": "Download settings.json",
+      "copyJsonCta": "Copy full JSON",
+      "exportSuccess": "Downloaded settings.json backup.",
+      "copySuccess": "Copied full settings JSON.",
+      "exportFailed": "Failed to export settings.",
+      "importTitle": "Import & Restore Settings",
+      "importDescription": "Accepts both structured schemaVersion 1 files and legacy flat settings.json files. Validates and previews every diff before applying.",
+      "chooseFileLabel": "Choose settings.json file",
+      "pasteJsonLabel": "Or paste JSON content",
+      "fileReadFailed": "Could not read selected file.",
+      "invalidJson": "Input is not a valid JSON object.",
+      "previewImportCta": "Validate & preview import",
+      "resetTitle": "Scoped Reset to Defaults",
+      "resetDescription": "Reset a chosen section (resetting Scan or Server removes overrides from settings.json so .env or system defaults take over).",
+      "resetScopeLabel": "Reset scope",
+      "resetScopes": {
+        "appearance": "Appearance & Layout",
+        "behavior": "Behavior",
+        "runtime": "Scan & Runner",
+        "server": "Server",
+        "plugins": "Plugins",
+        "all": "Entire settings.json"
+      },
+      "previewResetCta": "Preview reset"
+    }
   }
 }

@@ -93,8 +93,8 @@
   /* Bóng — chỉ modal / lớp nổi được có bóng */
   --shadow-modal: 0 0 16px var(--shadow-color);
 
-  /* Bề rộng tối đa vùng nội dung (~1280px) → max-w-content */
-  --container-content: 80rem;
+  /* Bề rộng tối đa vùng nội dung (~1280px mặc định, đổi qua html[data-width]) → max-w-content */
+  --container-content: var(--app-content-width);
 }
 
 /*

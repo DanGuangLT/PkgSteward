@@ -3,7 +3,9 @@
 import { useTransition } from "react"
 import { LanguagesIcon } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
+import { useRouter } from "next/navigation"
 
+import { useSettingsOptional } from "@/components/settings/settings-provider"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -16,19 +18,23 @@ import {
 import { isLocale, localeLabels, locales } from "@/i18n/config"
 import { setUserLocale } from "@/i18n/locale"
 
-/**
- * Đổi ngôn ngữ giao diện. Danh sách lấy từ i18n/config.ts nên thêm ngôn ngữ
- * mới không cần sửa component này. Server Action ghi cookie xong, Next.js tự
- * render lại route với ngôn ngữ mới.
- */
+/** Đổi ngôn ngữ giao diện và đồng bộ cookie + settings.json. */
 export function LocaleSwitcher() {
   const t = useTranslations("locale")
   const locale = useLocale()
+  const router = useRouter()
+  const settings = useSettingsOptional()
   const [isPending, startTransition] = useTransition()
 
   function handleChange(value: string) {
     if (!isLocale(value) || value === locale) return
-    startTransition(() => setUserLocale(value))
+    startTransition(async () => {
+      await setUserLocale(value)
+      if (settings) {
+        await settings.updatePreferences({ behavior: { locale: value } })
+      }
+      router.refresh()
+    })
   }
 
   return (

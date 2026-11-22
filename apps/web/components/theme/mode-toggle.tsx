@@ -10,6 +10,7 @@ import {
 import { useTranslations } from "next-intl"
 import { useTheme } from "next-themes"
 
+import { useSettingsOptional } from "@/components/settings/settings-provider"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -27,10 +28,20 @@ const MODE_ICONS = {
   system: MonitorIcon,
 } satisfies Record<ThemeMode, LucideIcon>
 
-/** Chọn chế độ Sáng / Tối / Theo hệ thống. */
+/** Chọn chế độ Sáng / Tối / Theo hệ thống và đồng bộ về settings.json. */
 export function ModeToggle() {
   const t = useTranslations("theme")
   const { theme, setTheme } = useTheme()
+  const settings = useSettingsOptional()
+
+  function handleChange(value: string) {
+    if (!themeModes.includes(value as ThemeMode)) return
+    const nextMode = value as ThemeMode
+    setTheme(nextMode)
+    if (settings) {
+      void settings.updatePreferences({ appearance: { themeMode: nextMode } })
+    }
+  }
 
   return (
     <DropdownMenu>
@@ -41,7 +52,7 @@ export function ModeToggle() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{t("label")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+        <DropdownMenuRadioGroup value={theme} onValueChange={handleChange}>
           {themeModes.map((mode) => {
             const Icon = MODE_ICONS[mode]
             return (

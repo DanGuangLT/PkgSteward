@@ -290,7 +290,11 @@
     "diskUsage": "Dung lượng",
     "cleanup": "Dọn dẹp",
     "globalPackages": "Gói global",
-    "designSystem": "Design system"
+    "designSystem": "Design system",
+    "settings": "Cài đặt",
+    "collapseSidebar": "Thu gọn thanh bên",
+    "expandSidebar": "Mở rộng thanh bên",
+    "restartBadge": "Có cấu hình máy chủ cần khởi động lại"
   },
   "theme": {
     "label": "Giao diện",
@@ -298,7 +302,12 @@
     "dark": "Tối",
     "system": "Theo hệ thống",
     "presets": {
-      "default": "Mặc định"
+      "default": "Mặc định (Đỏ npm)",
+      "ocean": "Đại dương (Xanh lam)",
+      "emerald": "Ngọc lục bảo (Xanh lá)",
+      "slate": "Đá phiến (Tối giản)",
+      "amber": "Hổ phách (Nâu ấm)",
+      "violet": "Tím chàm (Indigo)"
     }
   },
   "locale": {
@@ -1637,5 +1646,289 @@
     "autoPolling": "Trạng thái tác vụ đang tự động cập nhật liên tục.",
     "noMatchingVersions": "Không có phiên bản phù hợp bộ lọc hiện tại. Hãy nới bộ lọc hoặc tải lại danh sách.",
     "shellLockedWhileRunning": "Đang có lệnh chạy nên tạm khoá đổi terminal. Chờ lệnh kết thúc rồi chọn lại."
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "description": "Tùy biến giao diện, hành vi, cấu hình quét và máy chủ — lưu thống nhất trong một tệp settings.json để sao lưu và đồng bộ dễ dàng.",
+    "refreshCta": "Tải lại từ settings.json",
+    "restartRequiredGlobalBanner": "Một số cấu hình máy chủ đã lưu trong settings.json ({fields}) khác với cấu hình khởi động hiện tại. Hãy khởi động lại backend để áp dụng.",
+    "apiUnavailableHint": "Hiện chưa kết nối được backend API để đọc/ghi mục cài đặt này. Hãy bật backend rồi bấm Tải lại.",
+    "tabs": {
+      "appearance": "Giao diện & Bố cục",
+      "behavior": "Hành vi & Mặc định",
+      "runtime": "Quét & Thực thi",
+      "server": "Máy chủ & Đường dẫn",
+      "plugins": "Tiện ích (Plugins)",
+      "backup": "Sao lưu & Khôi phục"
+    },
+    "sources": {
+      "default": "Mặc định",
+      "env": ".env / Biến môi trường",
+      "settings": "settings.json"
+    },
+    "messages": {
+      "saveFailed": "Không lưu được tùy chọn.",
+      "previewFailed": "Không tạo được bản xem trước thay đổi.",
+      "applyFailed": "Không áp dụng được cấu hình mới.",
+      "appliedSuccess": "Đã lưu và áp dụng cài đặt thành công."
+    },
+    "validation": {
+      "SCAN_ROOTS_WILDCARD": "Ký tự \"*\" phải đứng một mình, không ghép chung với đường dẫn khác.",
+      "SCAN_ROOTS_ABSOLUTE": "Đường dẫn phải là đường dẫn tuyệt đối (ví dụ D:\\Projects hoặc /home/user/projects).",
+      "TIMEOUT_MIN_1000": "Thời gian chờ phải là số nguyên tối thiểu 1000 ms (1 giây).",
+      "DEPTH_RANGE": "Độ sâu quét phải là số nguyên từ 0 (không giới hạn) đến 20.",
+      "SERVER_HOST": "HOST chỉ được là địa chỉ loopback: 127.0.0.1, localhost hoặc ::1.",
+      "SERVER_PORT": "Cổng (PORT) phải là số nguyên từ 1 đến 65535.",
+      "SERVER_PREFIX": "GLOBAL_PREFIX chỉ gồm chữ, số, dấu gạch dưới hoặc gạch ngang (1–32 ký tự).",
+      "SERVER_VERSION": "VERSION chỉ gồm chữ, số, dấu gạch dưới hoặc gạch ngang (1–32 ký tự).",
+      "SERVER_CORS": "Mỗi origin CORS phải là URL http:// hoặc https:// hợp lệ, không chứa dấu * hay đường dẫn con."
+    },
+    "confirmDialog": {
+      "updateTitle": "Xác nhận cập nhật cài đặt",
+      "importTitle": "Xác nhận nhập tệp settings.json",
+      "resetTitle": "Xác nhận khôi phục cài đặt",
+      "description": "Kiểm tra kỹ danh sách thay đổi, mức độ ảnh hưởng và tác động hệ thống trước khi ghi vào settings.json.",
+      "clearsScanCache": "Thay đổi thư mục quét hoặc độ sâu sẽ xoá kết quả quét và bộ nhớ đệm dung lượng hiện tại (nếu đang rảnh). Bạn cần quét lại sau khi áp dụng.",
+      "restartRequired": "Các trường cần khởi động lại backend sau khi lưu: {fields}.",
+      "acknowledgeHighRisk": "Tôi hiểu rủi ro này và xác nhận áp dụng.",
+      "changesTitle": "Danh sách thay đổi ({count})",
+      "noChanges": "Không có giá trị nào thay đổi so với cấu hình đang dùng.",
+      "colField": "Trường",
+      "colBefore": "Trước",
+      "colAfter": "Sau",
+      "colEffect": "Hiệu lực",
+      "riskLevel": {
+        "low": "Rủi ro thấp",
+        "medium": "Cần lưu ý",
+        "high": "Rủi ro cao"
+      },
+      "riskReason": {
+        "BROAD_SCAN_ROOTS": "Quét toàn bộ ổ đĩa cố định (\"*\") cấp quyền truy cập cho mọi thư mục không nằm trong danh sách bảo vệ.",
+        "PLUGINS_LOCAL_ENABLED": "Cho phép đọc tệp manifest plugin cục bộ từ ổ đĩa (chế độ v1.0 không thực thi mã plugin).",
+        "SCAN_SCOPE_CHANGED": "Thay đổi đường dẫn quét hoặc độ sâu sẽ xoá bộ nhớ đệm quét và đo dung lượng hiện tại.",
+        "SERVER_RESTART_REQUIRED": "Thay đổi cấu hình máy chủ, CORS hoặc tiền tố API cần khởi động lại backend mới có hiệu lực.",
+        "SETTINGS_RESET": "Khôi phục nhóm cài đặt đã chọn về giá trị mặc định hoặc biến môi trường khởi động."
+      },
+      "effect": {
+        "instant": "Tức thì",
+        "hot-reload": "Đổi nóng ngay",
+        "restart-required": "Cần khởi động lại"
+      }
+    },
+    "appearance": {
+      "previewTitle": "Xem trước trực tiếp",
+      "previewDescription": "Mọi thay đổi bảng màu, phông chữ, cỡ chữ, bo góc và mật độ đều được áp dụng ngay trên toàn bộ ứng dụng.",
+      "previewProjectTitle": "Dự án mẫu · @pkgsteward/web",
+      "previewCleanBadge": "Ổn định",
+      "previewWarningBadge": "Cảnh báo mẫu",
+      "previewSecondaryCta": "Thao tác phụ",
+      "previewPrimaryCta": "Thao tác chính",
+      "themeSectionTitle": "Chế độ & Bảng màu",
+      "themeSectionDescription": "Tất cả bảng màu được kiểm tra tự động đạt chuẩn tương phản WCAG 2.1 AA ở cả Sáng và Tối.",
+      "presetLabel": "Bảng màu",
+      "typographySectionTitle": "Phông chữ & Tỷ lệ hiển thị",
+      "typographySectionDescription": "Phông chữ được đóng gói sẵn hỗ trợ đầy đủ tiếng Việt có dấu và hiển thị rõ đường dẫn / mã lệnh.",
+      "fontFamilyLabel": "Phông chữ giao diện",
+      "monoFontLabel": "Phông chữ mã lệnh & đường dẫn (Monospace)",
+      "fontScaleLabel": "Cỡ chữ tổng thể",
+      "lineHeightLabel": "Giãn dòng",
+      "fonts": {
+        "inter": "Inter (Mặc định)",
+        "be-vietnam-pro": "Be Vietnam Pro",
+        "plus-jakarta-sans": "Plus Jakarta Sans",
+        "roboto": "Roboto",
+        "system": "Phông hệ thống"
+      },
+      "monoFonts": {
+        "geist-mono": "Geist Mono",
+        "jetbrains-mono": "JetBrains Mono",
+        "fira-code": "Fira Code",
+        "system": "Mono hệ thống"
+      },
+      "lineHeights": {
+        "tight": "Gọn (1.35)",
+        "normal": "Chuẩn (1.5)",
+        "relaxed": "Thoáng (1.7)"
+      },
+      "layoutSectionTitle": "Bố cục, Hình khối & Mật độ",
+      "layoutSectionDescription": "Chuyển linh hoạt giữa thanh điều hướng trên cao hoặc thanh bên thu gọn theo phong cách ứng dụng Desktop.",
+      "navigationLayoutLabel": "Kiểu thanh điều hướng",
+      "navLayouts": {
+        "topbar": "Thanh trên (Topbar)",
+        "topbarDesc": "Menu ngang gọn gàng trên cùng, quen thuộc với trình duyệt web.",
+        "sidebar": "Thanh bên (Sidebar Desktop)",
+        "sidebarDesc": "Menu dọc bên trái có thể thu gọn thành dải biểu tượng, tối ưu màn hình rộng và Electron sau này."
+      },
+      "sidebarCollapsedLabel": "Thu gọn thanh bên mặc định",
+      "sidebarCollapsedDesc": "Chỉ hiện biểu tượng trên thanh bên để mở rộng không gian làm việc.",
+      "radiusLabel": "Độ bo góc",
+      "radii": {
+        "none": "Vuông (0px)",
+        "sharp": "Sắc (6px)",
+        "compact": "Vừa (10px)",
+        "default": "Chuẩn (16px)",
+        "rounded": "Tròn (22px)"
+      },
+      "densityLabel": "Mật độ bố cục",
+      "densities": {
+        "compact": "Gọn",
+        "comfortable": "Vừa",
+        "spacious": "Thoáng"
+      },
+      "contentWidthLabel": "Bề rộng vùng nội dung",
+      "widths": {
+        "narrow": "Hẹp (1024px)",
+        "standard": "Chuẩn (1280px)",
+        "wide": "Rộng (1536px)",
+        "full": "Toàn màn hình"
+      },
+      "showBreadcrumbsLabel": "Hiển thị thanh đường dẫn (Breadcrumb)",
+      "showBreadcrumbsDesc": "Hiện vị trí trang hiện tại ngay dưới thanh điều hướng.",
+      "accessibilityTitle": "Trợ năng & Tương phản",
+      "accessibilityDescription": "Điều chỉnh chuyển động và độ rõ viền theo nhu cầu sử dụng.",
+      "reducedMotionLabel": "Hiệu ứng chuyển động",
+      "motions": {
+        "system": "Theo hệ điều hành",
+        "reduce": "Giảm tối đa chuyển động",
+        "normal": "Bình thường"
+      },
+      "highContrastBordersLabel": "Tăng cường độ rõ đường viền",
+      "highContrastBordersDesc": "Làm đậm nét viền các thẻ và ô nhập liệu để dễ phân tách hơn."
+    },
+    "behavior": {
+      "generalTitle": "Tùy chọn hành vi mặc định",
+      "generalDescription": "Thiết lập các giá trị khởi tạo cho ngôn ngữ, terminal và danh sách.",
+      "localeLabel": "Ngôn ngữ giao diện",
+      "locales": {
+        "vi": "Tiếng Việt",
+        "en": "English"
+      },
+      "defaultShellLabel": "Terminal mặc định khi chạy lệnh dự án",
+      "shells": {
+        "cmd": "cmd",
+        "powershell": "powershell"
+      },
+      "defaultShellHint": "Áp dụng cho các dự án chưa từng lưu lựa chọn shell riêng.",
+      "defaultPageSizeLabel": "Số mục mặc định mỗi nhóm / trang",
+      "dateFormatLabel": "Định dạng hiển thị thời gian",
+      "dateFormats": {
+        "relative": "Tương đối (2 phút trước)",
+        "absolute": "Ngày giờ đầy đủ",
+        "iso": "ISO-8601"
+      },
+      "workflowTitle": "Luồng làm việc & Điều hướng",
+      "workflowDescription": "Tùy biến trải nghiệm khi chuyển trang hoặc quay lại cửa sổ ứng dụng.",
+      "autoRefreshLabel": "Tự làm mới trạng thái khi quay lại cửa sổ",
+      "autoRefreshDesc": "Đồng bộ lại trạng thái phiên quét/tác vụ khi tab ứng dụng được focus.",
+      "confirmNavigationLabel": "Cảnh báo khi rời trang giữa tác vụ nhạy cảm",
+      "confirmNavigationDesc": "Giữ nguyên nhắc nhở an toàn khi thao tác xoá hoặc đổi phiên bản chưa chốt.",
+      "showDesignSystemLabel": "Hiển thị mục Design system trên thanh điều hướng",
+      "showDesignSystemDesc": "Tắt mục này nếu bạn muốn ẩn trang trình diễn hệ thống thiết kế khỏi menu chính."
+    },
+    "runtime": {
+      "hotReloadBanner": "Các cấu hình bên dưới được nạp động (hot-reload) ngay lập tức vào PathGuard, Scanner, Projects, NpmRunner, Global Packages và Package Managers mà không cần khởi động lại backend.",
+      "scanRootsTitle": "Thư mục gốc quét dự án (SCAN_ROOT_PATHS)",
+      "scanRootsDescription": "Chỉ định chính xác các thư mục cho phép quét và thao tác tệp (bên ngoài vùng hệ thống bảo vệ).",
+      "modeCustom": "Chỉ định từng thư mục",
+      "modeAllDrives": "Mọi ổ đĩa cố định (*)",
+      "allDrivesWarning": "Chế độ \"*\" cho phép quét và cấp quyền path trên toàn bộ các ổ đĩa cố định (ngoại trừ thư mục hệ thống bảo vệ). Hệ thống sẽ yêu cầu xác nhận rủi ro cao.",
+      "pathPlaceholder": "D:\\Coding\\Projects",
+      "addPath": "Thêm thư mục",
+      "noCustomPaths": "Chưa có thư mục nào được thêm.",
+      "removePath": "Xoá {path}",
+      "customPathsRequired": "Cần có ít nhất 1 thư mục hợp lệ hoặc chuyển sang chế độ \"*\".",
+      "limitsTitle": "Giới hạn độ sâu & Thời gian chờ",
+      "limitsDescription": "Điều chỉnh giới hạn đệ quy thư mục và timeout lệnh chạy thực thi.",
+      "maxScanDepthLabel": "Độ sâu quét tối đa (MAX_SCAN_DEPTH)",
+      "maxScanDepthHint": "Đặt 0 để không giới hạn độ sâu; tối đa 20.",
+      "scanTimeoutLabel": "Giới hạn thời gian quét (SCAN_TIMEOUT_MS)",
+      "npmTimeoutLabel": "Giới hạn thời gian chạy lệnh npm/pnpm (NPM_COMMAND_TIMEOUT_MS)",
+      "noTimeLimit": "Không giới hạn thời gian (mặc định an toàn)",
+      "previewSaveCta": "Xem lại & áp dụng thay đổi"
+    },
+    "server": {
+      "restartPendingBanner": "Cấu hình máy chủ đã lưu thay đổi ({fields}) nhưng backend đang chạy vẫn giữ giá trị lúc khởi động. Khởi động lại backend để áp dụng hoàn toàn.",
+      "restartInfoBanner": "Các tham số bên dưới thay thế việc sửa file .env thủ công. Sau khi xác nhận ghi vào settings.json, cần khởi động lại tiến trình backend để có hiệu lực.",
+      "configTitle": "Tham số lắng nghe & API máy chủ",
+      "configDescription": "Chỉ cho phép bind trên địa chỉ loopback cục bộ theo chuẩn bảo mật của PkgSteward.",
+      "modeLabel": "Chế độ chạy (MODE)",
+      "hostLabel": "Địa chỉ lắng nghe (HOST)",
+      "portLabel": "Cổng API (PORT)",
+      "prefixLabel": "Tiền tố route (GLOBAL_PREFIX)",
+      "versionLabel": "Phiên bản API (VERSION)",
+      "corsLabel": "Origin cho phép (LIST_ORIGIN_CORS)",
+      "swaggerLabel": "Xuất tệp OpenAPI JSON khi phát triển (EXPORT_SWAGGER_API_JSON)",
+      "previewSaveCta": "Xem lại & lưu cấu hình máy chủ",
+      "systemPathsTitle": "Đường dẫn hệ thống (chỉ đọc)",
+      "systemPathsDescription": "Vị trí thực tế của settings.json, nhật ký kiểm toán và bộ nhớ đệm trên máy hiện tại.",
+      "copied": "Đã sao chép đường dẫn.",
+      "copyFailed": "Không thể truy cập clipboard.",
+      "copyValue": "Sao chép {label}",
+      "paths": {
+        "settingsFilePath": "Tệp settings.json",
+        "dataDir": "Thư mục dữ liệu (dataDir)",
+        "pluginsDir": "Thư mục plugin mặc định",
+        "auditLogFilePath": "Nhật ký thao tác nguy hiểm",
+        "cacheDir": "Thư mục bộ nhớ đệm (cache)",
+        "appInstallDir": "Thư mục cài đặt API",
+        "sourceCheckoutDir": "Thư mục mã nguồn repo",
+        "runtimeEnv": "Môi trường Node / Nền tảng"
+      }
+    },
+    "plugins": {
+      "foundationTitle": "Nền tảng Plugin mở rộng (Sẵn sàng phát triển)",
+      "manifestOnlyBadge": "Chế độ chỉ đọc manifest (v1)",
+      "foundationDescription": "Khai báo sẵn kiến trúc điểm mở rộng và khám phá manifest pkgsteward.plugin.json an toàn. Trong v1.0, hệ thống tuyệt đối không thực thi mã JavaScript ngoài để đảm bảo an toàn cục bộ.",
+      "masterEnableLabel": "Kích hoạt hệ thống Plugin (lưu trong settings.json)",
+      "masterEnableDesc": "Cho phép quản lý danh sách và cấu hình của từng plugin trong tệp sao lưu.",
+      "extensionPointsTitle": "Các điểm mở rộng hỗ trợ trong API v1",
+      "schemaReady": "Schema sẵn sàng",
+      "securityTitle": "Chính sách khám phá & Thư mục Plugin (Tier B)",
+      "securityDescription": "Thay đổi quyền đọc thư mục cục bộ hoặc thư mục tùy chỉnh đi qua bước xem trước, kiểm tra PathGuard và ghi nhận vào nhật ký.",
+      "allowLocalPluginsLabel": "Cho phép đọc manifest từ thư mục plugin cục bộ",
+      "allowLocalPluginsDesc": "Đọc tệp pkgsteward.plugin.json trong các thư mục con cấp 1 (chặn symlink thoát ra ngoài).",
+      "directoryLabel": "Thư mục plugin tùy chỉnh (để trống = dùng mặc định)",
+      "directoryHint": "Mặc định hiện tại: {defaultDir}",
+      "registriesLabel": "Trusted Registries (cách nhau bằng dấu phẩy, HTTPS hoặc localhost)",
+      "previewSavePolicyCta": "Xem lại & lưu chính sách Plugin",
+      "discoveredTitle": "Plugin phát hiện trên máy ({count})",
+      "refreshCta": "Quét lại manifest",
+      "noDiscovered": "Chưa phát hiện tệp pkgsteward.plugin.json hợp lệ nào trong thư mục plugin hiện tại.",
+      "enableEntry": "Bật trạng thái",
+      "saveConfigCta": "Lưu cấu hình plugin",
+      "invalidManifestsTitle": "Manifest không hợp lệ bị bỏ qua an toàn:",
+      "sampleManifestTitle": "Mẫu tệp pkgsteward.plugin.json cho nhà phát triển",
+      "copySample": "Sao chép mẫu JSON",
+      "sampleCopied": "Đã sao chép mẫu manifest.",
+      "sampleCopyFailed": "Không thể sao chép vào clipboard."
+    },
+    "backup": {
+      "exportTitle": "Xuất cấu hình ra tệp settings.json",
+      "exportDescription": "Tạo bản sao lưu đầy đủ toàn bộ cấu hình (giao diện, hành vi, quét, máy chủ, plugin) để chuyển máy hoặc chuẩn bị nâng cấp Desktop Electron.",
+      "downloadJsonCta": "Tải xuống settings.json",
+      "copyJsonCta": "Sao chép toàn bộ JSON",
+      "exportSuccess": "Đã tải xuống tệp sao lưu settings.json.",
+      "copySuccess": "Đã sao chép toàn bộ JSON cấu hình.",
+      "exportFailed": "Không xuất được cài đặt.",
+      "importTitle": "Nhập & Phục hồi từ tệp sao lưu",
+      "importDescription": "Hỗ trợ cả định dạng settings.json schema v1 mới và định dạng key phẳng cũ. Hệ thống sẽ kiểm tra hợp lệ và hiện bảng so sánh trước khi áp dụng.",
+      "chooseFileLabel": "Chọn tệp settings.json từ máy",
+      "pasteJsonLabel": "Hoặc dán nội dung JSON vào đây",
+      "fileReadFailed": "Không đọc được tệp đã chọn.",
+      "invalidJson": "Nội dung không phải JSON object hợp lệ.",
+      "previewImportCta": "Kiểm tra & xem trước nhập cấu hình",
+      "resetTitle": "Khôi phục mặc định theo từng phần",
+      "resetDescription": "Đưa nhóm cài đặt được chọn về mặc định (nhóm Quét & Máy chủ sẽ xoá ghi đè trong settings.json để quay lại giá trị .env hoặc mặc định hệ thống).",
+      "resetScopeLabel": "Phạm vi khôi phục",
+      "resetScopes": {
+        "appearance": "Giao diện & Bố cục",
+        "behavior": "Hành vi",
+        "runtime": "Quét & Timeout",
+        "server": "Máy chủ",
+        "plugins": "Plugins",
+        "all": "Toàn bộ settings.json"
+      },
+      "previewResetCta": "Xem trước khôi phục"
+    }
   }
 }

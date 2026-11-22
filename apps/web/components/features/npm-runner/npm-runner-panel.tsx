@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from "next-intl"
 
 import { NativeSessionDetails, RecoveryHoldBanner } from "@/components/features/npm-runner/native-session-status"
 import { NpmRunnerForm } from "@/components/features/npm-runner/npm-runner-form"
+import { useSettingsOptional } from "@/components/settings/settings-provider"
 import { DisabledTooltip } from "@/components/shared/disabled-tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,12 +27,13 @@ export function NpmRunnerPanel({ controller, contextError }: {
   const t = useTranslations("npmRunner")
   const tDisabled = useTranslations("disabledReasons")
   const format = useFormatter()
+  const settings = useSettingsOptional()
   const { hydrated, currentUrl, entryId } = useNavigationContinuity()
   const { state } = controller
   const [shellChoice, setShellChoice] = useViewState<ConsoleShell>(
     makeViewStateKey("npmRunner:consoleShell", controller.requestPath ?? state.requestPath ?? ""),
     runnerShellCodec,
-    "cmd",
+    settings?.behavior.defaultConsoleShell ?? "cmd",
   )
   const [actionSelection, setActionSelection] = useState<Omit<RunnerSelection, "consoleShell">>({ action: "install_all" })
   const selection: RunnerSelection = { ...actionSelection, consoleShell: shellChoice }
