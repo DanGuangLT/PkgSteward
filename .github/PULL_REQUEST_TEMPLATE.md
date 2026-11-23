@@ -21,8 +21,9 @@ Closes #
 
 ## Checklist
 
-- [ ] Backend changed: `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm test:e2e` pass in `apps/api/`
+- [ ] Backend changed: `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, `pnpm test:e2e` pass in `apps/api/`
 - [ ] Frontend changed: `pnpm lint`, `pnpm test` and `pnpm build` pass in `apps/web/` (plus `pnpm theme:check` for style changes and `pnpm i18n:check` for message changes)
+- [ ] Repository scripts changed: `npm run test:scripts`, `pnpm test:scripts`, or `yarn test:scripts` passes from the repository root
 - [ ] New UI strings are added to both `messages/vi.json` and `messages/en.json`
 - [ ] Destructive or machine-wide actions use preview → confirm, paths stay inside `SCAN_ROOT_PATHS`, and tests mock `execa` / the filesystem
 - [ ] Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
