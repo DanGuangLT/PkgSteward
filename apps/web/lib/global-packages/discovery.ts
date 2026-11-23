@@ -21,7 +21,18 @@ export function selectVersionOptions<T extends { version: string }>(
   rows: readonly T[], query: string, tags: Readonly<Record<string, string>>, selected: string
 ): { matches: T[]; options: T[]; selectedHidden: boolean } {
   const matchesText = createListTextMatcher(query)
-  const matches = rows.filter(row => matchesText(row.version, ...Object.entries(tags).filter(([, version]) => version === row.version).map(([tag]) => tag)))
+  const tagsByVersion = new Map<string, string[]>()
+  for (const [tag, version] of Object.entries(tags)) {
+    const versionTags = tagsByVersion.get(version)
+    if (versionTags) versionTags.push(tag)
+    else tagsByVersion.set(version, [tag])
+  }
+
+  const matches = rows.filter(row => matchesText(row.version, ...(tagsByVersion.get(row.version) ?? [])))
   const selectedHidden = selected !== "" && !matches.some(row => row.version === selected) && rows.some(row => row.version === selected)
-  return { matches, options: selectedHidden ? rows.filter(row => row.version === selected || matches.includes(row)) : matches, selectedHidden }
+  if (!selectedHidden) return { matches, options: matches, selectedHidden }
+
+  const matchedRows = new Set(matches)
+  const options = rows.filter(row => row.version === selected || matchedRows.has(row))
+  return { matches, options, selectedHidden }
 }

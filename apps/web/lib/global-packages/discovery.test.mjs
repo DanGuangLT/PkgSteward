@@ -17,6 +17,35 @@ test("version search includes tags and retains a selected filtered option withou
   assert.deepEqual(selectVersionOptions(rows, "missing", {}, ""), { matches: [], options: [], selectedHidden: false })
 })
 
+test("version search indexes tags once and keeps large results in catalog order", () => {
+  const rows = Array.from({ length: 2048 }, (_, index) => ({
+    version: `2.0.${2048 - index}${index % 4 === 0 ? "-rc.1" : ""}`,
+  }))
+  const tagValues = Object.fromEntries(rows.flatMap((row, index) =>
+    index % 3 === 0 ? [[`rc-channel-${index}`, row.version]] : []))
+  tagValues["rc-alias"] = rows[3].version
+  let enumerations = 0
+  const tags = new Proxy(tagValues, {
+    ownKeys(target) {
+      enumerations++
+      return Reflect.ownKeys(target)
+    },
+  })
+  const selectedIndex = 1025
+  const expectedMatches = rows.filter((_, index) => index % 4 === 0 || index % 3 === 0)
+  const expectedOptions = rows.filter((_, index) =>
+    index === selectedIndex || index % 4 === 0 || index % 3 === 0)
+
+  const result = selectVersionOptions(rows, " RC ", tags, rows[selectedIndex].version)
+
+  assert.equal(enumerations, 1)
+  assert.deepEqual(result, {
+    matches: expectedMatches,
+    options: expectedOptions,
+    selectedHidden: true,
+  })
+})
+
 test("global version ordering puts releases ahead of their prereleases and unknown version text last", () => {
   const row = version => ({ name: `TEST-${version}`, version, bins: [], status: "manageable" })
   const unknown = row("unknown"), prerelease = row("2.0.0-beta.1"), release = row("2.0.0")
