@@ -1,4 +1,8 @@
 {
+  "notFound": {
+    "title": "Không tìm thấy trang",
+    "backToProjects": "Về danh sách dự án"
+  },
   "listDiscovery": {
     "search": "Tìm trong danh sách",
     "reset": "Đặt lại tìm kiếm và bộ lọc",
