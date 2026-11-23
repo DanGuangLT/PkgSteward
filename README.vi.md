@@ -128,6 +128,38 @@ Giá trị chỉ có khoảng trắng tính là rỗng; giá trị sai sẽ dừ
 `GLOBAL_PREFIX=steward` và `VERSION=2` trên địa chỉ mặc định, đặt `API_BASE_URL=http://127.0.0.1:24681/steward/v2`
 trong `apps/web/.env.local`.
 
+#### Đổi cổng khi khởi động cả hai ứng dụng
+
+Lệnh `dev` và `start` ở thư mục gốc truyền biến môi trường của terminal cho cả hai ứng dụng.
+Một biến `PORT` dùng chung có thể khiến cả hai cùng lắng nghe trên một cổng. Ví dụ này dùng hai
+cổng khác nhau và giữ tiền tố, phiên bản API mặc định.
+
+Trong `apps/api/.env`, đặt:
+
+```dotenv
+HOST=127.0.0.1
+PORT=24781
+LIST_ORIGIN_CORS=http://127.0.0.1:24780
+```
+
+Trong `apps/web/.env.local`, đặt:
+
+```dotenv
+HOST=127.0.0.1
+PORT=24780
+API_BASE_URL=http://127.0.0.1:24781/api/v1
+```
+
+Nếu đã đặt `HOST` hoặc `PORT` trong phiên PowerShell hiện tại, hãy xóa các biến đó trước khi chạy
+lệnh ở thư mục gốc để mỗi ứng dụng dùng cấu hình riêng:
+
+```powershell
+Remove-Item Env:HOST, Env:PORT -ErrorAction SilentlyContinue
+```
+
+Mở `http://127.0.0.1:24780` để khớp với `LIST_ORIGIN_CORS`. Nếu backend đã lưu cấu hình máy chủ
+trong `settings.json`, hãy bảo đảm các giá trị đó cũng khớp với ví dụ.
+
 > [!IMPORTANT]
 > API không có xác thực theo thiết kế. Giữ `HOST` là địa chỉ loopback (mặc định `127.0.0.1`), không mở API ra mạng.
 
