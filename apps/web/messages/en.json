@@ -1,4 +1,8 @@
 {
+  "notFound": {
+    "title": "Page not found",
+    "backToProjects": "Back to Projects"
+  },
   "listDiscovery": {
     "search": "Search this list",
     "reset": "Reset search and filters",
