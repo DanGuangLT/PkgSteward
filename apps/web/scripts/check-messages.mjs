@@ -12,6 +12,7 @@ import { defaultLocale, locales } from "../i18n/config.ts"
 
 const MESSAGES_DIR = join(import.meta.dirname, "..", "messages")
 const defaultFile = `${defaultLocale}.json`
+let hasError = false
 
 function isMessageObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -25,7 +26,8 @@ function catalogEntries(tree, file, prefix = "") {
       try {
         parse(value)
       } catch (error) {
-        throw new SyntaxError(`Invalid ICU message in messages/${file} at "${path}": ${error.message}`, { cause: error })
+        console.error(`Invalid ICU message in messages/${file} at "${path}": ${error.message}`)
+        hasError = true
       }
       return [[path, "message"]]
     }
@@ -59,7 +61,6 @@ if (missingCatalogs.length > 0) {
 
 const base = readCatalog(defaultFile)
 const baseKeys = messageKeys(base)
-let hasError = false
 
 for (const file of files) {
   if (file === defaultFile) continue
@@ -80,7 +81,8 @@ for (const file of files) {
 }
 
 if (hasError) {
-  console.error("\nBản dịch có lỗi. Kiểm tra tên và cấu trúc key.")
-  process.exit(1)
+  console.error("\nBản dịch có lỗi. Kiểm tra cú pháp ICU, tên và cấu trúc key.")
+  process.exitCode = 1
+} else {
+  console.log("\nOK.")
 }
-console.log("\nOK.")

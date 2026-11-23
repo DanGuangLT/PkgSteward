@@ -47,16 +47,29 @@ test("names the catalog with invalid JSON syntax", (t) => {
   }
 })
 
-for (const file of ["vi.json", "en.json"]) {
-  test(`names the catalog and key with malformed ICU syntax in ${file}`, (t) => {
-    const valid = { section: { title: "Item count: {count}" } }
-    const invalid = { section: { title: "Item count: {count" } }
-    const check = createFixture(t, file === "vi.json" ? invalid : valid)
-    const result = check(file === "en.json" ? invalid : valid)
-    assert.equal(result.status, 1)
-    assert.ok(result.stderr.includes(`Invalid ICU message in messages/${file} at "section.title"`))
+test("reports every malformed ICU message across both catalogs in one run", (t) => {
+  const check = createFixture(t, {
+    section: {
+      title: "Item count: {count",
+      summary: "Valid: {count}",
+      group: { label: "{name" },
+    },
   })
-}
+  const result = check({
+    section: {
+      title: "Valid: {count}",
+      summary: "{total",
+      group: { label: "{item" },
+    },
+  })
+  assert.equal(result.status, 1)
+  const diagnostics = result.stderr.split(/\r?\n/).filter((line) => line.startsWith("Invalid ICU message"))
+  assert.equal(diagnostics.length, 4, result.stderr)
+  assert.match(diagnostics[0], /messages\/vi\.json at "section\.title"/)
+  assert.match(diagnostics[1], /messages\/vi\.json at "section\.group\.label"/)
+  assert.match(diagnostics[2], /messages\/en\.json at "section\.summary"/)
+  assert.match(diagnostics[3], /messages\/en\.json at "section\.group\.label"/)
+})
 
 test("accepts valid ICU plurals, rich text, and quoted syntax characters", (t) => {
   const messages = {
