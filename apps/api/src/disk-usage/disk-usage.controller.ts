@@ -97,10 +97,18 @@ export class DiskUsageController implements IDiskUsageController {
         ...errorEnvelope(409, 'CONFLICT').properties,
         details: {
           type: 'object',
-          required: ['jobId', 'path'],
+          required: ['jobId', 'path', 'requestPath'],
           properties: {
             jobId: { type: 'string', format: 'uuid' },
-            path: { type: 'string' },
+            path: {
+              type: 'string',
+              description: 'Canonical path of the running measurement',
+            },
+            requestPath: {
+              type: 'string',
+              description:
+                'Resolved path from the request that started the running measurement, before canonicalization',
+            },
           },
         },
       },
