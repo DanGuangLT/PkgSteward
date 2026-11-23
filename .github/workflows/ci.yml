@@ -188,6 +188,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      - name: Test root scripts with pnpm 11
+        if: matrix.node == '24'
+        working-directory: .
+        env:
+          # These tests use Node built-ins and do not need a root install.
+          pnpm_config_verify_deps_before_run: 'false'
+        run: pnpm test:scripts
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm theme:check
