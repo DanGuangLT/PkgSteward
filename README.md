@@ -136,6 +136,38 @@ update the backend's `LIST_ORIGIN_CORS` to match the origin used in the browser 
 `GLOBAL_PREFIX` or `VERSION`. For example, with `GLOBAL_PREFIX=steward` and `VERSION=2` on the default address,
 set `API_BASE_URL=http://127.0.0.1:24681/steward/v2` in `apps/web/.env.local`.
 
+#### Custom ports when starting both apps
+
+Root `dev` and `start` pass the terminal's environment to both apps. A shared `PORT` can make
+both try to listen on the same port. This example uses distinct ports and the default API prefix
+and version.
+
+In `apps/api/.env`, set:
+
+```dotenv
+HOST=127.0.0.1
+PORT=24781
+LIST_ORIGIN_CORS=http://127.0.0.1:24780
+```
+
+In `apps/web/.env.local`, set:
+
+```dotenv
+HOST=127.0.0.1
+PORT=24780
+API_BASE_URL=http://127.0.0.1:24781/api/v1
+```
+
+If you set `HOST` or `PORT` in the current PowerShell session, clear them before running the root
+command so the apps can use their own settings:
+
+```powershell
+Remove-Item Env:HOST, Env:PORT -ErrorAction SilentlyContinue
+```
+
+Open `http://127.0.0.1:24780` to match `LIST_ORIGIN_CORS`. If the backend has saved server settings
+in `settings.json`, make sure those values also match the example.
+
 > [!IMPORTANT]
 > The API has no authentication by design. Keep `HOST` on a loopback address (default `127.0.0.1`) and do not expose it to a network.
 
