@@ -77,6 +77,15 @@ The root install runs the same package manager inside `apps/api` and `apps/web`.
 committed `pnpm-lock.yaml` files, which pin the tested versions. npm and Yarn resolve the newest versions
 allowed by each `package.json`, and the lockfiles they create are not committed.
 
+If `npm install` or `yarn install` cannot find a matching version (for example, npm reports `ETARGET`)
+or the package tarball download returns HTTP 404, check the exact package, version, and registry in the
+error. Run `npm view "PACKAGE@VERSION" dist.tarball --registry "REGISTRY_URL"` with those values. The
+version can appear in the registry before the tarball is available. Retry the same install once the
+registry serves the file.
+
+If you can use the tested dependency versions, run `pnpm install` at the repository root with pnpm 11.
+It uses the committed lockfiles for both apps and still needs access to the pinned tarballs.
+
 For a fresh install with Yarn Classic (`1.22.22`), use a current Node.js 24 release so newly resolved
 dependencies can satisfy their Node.js requirements. Run `yarn install` at the root, then `yarn build` and
 `yarn start`, or use `yarn dev` for development.

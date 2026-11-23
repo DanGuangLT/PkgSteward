@@ -78,6 +78,15 @@ Lệnh cài ở thư mục gốc chạy cùng trình quản lý gói đó bên t
 các file `pnpm-lock.yaml` có sẵn trong repo, nơi ghi đúng phiên bản đã kiểm thử. npm và Yarn sẽ lấy phiên
 bản mới nhất mà từng `package.json` cho phép, và lockfile do chúng tạo ra không được commit.
 
+Nếu `npm install` hoặc `yarn install` không tìm thấy phiên bản phù hợp (ví dụ npm báo `ETARGET`) hoặc
+khi tải tệp tarball nhận HTTP 404, hãy kiểm tra đúng tên gói, phiên bản và registry ghi trong lỗi.
+Điền các giá trị đó vào lệnh `npm view "PACKAGE@VERSION" dist.tarball --registry "REGISTRY_URL"`.
+Phiên bản có thể xuất hiện trên registry trước khi tải được tệp. Hãy chạy lại lệnh cài khi registry
+đã cung cấp tệp tarball.
+
+Nếu có thể dùng các phiên bản dependency đã kiểm thử, hãy chạy `pnpm install` bằng pnpm 11 tại thư mục
+gốc. Lệnh dùng các lockfile có sẵn của cả hai ứng dụng và vẫn cần tải được các tarball đã khóa phiên bản.
+
 Khi cài mới bằng Yarn Classic (`1.22.22`), dùng bản Node.js 24 mới để đáp ứng yêu cầu của các dependency
 được tải về. Chạy `yarn install` ở thư mục gốc, sau đó chạy `yarn build` và `yarn start`, hoặc dùng
 `yarn dev` khi phát triển.
