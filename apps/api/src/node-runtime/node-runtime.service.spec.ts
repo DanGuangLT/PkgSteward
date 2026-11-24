@@ -30,6 +30,7 @@ describe('NodeRuntimeService', () => {
 
     const pathGuard = {
       check: jest.fn(),
+      checkMany: jest.fn(),
       assertAllowed: jest.fn(),
     } as unknown as PathGuardService;
 
@@ -110,17 +111,25 @@ describe('NodeRuntimeService', () => {
       getLatest: jest.fn(() => latest),
     } as unknown as ScannerService;
 
+    const check = jest.fn();
+    const checkMany = jest.fn(
+      (paths: readonly string[]): Promise<PathCheckResult[]> =>
+        Promise.resolve(
+          paths.map((p): PathCheckResult => {
+            if (p.endsWith('allowed-a')) {
+              return { allowed: true, path: makeGuarded(p) };
+            }
+            return {
+              allowed: false,
+              code: 'NOT_FOUND',
+              message: 'missing',
+            };
+          }),
+        ),
+    );
     const pathGuard = {
-      check: jest.fn((p: string): Promise<PathCheckResult> => {
-        if (p.endsWith('allowed-a')) {
-          return Promise.resolve({ allowed: true, path: makeGuarded(p) });
-        }
-        return Promise.resolve({
-          allowed: false,
-          code: 'NOT_FOUND',
-          message: 'missing',
-        });
-      }),
+      check,
+      checkMany,
       assertAllowed: jest.fn(),
     } as unknown as PathGuardService;
 
@@ -168,6 +177,12 @@ describe('NodeRuntimeService', () => {
 
     const first = await service.getOverview(false);
     expect(probeRunner).toHaveBeenCalledTimes(3);
+    expect(checkMany).toHaveBeenCalledTimes(1);
+    expect(checkMany).toHaveBeenCalledWith([
+      'D:\\Projects\\allowed-a',
+      'D:\\Projects\\gone-b',
+    ]);
+    expect(check).not.toHaveBeenCalled();
     expect(first.scanId).toBe('scan-1');
     expect(first.projects).toHaveLength(1);
     expect(first.counts.total).toBe(1);
@@ -175,9 +190,11 @@ describe('NodeRuntimeService', () => {
 
     await service.getOverview(false);
     expect(probeRunner).toHaveBeenCalledTimes(3);
+    expect(checkMany).toHaveBeenCalledTimes(2);
 
     await service.getOverview(true);
     expect(probeRunner).toHaveBeenCalledTimes(6);
+    expect(checkMany).toHaveBeenCalledTimes(3);
   });
 
   it('enforces PathGuardService and directory validation on getProjectDetail', async () => {
@@ -187,6 +204,7 @@ describe('NodeRuntimeService', () => {
 
     const pathGuard = {
       check: jest.fn(),
+      checkMany: jest.fn(),
       assertAllowed: jest.fn((rawPath: string) => {
         if (rawPath.includes('file.txt')) {
           return Promise.resolve(makeGuarded(rawPath));

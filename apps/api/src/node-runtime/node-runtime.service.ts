@@ -178,16 +178,25 @@ export class NodeRuntimeService implements INodeRuntimeService {
     const latest = this.getLatestScanOrNull();
 
     let projects: IProjectNodeCompatibility[] = [];
-    if (latest) {
+    if (latest && latest.projects.length > 0) {
+      const checks = await this.pathGuard.checkMany(
+        latest.projects.map((scannedProject) => scannedProject.path),
+      );
+      const allowedProjects = latest.projects.flatMap(
+        (scannedProject, index) => {
+          const check = checks[index];
+          return check?.allowed
+            ? [{ scannedProject, realPath: check.path.realPath }]
+            : [];
+        },
+      );
       const evaluated = await mapWithConcurrency(
-        latest.projects,
+        allowedProjects,
         PROJECT_READ_CONCURRENCY,
-        async (scannedProject) => {
-          const check = await this.pathGuard.check(scannedProject.path);
-          if (!check.allowed) return null;
-          if (!(await this.isDirectory(check.path.realPath))) return null;
+        async ({ scannedProject, realPath }) => {
+          if (!(await this.isDirectory(realPath))) return null;
 
-          const config = await this.readConfig(check.path.realPath);
+          const config = await this.readConfig(realPath);
           return evaluateProjectNodeCompatibility({
             projectPath: scannedProject.path,
             projectName: scannedProject.name ?? config.packageName,

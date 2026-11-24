@@ -67,6 +67,16 @@ describe('node-version.parser', () => {
         installedVersions: ['24.19.0', '22.18.0'],
       });
     });
+
+    it('strips ANSI CSI color sequences before parsing', () => {
+      const esc = String.fromCharCode(27);
+      const stdout = `${esc}[32m*${esc}[0m ${esc}[1mv24.19.0${esc}[0m default\n  ${esc}[36mv22.18.0${esc}[0m\n`;
+
+      expect(parseFnmList(stdout)).toEqual({
+        activeVersion: '24.19.0',
+        installedVersions: ['24.19.0', '22.18.0'],
+      });
+    });
   });
 
   describe('parseVoltaListNode', () => {

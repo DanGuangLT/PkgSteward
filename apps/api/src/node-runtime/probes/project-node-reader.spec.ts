@@ -79,6 +79,20 @@ describe('project-node-reader', () => {
     expect(requirements).toEqual([]);
   });
 
+  it('ignores comment-only .nvmrc and .node-version files cleanly', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pkgsteward-node-reader-'));
+    tempDirs.push(dir);
+    writeFileSync(
+      join(dir, '.nvmrc'),
+      '# pin node version\n  # second comment\n',
+      'utf8',
+    );
+    writeFileSync(join(dir, '.node-version'), '\uFEFF# comment only\n', 'utf8');
+
+    const requirements = await readProjectNodeRequirements(dir);
+    expect(requirements).toEqual([]);
+  });
+
   it('skips symlinked config files without reading them', async () => {
     const readPaths: string[] = [];
     const root = 'D:\\Projects\\app';

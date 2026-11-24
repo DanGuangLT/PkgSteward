@@ -32,10 +32,16 @@ export interface IParsedManagerVersions {
   activeVersion: string | null;
 }
 
+const ANSI_CSI_RE = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]`,
+  'g',
+);
+
 function sanitizeTerminalOutput(stdout: string): string {
   return stdout
     .replaceAll('\u0000', '')
     .replace(/^\uFEFF/, '')
+    .replace(ANSI_CSI_RE, '')
     .replace(/\r\n?/g, '\n');
 }
 

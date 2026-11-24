@@ -69,8 +69,7 @@ function extractFirstRawLine(content: string): string | null {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const firstMeaningful =
-    lines.find((line) => !line.startsWith('#')) ?? lines[0];
+  const firstMeaningful = lines.find((line) => !line.startsWith('#'));
   return firstMeaningful && firstMeaningful.length > 0 ? firstMeaningful : null;
 }
 
