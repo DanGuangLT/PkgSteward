@@ -20,6 +20,7 @@ export const ALLOWED_INTERNAL_ROUTES: readonly string[] = [
   "/files",
   "/cleanup",
   "/global-packages",
+  "/node-runtime",
   "/design-system",
 ]
 

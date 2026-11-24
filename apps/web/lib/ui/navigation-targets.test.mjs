@@ -102,6 +102,20 @@ test("appendReturnContext and resolveReturnTarget roundtrip origin and fall back
     isFallback: false,
   })
 
+  const nodeRuntimeLink = appendReturnContext("/projects?path=D%3A%5CTEST", {
+    returnTo: "/node-runtime?q=web",
+    originId: "node-runtime-row-0",
+  })
+  const nodeRuntimeResolved = resolveReturnTarget(
+    new URL(nodeRuntimeLink, "http://127.0.0.1").searchParams,
+    "/"
+  )
+  assert.deepEqual(nodeRuntimeResolved, {
+    href: "/node-runtime?q=web",
+    originId: "node-runtime-row-0",
+    isFallback: false,
+  })
+
   // Malicious returnTo falls back safely; self-loop also falls back.
   assert.deepEqual(
     resolveReturnTarget({ returnTo: "//evil.com", origin: "bad id!" }, "/projects?path=D%3A%5Ca"),

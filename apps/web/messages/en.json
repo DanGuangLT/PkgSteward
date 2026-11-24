@@ -294,6 +294,7 @@
     "diskUsage": "Disk usage",
     "cleanup": "Cleanup",
     "globalPackages": "Global packages",
+    "nodeRuntime": "Node Runtime",
     "designSystem": "Design system",
     "settings": "Settings",
     "collapseSidebar": "Collapse sidebar",
@@ -2141,5 +2142,90 @@
     "nextPage": "Next page",
     "lastPage": "Last page",
     "pageAria": "Page {page} of {totalPages}"
+  },
+  "nodeRuntime": {
+    "title": "Node Runtime Inspector",
+    "refresh": "Re-check",
+    "refreshing": "Checking…",
+    "retry": "Try again",
+    "safetyBanner": {
+      "title": "Read-only inspection — system-safe",
+      "description": "PkgSteward only reads installed runtimes and project configuration files. It never switches your machine-wide Node version, runs installers, or triggers UAC prompts."
+    },
+    "machine": {
+      "title": "Active Node.js & version managers",
+      "checkedAt": "Checked at",
+      "supported": "Supported runtime",
+      "unsupported": "Below supported minimum"
+    },
+    "managers": {
+      "detected": "Detected",
+      "notDetected": "Not detected",
+      "activeLabel": "Active version:",
+      "none": "None",
+      "noVersions": "No Node versions installed through this manager yet.",
+      "unavailableHint": "This manager command was not found on the current PATH."
+    },
+    "noScan": {
+      "title": "No project scan available yet",
+      "description": "Run a project scan first to inspect Node.js compatibility across your local workspace.",
+      "cta": "Go to Projects to scan"
+    },
+    "noProjects": {
+      "title": "No projects in the latest scan",
+      "description": "The latest scan has no active project directories left to evaluate."
+    },
+    "kpi": {
+      "total": "Total projects"
+    },
+    "filters": {
+      "status": "Compatibility status"
+    },
+    "sort": {
+      "priority": "Mismatches first",
+      "name": "Project name (A–Z)"
+    },
+    "statuses": {
+      "compatible": "Compatible",
+      "mismatch": "Version mismatch",
+      "unknown": "Unknown range",
+      "undeclared": "Undeclared"
+    },
+    "project": {
+      "openDetail": "Open details",
+      "declaredLabel": "Declared requirements:",
+      "noDeclaration": "No .nvmrc, .node-version, or package.json engines.node requirement found.",
+      "mismatchInstalled": "Active Node is {active}, while this project requires another version. Matching version {target} is already installed — copy a command below to switch manually:",
+      "mismatchMissing": "Active Node is {active}, and this project suggests {target} which is not installed yet. Copy the install and switch commands below if needed:",
+      "mismatchGeneric": "Active Node is {active}, which does not satisfy the project's declared Node requirement.",
+      "symbolicHint": "This project uses a symbolic alias that cannot be matched to an exact semver range."
+    },
+    "projectCard": {
+      "title": "Project Node.js compatibility",
+      "subtitle": "Read-only comparison between your active Node.js runtime and project configuration",
+      "openOverview": "Open Node Runtime Inspector",
+      "loading": "Checking project Node.js declarations…",
+      "activeNode": "Active machine Node.js"
+    },
+    "commands": {
+      "heading": "Suggested commands (copy to run in your terminal)",
+      "alreadyInstalled": "{version} installed",
+      "needsInstall": "Install {version} first",
+      "installStep": "Step 1 — Install version",
+      "switchStep": "Switch version",
+      "copy": "Copy",
+      "copiedShort": "Copied",
+      "copyAria": "Copy command {command}",
+      "copied": "Copied command: {command}",
+      "copyFailed": "Could not write to clipboard. Please select and copy the command manually.",
+      "noManagerDetected": "No nvm-windows, fnm, or Volta binary was detected on PATH for command suggestions.",
+      "noCommandAvailable": "No concrete target version could be derived from this requirement for command suggestions."
+    },
+    "errors": {
+      "title": "Could not load Node runtime information",
+      "backendUnavailable": "Could not reach the local backend service.",
+      "rateLimited": "Too many requests right now. Please wait a moment and try again.",
+      "generic": "An unexpected error occurred while inspecting Node.js runtimes."
+    }
   }
 }

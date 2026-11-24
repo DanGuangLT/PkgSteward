@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cva, type VariantProps } from "class-variance-authority"
 import {
+  CpuIcon,
   FolderGit2Icon,
   GlobeIcon,
   HardDriveIcon,
@@ -23,6 +24,7 @@ const NAV_ICONS = {
   diskUsage: HardDriveIcon,
   cleanup: Trash2Icon,
   globalPackages: GlobeIcon,
+  nodeRuntime: CpuIcon,
   designSystem: PaletteIcon,
 } satisfies Record<NavIconKey, LucideIcon>
 
@@ -33,7 +35,7 @@ const navLinkVariants = cva(
     variants: {
       orientation: {
         horizontal:
-          "relative inline-flex h-full items-center gap-1.5 rounded-sm after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-full after:bg-primary after:opacity-0 data-active:after:opacity-100",
+          "relative inline-flex h-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-full after:bg-primary after:opacity-0 data-active:after:opacity-100",
         vertical: "flex h-11 items-center gap-2.5 rounded-md px-3 hover:bg-muted data-active:bg-muted",
       },
     },
@@ -66,7 +68,7 @@ export function NavLinks({
     <ul
       className={cn(
         "flex",
-        orientation === "vertical" ? "flex-col gap-1" : "h-full gap-5"
+        orientation === "vertical" ? "flex-col gap-1" : "h-full gap-3.5 lg:gap-5"
       )}
     >
       {visibleItems.map((item) => {

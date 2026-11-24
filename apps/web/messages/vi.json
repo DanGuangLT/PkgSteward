@@ -294,6 +294,7 @@
     "diskUsage": "Dung lượng",
     "cleanup": "Dọn dẹp",
     "globalPackages": "Gói global",
+    "nodeRuntime": "Môi trường Node",
     "designSystem": "Design system",
     "settings": "Cài đặt",
     "collapseSidebar": "Thu gọn thanh bên",
@@ -2151,5 +2152,90 @@
     "nextPage": "Trang sau",
     "lastPage": "Trang cuối",
     "pageAria": "Trang {page} trên {totalPages}"
+  },
+  "nodeRuntime": {
+    "title": "Kiểm tra môi trường Node.js",
+    "refresh": "Kiểm tra lại",
+    "refreshing": "Đang kiểm tra…",
+    "retry": "Thử lại",
+    "safetyBanner": {
+      "title": "Chế độ chỉ đọc — an toàn cho hệ thống",
+      "description": "Công cụ chỉ đọc thông tin phiên bản và cấu hình dự án. Không tự ý đổi phiên bản Node toàn máy, không chạy lệnh cài đặt và không bật hộp thoại UAC."
+    },
+    "machine": {
+      "title": "Node.js & trình quản lý trên máy",
+      "checkedAt": "Kiểm tra lúc",
+      "supported": "Phiên bản được hỗ trợ",
+      "unsupported": "Phiên bản cũ hơn mức hỗ trợ"
+    },
+    "managers": {
+      "detected": "Đã phát hiện",
+      "notDetected": "Chưa phát hiện",
+      "activeLabel": "Đang kích hoạt:",
+      "none": "Chưa chọn",
+      "noVersions": "Chưa cài bản Node nào qua trình quản lý này.",
+      "unavailableHint": "Không tìm thấy lệnh của trình quản lý này trong PATH hiện tại."
+    },
+    "noScan": {
+      "title": "Chưa có dữ liệu quét dự án",
+      "description": "Hãy quét danh sách dự án trước để kiểm tra mức tương thích phiên bản Node.js trên toàn bộ thư mục của bạn.",
+      "cta": "Về trang Dự án để quét"
+    },
+    "noProjects": {
+      "title": "Không có dự án nào trong lần quét gần nhất",
+      "description": "Các thư mục dự án đã quét hiện không còn khả dụng hoặc danh sách quét đang trống."
+    },
+    "kpi": {
+      "total": "Tổng dự án"
+    },
+    "filters": {
+      "status": "Trạng thái tương thích"
+    },
+    "sort": {
+      "priority": "Ưu tiên lệch phiên bản",
+      "name": "Tên dự án (A–Z)"
+    },
+    "statuses": {
+      "compatible": "Tương thích",
+      "mismatch": "Không khớp phiên bản",
+      "unknown": "Chưa xác định dải phiên bản",
+      "undeclared": "Chưa khai báo"
+    },
+    "project": {
+      "openDetail": "Xem chi tiết",
+      "declaredLabel": "Khai báo phiên bản:",
+      "noDeclaration": "Dự án không có tệp .nvmrc, .node-version hoặc engines.node trong package.json.",
+      "mismatchInstalled": "Node đang chạy là {active}, nhưng dự án yêu cầu bản tương thích khác. Máy bạn đã có sẵn {target} — sao chép lệnh bên dưới để chuyển thủ công:",
+      "mismatchMissing": "Node đang chạy là {active}, còn dự án gợi ý {target} nhưng chưa thấy cài sẵn trong trình quản lý. Sao chép lệnh cài đặt và chuyển bên dưới khi cần:",
+      "mismatchGeneric": "Node đang chạy là {active}, không đáp ứng yêu cầu phiên bản đã khai báo của dự án.",
+      "symbolicHint": "Dự án dùng bí danh tượng trưng nên không đối chiếu được số phiên bản cụ thể."
+    },
+    "projectCard": {
+      "title": "Tương thích Node.js của dự án",
+      "subtitle": "Đối chiếu chỉ đọc giữa Node.js đang hoạt động trên máy và tệp cấu hình dự án",
+      "openOverview": "Xem toàn bộ môi trường Node",
+      "loading": "Đang kiểm tra khai báo phiên bản Node của dự án…",
+      "activeNode": "Node.js đang chạy trên máy"
+    },
+    "commands": {
+      "heading": "Lệnh gợi ý (sao chép để tự chạy trong terminal)",
+      "alreadyInstalled": "Đã cài sẵn {version}",
+      "needsInstall": "Cần cài thêm {version}",
+      "installStep": "Bước 1 — Cài phiên bản",
+      "switchStep": "Chuyển phiên bản",
+      "copy": "Sao chép",
+      "copiedShort": "Đã chép",
+      "copyAria": "Sao chép lệnh {command}",
+      "copied": "Đã sao chép lệnh: {command}",
+      "copyFailed": "Không thể sao chép vào bảng tạm. Vui lòng bôi đen lệnh để sao chép thủ công.",
+      "noManagerDetected": "Chưa phát hiện nvm-windows, fnm hoặc Volta trên PATH để gợi ý lệnh.",
+      "noCommandAvailable": "Yêu cầu phiên bản hiện tại không tạo được số phiên bản cụ thể để gợi ý lệnh chuyển tự động."
+    },
+    "errors": {
+      "title": "Không tải được thông tin môi trường Node",
+      "backendUnavailable": "Không kết nối được tới dịch vụ Backend cục bộ.",
+      "rateLimited": "Bạn thao tác quá nhanh, vui lòng thử lại sau ít giây.",
+      "generic": "Đã xảy ra lỗi khi kiểm tra môi trường Node.js."
+    }
   }
 }

@@ -21,6 +21,7 @@ import { NpmRunnerModule } from '@/npm-runner/npm-runner.module';
 import { GlobalPackagesModule } from '@/global-packages/global-packages.module';
 import { PackageManagersModule } from '@/package-managers/package-managers.module';
 import { SettingsModule } from '@/settings/settings.module';
+import { NodeRuntimeModule } from '@/node-runtime/node-runtime.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { SettingsModule } from '@/settings/settings.module';
     GlobalPackagesModule,
     PackageManagersModule,
     SettingsModule,
+    NodeRuntimeModule,
   ],
   controllers: [AppController],
   providers: [
