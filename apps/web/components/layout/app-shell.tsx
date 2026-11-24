@@ -37,16 +37,16 @@ export function AppShell({
     <div className="flex min-h-full flex-1">
       <SidebarNav />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-border bg-background px-4 md:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-border bg-background px-3 sm:px-4 md:hidden">
           <MobileNav />
           <Link
             href="/"
-            className="flex items-center gap-2 rounded-sm text-heading-md font-bold text-primary focus-ring"
+            className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold text-primary focus-ring sm:gap-2"
           >
             <Logo className="size-7 shrink-0" />
-            {t("brand")}
+            <span className="truncate">{t("brand")}</span>
           </Link>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
             <LocaleSwitcher />
             <ModeToggle />
             <SettingsNavButton />
