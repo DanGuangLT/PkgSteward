@@ -22,6 +22,7 @@ test("marks Projects as the current section on its detail routes", () => {
 test("marks only the matching section on unrelated routes", () => {
   assert.deepEqual(currentItems("/disk-usage"), [["/disk-usage", "page"]])
   assert.deepEqual(currentItems("/cleanup/result"), [["/cleanup", "true"]])
+  assert.deepEqual(currentItems("/node-runtime"), [["/node-runtime", "page"]])
 })
 
 test("ignores routes with similar prefixes", () => {

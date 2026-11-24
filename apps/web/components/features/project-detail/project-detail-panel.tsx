@@ -8,6 +8,7 @@ import type { ReactNode } from "react"
 import { useFormatter, useTranslations } from "next-intl"
 
 import { DiskSize } from "@/components/features/disk-usage/disk-usage-items"
+import { ProjectNodeRuntimeCard } from "@/components/features/node-runtime/project-node-runtime-card"
 import { ProjectManagerPanel } from "@/components/features/package-managers/project-manager-panel"
 import { ProjectAdvisories } from "@/components/features/project-detail/project-advisories"
 import { ProjectDependencies } from "@/components/features/project-detail/project-dependencies"
@@ -144,6 +145,8 @@ export function ProjectDetailPanel({ detail, detailError, runner, runnerBusy, ac
           />
 
           <ProjectManagerPanel path={local.requestPath} />
+
+          <ProjectNodeRuntimeCard path={local.requestPath} />
         </>
       ) : (
         <div role="alert" className="rounded-md border border-destructive/40 bg-card p-4 text-body-sm">

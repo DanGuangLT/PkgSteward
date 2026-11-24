@@ -5,6 +5,7 @@ export type NavIconKey =
   | "diskUsage"
   | "cleanup"
   | "globalPackages"
+  | "nodeRuntime"
   | "designSystem"
 
 export type NavItem = {
@@ -25,6 +26,7 @@ export const navItems = [
   { href: "/disk-usage", labelKey: "diskUsage", iconKey: "diskUsage" },
   { href: "/cleanup", labelKey: "cleanup", iconKey: "cleanup" },
   { href: "/global-packages", labelKey: "globalPackages", iconKey: "globalPackages" },
+  { href: "/node-runtime", labelKey: "nodeRuntime", iconKey: "nodeRuntime" },
   { href: "/design-system", labelKey: "designSystem", iconKey: "designSystem" },
 ] as const satisfies readonly NavItem[]
 
