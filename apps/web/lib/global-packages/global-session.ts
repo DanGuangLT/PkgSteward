@@ -1,6 +1,7 @@
 import { ApiError } from "../api/response.ts"
 import { isRunActive } from "../npm-runner/runner-policy.ts"
 import { initialRunnerLogs, mergeRunnerLogs, needsLogDrain } from "../npm-runner/runner-log-view.ts"
+import { createDismissedPreviewTracker, type DismissedPreviewTracker } from "./global-dismissed-previews.ts"
 import { globalError } from "./global-types.ts"
 import { newestGlobalVersions } from "./global-version-options.ts"
 import {
@@ -55,12 +56,14 @@ export interface GlobalSessionOptions {
   onChange(state: GlobalState): void
   onMutated(job: GlobalJob): void
   uuid?: () => string
+  dismissedPreviews?: DismissedPreviewTracker
 }
 export interface GlobalSession {
   inventory(): Promise<void>
   loadVersions(input: Pick<GlobalVersionsRequest, "manager" | "package">): Promise<void>
   preview(selection: GlobalSelection): Promise<void>
   stopPreview(): boolean
+  dismissPreview(): void
   execute(): Promise<void>
   select(selection: GlobalSelection): void
   consent(input: Partial<GlobalConsent>): void
@@ -98,7 +101,7 @@ export function globalActionPending(state: GlobalState, kind: GlobalJobKind, sel
     && (!selection || (activity.manager === selection.manager && activity.package === selection.package
       && (kind !== "preview" || selection.action === undefined || activity.action === selection.action)))
 }
-export function createGlobalSession({ api, clock, visibility, onChange, onMutated, uuid = () => crypto.randomUUID() }: GlobalSessionOptions): GlobalSession {
+export function createGlobalSession({ api, clock, visibility, onChange, onMutated, uuid = () => crypto.randomUUID(), dismissedPreviews }: GlobalSessionOptions): GlobalSession {
   let state = initialGlobalState()
   let disposed = false
   let timer: number | null = null
@@ -115,6 +118,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
   let displayedPreviewJob: string | null = null
   // A preview request stopped by Escape is never displayed, even if it completes first or the server re-seeds it.
   let stoppedPreviewRequest: string | null = null
+  const dismissed = dismissedPreviews ?? createDismissedPreviewTracker({ storage: null })
   let notifiedMutation: string | null = null
   let refreshedJob: string | null = null
   let mutationRequestId: string | null = null
@@ -159,6 +163,13 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       publish({ ...state, phase: "idle" })
     }
   }
+  function isDismissedPreview(job: GlobalJob): boolean {
+    return job.kind === "preview" && (
+      dismissed.has(job.previewId)
+      || dismissed.has(job.preview?.previewId)
+      || dismissed.has(job.jobId)
+    )
+  }
   function matchesSelection(preview: NonNullable<GlobalJob["preview"]>): boolean {
     const selection = state.form.selection
     return previewSelectionVersion === selectionVersion && selection.manager === preview.manager
@@ -169,7 +180,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     const generation = state.generation
     let form = state.form
     if (job.kind === "preview" && job.status === "completed" && job.preview && displayedPreviewJob !== job.jobId
-      && job.requestId !== stoppedPreviewRequest) {
+      && job.requestId !== stoppedPreviewRequest && !isDismissedPreview(job)) {
       if (job.preview.previewId !== job.previewId) invalidResponse()
       displayedPreviewJob = job.jobId
       if (matchesSelection(job.preview)) form = displayGlobalPreview(form, job.preview)
@@ -420,8 +431,18 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       || state.form.preview !== null || state.cancelPending || commandKind === "cancel"
       || state.requestId === null || stoppedPreviewRequest === state.requestId) return false
     stoppedPreviewRequest = state.requestId
+    dismissed.add(state.previewId)
+    dismissed.add(state.jobId)
     if (state.jobId) void cancel()
     return true
+  }
+  function dismissPreview(): void {
+    if (disposed || !state.form.preview) return
+    dismissed.add(state.form.preview.previewId)
+    dismissed.add(state.previewId)
+    dismissed.add(state.jobId)
+    selectionVersion++
+    publish({ ...state, form: clearGlobalPreview(state.form) })
   }
   async function cancel(): Promise<void> {
     if (disposed || state.cancelPending || !state.jobId || commandKind === "cancel"
@@ -467,12 +488,13 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
       publish({ ...state, snapshot: snapshot && state.job?.mutationSpawned && isRunActive(state.job)
         ? { ...snapshot, stale: true } : snapshot, snapshotError: null })
       if (latest && (!state.requestId || matchesPending(latest))) {
-        if (latest.kind === "preview" && latest.preview && !state.form.selection.package) {
+        const dismissedPreview = isDismissedPreview(latest)
+        if (latest.kind === "preview" && latest.preview && !dismissedPreview && !state.form.selection.package) {
           select({ manager: latest.preview.manager, package: latest.preview.package, action: latest.preview.action,
             ...(latest.preview.requestedVersion !== null ? { targetVersion: latest.preview.requestedVersion } : {}) })
           previewSelectionVersion = selectionVersion
         }
-        if (latest.kind === "preview" && state.jobId === null && state.requestId === null) previewSelectionVersion = selectionVersion
+        if (latest.kind === "preview" && !dismissedPreview && state.jobId === null && state.requestId === null) previewSelectionVersion = selectionVersion
         track(latest)
         void poll()
       }
@@ -502,7 +524,7 @@ export function createGlobalSession({ api, clock, visibility, onChange, onMutate
     invalidate()
     unsubscribe()
   }
-  return { inventory, loadVersions, preview, stopPreview, execute, select,
+  return { inventory, loadVersions, preview, stopPreview, dismissPreview, execute, select,
     consent: input => { if (!disposed) publish({ ...state, form: setGlobalConsent(state.form, input) }) },
     cancel, retryPoll, refresh, dispose, getSnapshot: () => state }
 }

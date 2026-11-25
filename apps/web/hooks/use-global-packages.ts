@@ -7,6 +7,7 @@ import {
   pollBrowserGlobalJob, getBrowserGlobalLogs, cancelBrowserGlobalJob,
 } from "@/lib/api/global-packages/global-packages-browser"
 import { createGlobalSession, initialGlobalState } from "@/lib/global-packages/global-session"
+import { getDefaultDismissedGlobalPreviews } from "@/lib/global-packages/global-dismissed-previews"
 import type { GlobalSession, GlobalState } from "@/lib/global-packages/global-session"
 import type { GlobalJob, GlobalSnapshot, GlobalVersionsRequest } from "@/lib/global-packages/global-types"
 import type { GlobalConsent, GlobalSelection } from "@/lib/global-packages/global-preview-form"
@@ -38,6 +39,7 @@ export function useGlobalPackages(snapshot: GlobalSnapshot | null, latest: Globa
         invalidateNavigationSnapshots("global-packages")
         onMutatedRef.current(job)
       },
+      dismissedPreviews: getDefaultDismissedGlobalPreviews(),
     })
     session.current = current
     return () => { current.dispose(); session.current = null }
@@ -48,11 +50,12 @@ export function useGlobalPackages(snapshot: GlobalSnapshot | null, latest: Globa
   const loadVersions = useCallback((input: Pick<GlobalVersionsRequest, "manager" | "package">) => session.current?.loadVersions(input) ?? Promise.resolve(), [])
   const preview = useCallback((selection: GlobalSelection) => session.current?.preview(selection) ?? Promise.resolve(), [])
   const stopPreview = useCallback(() => session.current?.stopPreview() ?? false, [])
+  const dismissPreview = useCallback(() => session.current?.dismissPreview(), [])
   const execute = useCallback(() => session.current?.execute() ?? Promise.resolve(), [])
   const select = useCallback((selection: GlobalSelection) => session.current?.select(selection), [])
   const consent = useCallback((input: Partial<GlobalConsent>) => session.current?.consent(input), [])
   const cancel = useCallback(() => session.current?.cancel() ?? Promise.resolve(), [])
   const retryPoll = useCallback(() => session.current?.retryPoll(), [])
   const refresh = useCallback(() => session.current?.refresh() ?? Promise.resolve(), [])
-  return { state, inventory, loadVersions, preview, stopPreview, execute, select, consent, cancel, retryPoll, refresh }
+  return { state, inventory, loadVersions, preview, stopPreview, dismissPreview, execute, select, consent, cancel, retryPoll, refresh }
 }

@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { ApiError } from "../api/response.ts"
+import { createDismissedPreviewTracker } from "./global-dismissed-previews.ts"
 import { createGlobalSession, initialGlobalState, globalActionPending, globalMutationSucceeded, isGlobalLateCancel } from "./global-session.ts"
 import { RUNNER_LOG_MAX_BYTES, RUNNER_LOG_MAX_CHUNKS } from "../npm-runner/runner-log-view.ts"
 
@@ -853,4 +854,94 @@ test("isGlobalLateCancel identifies late-cancelled mutations that exited 0 while
   ]) {
     assert.equal(isGlobalLateCancel(negative), false)
   }
+})
+
+function harnessWithDismissed(t, dismissedPreviews, customUuid = requestId) {
+  let visible = true
+  const api = Object.fromEntries(["snapshot", "inventory", "versions", "preview", "execute", "latest", "get", "logs", "cancel"].map(method => [method, () => deferred().promise]))
+  const requests = []
+  for (const method of Object.keys(api)) {
+    api[method] = (...args) => {
+      const pending = deferred()
+      requests.push({ method, args, ...pending })
+      return pending.promise
+    }
+  }
+  const session = createGlobalSession({
+    api,
+    clock: { now: () => epoch, setTimeout: () => 1, clearTimeout: () => {} },
+    visibility: { isVisible: () => visible, subscribe: () => () => {} },
+    onChange: () => {},
+    onMutated: () => {},
+    uuid: typeof customUuid === "function" ? customUuid : () => customUuid,
+    dismissedPreviews,
+  })
+  t.after(() => session.dispose())
+  return { session, requests, all: method => requests.filter(r => r.method === method), last: method => requests.filter(r => r.method === method).at(-1) }
+}
+
+test("dismissPreview clears dialog while preserving selection and prevents reopening across remount", async t => {
+  const tracker = createDismissedPreviewTracker({ storage: null })
+  const first = harnessWithDismissed(t, tracker)
+  const latestPreview = terminal({ kind: "preview", ...selection, previewId, preview })
+  first.session.select(selection)
+  await first.session.refresh(snapshot, latestPreview)
+  assert.deepEqual(first.session.getSnapshot().form.preview, preview)
+  assert.equal(first.session.getSnapshot().phase, "idle")
+
+  first.session.dismissPreview()
+  assert.equal(first.session.getSnapshot().form.preview, null)
+  assert.equal(first.session.getSnapshot().form.acknowledged, false)
+  assert.equal(first.session.getSnapshot().form.confirmText, "")
+  assert.deepEqual(first.session.getSnapshot().form.selection, selection)
+
+  // Simulate navigating away and returning (new session sharing the same tracker, seeded with server latest).
+  const remounted = harnessWithDismissed(t, tracker)
+  await remounted.session.refresh(snapshot, latestPreview)
+  assert.equal(remounted.session.getSnapshot().form.preview, null)
+  assert.equal(remounted.session.getSnapshot().phase, "idle")
+  assert.deepEqual(remounted.session.getSnapshot().form.selection, { manager: "npm", package: "", action: "remove" })
+})
+
+test("after dismissing preview P1, a fresh preview P2 for the exact same package still displays", async t => {
+  const tracker = createDismissedPreviewTracker({ storage: null })
+  let counter = 0
+  const h = harnessWithDismissed(t, tracker, () => `00000000-0000-4000-8000-00000000001${++counter}`)
+  const p1Job = terminal({ requestId: "req-p1", kind: "preview", ...selection, previewId: "prev-p1", preview: { ...preview, previewId: "prev-p1" } })
+  h.session.select(selection)
+  await h.session.refresh(snapshot, p1Job)
+  assert.equal(h.session.getSnapshot().form.preview?.previewId, "prev-p1")
+
+  h.session.dismissPreview()
+  assert.equal(h.session.getSnapshot().form.preview, null)
+
+  const started = h.session.preview(selection)
+  h.last("preview").resolve({ jobId: "job-p2", requestId: "00000000-0000-4000-8000-000000000011", previewId: "prev-p2", status: "running" })
+  await started; await flush()
+  const p2Preview = { ...preview, previewId: "prev-p2" }
+  h.last("get").resolve(terminal({ jobId: "job-p2", requestId: "00000000-0000-4000-8000-000000000011", kind: "preview", ...selection, previewId: "prev-p2", preview: p2Preview }))
+  h.last("logs").resolve(page([], { jobId: "job-p2" }))
+  await flush()
+  assert.equal(h.session.getSnapshot().form.preview?.previewId, "prev-p2")
+})
+
+test("stopPreview records preview identity in shared tracker so remounted session never opens that completed preview", async t => {
+  const tracker = createDismissedPreviewTracker({ storage: null })
+  const first = harnessWithDismissed(t, tracker)
+  first.session.select(selection)
+  await first.session.refresh(snapshot, job({ kind: "preview", ...selection, previewId }))
+  assert.equal(first.session.stopPreview(), true)
+
+  const remounted = harnessWithDismissed(t, tracker)
+  await remounted.session.refresh(snapshot, terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.equal(remounted.session.getSnapshot().form.preview, null)
+  assert.equal(remounted.session.getSnapshot().phase, "idle")
+})
+
+test("an undismissed preview from server latest still displays on mount", async t => {
+  const tracker = createDismissedPreviewTracker({ storage: null })
+  tracker.add("different-preview-id")
+  const h = harnessWithDismissed(t, tracker)
+  await h.session.refresh(snapshot, terminal({ kind: "preview", ...selection, previewId, preview }))
+  assert.deepEqual(h.session.getSnapshot().form.preview, preview)
 })

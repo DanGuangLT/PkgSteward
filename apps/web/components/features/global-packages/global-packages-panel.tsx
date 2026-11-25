@@ -204,9 +204,8 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
           blocked={blocked}
           onCloseAutoFocus={closePreview}
           onCancel={() => {
-            // Reset preview and consent while retaining the editor and its focus target.
-            controller.select({ ...state.form.selection, package: "" })
-            controller.select(state.form.selection)
+            // Persist dismissal so returning before the server preview TTL expires will not reopen it.
+            controller.dismissPreview()
           }}
         />
       ) : null}

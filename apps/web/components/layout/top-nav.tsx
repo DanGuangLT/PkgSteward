@@ -15,18 +15,18 @@ export async function TopNav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background">
-      <Container className="flex h-16 min-w-0 items-center gap-1.5 sm:gap-2 md:gap-4 lg:gap-8">
-        <MobileNav />
+      <Container className="flex h-16 min-w-0 items-center gap-1.5 sm:gap-2 lg:gap-6 xl:gap-8">
+        <MobileNav triggerClassName="lg:hidden" />
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold text-primary focus-ring sm:gap-2 sm:text-heading-lg md:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold text-primary focus-ring sm:gap-2 sm:text-heading-lg lg:shrink-0"
         >
           <Logo className="size-7 shrink-0 sm:size-8" />
           <span className="truncate">{t("brand")}</span>
         </Link>
         <nav
           aria-label={t("mainNavigation")}
-          className="hidden h-full min-w-0 flex-1 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex"
+          className="hidden h-full min-w-0 flex-1 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex"
         >
           <NavLinks />
         </nav>
