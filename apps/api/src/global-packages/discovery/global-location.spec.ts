@@ -1003,3 +1003,145 @@ describe('cross-manager location ambiguity', () => {
     },
   );
 });
+
+describe('Yarn Classic real-Windows ancestor .yarnrc discovery (Tier B Finding 1)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function setupRealProfileLayout() {
+    const profile = 'D:\\TEST\\Users\\alice';
+    const local = `${profile}\\AppData\\Local`;
+    const cacheDir = `${local}\\PkgSteward\\cache`;
+    const cwd = `${cacheDir}\\global-packages-cwd`;
+    const npmPrefix = 'D:\\TEST\\npm-global';
+    const npmPkg = `${npmPrefix}\\node_modules\\yarn`;
+    const npmEntry = `${npmPkg}\\bin\\yarn.js`;
+    const yarnPrefix = 'D:\\TEST\\yarn-prefix';
+    const mem = memoryFs();
+
+    for (const d of [
+      profile,
+      `${profile}\\AppData`,
+      local,
+      `${local}\\PkgSteward`,
+      cacheDir,
+      cwd,
+      npmPrefix,
+      `${npmPrefix}\\node_modules`,
+      npmPkg,
+      `${npmPkg}\\bin`,
+      yarnPrefix,
+      `${yarnPrefix}\\bin`,
+      `${local}\\Yarn`,
+      `${local}\\Yarn\\Data`,
+      `${local}\\Yarn\\Data\\global`,
+      `${local}\\Yarn\\Data\\global\\node_modules`,
+      `${local}\\Yarn\\Cache`,
+    ]) {
+      mem.put(d, { directory: true });
+    }
+    mem.put(P.node, { text: 'TEST node' });
+    mem.put(win32.join(npmPkg, 'package.json'), {
+      text: JSON.stringify({
+        name: 'yarn',
+        version: '1.22.22',
+        bin: { yarn: 'bin/yarn.js' },
+      }),
+    });
+    mem.put(npmEntry, { text: '// TEST yarn entry' });
+
+    const deps: IGlobalLocationDeps = {
+      fs: mem.fs,
+      environment: {
+        USERPROFILE: profile,
+        LOCALAPPDATA: local,
+        PATH: `${npmPrefix};${yarnPrefix}\\bin;C:\\Program Files\\nodejs`,
+      },
+      execPath: P.node,
+      paths: {
+        cacheDir,
+        appInstallDir: P.app,
+        sourceCheckoutDir: P.source,
+        dataDir: `${local}\\PkgSteward`,
+      },
+      scannedProjectPaths: ['D:\\TEST\\project'],
+      signal: new AbortController().signal,
+      spawn: testSpawn(),
+      makeDirectory: jest
+        .fn<Promise<void>, [string]>()
+        .mockResolvedValue(undefined),
+    };
+    return { ...mem, deps, profile, local, yarnPrefix };
+  }
+
+  it('allows USERPROFILE\\.yarnrc for yarn when cwd sits under AppData\\Local, and refuses intermediate .yarnrc or .yarnrc.yml', async () => {
+    const h = setupRealProfileLayout();
+    const userYarnrc = `${h.profile}\\.yarnrc`;
+    h.put(userYarnrc, {
+      text: `prefix "${h.yarnPrefix.replace(/\\/g, '\\\\')}"\n`,
+    });
+
+    const yarnLoc = await discoverGlobalLocation('yarn', h.deps);
+    expect(yarnLoc.manager).toBe('yarn');
+    expect(yarnLoc.prefix).toBe(h.yarnPrefix);
+    expect(
+      yarnLoc.configIdentities.some(
+        (id) => id.file.path.toLowerCase() === userYarnrc.toLowerCase(),
+      ),
+    ).toBe(true);
+
+    // npm and pnpm must also not fail on USERPROFILE\.yarnrc or .yarnrc.yml
+    h.put(`${h.profile}\\.yarnrc.yml`, { text: 'nodeLinker: node-modules\n' });
+    for (const d of [
+      'D:\\TEST\\npm-prefix',
+      'D:\\TEST\\npm-prefix\\node_modules',
+      'D:\\TEST\\npm-cache',
+    ]) {
+      h.put(d, { directory: true });
+    }
+    jest
+      .spyOn(runnerTools, 'resolveRunnerTool')
+      .mockImplementation((manager) =>
+        Promise.resolve(testTool(manager === 'pnpm' ? 'pnpm' : 'npm')),
+      );
+    jest
+      .spyOn(runnerTools, 'revalidateRunnerTool')
+      .mockResolvedValue(undefined);
+    const npmSpawn = jest
+      .fn<
+        ReturnType<IGlobalLocationDeps['spawn']>,
+        Parameters<IGlobalLocationDeps['spawn']>
+      >()
+      .mockImplementation((_f, args) => {
+        const q = args.includes('root') ? 'root' : args.at(-1)!;
+        const map: Record<string, string> = {
+          prefix: 'D:\\TEST\\npm-prefix',
+          root: 'D:\\TEST\\npm-prefix\\node_modules',
+          userconfig: `${h.profile}\\.npmrc`,
+          globalconfig: 'D:\\TEST\\npm-prefix\\etc\\npmrc',
+          cache: 'D:\\TEST\\npm-cache',
+        };
+        return Promise.resolve(
+          probeResult(null, { stdout: Buffer.from(`${map[q]}\n`) }),
+        );
+      });
+    const npmLoc = await discoverGlobalLocation('npm', {
+      ...h.deps,
+      spawn: npmSpawn,
+    });
+    expect(npmLoc.manager).toBe('npm');
+
+    // Yarn itself must still refuse .yarnrc.yml
+    await expectGlobalReason(
+      () => discoverGlobalLocation('yarn', h.deps),
+      'CONFIG_UNSUPPORTED',
+    );
+
+    // Unexpected intermediate AppData\.yarnrc without .yarnrc.yml -> CONFIG_UNSUPPORTED for yarn
+    const hInter = setupRealProfileLayout();
+    hInter.put(`${hInter.local}\\.yarnrc`, { text: 'lastUpdateCheck 1\n' });
+    await expectGlobalReason(
+      () => discoverGlobalLocation('yarn', hInter.deps),
+      'CONFIG_UNSUPPORTED',
+    );
+  });
+});

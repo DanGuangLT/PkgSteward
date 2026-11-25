@@ -9,7 +9,7 @@ export type GlobalConsentError = "NO_PREVIEW" | "PREVIEW_EXPIRED" | "RISK_NOT_AC
 
 export function globalPreviewWarningCodes(preview: GlobalPreview): string[] {
   return preview.warningCodes.filter(code => {
-    if (code === "PNPM_SHARED_GLOBAL_PROJECT") return !preview.sharedPackages?.length
+    if (code === "PNPM_SHARED_GLOBAL_PROJECT" || code === "YARN_SHARED_GLOBAL_PROJECT") return !preview.sharedPackages?.length
     if (code === "GLOBAL_CODE_EXECUTION" || code === "GLOBAL_CONSUMERS_UNKNOWN") return preview.action === "repair"
     return true
   })

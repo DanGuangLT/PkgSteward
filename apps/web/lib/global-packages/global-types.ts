@@ -1,7 +1,7 @@
 import { ApiError } from "../api/response.ts"
 import type { Risk, RunFailureCode, RunLogPage, RunStatus, RunWarningCode } from "@/lib/api/types"
 
-export type GlobalManager = "npm" | "pnpm"
+export type GlobalManager = "npm" | "pnpm" | "yarn"
 export type GlobalAction = "remove" | "change" | "repair"
 export type GlobalJobKind = "inventory" | "versions" | "preview" | "mutation"
 export type GlobalReasonCode = RunFailureCode
@@ -9,12 +9,12 @@ export type GlobalReasonCode = RunFailureCode
   | "BIN_CONFLICT" | "NO_VERSION_CHANGE" | "PREVIEW_CHANGED" | "PREVIEW_EXPIRED" | "PREVIEW_CONSUMED"
   | "REQUEST_MISMATCH" | "LIMIT_EXCEEDED" | "REGISTRY_UNAVAILABLE" | "REGISTRY_INVALID_RESPONSE"
   | "REGISTRY_NOT_FOUND" | "REGISTRY_RATE_LIMITED" | "REGISTRY_AUTH_REQUIRED" | "INVENTORY_FAILED" | "POSTCONDITION_FAILED"
-  | "MANAGER_DISABLED" | "PNPM_GLOBAL_NOT_CONFIGURED" | "GLOBAL_GROUP_UNSUPPORTED"
+  | "MANAGER_DISABLED" | "PNPM_GLOBAL_NOT_CONFIGURED" | "YARN_GLOBAL_NOT_CONFIGURED" | "GLOBAL_GROUP_UNSUPPORTED"
   | "NPM_PREFIX_IS_NODE_DIR" | "NPM_OVERLAY_ABSENT" | "NPM_OVERLAY_NOT_BROKEN" | "NPM_DELEGATION_UNVERIFIED"
   | "TARGET_VERSION_UNSUPPORTED" | "ENGINE_UNSUPPORTED" | "FILE_IN_USE" | "ACCESS_DENIED" | "DELETE_FAILED" | "PATH_TOO_LONG"
 export type GlobalWarningCode = RunWarningCode | "MAJOR_VERSION_CHANGE" | "VERSION_DOWNGRADE"
   | "PRERELEASE_VERSION" | "GLOBAL_CODE_EXECUTION" | "GLOBAL_CONSUMERS_UNKNOWN" | "PROCESS_ESCAPE_RESIDUAL"
-  | "TERMINAL_NPM_SWITCH" | "PNPM_SHARED_GLOBAL_PROJECT"
+  | "TERMINAL_NPM_SWITCH" | "PNPM_SHARED_GLOBAL_PROJECT" | "YARN_SHARED_GLOBAL_PROJECT"
 
 export interface GlobalActivityRequest { requestId: string }
 export interface GlobalVersionsRequest extends GlobalActivityRequest { manager: GlobalManager; package: string }
@@ -99,7 +99,10 @@ export interface GlobalPreview {
 }
 
 export function parseGlobalSharedPackages(preview: Pick<GlobalPreview, "manager" | "managerVersion"> & { sharedPackages?: unknown }): GlobalSharedPackage[] | undefined {
-  if (preview.manager !== "pnpm" || !/^10\./.test(preview.managerVersion)) return undefined
+  const supportedShared =
+    (preview.manager === "pnpm" && /^10\./.test(preview.managerVersion)) ||
+    (preview.manager === "yarn" && /^1\./.test(preview.managerVersion))
+  if (!supportedShared) return undefined
   const packages = preview.sharedPackages
   if (!Array.isArray(packages) || !packages.every(item => typeof item === "object" && item !== null
     && typeof item.name === "string" && typeof item.version === "string" && typeof item.linked === "boolean")) return undefined
@@ -152,7 +155,7 @@ const reasonCodes = new Set<GlobalReasonCode>([
   "BIN_CONFLICT", "NO_VERSION_CHANGE", "PREVIEW_CHANGED", "PREVIEW_EXPIRED", "PREVIEW_CONSUMED", "REQUEST_MISMATCH",
   "LIMIT_EXCEEDED", "REGISTRY_UNAVAILABLE", "REGISTRY_INVALID_RESPONSE", "REGISTRY_NOT_FOUND", "REGISTRY_RATE_LIMITED",
   "REGISTRY_AUTH_REQUIRED", "INVENTORY_FAILED", "POSTCONDITION_FAILED", "MANAGER_DISABLED",
-  "PNPM_GLOBAL_NOT_CONFIGURED", "GLOBAL_GROUP_UNSUPPORTED", "NPM_PREFIX_IS_NODE_DIR", "NPM_OVERLAY_ABSENT",
+  "PNPM_GLOBAL_NOT_CONFIGURED", "YARN_GLOBAL_NOT_CONFIGURED", "GLOBAL_GROUP_UNSUPPORTED", "NPM_PREFIX_IS_NODE_DIR", "NPM_OVERLAY_ABSENT",
   "NPM_OVERLAY_NOT_BROKEN", "NPM_DELEGATION_UNVERIFIED", "TARGET_VERSION_UNSUPPORTED", "ENGINE_UNSUPPORTED",
   "FILE_IN_USE", "ACCESS_DENIED", "DELETE_FAILED", "PATH_TOO_LONG",
 ])

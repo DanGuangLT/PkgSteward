@@ -397,7 +397,7 @@ describe('shared machine-wide risk and exact confirmation', () => {
     expect(risk).toEqual(assessRisk(['MACHINE_WIDE']));
     expect(risk.level).toBe('high');
   });
-  it.each(['npm', 'pnpm'] as const)(
+  it.each(['npm', 'pnpm', 'yarn'] as const)(
     'builds server confirmation for %s',
     (manager) => {
       expect(globalConfirmText(manager, 'remove', '@test/tool', null)).toBe(

@@ -53,10 +53,10 @@ describe('global activity DTO contracts', () => {
     ).not.toEqual([]);
     expect(errors(GlobalJobIdDto, { id: value })).not.toEqual([]);
   });
-  it.each(['npm', 'pnpm'])('accepts %s versions input', (manager) => {
+  it.each(['npm', 'pnpm', 'yarn'])('accepts %s versions input', (manager) => {
     expect(errors(GlobalVersionsDto, { ...base, manager })).toEqual([]);
   });
-  it.each(['yarn', 'corepack', 'NPM', '', null, 1])(
+  it.each(['bun', 'corepack', 'NPM', '', null, 1])(
     'rejects manager %p',
     (manager) => {
       expect(errors(GlobalVersionsDto, { ...base, manager })).not.toEqual([]);

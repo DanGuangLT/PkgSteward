@@ -253,31 +253,33 @@ another tab cannot be resumed; wait for it to finish before starting a new one.
 
 ## Global packages
 
-Open `/global-packages` to manage installed global packages with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11 or pnpm 12**.
-npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`).
+Open `/global-packages` to manage installed global packages with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11, pnpm 12 or Yarn 1 (Classic)**.
+npm 10, npm 12, pnpm 10, pnpm 12 and Yarn 1 prereleases, Yarn 2+ (which removed `yarn global`) and other majors are refused (`TOOL_VERSION_MISMATCH`).
 Installed npm 12 needs valid `engines.node` metadata
 satisfied by the backend's Node: missing/malformed metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid
-Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0
-and Node 22.23.5, 24.19.0; how npm 12 handles install scripts of global packages has not been verified. Yarn is not
-supported;
-missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
+Node returns `TOOL_VERSION_MISMATCH`. Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0, yarn 1.22.22
+and Node 22.23.5, 24.19.0; how npm 12 handles install scripts of global packages has not been verified.
+Missing, Corepack-only or unsupported tools show an unavailable reason. Opening or reloading the page reads
 retained inventory and job state only, without starting a command. Select **Refresh** to discover global locations
-and read the installed inventory. pnpm discovery and listing read configuration and filesystem metadata statically;
-no pnpm command runs until execute. Each manager tab shows tool version, global root, bin directory, package
+and read the installed inventory. pnpm and Yarn 1 discovery and listing read configuration and filesystem metadata statically;
+no pnpm or Yarn command runs until execute. Each manager tab shows tool version, global root, bin directory, package
 versions and bins, with an as-of time and stale indicator. Empty, unavailable, protected, linked and invalid
 states remain distinct; protected and linked packages have no mutation controls.
 
 If pnpm reports `PNPM_GLOBAL_NOT_CONFIGURED`, run `pnpm setup` in a terminal, ensure `PNPM_HOME` (or your configured
 global bin directory) is on PATH, open a new terminal, then restart PkgSteward. The app does not run setup or edit PATH.
+If Yarn reports `YARN_GLOBAL_NOT_CONFIGURED`, ensure the Yarn global bin folder is on PATH or configure an explicit
+global prefix (`PREFIX` / `.yarnrc` `prefix`), then restart PkgSteward.
 With pnpm 11 and pnpm 12, packages installed together in one `pnpm add -g` are read-only (`GLOBAL_GROUP_UNSUPPORTED`); manage them in a
 terminal because a change or removal could affect the whole group. Configuration that can load code or move
 the layout also makes pnpm read-only (`CONFIG_UNSUPPORTED`), including pnpmfile/hooks, `lockfileDir`,
-layout/workspace directories, shell/Node execution options and override/extension maps. Inherited `PNPM_*`
-switches are stripped before commands run; only validated location and safety settings are supplied.
+layout/workspace directories, shell/Node execution options and override/extension maps; similarly Yarn `.yarnrc.yml`,
+`YARN_CONFIG` / `--use-yarnrc`, cross-drive `global-folder`/`prefix`, and `yarn-path`/`onload-script` hooks are restricted. Inherited `PNPM_*`
+and `YARN_*` switches are stripped before commands run; only validated location and safety settings are supplied.
 
-pnpm 10 keeps all global packages in one shared project. A change or removal reruns pnpm on that project.
+pnpm 10 and Yarn 1 keep all global packages in one shared project. A change or removal reruns the manager on that project.
 Before confirmation, the preview lists the other packages with their names, versions and linked markers,
-and warns that the app checks afterwards that they are unchanged. If the check fails, the result could not be
+and warns that the app checks afterwards that they are unchanged (`PNPM_SHARED_GLOBAL_PROJECT` or `YARN_SHARED_GLOBAL_PROJECT`). If the check fails, the result could not be
 verified (`POSTCONDITION_FAILED`): refresh the inventory and inspect the packages before another action.
 There is no automatic retry or undo. `link:`, file, git, tarball and alias installs are listed read-only;
 linked packages can stay in the shared project while another package changes. Old package versions may stay
@@ -308,13 +310,13 @@ backend crash, inspect and end leftover processes in Windows Task Manager. There
   output. The active control shows a spinner and action-specific loading text, announced to screen readers;
   competing actions are disabled. Cancel requests process termination. **Retry cleanup** retries pending termination/finalization while
   the lock remains held, without running the mutation again. Only one global activity runs at a time across
-  both managers; mutations share the lock with file deletions and project commands. Leaving or hiding the page
+  all managers; mutations share the lock with file deletions and project commands. Leaving or hiding the page
   does not cancel backend work. Empty `NPM_COMMAND_TIMEOUT_MS` means no time limit.
 - **Unknown outcomes:** a lost start/cancel response is unconfirmed. Refresh activity status to recover the latest
   job; retry polling after a poll error. A lost job after restart/replacement does not prove processes stopped.
   The page blocks new actions during unresolved tracking and never automatically retries execute or cancel.
   Backend restart loses retained jobs and output; intent/result records remain in the audit log.
-- **Refresh after changes:** any spawned mutation invalidates inventory and previews for both managers, even on
+- **Refresh after changes:** any spawned mutation invalidates inventory and previews for all managers, even on
   failure, cancellation or timeout. A visible outcome remains after execution, including a translated failure reason.
   Verified success automatically starts one inventory refresh after finalization and log drain. Failure retains
   the displayed rows; if the mutation command never started, the outcome states that this operation changed nothing.

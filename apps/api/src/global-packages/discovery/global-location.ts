@@ -3,12 +3,10 @@ import type {
   IGlobalCommand,
   IGlobalProbeResult,
   IGlobalResolvedLocation,
+  IGlobalTool,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import type { GlobalManager } from '@/global-packages/interfaces/global-packages.types';
-import type {
-  IRunnerFs,
-  IRunnerTool,
-} from '@/npm-runner/interfaces/npm-runner.types';
+import type { IRunnerFs } from '@/npm-runner/interfaces/npm-runner.types';
 import { launchRun } from '@/npm-runner/execution/runner-process';
 import type {
   IRunProcess,
@@ -38,8 +36,13 @@ import {
   resolveRunnerTool,
   revalidateRunnerTool,
 } from '@/npm-runner/toolchain/runner-tool';
+import { resolveYarnGlobalTool } from '@/global-packages/execution/yarn-global-command';
 import { readPnpmGlobalConfig } from '@/global-packages/config/pnpm-global-config';
 import { readPnpm10GlobalConfig } from '@/global-packages/config/pnpm10-global-config';
+import {
+  assertYarnLocationLayout,
+  readYarnGlobalConfig,
+} from '@/global-packages/config/yarn-global-config';
 import type { IPnpm10GlobalConfig } from '@/global-packages/interfaces/pnpm10-global.types';
 
 const failure = (reason: GlobalReasonCode): AppException =>
@@ -101,7 +104,7 @@ export interface IGlobalProbeBindings {
   launchFailed?(): void;
 }
 export function createGlobalProbeSpawn(
-  tool: IRunnerTool,
+  tool: IGlobalTool,
   deps: IRunProcessDeps,
   bindings: IGlobalProbeBindings = {},
 ): GlobalProbeSpawn {
@@ -313,7 +316,10 @@ async function probeLocationPaths(
   return paths;
 }
 
-async function prepareCwd(deps: IGlobalLocationDeps): Promise<{
+async function prepareCwd(
+  deps: IGlobalLocationDeps,
+  manager: GlobalManager = 'npm',
+): Promise<{
   cwd: string;
   ancestorConfigs: IGlobalResolvedLocation['configIdentities'];
 }> {
@@ -321,16 +327,18 @@ async function prepareCwd(deps: IGlobalLocationDeps): Promise<{
   await assertGlobalDirectory(cwd, deps.fs, deps.signal, true);
   const ancestorConfigs: IGlobalResolvedLocation['configIdentities'] = [];
   const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
+  const candidateNames = [
+    'package.json',
+    '.npmrc',
+    ...(manager === 'yarn' ? ['.yarnrc', '.yarnrc.yml'] : []),
+    'pnpm-workspace.yaml',
+    '.pnpmfile.cjs',
+    'pnpmfile.cjs',
+    '.pnp.cjs',
+  ];
   let ancestor = cwd;
   for (;;) {
-    for (const name of [
-      'package.json',
-      '.npmrc',
-      'pnpm-workspace.yaml',
-      '.pnpmfile.cjs',
-      'pnpmfile.cjs',
-      '.pnp.cjs',
-    ]) {
+    for (const name of candidateNames) {
       try {
         await deps.fs.lstat(win32.join(ancestor, name));
         deps.signal.throwIfAborted();
@@ -356,6 +364,27 @@ async function prepareCwd(deps: IGlobalLocationDeps): Promise<{
             )
           )
             throw failure('CONFIG_UNSUPPORTED');
+          ancestorConfigs.push({
+            file: data.identity,
+            sha256: createHash('sha256').update(data.bytes).digest('hex'),
+          });
+          continue;
+        }
+        if (manager === 'yarn' && name === '.yarnrc') {
+          const file = win32.join(ancestor, name);
+          const data = await readRunnerFile(
+            file,
+            GLOBAL_CONFIG_FILE_LIMIT,
+            deps.fs,
+            deps.signal,
+            'win32',
+            {
+              budget,
+              checkParent: () =>
+                assertGlobalDirectory(ancestor, deps.fs, deps.signal),
+            },
+          );
+          if (!data) throw failure('CONFIG_UNSUPPORTED');
           ancestorConfigs.push({
             file: data.identity,
             sha256: createHash('sha256').update(data.bytes).digest('hex'),
@@ -419,12 +448,46 @@ function assertLocationScope(path: string, deps: IGlobalLocationDeps): void {
       throw failure('LOCATION_AMBIGUOUS');
 }
 
+async function collectProtectedToolDirs(
+  primary: GlobalManager,
+  snapshot: Parameters<typeof resolveRunnerTool>[1],
+  fs: IRunnerFs,
+): Promise<readonly string[]> {
+  const dirs: string[] = [];
+  for (const other of (['npm', 'pnpm', 'yarn'] as const).filter(
+    (candidate) => candidate !== primary,
+  )) {
+    try {
+      const sibling =
+        other === 'yarn'
+          ? await resolveYarnGlobalTool(snapshot, fs)
+          : await resolveRunnerTool(other, snapshot, fs);
+      dirs.push(sibling.packageDir);
+    } catch (error) {
+      snapshot.signal.throwIfAborted();
+      if (
+        !(error instanceof AppException) ||
+        ![
+          'TOOL_NOT_FOUND',
+          'TOOL_VERSION_MISMATCH',
+          'TOOL_LAYOUT_UNSUPPORTED',
+        ].includes(
+          String((error.details as { reason?: string } | undefined)?.reason),
+        )
+      )
+        throw error;
+    }
+  }
+  return dirs;
+}
+
 export async function discoverGlobalLocation(
   manager: GlobalManager,
   deps: IGlobalLocationDeps,
 ): Promise<IGlobalResolvedLocation> {
   deps.signal.throwIfAborted();
   if (manager === 'pnpm') return discoverPnpmGlobalLocation(deps);
+  if (manager === 'yarn') return discoverYarnGlobalLocation(deps);
   const captured = captureGlobalEnvironment(deps.environment);
   const snapshot = {
     platform: 'win32' as const,
@@ -437,31 +500,12 @@ export async function discoverGlobalLocation(
   deps.signal.throwIfAborted();
   await revalidateRunnerTool(tool, deps.fs, deps.signal);
   deps.signal.throwIfAborted();
-  const tools = [tool];
-  try {
-    tools.push(
-      await resolveRunnerTool(
-        manager === 'npm' ? 'pnpm' : 'npm',
-        snapshot,
-        deps.fs,
-      ),
-    );
-  } catch (error) {
-    deps.signal.throwIfAborted();
-    // An absent second manager is not a fallback candidate.
-    if (
-      !(error instanceof AppException) ||
-      ![
-        'TOOL_NOT_FOUND',
-        'TOOL_VERSION_MISMATCH',
-        'TOOL_LAYOUT_UNSUPPORTED',
-      ].includes(
-        String((error.details as { reason?: string } | undefined)?.reason),
-      )
-    )
-      throw error;
-  }
-  const { cwd, ancestorConfigs } = await prepareCwd(deps);
+  const siblingToolDirs = await collectProtectedToolDirs(
+    manager,
+    snapshot,
+    deps.fs,
+  );
+  const { cwd, ancestorConfigs } = await prepareCwd(deps, manager);
   const queries: GlobalQuery[] = [
     'prefix',
     'root',
@@ -599,7 +643,8 @@ export async function discoverGlobalLocation(
     cwd,
     protectedPaths: [
       ...new Set([
-        ...tools.map((installed) => installed.packageDir),
+        tool.packageDir,
+        ...siblingToolDirs,
         tool.file,
         deps.paths.appInstallDir,
         ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
@@ -627,24 +672,8 @@ async function discoverPnpmGlobalLocation(
     throw failure('TOOL_VERSION_MISMATCH');
   await revalidateRunnerTool(tool, fs, signal);
   signal.throwIfAborted();
-  const tools = [tool];
-  try {
-    tools.push(await resolveRunnerTool('npm', snapshot, fs));
-  } catch (error) {
-    signal.throwIfAborted();
-    if (
-      !(error instanceof AppException) ||
-      ![
-        'TOOL_NOT_FOUND',
-        'TOOL_VERSION_MISMATCH',
-        'TOOL_LAYOUT_UNSUPPORTED',
-      ].includes(
-        String((error.details as { reason?: string } | undefined)?.reason),
-      )
-    )
-      throw error;
-  }
-  const { cwd, ancestorConfigs } = await prepareCwd(deps);
+  const siblingToolDirs = await collectProtectedToolDirs('pnpm', snapshot, fs);
+  const { cwd, ancestorConfigs } = await prepareCwd(deps, 'pnpm');
   const configDeps = {
     fs,
     signal,
@@ -721,7 +750,93 @@ async function discoverPnpmGlobalLocation(
     cwd,
     protectedPaths: [
       ...new Set([
-        ...tools.map((installed) => installed.packageDir),
+        tool.packageDir,
+        ...siblingToolDirs,
+        tool.file,
+        deps.paths.appInstallDir,
+        ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
+        deps.paths.dataDir,
+      ]),
+    ],
+  };
+}
+
+async function discoverYarnGlobalLocation(
+  deps: IGlobalLocationDeps,
+): Promise<IGlobalResolvedLocation> {
+  const { fs, signal } = deps;
+  signal.throwIfAborted();
+  const snapshot = {
+    platform: 'win32' as const,
+    execPath: deps.execPath,
+    env: deps.environment,
+    projectPaths: deps.scannedProjectPaths,
+    signal,
+  };
+  const tool = await resolveYarnGlobalTool(snapshot, fs);
+  await revalidateRunnerTool(tool, fs, signal);
+  signal.throwIfAborted();
+  const siblingToolDirs = await collectProtectedToolDirs('yarn', snapshot, fs);
+  const { cwd, ancestorConfigs } = await prepareCwd(deps, 'yarn');
+  const yarn = await readYarnGlobalConfig({
+    fs,
+    signal,
+    tool,
+    cwd,
+    dataDir: deps.paths.dataDir,
+    environment: deps.environment,
+    checkDirectory: (path) => assertGlobalDirectory(path, fs, signal, true),
+  });
+  for (const path of [
+    yarn.prefixDir,
+    yarn.globalDir,
+    yarn.globalRoot,
+    yarn.binDir,
+    yarn.cacheDir,
+  ]) {
+    assertLocationScope(path, deps);
+  }
+  assertYarnLocationLayout(yarn);
+  if (
+    ancestorConfigs.some(
+      (ancestor) =>
+        !yarn.configIdentities.some(
+          (identity) =>
+            comparable(identity.file.path) === comparable(ancestor.file.path),
+        ),
+    )
+  )
+    throw failure('CONFIG_UNSUPPORTED');
+  assertGlobalConfigUnchanged(
+    ancestorConfigs,
+    yarn.configIdentities.filter((identity) =>
+      ancestorConfigs.some(
+        (ancestor) =>
+          comparable(identity.file.path) === comparable(ancestor.file.path),
+      ),
+    ),
+  );
+  await revalidateRunnerTool(tool, fs, signal);
+  signal.throwIfAborted();
+  return {
+    manager: 'yarn',
+    tool,
+    prefix: yarn.prefixDir,
+    globalDir: yarn.globalDir,
+    globalRoot: yarn.globalRoot,
+    binDir: yarn.binDir,
+    cacheDir: yarn.cacheDir,
+    storeDir: null,
+    userConfig: yarn.userYarnrc,
+    globalConfig: yarn.globalYarnrc,
+    configIdentities: [...yarn.configIdentities],
+    missingConfigPaths: [...yarn.missingConfigPaths],
+    yarn,
+    cwd,
+    protectedPaths: [
+      ...new Set([
+        tool.packageDir,
+        ...siblingToolDirs,
         tool.file,
         deps.paths.appInstallDir,
         ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),

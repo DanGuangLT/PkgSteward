@@ -181,7 +181,7 @@ export class GlobalPreviewEntity implements IGlobalPreview {
   @ApiPropertyOptional({
     type: [GlobalSharedPackageEntity],
     description:
-      'Other direct dependencies sharing the pnpm 10 global project.',
+      'Other direct dependencies sharing the pnpm 10 or Yarn 1 global project.',
   })
   @Type(() => GlobalSharedPackageEntity)
   sharedPackages?: GlobalSharedPackageEntity[];

@@ -9,7 +9,7 @@ import type {
   RunStatus,
 } from '@/npm-runner/interfaces/npm-runner.types';
 
-export const GLOBAL_MANAGERS = ['npm', 'pnpm'] as const;
+export const GLOBAL_MANAGERS = ['npm', 'pnpm', 'yarn'] as const;
 export type GlobalManager = (typeof GLOBAL_MANAGERS)[number];
 export const GLOBAL_DISABLED_MANAGERS: readonly GlobalManager[] = [];
 export const GLOBAL_ACTIONS = ['remove', 'change', 'repair'] as const;
@@ -45,6 +45,7 @@ export const GLOBAL_REASON_CODES = [
   'POSTCONDITION_FAILED',
   'MANAGER_DISABLED',
   'PNPM_GLOBAL_NOT_CONFIGURED',
+  'YARN_GLOBAL_NOT_CONFIGURED',
   'GLOBAL_GROUP_UNSUPPORTED',
   'NPM_PREFIX_IS_NODE_DIR',
   'NPM_OVERLAY_ABSENT',
@@ -68,6 +69,7 @@ export const GLOBAL_WARNING_CODES = [
   'PROCESS_ESCAPE_RESIDUAL',
   'TERMINAL_NPM_SWITCH',
   'PNPM_SHARED_GLOBAL_PROJECT',
+  'YARN_SHARED_GLOBAL_PROJECT',
 ] as const;
 export type GlobalWarningCode = (typeof GLOBAL_WARNING_CODES)[number];
 

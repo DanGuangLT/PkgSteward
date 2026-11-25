@@ -56,7 +56,12 @@ function command(
   const clean = Object.fromEntries(
     Object.entries(input.environment).filter(([name]) => !selector.test(name)),
   );
-  const env = environmentFor(clean, tool, 'pnpm', 'remove');
+  const env = environmentFor(
+    clean,
+    { ...tool, manager: 'pnpm' },
+    'pnpm',
+    'remove',
+  );
   for (const name of Object.keys(env))
     if (
       /^(?:npm_config_|pnpm_config_)/i.test(name) &&

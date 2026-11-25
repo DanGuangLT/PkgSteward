@@ -96,33 +96,39 @@ const job: IGlobalJob = {
 };
 
 describe('global public contract and entity exclusions', () => {
-  it('exposes pnpm 10 shared packages and warning without private facts', () => {
+  it('exposes pnpm 10 and yarn 1.x shared packages and warnings without private facts', () => {
     const sharedPackages = [
       { name: 'test-neighbour', version: '1.0.0', linked: false },
     ];
-    const expected = {
-      ...job,
-      preview: {
-        ...preview,
-        manager: 'pnpm',
-        managerVersion: '10.34.9',
-        sharedPackages,
-        warningCodes: [...preview.warningCodes, 'PNPM_SHARED_GLOBAL_PROJECT'],
-      },
-    };
-    const input = {
-      ...expected,
-      preview: {
-        ...expected.preview,
-        pnpm10Inventory: { secret: 'TEST private' },
-        sharedPackages: [
-          { ...sharedPackages[0], realPath: 'E:\\TEST\\private' },
-        ],
-      },
-    };
-    expect(instanceToPlain(plainToInstance(GlobalJobEntity, input))).toEqual(
-      expected,
-    );
+    for (const [mgr, ver, warn] of [
+      ['pnpm', '10.34.9', 'PNPM_SHARED_GLOBAL_PROJECT'],
+      ['yarn', '1.22.22', 'YARN_SHARED_GLOBAL_PROJECT'],
+    ] as const) {
+      const expected = {
+        ...job,
+        preview: {
+          ...preview,
+          manager: mgr,
+          managerVersion: ver,
+          sharedPackages,
+          warningCodes: [...preview.warningCodes, warn],
+        },
+      };
+      const input = {
+        ...expected,
+        preview: {
+          ...expected.preview,
+          pnpm10Inventory: { secret: 'TEST private' },
+          yarnInventory: { secret: 'TEST yarn private' },
+          sharedPackages: [
+            { ...sharedPackages[0], realPath: 'E:\\TEST\\private' },
+          ],
+        },
+      };
+      expect(instanceToPlain(plainToInstance(GlobalJobEntity, input))).toEqual(
+        expected,
+      );
+    }
   });
   it('serializes npm state, repair targets and partial repair results without internal facts', () => {
     const npm = {
@@ -293,7 +299,7 @@ describe('global public contract and entity exclusions', () => {
     );
   });
   it('limits managers/actions/kinds and reuses the M6 status values', () => {
-    expect(GLOBAL_MANAGERS).toEqual(['npm', 'pnpm']);
+    expect(GLOBAL_MANAGERS).toEqual(['npm', 'pnpm', 'yarn']);
     expect(GLOBAL_ACTIONS).toEqual(['remove', 'change', 'repair']);
     expect(GLOBAL_JOB_KINDS).toEqual([
       'inventory',

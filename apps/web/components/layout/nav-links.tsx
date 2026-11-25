@@ -68,7 +68,7 @@ export function NavLinks({
     <ul
       className={cn(
         "flex",
-        orientation === "vertical" ? "flex-col gap-1" : "h-full gap-3.5 lg:gap-5"
+        orientation === "vertical" ? "flex-col gap-1" : "h-full gap-4 xl:gap-5"
       )}
     >
       {visibleItems.map((item) => {

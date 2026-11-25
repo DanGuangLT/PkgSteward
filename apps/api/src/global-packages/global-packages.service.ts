@@ -65,6 +65,10 @@ import { assessPnpmGlobalRegistryPolicy } from '@/global-packages/config/pnpm-gl
 import { assertPnpm10GlobalMutable } from '@/global-packages/policy/pnpm10-global-policy';
 import { verifyPnpm10GlobalPostcondition } from '@/global-packages/policy/pnpm10-global-postcondition';
 import { readPnpm10GlobalInventory } from '@/global-packages/discovery/pnpm10-global-inventory';
+import {
+  assertYarnGlobalMutable,
+  verifyYarnGlobalPostcondition,
+} from '@/global-packages/policy/yarn-global-postcondition';
 import { GlobalRegistry } from '@/global-packages/registry/global-registry';
 import {
   assessGlobalRegistryPolicy,
@@ -137,9 +141,9 @@ const reasonOf = (error: unknown): GlobalReasonCode => {
     'INTERNAL_SERVER_ERROR'
   );
 };
-// Failed static pnpm discovery/inventory must not disable npm. Stop/termination
-// signals are control flow; the caller also checks the activity signal first.
-const isolatablePnpmError = (error: unknown): boolean =>
+// Failed static pnpm/yarn discovery/inventory must not disable other managers.
+// Stop/termination signals remain control flow; callers check activity.signal first.
+const isolatableStaticError = (error: unknown): boolean =>
   !['CANCELLED', 'TIMED_OUT', 'SHUTDOWN', 'TERMINATION_UNCONFIRMED'].includes(
     reasonOf(error),
   ) &&
@@ -328,10 +332,16 @@ export class GlobalPackagesService
         pnpm10Inventory: finalFacts.pnpm10Inventory,
       });
       activity.checkpoint();
-      // Launch only runs tools registered by a fresh verified resolution; static pnpm
+      // Launch only runs tools registered by a fresh verified resolution; static
       // discovery spawns nothing, so resolve here (launch rejects a changed identity).
       await this.runtime.resolveTool(active.request!.manager, activity.signal);
       activity.checkpoint();
+      if (active.location.yarn) {
+        await this.runtime.makeDirectory(
+          win32.dirname(active.location.yarn.mutexFile),
+        );
+        activity.checkpoint();
+      }
       await activity.launch(command);
     });
     return await Promise.resolve(accepted);
@@ -642,8 +652,8 @@ export class GlobalPackagesService
     request: IGlobalPreviewRequest,
     signal: AbortSignal,
   ): Promise<IGlobalRegistryInput> {
-    if (location.manager === 'pnpm')
-      return await this.pnpmRegistryInput(location, request, signal);
+    if (location.manager === 'pnpm' || location.manager === 'yarn')
+      return await this.staticRegistryInput(location, request, signal);
     const configs: string[] = [];
     const identities: IGlobalResolvedLocation['configIdentities'] = [];
     const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
@@ -690,17 +700,20 @@ export class GlobalPackagesService
     location: IGlobalResolvedLocation,
     input: IGlobalRegistryInput,
   ) {
-    return location.manager === 'pnpm'
+    return location.manager === 'pnpm' || location.manager === 'yarn'
       ? assessPnpmGlobalRegistryPolicy(input)
       : assessGlobalRegistryPolicy(input);
   }
 
-  private async pnpmRegistryInput(
+  private async staticRegistryInput(
     location: IGlobalResolvedLocation,
     request: IGlobalPreviewRequest,
     signal: AbortSignal,
   ): Promise<IGlobalRegistryInput> {
-    const config = location.pnpm10 ?? location.pnpm;
+    const config =
+      location.manager === 'yarn'
+        ? location.yarn
+        : (location.pnpm10 ?? location.pnpm);
     if (!config) throw fail('CONFIG_UNSUPPORTED');
     const identities: IGlobalResolvedLocation['configIdentities'] = [];
     const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
@@ -747,12 +760,21 @@ export class GlobalPackagesService
     };
   }
 
-  private assertPnpmInventoryMutable(
+  private assertInventoryMutable(
     request: IGlobalPreviewRequest,
     location: IGlobalResolvedLocation,
     inventory: IGlobalInventoryResult,
     current: IGlobalPackageFacts,
   ): void {
+    if (location.manager === 'yarn') {
+      assertYarnGlobalMutable({
+        location,
+        inventory,
+        packageName: request.package,
+        action: request.action,
+      });
+      return;
+    }
     if (location.manager !== 'pnpm') return;
     if (location.pnpm10) {
       assertPnpm10GlobalMutable({
@@ -1037,25 +1059,25 @@ export class GlobalPackagesService
   ): Promise<IGlobalPreviewFacts> {
     const location = await this.discover(request.manager, activity);
     const locations = [location];
-    try {
-      locations.push(
-        await this.discover(
-          request.manager === 'npm' ? 'pnpm' : 'npm',
-          activity,
-        ),
-      );
-    } catch (error) {
-      activity.checkpoint();
-      if (
-        !(request.manager === 'npm' && isolatablePnpmError(error)) &&
-        ![
-          'TOOL_NOT_FOUND',
-          'TOOL_VERSION_MISMATCH',
-          'TOOL_LAYOUT_UNSUPPORTED',
-          'MANAGER_DISABLED',
-        ].includes(reasonOf(error))
-      )
-        throw error;
+    for (const other of GLOBAL_MANAGERS.filter((m) => m !== request.manager)) {
+      try {
+        locations.push(await this.discover(other, activity));
+      } catch (error) {
+        activity.checkpoint();
+        if (
+          !(
+            (other === 'pnpm' || other === 'yarn') &&
+            isolatableStaticError(error)
+          ) &&
+          ![
+            'TOOL_NOT_FOUND',
+            'TOOL_VERSION_MISMATCH',
+            'TOOL_LAYOUT_UNSUPPORTED',
+            'MANAGER_DISABLED',
+          ].includes(reasonOf(error))
+        )
+          throw error;
+      }
     }
     assertGlobalLocationsDistinct(locations);
     if (npmSelf(request))
@@ -1082,7 +1104,7 @@ export class GlobalPackagesService
     if (!row || !current) throw fail(row?.reason ?? 'INVENTORY_FAILED');
     if (row.status !== 'manageable')
       throw fail(row.reason ?? 'PROTECTED_PACKAGE', 403);
-    this.assertPnpmInventoryMutable(request, location, inventory, current);
+    this.assertInventoryMutable(request, location, inventory, current);
     const policy = await this.registryInput(location, request, activity.signal);
     activity.checkpoint();
     if (
@@ -1113,7 +1135,7 @@ export class GlobalPackagesService
       current = inventory.facts.find((entry) => entry.name === request.package);
       if (!row || !current || row.status !== 'manageable')
         throw fail('PREVIEW_CHANGED');
-      this.assertPnpmInventoryMutable(request, location, inventory, current);
+      this.assertInventoryMutable(request, location, inventory, current);
     }
     assertGlobalPackageMutable({
       packageName: request.package,
@@ -1143,6 +1165,7 @@ export class GlobalPackagesService
       locations,
       pnpmInventory: inventory.pnpmInventory,
       pnpm10Inventory: inventory.pnpm10Inventory,
+      yarnInventory: inventory.yarnInventory,
     });
   }
 
@@ -1170,6 +1193,9 @@ export class GlobalPackagesService
                 'GLOBAL_GROUP_UNSUPPORTED',
                 'INVENTORY_FAILED',
               ]
+            : []),
+          ...(request.manager === 'yarn'
+            ? ['YARN_GLOBAL_NOT_CONFIGURED', 'INVENTORY_FAILED']
             : []),
           ...(npmSelf(request)
             ? [
@@ -1202,7 +1228,10 @@ export class GlobalPackagesService
         activity.checkpoint();
         const reason = reasonOf(error);
         if (
-          !(manager === 'pnpm' && isolatablePnpmError(error)) &&
+          !(
+            (manager === 'pnpm' || manager === 'yarn') &&
+            isolatableStaticError(error)
+          ) &&
           ![
             'TOOL_NOT_FOUND',
             'TOOL_VERSION_MISMATCH',
@@ -1211,6 +1240,7 @@ export class GlobalPackagesService
             'CONFIG_UNSUPPORTED',
             'MANAGER_DISABLED',
             'PNPM_GLOBAL_NOT_CONFIGURED',
+            'YARN_GLOBAL_NOT_CONFIGURED',
           ].includes(reason)
         )
           throw error;
@@ -1255,7 +1285,7 @@ export class GlobalPackagesService
       } catch (error) {
         activity.checkpoint();
         // Location overlap was checked above and must never be swallowed here.
-        if (!isolatablePnpmError(error)) throw error;
+        if (!isolatableStaticError(error)) throw error;
         managers.push({
           manager,
           available: false,
@@ -1441,6 +1471,13 @@ export class GlobalPackagesService
               request,
             );
             active.refreshed = true;
+          } else if (active.location!.yarn) {
+            active.postcondition = verifyYarnGlobalPostcondition(
+              active.facts!,
+              result,
+              request,
+            );
+            active.refreshed = true;
           } else {
             if (
               request.manager === 'pnpm' &&
@@ -1486,9 +1523,12 @@ export class GlobalPackagesService
         /* Explicit cleanup retry only, never another mutation. */
       }
     }
+    const strictProject = Boolean(
+      active.location?.pnpm10 || active.location?.yarn,
+    );
     job.refreshRequired = changed && !active.refreshed;
     if (
-      active.location?.pnpm10 &&
+      strictProject &&
       changed &&
       active.refreshed &&
       !active.postcondition &&
@@ -1500,7 +1540,7 @@ export class GlobalPackagesService
       job.failureCode = 'TERMINATION_UNCONFIRMED';
     } else if (job.status === 'completed' && job.refreshRequired) {
       job.status = 'failed';
-      job.failureCode = active.location?.pnpm10
+      job.failureCode = strictProject
         ? 'POSTCONDITION_FAILED'
         : 'INVENTORY_FAILED';
     } else if (job.status === 'completed' && changed && !active.postcondition) {
@@ -1524,8 +1564,7 @@ export class GlobalPackagesService
       }
       if (
         job.terminationVerified &&
-        (!job.refreshRequired ||
-          (active.location?.pnpm10 && active.refreshed)) &&
+        (!job.refreshRequired || (strictProject && active.refreshed)) &&
         job.auditWritten
       ) {
         this.runtime.gate.leave(active.token);

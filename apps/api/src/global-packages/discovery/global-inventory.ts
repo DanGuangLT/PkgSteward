@@ -42,6 +42,8 @@ import type { IPnpmGlobalInventoryFacts } from '@/global-packages/interfaces/pnp
 import { readPnpmGlobalInventory } from '@/global-packages/discovery/pnpm-global-inventory';
 import type { IPnpm10GlobalInventoryFacts } from '@/global-packages/interfaces/pnpm10-global.types';
 import { readPnpm10GlobalInventory } from '@/global-packages/discovery/pnpm10-global-inventory';
+import type { IYarnGlobalInventoryFacts } from '@/global-packages/interfaces/yarn-global.types';
+import { readYarnGlobalInventory } from '@/global-packages/discovery/yarn-global-inventory';
 
 const failed = (): AppException =>
   new AppException(409, 'Global inventory is incomplete', 'CONFLICT', {
@@ -96,6 +98,7 @@ export interface IGlobalInventoryResult {
   ownershipComplete: boolean;
   pnpmInventory?: IPnpmGlobalInventoryFacts;
   pnpm10Inventory?: IPnpm10GlobalInventoryFacts;
+  yarnInventory?: IYarnGlobalInventoryFacts;
 }
 export interface IGlobalInventoryDeps {
   fs: IRunnerFs;
@@ -257,6 +260,8 @@ export async function readGlobalInventory(
   location: IGlobalResolvedLocation,
   deps: IGlobalInventoryDeps,
 ): Promise<IGlobalInventoryResult> {
+  if (location.manager === 'yarn')
+    return readYarnGlobalInventory(location, deps);
   if (location.manager === 'pnpm')
     return location.pnpm10
       ? readPnpm10GlobalInventory(location, deps)

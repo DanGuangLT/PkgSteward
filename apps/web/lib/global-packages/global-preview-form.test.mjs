@@ -126,3 +126,37 @@ test("shared packages are absent for npm and pnpm 11; an empty pnpm 10 list stay
   })
   assert.deepEqual(displayed.preview.sharedPackages, [])
 })
+
+test("yarn 1.x preview keeps sharedPackages and suppresses YARN_SHARED_GLOBAL_PROJECT only when non-empty; Berry strips sharedPackages", () => {
+  const displayed = displayGlobalPreview(initialGlobalPreviewForm({ ...selection, manager: "yarn" }), {
+    ...preview,
+    manager: "yarn",
+    managerVersion: "1.22.22",
+    sharedPackages: [{ name: "is-odd", version: "3.0.0", linked: false }],
+    warningCodes: ["GLOBAL_CODE_EXECUTION", "YARN_SHARED_GLOBAL_PROJECT", "TEST_DISTINCT"],
+  })
+  assert.deepEqual(displayed.preview.sharedPackages, [{ name: "is-odd", version: "3.0.0", linked: false }])
+  assert.deepEqual(globalPreviewWarningCodes(displayed.preview), ["TEST_DISTINCT"])
+
+  const emptyShared = displayGlobalPreview(initialGlobalPreviewForm({ ...selection, manager: "yarn" }), {
+    ...preview,
+    manager: "yarn",
+    managerVersion: "1.22.22",
+    sharedPackages: [],
+    warningCodes: ["GLOBAL_CODE_EXECUTION", "YARN_SHARED_GLOBAL_PROJECT"],
+  })
+  assert.deepEqual(emptyShared.preview.sharedPackages, [])
+  assert.deepEqual(globalPreviewWarningCodes(emptyShared.preview), ["YARN_SHARED_GLOBAL_PROJECT"])
+
+  for (const berryVersion of ["2.0.0", "4.5.0"]) {
+    const berry = displayGlobalPreview(initialGlobalPreviewForm({ ...selection, manager: "yarn" }), {
+      ...preview,
+      manager: "yarn",
+      managerVersion: berryVersion,
+      sharedPackages: [{ name: "is-odd", version: "3.0.0", linked: false }],
+      warningCodes: ["YARN_SHARED_GLOBAL_PROJECT"],
+    })
+    assert.equal(berry.preview.sharedPackages, undefined)
+    assert.deepEqual(globalPreviewWarningCodes(berry.preview), ["YARN_SHARED_GLOBAL_PROJECT"])
+  }
+})

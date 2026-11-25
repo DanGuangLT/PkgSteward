@@ -15,8 +15,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 
-/** Menu điều hướng cho màn hình < 768px (nav → hamburger drawer). */
-export function MobileNav() {
+/** Menu điều hướng dạng drawer cho màn hình nhỏ hoặc hẹp. */
+export function MobileNav({ triggerClassName = "md:hidden" }: { triggerClassName?: string } = {}) {
   const t = useTranslations("nav")
   const navigationTitle = t("mainNavigation")
   const [open, setOpen] = useState(false)
@@ -27,7 +27,7 @@ export function MobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className={triggerClassName}
           aria-label={t("openMenu")}
         >
           <MenuIcon />

@@ -1243,7 +1243,6 @@
     "retry": "Try again",
     "refresh": "Refresh inventory",
     "refreshHint": "Refresh explicitly reads installed global packages. Opening this page does not run a package manager.",
-    "yarnUnsupported": "Yarn global packages are not supported.",
     "asOf": "Updated at {time}",
     "stale": "Inventory may be out of date",
     "noInventory": "No inventory has been collected. Select Refresh inventory to read installed packages.",
@@ -1378,7 +1377,7 @@
       "PROJECT_NOT_SCANNED": "A required scanned project is unavailable.",
       "INPUT_CHANGED": "Inputs changed. Refresh inventory and request a new preview.",
       "WORKSPACE_LEAF": "This operation is not supported for a workspace leaf.",
-      "UNSUPPORTED_MANAGER": "This package manager is unsupported. Only supported npm and pnpm installations can be used.",
+      "UNSUPPORTED_MANAGER": "This package manager is unsupported. Only supported npm, pnpm and Yarn installations can be used.",
       "LOCKFILE_MISMATCH": "Package manager and lockfile do not match.",
       "TOOL_NOT_FOUND": "The installed package manager was not found. Set it up outside this app.",
       "TOOL_LAYOUT_UNSUPPORTED": "This tool installation layout is unsupported. The app will not download or replace the tool.",
@@ -1418,6 +1417,7 @@
       "POSTCONDITION_FAILED": "The resulting package state could not be verified. A partial change is possible.",
       "MANAGER_DISABLED": "This version cannot manage global packages of this package manager yet. Manage them in a terminal for now.",
       "PNPM_GLOBAL_NOT_CONFIGURED": "pnpm global packages are not set up. Run pnpm setup in a terminal, open a new terminal, then restart PkgSteward.",
+      "YARN_GLOBAL_NOT_CONFIGURED": "Yarn global commands are not on PATH and no global prefix is configured. Add the Yarn global bin folder to PATH in a terminal, then restart PkgSteward.",
       "GLOBAL_GROUP_UNSUPPORTED": "This package was installed with others in one pnpm add -g command. PkgSteward only displays it; manage it in a terminal.",
       "NPM_PREFIX_IS_NODE_DIR": "The npm global folder is inside the Node installation folder (for example, with nvm). PkgSteward does not replace Node's own npm.",
       "NPM_OVERLAY_ABSENT": "No npm is installed in the global folder; terminals already use the Node-bundled npm.",
@@ -1457,7 +1457,8 @@
       "GLOBAL_CONSUMERS_UNKNOWN": "Other programs and terminals using this package cannot all be detected.",
       "PROCESS_ESCAPE_RESIDUAL": "Package code may launch processes outside the tracked tree. After a crash, check Task Manager; process isolation is not guaranteed.",
       "TERMINAL_NPM_SWITCH": "Every terminal that uses this Node's npm runs the new version from its next run; a terminal already running npm keeps the old version until it runs again. A project whose .npmrc changes the prefix may see a different version. PkgSteward keeps using the Node-bundled npm.",
-      "PNPM_SHARED_GLOBAL_PROJECT": "pnpm 10 keeps all global packages in one project. This change reruns pnpm on that project. PkgSteward checks afterwards that the packages below are unchanged and reports any change. It cannot undo changes."
+      "PNPM_SHARED_GLOBAL_PROJECT": "pnpm 10 keeps all global packages in one project. This change reruns pnpm on that project. PkgSteward checks afterwards that the packages below are unchanged and reports any change. It cannot undo changes.",
+      "YARN_SHARED_GLOBAL_PROJECT": "Yarn keeps all global packages in one shared project. This change reruns Yarn on that project. PkgSteward checks afterwards that the packages below are unchanged and reports any change. It cannot undo changes."
     }
   },
   "packageManagers": {

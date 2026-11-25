@@ -41,11 +41,14 @@ See the [Settings guide](apps/web/README.md#settings) for appearance and plugins
 
 ## Global packages
 
-Manage global packages with npm 10/11/12 or pnpm 10/11/12 through **preview → confirm**.
+Manage global packages with npm 10/11/12, pnpm 10/11/12 or Yarn Classic (1.x) through **preview → confirm** (Yarn 2+ removed `yarn global` upstream and is refused).
 pnpm globals must already be set up: run `pnpm setup` in a terminal, ensure `PNPM_HOME` (or your configured
-global bin directory) is on PATH, open a new terminal and restart PkgSteward.
+global bin directory) is on PATH, open a new terminal and restart PkgSteward. Yarn Classic globals require
+the Yarn global bin folder on PATH or an explicit prefix in Yarn configuration (`PREFIX` / `.yarnrc` `prefix`);
+otherwise PkgSteward reports `YARN_GLOBAL_NOT_CONFIGURED`.
 
-pnpm 10 keeps all global packages in one shared project. Changing or removing one reruns pnpm on that project.
+pnpm 10 and Yarn Classic (1.x) keep all global packages in one shared project. Changing or removing one reruns
+the manager on that project.
 The preview lists the other packages; afterwards, PkgSteward verifies they are unchanged. If verification fails,
 the result could not be verified: refresh the inventory and inspect the packages before another action.
 There is no automatic retry or undo. `link:`, file, git, tarball and alias installs are listed read-only.

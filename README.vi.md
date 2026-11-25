@@ -42,12 +42,14 @@ Xem [hướng dẫn Cài đặt](apps/web/README.md#settings) để biết thêm
 
 ## Gói global
 
-Quản lý gói global bằng npm 10/11/12 hoặc pnpm 10/11/12 qua bước **xem trước → xác nhận**.
+Quản lý gói global bằng npm 10/11/12, pnpm 10/11/12 hoặc Yarn Classic (1.x) qua bước **xem trước → xác nhận** (Yarn 2+ đã bỏ `yarn global` nên bị từ chối).
 Cần thiết lập pnpm global trước: chạy `pnpm setup` trong terminal, bảo đảm `PNPM_HOME` (hoặc thư mục lệnh
-global đã cấu hình) có trong PATH, mở terminal mới rồi khởi động lại PkgSteward.
+global đã cấu hình) có trong PATH, mở terminal mới rồi khởi động lại PkgSteward. Với Yarn Classic, thư mục
+bin global của Yarn cần có trong PATH hoặc cấu hình `prefix` rõ ràng trong `PREFIX` / `.yarnrc`; nếu không,
+PkgSteward báo `YARN_GLOBAL_NOT_CONFIGURED`.
 
-pnpm 10 giữ mọi gói global trong một dự án dùng chung. Đổi phiên bản hoặc xoá một gói sẽ chạy lại pnpm trên
-dự án đó. Bản xem trước liệt kê các gói khác; sau thao tác, PkgSteward kiểm tra chúng vẫn giữ nguyên.
+pnpm 10 và Yarn Classic (1.x) giữ mọi gói global trong một dự án dùng chung. Đổi phiên bản hoặc xoá một gói sẽ
+chạy lại trình quản lý trên dự án đó. Bản xem trước liệt kê các gói khác; sau thao tác, PkgSteward kiểm tra chúng vẫn giữ nguyên.
 Nếu kiểm tra thất bại, kết quả không thể xác minh: hãy làm mới danh sách và kiểm tra các gói trước thao tác tiếp theo.
 Ứng dụng không tự thử lại hay hoàn tác. Các gói cài bằng `link:`, file, git, tarball và alias chỉ được hiển thị,
 không thể sửa tại đây. Phiên bản gói cũ có thể còn trên đĩa đến khi pnpm dọn chúng. Chỉ thay đổi gói bạn tin cậy:

@@ -424,21 +424,22 @@ folder of that directory, and leave two small `pkgsteward-test-*` folders in the
 
 ## Global packages API
 
-List, remove or change an installed global package with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11 or pnpm 12** on Windows.
-npm 10, npm 12, pnpm 10 and pnpm 12 prereleases and other majors are refused (`TOOL_VERSION_MISMATCH`). Yarn is not supported.
+List, remove or change an installed global package with **npm 10, npm 11, npm 12, pnpm 10, pnpm 11, pnpm 12 or Yarn 1 (Classic)** on Windows.
+npm 10, npm 12, pnpm 10, pnpm 12 and Yarn 1 prereleases, Yarn 2+ (which removed `yarn global`), and other majors are refused (`TOOL_VERSION_MISMATCH`).
 Installed npm 12 requires valid `engines.node` metadata satisfied by the backend's Node: missing/malformed
 metadata returns `TOOL_LAYOUT_UNSUPPORTED`, incompatible/invalid Node returns `TOOL_VERSION_MISMATCH`.
-Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0 and Node 22.23.5, 24.19.0; how npm 12
+Verified with npm 10.9.9, npm 11.17.0, npm 12.2.2, pnpm 10.34.9, pnpm 11.22.0, pnpm 12.21.0, yarn 1.22.22 and Node 22.23.5, 24.19.0; how npm 12
 handles install scripts of global packages has not been verified.
 The installed-tool resolver verifies the backend's Node executable and the manager's JavaScript entry point (or for
 pnpm 12, its verified native `pnpm.exe` binary inside the npm-installed pnpm package directory);
 unknown versions/layouts and Corepack-only tools are unavailable. The app never installs or switches managers.
 An explicit **Refresh** discovers npm locations through read-only manager queries: npm prefix/root/config/cache.
 These queries use a neutral working directory, not a scanned project; the tool may still write caches.
-pnpm discovery and inventory listing read configuration and filesystem metadata statically; no pnpm command runs
+pnpm and Yarn 1 discovery and inventory listing read configuration, lockfiles (`yarn.lock` via `@yarnpkg/lockfile` for Yarn 1) and filesystem metadata statically; no pnpm or Yarn command runs
 until execute. pnpm globals must already be set up: run `pnpm setup` in a terminal, ensure `PNPM_HOME` (or your
 configured global bin directory) is on PATH, open a new terminal, then restart PkgSteward.
 Otherwise availability reports `PNPM_GLOBAL_NOT_CONFIGURED`.
+Yarn 1 globals require the Yarn global bin folder on PATH or an explicit prefix (`PREFIX` / `.yarnrc` `prefix`) before installing or changing command-bearing packages; otherwise preview/execute reports `YARN_GLOBAL_NOT_CONFIGURED`.
 The app does not run setup or edit PATH. GET requests and page loads only read retained RAM snapshots and never run commands.
 Preview and execute recheck the discovered locations and configuration; clients cannot supply paths, argv or environment.
 
@@ -462,7 +463,7 @@ All routes below use `/api/v1/global-packages` and the standard response envelop
 | `GET /api/v1/global-packages/jobs/:id/logs?cursor=0` | `200` with a bounded output page and `nextCursor` |
 | `POST /api/v1/global-packages/jobs/:id/cancel` | No body; `200` with current status; cancels or retries cleanup without repeating a mutation |
 
-`manager` is `npm` or `pnpm`; `action` is `remove`, `change` or `repair` (in-process cleanup of broken global `npm` files with `manager: 'npm'` and `package: 'npm'`, without spawning npm). For `manager: 'npm'` and `package: 'npm'`, `change` switches terminal npm to a stable npm 10–12 release and `remove` restores Node-bundled npm. `targetVersion` is required only for `change` and
+`manager` is `npm`, `pnpm` or `yarn`; `action` is `remove`, `change` or `repair` (in-process cleanup of broken global `npm` files with `manager: 'npm'` and `package: 'npm'`, without spawning npm). For `manager: 'npm'` and `package: 'npm'`, `change` switches terminal npm to a stable npm 10–12 release and `remove` restores Node-bundled npm. `targetVersion` is required only for `change` and
 must be a canonical exact version or dist-tag. Ranges, URLs, Git specs, paths, aliases and command flags are refused.
 Names may be scoped. IDs and `requestId` are UUID v4; the log cursor is a nonnegative safe integer. Extra fields
 are rejected. Only latest/status/log polling bypasses throttling; other requests remain rate limited.
@@ -474,11 +475,11 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
   requires `confirm: true`, acknowledgement of `MACHINE_WIDE`, and the exact, case-sensitive server text:
   `REMOVE GLOBAL <manager> <name>`, `CHANGE GLOBAL <manager> <name> TO <version>` or `REPAIR GLOBAL npm npm`. Whitespace is not trimmed.
   Bin differences describe declared metadata, not all effects of scripts or transitive packages.
-- **pnpm 10 shared project:** all global packages live in one project. Changing or removing one reruns pnpm on
+- **pnpm 10 and Yarn 1 shared project:** all global packages live in one project. Changing or removing one reruns the manager on
   that project. A preview's optional `sharedPackages: { name: string; version: string; linked: boolean }[]`
-  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT`. npm, pnpm 11 and pnpm 12
+  lists the other direct packages; a non-empty list adds warning `PNPM_SHARED_GLOBAL_PROJECT` or `YARN_SHARED_GLOBAL_PROJECT`. npm, pnpm 11 and pnpm 12
   previews omit this field. After execution, the app verifies that each listed package's spec, installed version,
-  link destination and command shims are unchanged, and that no new direct package appeared. Failure means the
+  link destination and command shims are unchanged, and that no new direct package appeared (and for Yarn 1, that unowned command slots are unchanged). Failure means the
   result could not be verified (`POSTCONDITION_FAILED`, `refreshRequired`); refresh the inventory and inspect it
   before another action. There is no automatic retry or undo. `link:`, file, git, tarball and alias installs are
   listed read-only. Old package versions may stay on disk until pnpm prunes them; retained directories are not
@@ -515,11 +516,13 @@ are rejected. Only latest/status/log polling bypasses throttling; other requests
   location settings are refused. Config secrets are not returned or logged. A typed exact target still requires
   online metadata; selecting the installed version returns `NO_VERSION_CHANGE`. Major changes, downgrades and
   prereleases produce warnings.
-  For pnpm 10 change, registry and protection checks cover every package in the shared project, including
+  For pnpm 10 and Yarn 1 change, registry and protection checks cover every package in the shared project, including
   matching scoped registries on other packages. A protected neighbour blocks change and removal.
-- **pnpm configuration:** settings that can load code or move the layout make pnpm read-only
+- **pnpm and Yarn configuration:** settings that can load code or move the layout make pnpm read-only
   (`CONFIG_UNSUPPORTED`), including pnpmfile/hooks, `lockfileDir`, layout/workspace directories, shell/Node
-  execution options and override/extension maps. Registry restrictions alone still allow remove when the
+  execution options and override/extension maps; Yarn 1 similarly refuses `.yarnrc.yml`, `YARN_CONFIG` / `--use-yarnrc`,
+  cross-drive `global-folder`/`prefix`, and overlapping directories (`LOCATION_AMBIGUOUS`), and marks `yarn-path`/`onload-script` as
+  unsupported for registry change. Registry restrictions alone still allow remove when the
   location and protection checks pass.
 
 Other HTTP errors include `403 FORBIDDEN` for unsafe/protected targets, `409 CONFLICT` for busy or unsupported
@@ -564,18 +567,28 @@ directory, `CFG` = config directory):
 --dir W --pm-on-fail=warn --store-dir S --state-dir ST --npmrc-auth-file A --config.global-dir=G --config.global-bin-dir=B --config.cache-dir=C --config.config-dir=CFG remove --global --reporter=append-only -- NAME
 ```
 
+Yarn 1 uses these exact arguments after its JavaScript entry point (`G` = global folder, `P` = prefix directory,
+`C` = cache folder, `M` = per-instance mutex lock file whose directory is created right before launch):
+
+```text
+global add --global-folder G --prefix P --cache-folder C --mutex file:M --non-interactive --registry https://registry.npmjs.org -- NAME@EXACT
+global remove --global-folder G --prefix P --cache-folder C --mutex file:M --non-interactive -- NAME
+```
+
+Yarn mutations force `PREFIX=P`, `YARN_CACHE_FOLDER=C`, `YARN_IGNORE_PATH=1`, `YARN_ENABLE_TELEMETRY=0`, and `NO_UPDATE_NOTIFIER=1`.
+
 No arbitrary arguments, elevation, tool-download fallback or automatic mutation retry is available. The child
 uses the command runner's sanitized environment: backend settings, `NODE_ENV`, `NODE_OPTIONS`, project-run
 markers and `npm_*` keys are stripped, and PATH retains absolute entries only. Global operations additionally
 strip inherited `PNPM_*` switches (case-insensitively), `NODE_AUTH_TOKEN`, `COREPACK_NPM_TOKEN` and `YARN_*` keys
-before building it. Validated location overrides become explicit flags or pinned pnpm environment settings,
-including its home, original auth-file path, cache/state paths and fixed safety settings.
+before building it. Validated location overrides become explicit flags or pinned pnpm/Yarn environment settings,
+including home, original auth-file path, cache/state paths and fixed safety settings.
 Mutations force `CI=1`, disable Corepack downloads/network/auto-pinning, and disable color output.
 This controls launch configuration; it does not isolate lifecycle code.
 
 ### Lifecycle, audit and limits
 
-- **Concurrency:** one global activity at a time across both managers, including refresh/version/preview jobs.
+- **Concurrency:** one global activity at a time across all managers, including refresh/version/preview jobs.
   Execute shares the mutation lock with file operations and the project command runner, held through stop,
   verification, audit and cleanup. Read-only global activities use their own slot without taking that lock;
   execute does not wait for existing scans, disk measurements, analyses or file-operation previews.
@@ -588,7 +601,7 @@ This controls launch configuration; it does not isolate lifecycle code.
   `terminationVerified`, `gateHeld`, `auditWritten` and `refreshRequired`. Exit zero alone is insufficient;
   completion also checks the package is absent after remove, or matches the target version/bins after change.
   A failed postcondition reports `POSTCONDITION_FAILED`.
-- **Freshness:** any spawned mutation invalidates both managers' inventory and all previews. Inventory is
+- **Freshness:** any spawned mutation invalidates all managers' inventory and all previews. Inventory is
   refreshed after verified stop; a failed refresh leaves stale/error state. Project scan entries, analyses and
   disk-size caches are not refreshed by this feature. Inspect lifecycle side effects separately and explicitly
   rescan, recheck or remeasure when needed.

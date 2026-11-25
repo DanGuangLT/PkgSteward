@@ -56,6 +56,16 @@ import { P10 } from './__fixtures__/pnpm10/config';
 import { readPnpm10GlobalInventory } from './discovery/pnpm10-global-inventory';
 import { readPnpm10GlobalConfig } from './config/pnpm10-global-config';
 import { snapshotGlobalPreviewFacts } from './policy/global-preview';
+import {
+  YARN_TEST_PATHS as Y,
+  yarnConfigFacts,
+  yarnLocation,
+} from './__fixtures__/yarn1/facts';
+import {
+  yarnGlobalBinShims,
+  yarnLocalBinShims,
+} from './__fixtures__/yarn1/shims';
+import { readYarnGlobalInventory } from './discovery/yarn-global-inventory';
 
 describe('pnpm 10 shared-project service integration', () => {
   afterEach(() => jest.restoreAllMocks());
@@ -1376,7 +1386,9 @@ function setupPnpmService(change = false) {
     testConfigIdentity(Q.auth),
   ];
   location.pnpm!.configIdentities = [...location.configIdentities];
-  const unavailable = new Map<GlobalManager, GlobalReasonCode>();
+  const unavailable = new Map<GlobalManager, GlobalReasonCode>([
+    ['yarn', 'TOOL_NOT_FOUND'],
+  ]);
   const discover = jest
     .spyOn(locationAdapter, 'discoverGlobalLocation')
     .mockImplementation((manager) => {
@@ -1549,7 +1561,7 @@ function setupNpmService(change: boolean, version: string) {
     .spyOn(inventoryAdapter, 'readGlobalInventory')
     .mockImplementation((resolved) =>
       Promise.resolve(
-        resolved.manager === 'pnpm'
+        resolved.manager !== 'npm'
           ? emptyInventory()
           : fixture.child.launch.mock.calls.length > 0
             ? postInventory
@@ -1629,20 +1641,26 @@ describe('pnpm 11 service integration', () => {
     f.discover.mockImplementation((manager, deps) =>
       manager === 'npm'
         ? Promise.resolve({ ...testLocation(), ...testFacts().location })
-        : readPnpmGlobalConfig({
-            fs: f.runtime.fs,
-            environment: f.runtime.environment,
-            signal: deps.signal,
-            tool: f.location.tool,
-            cwd: f.location.cwd,
-            checkDirectory: (path) =>
-              locationAdapter.assertGlobalDirectory(
-                path,
-                f.runtime.fs,
-                deps.signal,
-                true,
-              ),
-          }).then(() => f.location),
+        : manager === 'yarn'
+          ? Promise.reject(
+              new AppException(409, 'TEST yarn unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            )
+          : readPnpmGlobalConfig({
+              fs: f.runtime.fs,
+              environment: f.runtime.environment,
+              signal: deps.signal,
+              tool: { ...f.location.tool, manager: 'pnpm' },
+              cwd: f.location.cwd,
+              checkDirectory: (path) =>
+                locationAdapter.assertGlobalDirectory(
+                  path,
+                  f.runtime.fs,
+                  deps.signal,
+                  true,
+                ),
+            }).then(() => f.location),
     );
     const start = await f.service.inventory({ requestId: f.uuid() });
     expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
@@ -1655,6 +1673,7 @@ describe('pnpm 11 service integration', () => {
         available: true,
         reason: null,
       }),
+      expect.objectContaining({ manager: 'yarn', available: false }),
     ]);
     expect(f.child.launch).not.toHaveBeenCalled();
   });
@@ -1665,24 +1684,30 @@ describe('pnpm 11 service integration', () => {
     f.discover.mockImplementation((manager, deps) =>
       manager === 'npm'
         ? Promise.resolve({ ...testLocation(), ...testFacts().location })
-        : readPnpmGlobalConfig({
-            fs: f.runtime.fs,
-            environment: {
-              ...f.runtime.environment,
-              USERPROFILE: Q.profile,
-              XDG_CONFIG_HOME: 'D:\\TEST\\xdg',
-            },
-            signal: deps.signal,
-            tool: f.location.tool,
-            cwd: f.location.cwd,
-            checkDirectory: (path) =>
-              locationAdapter.assertGlobalDirectory(
-                path,
-                f.runtime.fs,
-                deps.signal,
-                true,
-              ),
-          }).then(() => f.location),
+        : manager === 'yarn'
+          ? Promise.reject(
+              new AppException(409, 'TEST yarn unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            )
+          : readPnpmGlobalConfig({
+              fs: f.runtime.fs,
+              environment: {
+                ...f.runtime.environment,
+                USERPROFILE: Q.profile,
+                XDG_CONFIG_HOME: 'D:\\TEST\\xdg',
+              },
+              signal: deps.signal,
+              tool: { ...f.location.tool, manager: 'pnpm' },
+              cwd: f.location.cwd,
+              checkDirectory: (path) =>
+                locationAdapter.assertGlobalDirectory(
+                  path,
+                  f.runtime.fs,
+                  deps.signal,
+                  true,
+                ),
+            }).then(() => f.location),
     );
     const inventory = await f.service.inventory({ requestId: f.uuid() });
     expect((await finishPnpmJob(f.service, inventory.jobId)).status).toBe(
@@ -1695,6 +1720,7 @@ describe('pnpm 11 service integration', () => {
         available: false,
         reason: 'LIMIT_EXCEEDED',
       }),
+      expect.objectContaining({ manager: 'yarn', available: false }),
     ]);
     const start = await f.service.preview(
       f.request({ manager: 'npm', package: 'test-tool' }),
@@ -1735,7 +1761,7 @@ describe('pnpm 11 service integration', () => {
         available: false,
         reason,
       });
-      f.unavailable.clear();
+      f.unavailable.delete('pnpm');
       f.inventory.mockImplementation((location) =>
         location.manager === 'pnpm'
           ? Promise.reject(
@@ -1770,7 +1796,13 @@ describe('pnpm 11 service integration', () => {
     f.discover.mockImplementation((manager) =>
       manager === 'pnpm'
         ? Promise.reject(new Error('TEST sensitive config bytes'))
-        : Promise.resolve({ ...testLocation(), ...testFacts().location }),
+        : manager === 'yarn'
+          ? Promise.reject(
+              new AppException(409, 'TEST yarn unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            )
+          : Promise.resolve({ ...testLocation(), ...testFacts().location }),
     );
     const start = await f.service.inventory({ requestId: f.uuid() });
     expect((await finishPnpmJob(f.service, start.jobId)).status).toBe(
@@ -1802,7 +1834,13 @@ describe('pnpm 11 service integration', () => {
         f.discover.mockImplementation((manager) =>
           manager === 'pnpm'
             ? pending.promise
-            : Promise.resolve({ ...testLocation(), ...testFacts().location }),
+            : manager === 'yarn'
+              ? Promise.reject(
+                  new AppException(409, 'TEST yarn unavailable', 'CONFLICT', {
+                    reason: 'TOOL_NOT_FOUND',
+                  }),
+                )
+              : Promise.resolve({ ...testLocation(), ...testFacts().location }),
         );
       const start =
         where === 'secondary-discovery'
@@ -1889,6 +1927,7 @@ describe('pnpm 11 service integration', () => {
           }) as unknown,
         ],
       }),
+      expect.objectContaining({ manager: 'yarn', available: false }),
     ]);
     expect(f.probe).not.toHaveBeenCalled();
     expect(f.child.launch).not.toHaveBeenCalled();
@@ -1953,6 +1992,7 @@ describe('pnpm 11 service integration', () => {
         reason: 'INVENTORY_FAILED',
         packages: [],
       }),
+      expect.objectContaining({ manager: 'yarn', available: false }),
     ]);
     expect(f.child.launch).not.toHaveBeenCalled();
   });
@@ -1983,6 +2023,7 @@ describe('pnpm 11 service integration', () => {
           binDir: null,
           packages: [],
         },
+        expect.objectContaining({ manager: 'yarn', available: false }),
       ]);
       expect(f.probe).not.toHaveBeenCalled();
       expect(f.child.launch).not.toHaveBeenCalled();
@@ -2600,9 +2641,10 @@ describe.each(TEST_NPM_VERSIONS)('M7 RAM reads (npm %s)', (v) => {
     expect(snapshot.managers.map((manager) => manager.manager).sort()).toEqual([
       'npm',
       'pnpm',
+      'yarn',
     ]);
     snapshot.managers.length = 0;
-    expect(f.service.getSnapshot()!.managers).toHaveLength(2);
+    expect(f.service.getSnapshot()!.managers).toHaveLength(3);
     expect(f.tryEnter).not.toHaveBeenCalled();
     expect(f.audit).not.toHaveBeenCalled();
     expect(f.child.launch).not.toHaveBeenCalled();
@@ -3588,17 +3630,23 @@ describe('pnpm 12 service integration', () => {
       .mocked(fixture.runtime.resolveTool)
       .mockImplementation((manager) =>
         Promise.resolve(
-          manager === 'pnpm' ? location.tool : testLocation('npm').tool,
+          manager === 'pnpm' ? location.tool : testLocation(manager).tool,
         ),
       );
     const discover = jest
       .spyOn(locationAdapter, 'discoverGlobalLocation')
       .mockImplementation((manager) =>
-        Promise.resolve(
-          manager === 'pnpm'
-            ? location
-            : { ...testLocation(), ...testFacts().location },
-        ),
+        manager === 'yarn'
+          ? Promise.reject(
+              new AppException(409, 'TEST yarn unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            )
+          : Promise.resolve(
+              manager === 'pnpm'
+                ? location
+                : { ...testLocation(), ...testFacts().location },
+            ),
       );
     let before: IGlobalInventoryResult = {
       ...testInventory(facts),
@@ -3687,6 +3735,7 @@ describe('pnpm 12 service integration', () => {
         version: '12.21.0',
         reason: null,
       }),
+      expect.objectContaining({ manager: 'yarn', available: false }),
     ]);
 
     const verStart = await f.service.versions({
@@ -3821,4 +3870,367 @@ describe('pnpm 12 service integration', () => {
       });
     },
   );
+});
+
+describe('yarn 1.x shared-project service integration', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  async function finishYarnJob(
+    service: GlobalPackagesService,
+    id: string,
+  ): Promise<IGlobalJob> {
+    for (let index = 0; index < 100; index++) {
+      await settleJobs();
+      const job = service.getJob(id);
+      if (job.phase === 'done') return job;
+    }
+    throw new Error('TEST yarn job did not finish');
+  }
+
+  function setupYarnService(
+    options: {
+      semverVersion?: string;
+      neighbourVersion?: string;
+      binOnPath?: boolean;
+      explicitPrefix?: boolean;
+      yarnPathRc?: boolean;
+    } = {},
+  ) {
+    const f = testRuntime();
+    const makeDirectory = jest
+      .fn<Promise<void>, [string]>()
+      .mockResolvedValue(undefined);
+    f.runtime.makeDirectory = makeDirectory;
+    const globalDotBin = win32.join(Y.root, '.bin');
+    const writeState = (
+      semverVer: string,
+      neighbourVer: string,
+      includeSemver = true,
+    ) => {
+      const deps: Record<string, string> = {
+        'is-odd': neighbourVer,
+        '@types/is-odd': '3.0.0',
+      };
+      const lockLines = [
+        '"@types/is-odd@3.0.0":',
+        '  version "3.0.0"',
+        '  resolved "https://registry.yarnpkg.com/@types/is-odd/-/is-odd-3.0.0.tgz#aaaa"',
+        '  integrity sha512-types==',
+        '',
+        `is-odd@${neighbourVer}:`,
+        `  version "${neighbourVer}"`,
+        `  resolved "https://registry.yarnpkg.com/is-odd/-/is-odd-${neighbourVer}.tgz#bbbb"`,
+        `  integrity sha512-odd==`,
+      ];
+      f.fs.put(Y.global, { directory: true });
+      f.fs.put(Y.root, { directory: true });
+      f.fs.put(Y.bin, { directory: true });
+      f.fs.put(globalDotBin, { directory: true });
+      f.fs.put(win32.join(Y.root, 'is-odd', 'package.json'), {
+        text: JSON.stringify({ name: 'is-odd', version: neighbourVer }),
+      });
+      f.fs.put(win32.join(Y.root, '@types', 'is-odd', 'package.json'), {
+        text: JSON.stringify({ name: '@types/is-odd', version: '3.0.0' }),
+      });
+      const binNames: string[] = [];
+      const localNames: string[] = [];
+      if (includeSemver) {
+        deps.semver = semverVer;
+        lockLines.push(
+          '',
+          `semver@${semverVer}:`,
+          `  version "${semverVer}"`,
+          `  resolved "https://registry.yarnpkg.com/semver/-/semver-${semverVer}.tgz#cccc"`,
+          `  integrity sha512-sv${semverVer}==`,
+        );
+        const target = win32.join(Y.root, 'semver', 'bin', 'semver.js');
+        f.fs.put(win32.join(Y.root, 'semver', 'package.json'), {
+          text: JSON.stringify({
+            name: 'semver',
+            version: semverVer,
+            bin: { semver: 'bin/semver.js' },
+          }),
+        });
+        f.fs.put(target, { text: `// semver ${semverVer}` });
+        const l = yarnLocalBinShims(globalDotBin, 'semver', target);
+        const g = yarnGlobalBinShims(Y.bin, globalDotBin, 'semver');
+        f.fs.put(l.cmdPath, { text: l.cmdText });
+        f.fs.put(l.shPath, { text: l.shText });
+        f.fs.put(g.cmdPath, { text: g.cmdText });
+        f.fs.put(g.shPath, { text: g.shText });
+        binNames.push('semver', 'semver.cmd');
+        localNames.push('semver', 'semver.cmd');
+      }
+      f.fs.put(win32.join(Y.global, 'package.json'), {
+        text: JSON.stringify({ dependencies: deps }),
+      });
+      f.fs.put(win32.join(Y.global, 'yarn.lock'), {
+        text: lockLines.join('\n'),
+      });
+      f.fs.readdir.mockImplementation((dir: string) => {
+        const lower = win32.resolve(dir).toLowerCase();
+        if (lower === Y.bin.toLowerCase()) return Promise.resolve(binNames);
+        if (lower === globalDotBin.toLowerCase())
+          return Promise.resolve(localNames);
+        return Promise.resolve([]);
+      });
+    };
+
+    writeState(
+      options.semverVersion ?? '7.7.1',
+      options.neighbourVersion ?? '3.0.0',
+    );
+    const rcText = options.yarnPathRc
+      ? 'yarn-path "D:\\\\TEST\\\\evil.js"\n'
+      : '';
+    const configIdentities = options.yarnPathRc
+      ? [testConfigIdentity(Y.userYarnrc, rcText)]
+      : [];
+    if (options.yarnPathRc) f.fs.put(Y.userYarnrc, { text: rcText });
+    const missingConfigs = [
+      ...(options.yarnPathRc ? [] : [Y.userYarnrc]),
+      Y.globalYarnrc,
+      Y.userNpmrc,
+      Y.globalNpmrc,
+    ];
+    const cfg = yarnConfigFacts({
+      binOnPath: options.binOnPath ?? true,
+      explicitPrefix: options.explicitPrefix ?? false,
+      configIdentities,
+      missingConfigPaths: missingConfigs,
+      policy: {
+        defaultRegistry: 'public',
+        scopedRegistries: [],
+        unknownRouting: false,
+        publicAuthPresent: false,
+        changeUnsupported: options.yarnPathRc ?? false,
+      },
+    });
+    const loc = yarnLocation(cfg, '1.22.22');
+    f.runtime.environment = {
+      PATH:
+        options.binOnPath === false
+          ? 'C:\\Program Files\\nodejs'
+          : `${Y.bin};C:\\Program Files\\nodejs`,
+      LOCALAPPDATA: Y.local,
+      USERPROFILE: Y.profile,
+    };
+    jest
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- jest.fn mock
+      .mocked(f.runtime.resolveTool)
+      .mockResolvedValue(loc.tool);
+    jest
+      .spyOn(locationAdapter, 'discoverGlobalLocation')
+      .mockImplementation((manager) =>
+        manager === 'yarn'
+          ? Promise.resolve(loc)
+          : Promise.reject(
+              new AppException(409, 'TEST sibling unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            ),
+      );
+    jest
+      .spyOn(inventoryAdapter, 'readGlobalInventory')
+      .mockImplementation((location, deps) =>
+        readYarnGlobalInventory(location, deps),
+      );
+    jest.spyOn(GlobalRegistry.prototype, 'getVersions').mockResolvedValue({
+      manager: 'yarn',
+      package: 'semver',
+      versions: ['7.7.1', '7.7.2'],
+      tags: { latest: '7.7.2' },
+      deprecatedVersions: [],
+    });
+    jest.spyOn(GlobalRegistry.prototype, 'getTarget').mockResolvedValue({
+      name: 'semver',
+      version: '7.7.2',
+      requestedVersion: '7.7.2',
+      manifestHash: 'TEST',
+      integrity: 'TEST',
+      bins: [{ name: 'semver', target: 'bin/semver.js' }],
+      engines: null,
+      deprecated: false,
+    });
+    const service = new GlobalPackagesService(f.runtime);
+    return { ...f, service, loc, writeState, makeDirectory };
+  }
+
+  async function waitForYarnLaunch(
+    f: ReturnType<typeof setupYarnService>,
+    id: string,
+  ) {
+    await f.service.waitForPreflight(id);
+    for (let index = 0; index < 100; index++) {
+      await settleJobs();
+      if (f.child.launch.mock.calls.length === 1) return;
+      if (f.service.getJob(id).phase === 'done') {
+        throw new Error('TEST yarn mutation finished before launch');
+      }
+    }
+    throw new Error('TEST yarn mutation did not launch');
+  }
+
+  it('completes static inventory, shared-project preview, change execute and neighbor postcondition', async () => {
+    const f = setupYarnService();
+    const invStart = await f.service.inventory({ requestId: f.uuid() });
+    expect(await finishYarnJob(f.service, invStart.jobId)).toMatchObject({
+      status: 'completed',
+    });
+    const yarnInv = f.service
+      .getSnapshot()!
+      .managers.find((m) => m.manager === 'yarn');
+    expect(yarnInv).toMatchObject({
+      manager: 'yarn',
+      available: true,
+      version: '1.22.22',
+    });
+    expect(yarnInv!.packages.map((p) => p.name)).toEqual([
+      '@types/is-odd',
+      'is-odd',
+      'semver',
+    ]);
+    expect(f.probe).not.toHaveBeenCalled();
+
+    const prevStart = await f.service.preview({
+      requestId: f.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'change',
+      targetVersion: '7.7.2',
+    });
+    const prevJob = await finishYarnJob(f.service, prevStart.jobId);
+    expect(prevJob.status).toBe('completed');
+    expect(prevJob.preview!.warningCodes).toContain(
+      'YARN_SHARED_GLOBAL_PROJECT',
+    );
+    expect(prevJob.preview!.sharedPackages).toEqual([
+      { name: '@types/is-odd', version: '3.0.0', linked: false },
+      { name: 'is-odd', version: '3.0.0', linked: false },
+    ]);
+
+    const execStart = await f.service.execute(
+      testConsent({
+        requestId: f.uuid(),
+        previewId: prevJob.preview!.previewId,
+        confirmText: prevJob.preview!.confirmText,
+      }),
+    );
+    await waitForYarnLaunch(f, execStart.jobId);
+    expect(f.makeDirectory).toHaveBeenCalledWith(win32.dirname(Y.mutex));
+    const launched = f.child.launch.mock.calls[0][0];
+    expect(launched.args.slice(1, 3)).toEqual(['global', 'add']);
+    expect(launched.args.slice(-2)).toEqual(['--', 'semver@7.7.2']);
+    expect(launched.env.YARN_IGNORE_PATH).toBe('1');
+    f.writeState('7.7.2', '3.0.0', true);
+    f.child.exit({ exitCode: 0, termination: 'verified' });
+    const execJob = await finishYarnJob(f.service, execStart.jobId);
+    expect(execJob).toMatchObject({
+      status: 'completed',
+      failureCode: null,
+      gateHeld: false,
+    });
+    expect(f.audit.mock.calls.map(([r]) => r.phase)).toEqual([
+      'intent',
+      'result',
+    ]);
+  });
+
+  it('fails execute with POSTCONDITION_FAILED when a neighbor package mutates unexpectedly', async () => {
+    const f = setupYarnService();
+    const prevStart = await f.service.preview({
+      requestId: f.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'change',
+      targetVersion: '7.7.2',
+    });
+    const prevJob = await finishYarnJob(f.service, prevStart.jobId);
+    const execStart = await f.service.execute(
+      testConsent({
+        requestId: f.uuid(),
+        previewId: prevJob.preview!.previewId,
+        confirmText: prevJob.preview!.confirmText,
+      }),
+    );
+    await waitForYarnLaunch(f, execStart.jobId);
+    // Target updated to 7.7.2 BUT neighbor is-odd silently mutated to 3.0.1!
+    f.writeState('7.7.2', '3.0.1', true);
+    f.child.exit({ exitCode: 0, termination: 'verified' });
+    const execJob = await finishYarnJob(f.service, execStart.jobId);
+    expect(execJob).toMatchObject({
+      status: 'failed',
+      failureCode: 'POSTCONDITION_FAILED',
+      gateHeld: false,
+    });
+  });
+
+  it('rejects change on yarn-path .yarnrc while allowing remove, and checks YARN_GLOBAL_NOT_CONFIGURED / PREVIEW_CHANGED', async () => {
+    const fRc = setupYarnService({ yarnPathRc: true });
+    const blockedChange = await fRc.service.preview({
+      requestId: fRc.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'change',
+      targetVersion: '7.7.2',
+    });
+    expect(await finishYarnJob(fRc.service, blockedChange.jobId)).toMatchObject(
+      {
+        status: 'failed',
+        failureCode: 'REGISTRY_CONFIG_UNSUPPORTED',
+      },
+    );
+    const allowedRemove = await fRc.service.preview({
+      requestId: fRc.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'remove',
+    });
+    expect(await finishYarnJob(fRc.service, allowedRemove.jobId)).toMatchObject(
+      {
+        status: 'completed',
+      },
+    );
+
+    const fUnconf = setupYarnService({
+      binOnPath: false,
+      explicitPrefix: false,
+    });
+    const unconfStart = await fUnconf.service.preview({
+      requestId: fUnconf.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'change',
+      targetVersion: '7.7.2',
+    });
+    expect(
+      await finishYarnJob(fUnconf.service, unconfStart.jobId),
+    ).toMatchObject({
+      status: 'failed',
+      failureCode: 'YARN_GLOBAL_NOT_CONFIGURED',
+    });
+
+    // TOCTOU: yarn.lock changes after preview -> PREVIEW_CHANGED before launch
+    const fToctou = setupYarnService();
+    const prevStart = await fToctou.service.preview({
+      requestId: fToctou.uuid(),
+      manager: 'yarn',
+      package: 'semver',
+      action: 'remove',
+    });
+    const prevJob = await finishYarnJob(fToctou.service, prevStart.jobId);
+    fToctou.writeState('7.7.1', '3.0.1', true);
+    const execStart = await fToctou.service.execute(
+      testConsent({
+        requestId: fToctou.uuid(),
+        previewId: prevJob.preview!.previewId,
+        confirmText: prevJob.preview!.confirmText,
+      }),
+    );
+    await expectGlobalReason(
+      () => fToctou.service.waitForPreflight(execStart.jobId),
+      'PREVIEW_CHANGED',
+    );
+    expect(fToctou.child.launch).not.toHaveBeenCalled();
+  });
 });

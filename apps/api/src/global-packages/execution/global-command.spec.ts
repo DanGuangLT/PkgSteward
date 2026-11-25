@@ -993,4 +993,86 @@ describe('pnpm 12 native command boundary', () => {
       'TOOL_LAYOUT_UNSUPPORTED',
     );
   });
+
+  it('delegates yarn mutations to buildYarnGlobalCommand and refuses buildGlobalQuery for yarn', async () => {
+    const yarnPkg = 'D:\\TEST\\AppData\\npm\\node_modules\\yarn';
+    const cfg = {
+      prefixDir: 'D:\\TEST\\YarnPrefix',
+      globalDir: 'D:\\TEST\\YarnData\\global',
+      globalRoot: 'D:\\TEST\\YarnData\\global\\node_modules',
+      binDir: 'D:\\TEST\\YarnPrefix\\bin',
+      cacheDir: 'D:\\TEST\\YarnCache',
+      mutexFile: 'D:\\TEST\\data\\cache\\yarn-global.mutex',
+      userYarnrc: 'D:\\TEST\\profile\\.yarnrc',
+      globalYarnrc: 'D:\\TEST\\YarnPrefix\\etc\\yarnrc',
+      userNpmrc: 'D:\\TEST\\profile\\.npmrc',
+      globalNpmrc: 'D:\\TEST\\YarnPrefix\\etc\\npmrc',
+      binOnPath: true,
+      explicitPrefix: false,
+      originalPath: ['D:\\TEST\\YarnPrefix\\bin', 'C:\\Program Files\\nodejs'],
+      selectors: { PREFIX: 'D:\\TEST\\YarnPrefix' },
+      configIdentities: [],
+      missingConfigPaths: [],
+      directoryIdentities: [],
+      missingDirectoryPaths: [],
+      policy: {
+        defaultRegistry: 'public' as const,
+        scopedRegistries: [],
+        unknownRouting: false,
+        publicAuthPresent: false,
+        changeUnsupported: false,
+      },
+    };
+    const yarnLoc = {
+      manager: 'yarn' as const,
+      tool: {
+        manager: 'yarn' as const,
+        version: '1.22.22',
+        file: P.node,
+        entry: `${yarnPkg}\\bin\\yarn.js`,
+        packageDir: yarnPkg,
+        identities: [],
+      },
+      prefix: cfg.prefixDir,
+      globalDir: cfg.globalDir,
+      globalRoot: cfg.globalRoot,
+      binDir: cfg.binDir,
+      cacheDir: cfg.cacheDir,
+      storeDir: null,
+      userConfig: cfg.userYarnrc,
+      globalConfig: cfg.globalYarnrc,
+      configIdentities: [],
+      yarn: cfg,
+      cwd: P.cwd,
+      protectedPaths: [yarnPkg, P.node, P.app, P.source, P.data],
+    };
+    await expectGlobalReason(
+      () =>
+        buildGlobalQuery({
+          manager: 'yarn',
+          tool: yarnLoc.tool,
+          cwd: P.cwd,
+          query: 'list',
+          captured: {},
+          environment: {},
+        }),
+      'CONFIG_UNSUPPORTED',
+    );
+    const cmd = buildGlobalCommand(
+      input('yarn', { location: yarnLoc, environment: { PATH: cfg.binDir } }),
+    );
+    expect(cmd.args[1]).toBe('global');
+    expect(cmd.args[2]).toBe('add');
+    await expectGlobalReason(
+      () =>
+        buildGlobalCommand(
+          input('yarn', {
+            location: yarnLoc,
+            action: 'repair',
+            exactVersion: null,
+          }),
+        ),
+      'INVALID_PACKAGE_SPEC',
+    );
+  });
 });

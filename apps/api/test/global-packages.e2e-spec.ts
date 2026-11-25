@@ -40,11 +40,21 @@ import type {
   IGlobalSnapshot,
 } from '@/global-packages/interfaces/global-packages.types';
 import { flushJobs } from '@/global-packages/__fixtures__/global-lifecycle';
+import { testTool } from '@/global-packages/__fixtures__/global-adapters';
 import { globalHttpFixture } from '@/../test/mocks/global-packages';
 import { npmLifecycleFixture } from '@/global-packages/__fixtures__/npm-overlay/lifecycle';
 import { npmTarget } from '@/global-packages/__fixtures__/npm-overlay/facts';
 import * as locationAdapter from '@/global-packages/discovery/global-location';
 import { GlobalRegistry } from '@/global-packages/registry/global-registry';
+import {
+  YARN_TEST_PATHS as Y,
+  yarnConfigFacts,
+  yarnLocation,
+} from '@/global-packages/__fixtures__/yarn1/facts';
+import {
+  yarnGlobalBinShims,
+  yarnLocalBinShims,
+} from '@/global-packages/__fixtures__/yarn1/shims';
 
 jest.mock('execa', () => ({ execa: jest.fn() }));
 jest.mock('node:fs/promises', () => {
@@ -651,5 +661,141 @@ describe('Global packages HTTP PC (real Nest/service/adapters, mocked IO)', () =
     assertError(response, 503, 'SERVICE_UNAVAILABLE');
     expect(f.probe).not.toHaveBeenCalled();
     expect(f.child.launch).not.toHaveBeenCalled();
+  });
+
+  it('runs Yarn Classic HTTP workflow with sharedPackages, preview -> consent -> execute and neighbor postcondition', async () => {
+    const globalDotBin = `${Y.root}\\.bin`;
+    const semverTarget = `${Y.root}\\semver\\bin\\semver.js`;
+    const writeYarnFs = (sv: string) => {
+      f.fs.put(Y.global, { directory: true });
+      f.fs.put(Y.root, { directory: true });
+      f.fs.put(Y.bin, { directory: true });
+      f.fs.put(globalDotBin, { directory: true });
+      f.fs.put(`${Y.global}\\package.json`, {
+        text: JSON.stringify({
+          dependencies: { semver: sv, 'is-odd': '3.0.0' },
+        }),
+      });
+      f.fs.put(`${Y.global}\\yarn.lock`, {
+        text: [
+          'is-odd@3.0.0:',
+          '  version "3.0.0"',
+          '  resolved "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.0.tgz#bbbb"',
+          '  integrity sha512-odd==',
+          '',
+          `semver@${sv}:`,
+          `  version "${sv}"`,
+          `  resolved "https://registry.yarnpkg.com/semver/-/semver-${sv}.tgz#aaaa"`,
+          `  integrity sha512-sv${sv}==`,
+        ].join('\n'),
+      });
+      f.fs.put(`${Y.root}\\is-odd\\package.json`, {
+        text: JSON.stringify({ name: 'is-odd', version: '3.0.0' }),
+      });
+      f.fs.put(`${Y.root}\\semver\\package.json`, {
+        text: JSON.stringify({
+          name: 'semver',
+          version: sv,
+          bin: { semver: 'bin/semver.js' },
+        }),
+      });
+      f.fs.put(semverTarget, { text: `// semver ${sv}` });
+      const l = yarnLocalBinShims(globalDotBin, 'semver', semverTarget);
+      const g = yarnGlobalBinShims(Y.bin, globalDotBin, 'semver');
+      f.fs.put(l.cmdPath, { text: l.cmdText });
+      f.fs.put(l.shPath, { text: l.shText });
+      f.fs.put(g.cmdPath, { text: g.cmdText });
+      f.fs.put(g.shPath, { text: g.shText });
+    };
+    writeYarnFs('7.7.1');
+    const loc = yarnLocation(yarnConfigFacts(), '1.22.22');
+    jest
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- jest.fn mock
+      .mocked(f.runtime.resolveTool)
+      .mockImplementation((manager) =>
+        Promise.resolve(manager === 'yarn' ? loc.tool : testTool(manager)),
+      );
+    jest
+      .spyOn(locationAdapter, 'discoverGlobalLocation')
+      .mockImplementation((manager) =>
+        manager === 'yarn'
+          ? Promise.resolve(loc)
+          : Promise.reject(
+              new AppException(409, 'TEST unavailable', 'CONFLICT', {
+                reason: 'TOOL_NOT_FOUND',
+              }),
+            ),
+      );
+    jest.spyOn(GlobalRegistry.prototype, 'getVersions').mockResolvedValue({
+      manager: 'yarn',
+      package: 'semver',
+      versions: ['7.7.1', '7.7.2'],
+      deprecatedVersions: [],
+      tags: { latest: '7.7.2' },
+    });
+    jest.spyOn(GlobalRegistry.prototype, 'getTarget').mockResolvedValue({
+      name: 'semver',
+      version: '7.7.2',
+      requestedVersion: '7.7.2',
+      manifestHash: 'TEST',
+      integrity: 'TEST',
+      bins: [{ name: 'semver', target: 'bin/semver.js' }],
+      engines: null,
+      deprecated: false,
+    });
+    const app = await open();
+    const waitDone = async () => {
+      for (let i = 0; i < 100; i++) {
+        await new Promise<void>((r) => setImmediate(r));
+        const job = await latest(app);
+        if (job?.phase === 'done') return job;
+      }
+      throw new Error('TEST yarn HTTP job did not finish');
+    };
+    await request(app.getHttpServer())
+      .post(`${base}/inventory`)
+      .send({ requestId: uuid(++serial) })
+      .expect(202);
+    expect((await waitDone()).status).toBe('completed');
+    const snap = await snapshot(app);
+    expect(snap?.managers.find((m) => m.manager === 'yarn')).toMatchObject({
+      manager: 'yarn',
+      available: true,
+      version: '1.22.22',
+    });
+
+    await request(app.getHttpServer())
+      .post(`${base}/preview`)
+      .send({
+        requestId: uuid(++serial),
+        manager: 'yarn',
+        package: 'semver',
+        action: 'change',
+        targetVersion: '7.7.2',
+      })
+      .expect(202);
+    const prevJob = await waitDone();
+    expect(prevJob.status).toBe('completed');
+    expect(prevJob.preview?.sharedPackages).toEqual([
+      { name: 'is-odd', version: '3.0.0', linked: false },
+    ]);
+    expect(prevJob.preview?.warningCodes).toContain(
+      'YARN_SHARED_GLOBAL_PROJECT',
+    );
+
+    await request(app.getHttpServer())
+      .post(`${base}/execute`)
+      .send(consent(prevJob.preview!))
+      .expect(202);
+    for (let i = 0; i < 100 && f.child.launch.mock.calls.length === 0; i++) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    writeYarnFs('7.7.2');
+    f.child.exit();
+    expect(await waitDone()).toMatchObject({
+      status: 'completed',
+      gateHeld: false,
+    });
   });
 });

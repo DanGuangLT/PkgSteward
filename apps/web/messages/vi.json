@@ -1253,7 +1253,6 @@
     "retry": "Thử lại",
     "refresh": "Làm mới danh sách",
     "refreshHint": "Nút làm mới chủ động đọc các gói global đã cài. Mở trang này không chạy trình quản lý gói.",
-    "yarnUnsupported": "Chưa hỗ trợ gói global của Yarn.",
     "asOf": "Cập nhật lúc {time}",
     "stale": "Danh sách có thể đã cũ",
     "noInventory": "Chưa có danh sách gói. Chọn Làm mới danh sách để đọc các gói đã cài.",
@@ -1388,7 +1387,7 @@
       "PROJECT_NOT_SCANNED": "Không tìm thấy dự án đã quét cần thiết.",
       "INPUT_CHANGED": "Đầu vào đã đổi. Làm mới danh sách và tạo bản xem trước mới.",
       "WORKSPACE_LEAF": "Không hỗ trợ thao tác này tại dự án con của workspace.",
-      "UNSUPPORTED_MANAGER": "Không hỗ trợ trình quản lý gói này. Chỉ dùng được bản cài npm và pnpm nằm trong phạm vi hỗ trợ.",
+      "UNSUPPORTED_MANAGER": "Không hỗ trợ trình quản lý gói này. Chỉ dùng được bản cài npm, pnpm và Yarn nằm trong phạm vi hỗ trợ.",
       "LOCKFILE_MISMATCH": "Lockfile không khớp với trình quản lý gói.",
       "TOOL_NOT_FOUND": "Không tìm thấy trình quản lý gói đã cài. Hãy thiết lập bên ngoài ứng dụng.",
       "TOOL_LAYOUT_UNSUPPORTED": "Chưa hỗ trợ cấu trúc cài đặt công cụ này. Ứng dụng không tự tải hoặc thay công cụ.",
@@ -1428,6 +1427,7 @@
       "POSTCONDITION_FAILED": "Không xác minh được trạng thái gói sau thao tác. Có thể đã thay đổi dở dang.",
       "MANAGER_DISABLED": "Phiên bản này chưa quản lý được gói global của trình quản lý gói này. Tạm thời hãy quản lý trong terminal.",
       "PNPM_GLOBAL_NOT_CONFIGURED": "Gói global của pnpm chưa được thiết lập. Hãy chạy pnpm setup trong terminal, mở terminal mới rồi khởi động lại PkgSteward.",
+      "YARN_GLOBAL_NOT_CONFIGURED": "Thư mục lệnh global của Yarn chưa có trong PATH và chưa cấu hình prefix global. Hãy thêm thư mục bin global của Yarn vào PATH rồi khởi động lại PkgSteward.",
       "GLOBAL_GROUP_UNSUPPORTED": "Gói này được cài cùng các gói khác trong một lệnh pnpm add -g. PkgSteward chỉ hiển thị gói; hãy quản lý trong terminal.",
       "NPM_PREFIX_IS_NODE_DIR": "Thư mục global của npm nằm trong thư mục cài Node (ví dụ khi dùng nvm). PkgSteward không thay npm của chính Node.",
       "NPM_OVERLAY_ABSENT": "Chưa có npm cài trong thư mục global, terminal đã dùng npm đi kèm Node.",
@@ -1467,7 +1467,8 @@
       "GLOBAL_CONSUMERS_UNKNOWN": "Không thể phát hiện hết chương trình và terminal khác đang sử dụng gói này.",
       "PROCESS_ESCAPE_RESIDUAL": "Mã của gói có thể tạo tiến trình ngoài cây được theo dõi. Sau sự cố, kiểm tra Task Manager; không bảo đảm cô lập tiến trình.",
       "TERMINAL_NPM_SWITCH": "Mọi terminal dùng npm của Node này sẽ chạy phiên bản mới từ lần chạy tiếp theo; terminal đang chạy npm giữ bản cũ đến khi chạy lại. Dự án có .npmrc đổi prefix có thể thấy bản khác. PkgSteward vẫn dùng npm đi kèm Node.",
-      "PNPM_SHARED_GLOBAL_PROJECT": "pnpm 10 giữ mọi gói global trong một dự án. Thao tác này chạy lại pnpm trên dự án đó. Sau đó, PkgSteward kiểm tra các gói bên dưới vẫn giữ nguyên và báo nếu có thay đổi. Ứng dụng không thể hoàn tác thay đổi."
+      "PNPM_SHARED_GLOBAL_PROJECT": "pnpm 10 giữ mọi gói global trong một dự án. Thao tác này chạy lại pnpm trên dự án đó. Sau đó, PkgSteward kiểm tra các gói bên dưới vẫn giữ nguyên và báo nếu có thay đổi. Ứng dụng không thể hoàn tác thay đổi.",
+      "YARN_SHARED_GLOBAL_PROJECT": "Yarn giữ mọi gói global trong một dự án dùng chung. Thao tác này chạy lại Yarn trên dự án đó. Sau đó, PkgSteward kiểm tra các gói bên dưới vẫn giữ nguyên và báo nếu có thay đổi. Ứng dụng không thể hoàn tác thay đổi."
     }
   },
   "packageManagers": {
