@@ -28,6 +28,7 @@ import type { GlobalManager } from '@/global-packages/interfaces/global-packages
 import type {
   GlobalProbeSpawn,
   IGlobalServiceRuntime,
+  IGlobalTool,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import {
   GLOBAL_PACKAGES_FS,
@@ -36,12 +37,12 @@ import {
 } from '@/global-packages/interfaces/global-packages.runtime';
 import type { IGlobalDirectoryAccess } from '@/global-packages/discovery/global-location';
 import { createGlobalProbeSpawn } from '@/global-packages/discovery/global-location';
-import type { IRunnerTool } from '@/npm-runner/interfaces/npm-runner.types';
 import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
 import {
   resolveRunnerTool,
   runnerFailure,
 } from '@/npm-runner/toolchain/runner-tool';
+import { resolveYarnGlobalTool } from '@/global-packages/execution/yarn-global-command';
 import {
   assertGlobalLauncher,
   isGlobalAbsolutePath,
@@ -92,7 +93,7 @@ export function createGlobalPackagesRuntime(
     return typeof timeout === 'number' ? timeout : undefined;
   };
   const launchProcess = bindings.launchProcess ?? launchRun;
-  const tools = new Map<string, IRunnerTool>();
+  const tools = new Map<string, IGlobalTool>();
   const retainedProbes = new Set<IRunProcess>();
   let unknownLaunch = false;
   let verification: Promise<boolean> | null = null;
@@ -126,17 +127,17 @@ export function createGlobalPackagesRuntime(
   const resolveTool = async (manager: GlobalManager, signal: AbortSignal) => {
     requireWindows();
     signal.throwIfAborted();
-    const tool = await resolveRunnerTool(
-      manager,
-      {
-        platform: 'win32',
-        execPath: host.execPath,
-        env: environment,
-        signal,
-        projectPaths: scannedProjectPaths(),
-      },
-      fs,
-    );
+    const snapshot = {
+      platform: 'win32' as const,
+      execPath: host.execPath,
+      env: environment,
+      signal,
+      projectPaths: scannedProjectPaths(),
+    };
+    const tool: IGlobalTool =
+      manager === 'yarn'
+        ? await resolveYarnGlobalTool(snapshot, fs)
+        : await resolveRunnerTool(manager, snapshot, fs);
     signal.throwIfAborted();
     // Registration, discovery and command construction share the same version and launcher gates.
     if (manager === 'pnpm' && !isPnpmGlobalVersion(tool.version))
@@ -156,7 +157,9 @@ export function createGlobalPackagesRuntime(
         ? 'npm'
         : entry && /[\\/]pnpm\.(?:mjs|cjs|js)$/i.test(entry)
           ? 'pnpm'
-          : null;
+          : entry && /[\\/](?:yarn|cli)\.(?:cjs|mjs|js)$/i.test(entry)
+            ? 'yarn'
+            : null;
     if (
       !manager ||
       !isGlobalAbsolutePath(file) ||

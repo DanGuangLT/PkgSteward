@@ -1,4 +1,5 @@
 import type { IRunnerCommand } from '@/npm-runner/interfaces/npm-runner.types';
+import type { ProjectManager } from '@/projects/interfaces/projects.types';
 import type { IRunClock } from '@/npm-runner/execution/runner-logs';
 import type {
   IRunnerProcessIdentity,
@@ -33,7 +34,7 @@ export interface IRunProcessDeps {
 }
 
 export function launchRun(
-  command: IRunnerCommand,
+  command: Omit<IRunnerCommand, 'manager'> & { manager: ProjectManager },
   env: Readonly<NodeJS.ProcessEnv>,
   callbacks: IRunProcessCallbacks,
   deps: IRunProcessDeps,

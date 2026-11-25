@@ -549,4 +549,55 @@ describe('GlobalPackagesModule runtime bindings', () => {
     });
     expect(runtime.timeoutMs).toBe(8000);
   });
+
+  it('resolves Yarn 1.22.22 via resolveYarnGlobalTool and refuses Berry 2+ before registration', async () => {
+    const b = bindings();
+    const yarnDir = 'D:\\TEST\\yarn-bin';
+    b.input.host = {
+      ...b.input.host!,
+      env: { ...b.input.host!.env, PATH: yarnDir },
+    };
+    b.f.fs.put(`${yarnDir}\\node_modules\\yarn\\package.json`, {
+      text: JSON.stringify({
+        name: 'yarn',
+        version: '1.22.22',
+        bin: { yarn: './bin/yarn.js' },
+      }),
+    });
+    b.f.fs.put(`${yarnDir}\\node_modules\\yarn\\bin\\yarn.js`, {
+      text: '// yarn 1.22.22',
+    });
+    const runtime = createGlobalPackagesRuntime(b.input);
+    const tool = await runtime.resolveTool(
+      'yarn',
+      new AbortController().signal,
+    );
+    expect(tool).toMatchObject({
+      manager: 'yarn',
+      version: '1.22.22',
+      file: TEST_PATHS.node,
+      entry: `${yarnDir}\\node_modules\\yarn\\bin\\yarn.js`,
+    });
+
+    const bBerry = bindings();
+    bBerry.input.host = {
+      ...bBerry.input.host!,
+      env: { ...bBerry.input.host!.env, PATH: yarnDir },
+    };
+    bBerry.f.fs.put(`${yarnDir}\\node_modules\\yarn\\package.json`, {
+      text: JSON.stringify({
+        name: 'yarn',
+        version: '4.5.0',
+        bin: { yarn: './bin/yarn.js' },
+      }),
+    });
+    bBerry.f.fs.put(`${yarnDir}\\node_modules\\yarn\\bin\\yarn.js`, {
+      text: '// berry',
+    });
+    const berryRuntime = createGlobalPackagesRuntime(bBerry.input);
+    await expect(
+      berryRuntime.resolveTool('yarn', new AbortController().signal),
+    ).rejects.toMatchObject({ details: { reason: 'TOOL_VERSION_MISMATCH' } });
+    expect(bBerry.launchProcess).not.toHaveBeenCalled();
+  });
 });

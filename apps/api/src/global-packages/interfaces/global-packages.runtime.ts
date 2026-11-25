@@ -21,9 +21,17 @@ import type {
   IPnpmGlobalPolicy,
 } from '@/global-packages/interfaces/pnpm-global.types';
 import type {
+  IYarnGlobalConfig,
+  IYarnGlobalInventoryFacts,
+} from '@/global-packages/interfaces/yarn-global.types';
+import type {
   IRunProcess,
   IRunProcessCallbacks,
 } from '@/npm-runner/execution/runner-process';
+
+export type IGlobalTool = Omit<IRunnerTool, 'manager'> & {
+  manager: GlobalManager;
+};
 
 export const GLOBAL_ENVIRONMENT_KEYS = [
   'npm_config_prefix',
@@ -34,6 +42,8 @@ export const GLOBAL_ENVIRONMENT_KEYS = [
   'pnpm_config_global_bin_dir',
   'pnpm_config_store_dir',
   'PNPM_HOME',
+  'PREFIX',
+  'YARN_CACHE_FOLDER',
 ] as const;
 export type GlobalEnvironmentKey = (typeof GLOBAL_ENVIRONMENT_KEYS)[number];
 export type GlobalEnvironmentCapture = Readonly<
@@ -65,7 +75,7 @@ export interface IGlobalRegistryDecision {
 }
 export interface IGlobalLocation {
   manager: GlobalManager;
-  tool: IRunnerTool;
+  tool: IGlobalTool;
   prefix: string | null;
   globalDir: string | null;
   globalRoot: string;
@@ -77,6 +87,7 @@ export interface IGlobalLocation {
   configIdentities: IGlobalConfigIdentity[];
   pnpm?: IPnpmGlobalConfig;
   pnpm10?: IPnpm10GlobalConfig;
+  yarn?: IYarnGlobalConfig;
 }
 export interface IGlobalBinOwner {
   name: string;
@@ -168,6 +179,7 @@ export interface IGlobalPreviewFacts {
   locations?: IGlobalLocation[];
   pnpmInventory?: IPnpmGlobalInventoryFacts;
   pnpm10Inventory?: IPnpm10GlobalInventoryFacts;
+  yarnInventory?: IYarnGlobalInventoryFacts;
   npm?: INpmSelfFacts;
 }
 // Infrastructure inputs only; no controller accepts paths, argv or environment.
@@ -179,7 +191,7 @@ export interface IGlobalRuntime {
   resolveTool(
     manager: GlobalManager,
     signal: AbortSignal,
-  ): Promise<IRunnerTool>;
+  ): Promise<IGlobalTool>;
 }
 
 export interface IGlobalResolvedLocation extends IGlobalLocation {

@@ -2,6 +2,7 @@ import type {
   GlobalEnvironmentCapture,
   IGlobalCommand,
   IGlobalResolvedLocation,
+  IGlobalTool,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import type {
   GlobalAction,
@@ -28,6 +29,10 @@ import {
   buildPnpm10GlobalCommand,
   buildPnpm10GlobalQuery,
 } from '@/global-packages/execution/pnpm10-global-command';
+import {
+  assertYarnLauncher,
+  buildYarnGlobalCommand,
+} from '@/global-packages/execution/yarn-global-command';
 
 const PUBLIC_REGISTRY = 'https://registry.npmjs.org';
 // pnpm 11.22.0:214230-214250,272082: auto-approval ignores non-TTY consent.
@@ -101,8 +106,12 @@ export const isGlobalAbsolutePath = (value: string): boolean =>
 
 export function assertGlobalLauncher(
   manager: GlobalManager,
-  tool: IRunnerTool,
+  tool: IGlobalTool,
 ): void {
+  if (manager === 'yarn') {
+    assertYarnLauncher(tool);
+    return;
+  }
   if (manager !== 'npm' && manager !== 'pnpm')
     return fail('UNSUPPORTED_MANAGER');
   if (
@@ -144,17 +153,25 @@ export function assertGlobalLauncher(
 
 function assertLauncher(
   manager: GlobalManager,
-  tool: IRunnerTool,
+  tool: IGlobalTool,
   cwd: string,
 ): void {
   assertGlobalLauncher(manager, tool);
   if (!isGlobalAbsolutePath(cwd)) return fail('CONFIG_UNSUPPORTED');
 }
 
+function asRunnerTool(
+  tool: IGlobalTool,
+  manager: Extract<GlobalManager, 'npm' | 'pnpm'>,
+): IRunnerTool {
+  if (tool.manager !== manager) return fail('TOOL_LAYOUT_UNSUPPORTED');
+  return { ...tool, manager };
+}
+
 export function environmentFor(
   snapshot: Readonly<NodeJS.ProcessEnv>,
   tool: IRunnerTool,
-  manager: GlobalManager,
+  manager: Extract<GlobalManager, 'npm' | 'pnpm'>,
   action: GlobalAction,
 ): NodeJS.ProcessEnv {
   const clean: NodeJS.ProcessEnv = {};
@@ -189,7 +206,7 @@ export type GlobalQuery =
 
 export interface IGlobalQueryInput {
   manager: GlobalManager;
-  tool: IRunnerTool;
+  tool: IGlobalTool;
   cwd: string;
   environment: Readonly<NodeJS.ProcessEnv>;
   captured: GlobalEnvironmentCapture;
@@ -210,6 +227,7 @@ export interface IGlobalMutationInput {
 export function buildGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
   const { manager, tool, cwd, query } = input;
   assertLauncher(manager, tool, cwd);
+  if (manager === 'yarn') return fail('CONFIG_UNSUPPORTED');
   if (manager === 'pnpm')
     return semver.parse(tool.version)?.major === 10
       ? buildPnpm10GlobalQuery(input)
@@ -242,7 +260,12 @@ export function buildGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
       ),
       ...tail,
     ],
-    env: environmentFor(input.environment, tool, manager, 'remove'),
+    env: environmentFor(
+      input.environment,
+      asRunnerTool(tool, manager),
+      manager,
+      'remove',
+    ),
   };
 }
 
@@ -261,6 +284,21 @@ export function buildGlobalCommand(
     return fail('INVALID_PACKAGE_SPEC');
   if (action === 'change' && !input.publicRegistry)
     return fail('REGISTRY_CONFIG_UNSUPPORTED');
+  if (manager === 'yarn') {
+    if (!location.yarn) return fail('CONFIG_UNSUPPORTED');
+    if (action === 'repair') return fail('INVALID_PACKAGE_SPEC');
+    return buildYarnGlobalCommand(
+      {
+        location,
+        environment: input.environment,
+        action,
+        packageName,
+        exactVersion,
+        publicRegistry: input.publicRegistry,
+      },
+      location.yarn,
+    );
+  }
   if (manager === 'pnpm')
     return semver.parse(tool.version)?.major === 10
       ? buildPnpm10GlobalCommand(input)
@@ -302,7 +340,12 @@ export function buildGlobalCommand(
       '--',
       action === 'remove' ? packageName : `${packageName}@${exactVersion}`,
     ],
-    env: environmentFor(input.environment, tool, manager, action),
+    env: environmentFor(
+      input.environment,
+      asRunnerTool(tool, manager),
+      manager,
+      action,
+    ),
   };
 }
 
@@ -386,7 +429,12 @@ function buildPnpmGlobalCommand(input: IGlobalMutationInput): IGlobalCommand {
     file: location.tool.file,
     cwd: location.cwd,
     args,
-    env: pnpmEnvironment(input.environment, location.tool, action, config),
+    env: pnpmEnvironment(
+      input.environment,
+      asRunnerTool(location.tool, 'pnpm'),
+      action,
+      config,
+    ),
     shell: false,
     extendEnv: false,
     stdin: 'ignore',
@@ -426,7 +474,12 @@ function buildPnpmGlobalQuery(input: IGlobalQueryInput): IGlobalCommand {
           '--depth=0',
           '--json',
         ],
-    env: pnpmEnvironment(input.environment, input.tool, 'remove', config),
+    env: pnpmEnvironment(
+      input.environment,
+      asRunnerTool(input.tool, 'pnpm'),
+      'remove',
+      config,
+    ),
     shell: false,
     extendEnv: false,
     stdin: 'ignore',

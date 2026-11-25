@@ -369,7 +369,10 @@ export async function resolveRunnerTool(
 }
 
 export async function revalidateRunnerTool(
-  tool: IRunnerTool,
+  tool: Pick<
+    IRunnerTool,
+    'identities' | 'npm10InstallCompat' | 'npm10InstallCompatIdentities'
+  >,
   fs: IRunnerFs,
   signal: AbortSignal,
 ): Promise<void> {

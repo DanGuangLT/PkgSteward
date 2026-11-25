@@ -141,6 +141,9 @@ function snapshotLocation(location: IGlobalLocation): IGlobalLocation {
     ...(location.pnpm10
       ? { pnpm10: pnpm10Data(location.pnpm10) as IGlobalLocation['pnpm10'] }
       : {}),
+    ...(location.yarn
+      ? { yarn: pnpm10Data(location.yarn) as IGlobalLocation['yarn'] }
+      : {}),
   };
 }
 
@@ -238,6 +241,13 @@ export function snapshotGlobalPreviewFacts(
           pnpm10Inventory: pnpm10Data(
             facts.pnpm10Inventory,
           ) as IGlobalPreviewFacts['pnpm10Inventory'],
+        }
+      : {}),
+    ...(facts.yarnInventory
+      ? {
+          yarnInventory: pnpm10Data(
+            facts.yarnInventory,
+          ) as IGlobalPreviewFacts['yarnInventory'],
         }
       : {}),
     ...(facts.pnpmInventory
@@ -352,6 +362,7 @@ function locationFacts(location: IGlobalLocation) {
       .sort((a, b) => a.file.path.localeCompare(b.file.path)),
     pnpm: location.pnpm ? pnpmConfigFacts(location.pnpm) : undefined,
     pnpm10: location.pnpm10 ? pnpm10Data(location.pnpm10, true) : undefined,
+    yarn: location.yarn ? pnpm10Data(location.yarn, true) : undefined,
   };
 }
 
@@ -442,6 +453,9 @@ function comparable(facts: IGlobalPreviewFacts) {
     pnpm10Inventory: facts.pnpm10Inventory
       ? pnpm10Data(facts.pnpm10Inventory, true)
       : undefined,
+    yarnInventory: facts.yarnInventory
+      ? pnpm10Data(facts.yarnInventory, true)
+      : undefined,
     target: target ? { ...target, bins: sortBins(target.bins) } : null,
     binOwners: [...facts.binOwners].sort((a, b) =>
       a.name.localeCompare(b.name),
@@ -510,6 +524,13 @@ export function createGlobalPreview(
     )
   )
     return refuse('PNPM_GLOBAL_NOT_CONFIGURED');
+  if (
+    location.yarn &&
+    after.length > 0 &&
+    !location.yarn.binOnPath &&
+    !location.yarn.explicitPrefix
+  )
+    return refuse('YARN_GLOBAL_NOT_CONFIGURED');
   const warnings = npm
     ? npmSelfWarnings(request.action, currentVersion, terminalAfter!)
     : target
@@ -521,8 +542,19 @@ export function createGlobalPreview(
           .filter((d) => d.name !== packageName)
           .map(({ name, version, linked }) => ({ name, version, linked }))
           .sort((a, b) => a.name.localeCompare(b.name))
-      : undefined;
-  if (sharedPackages?.length) warnings.push('PNPM_SHARED_GLOBAL_PROJECT');
+      : location.yarn && facts.yarnInventory
+        ? facts.yarnInventory.project.dependencies
+            .filter((d) => d.name !== packageName)
+            .map(({ name, version, linked }) => ({ name, version, linked }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : undefined;
+  if (sharedPackages?.length) {
+    warnings.push(
+      location.yarn
+        ? 'YARN_SHARED_GLOBAL_PROJECT'
+        : 'PNPM_SHARED_GLOBAL_PROJECT',
+    );
+  }
   const preview: IGlobalPreview = {
     previewId,
     createdAt: now.toISOString(),

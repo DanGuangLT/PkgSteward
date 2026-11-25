@@ -4,6 +4,7 @@ import type {
   GlobalProbeSpawn,
   IGlobalProbeResult,
   IGlobalResolvedLocation,
+  IGlobalTool,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import type { GlobalManager } from '@/global-packages/interfaces/global-packages.types';
 import type {
@@ -18,13 +19,21 @@ export const TEST_PATHS = {
   node: 'C:\\Program Files\\nodejs\\node.exe',
   npm: 'C:\\Program Files\\nodejs\\node_modules\\npm',
   pnpm: 'D:\\TEST\\AppData\\npm\\node_modules\\pnpm',
+  yarn: 'D:\\TEST\\AppData\\npm\\node_modules\\yarn',
   prefix: 'D:\\TEST\\prefix',
+  yarnPrefix: 'D:\\TEST\\yarn-prefix',
   global: 'D:\\TEST\\pnpm-global',
+  yarnGlobal: 'D:\\TEST\\yarn-global',
   bin: 'D:\\TEST\\pnpm-bin',
+  yarnBin: 'D:\\TEST\\yarn-prefix\\bin',
   store: 'D:\\TEST\\pnpm-store',
   cache: 'D:\\TEST\\npm-cache',
+  yarnCache: 'D:\\TEST\\yarn-cache',
+  yarnMutex: 'D:\\TEST\\data\\cache\\yarn-global.mutex',
   userconfig: 'D:\\TEST\\config\\user.npmrc',
   globalconfig: 'D:\\TEST\\config\\global.npmrc',
+  userYarnrc: 'D:\\TEST\\config\\user.yarnrc',
+  globalYarnrc: 'D:\\TEST\\yarn-prefix\\etc\\yarnrc',
   data: 'D:\\TEST\\data',
   app: 'D:\\TEST\\app',
   source: 'D:\\TEST\\source',
@@ -33,9 +42,18 @@ export const TEST_PATHS = {
 } as const;
 
 export function testTool(
+  manager: 'npm' | 'pnpm',
+  version?: string,
+): IRunnerTool;
+export function testTool(manager: GlobalManager, version?: string): IGlobalTool;
+export function testTool(
   manager: GlobalManager,
-  version = manager === 'npm' ? '11.17.0' : '11.22.0',
-): IRunnerTool {
+  version = manager === 'npm'
+    ? '11.17.0'
+    : manager === 'pnpm'
+      ? '11.22.0'
+      : '1.22.22',
+): IGlobalTool {
   const packageDir = TEST_PATHS[manager];
   return {
     manager,
@@ -43,7 +61,11 @@ export function testTool(
     file: TEST_PATHS.node,
     entry: win32.join(
       packageDir,
-      manager === 'npm' ? 'bin/npm-cli.js' : 'bin/pnpm.mjs',
+      manager === 'npm'
+        ? 'bin/npm-cli.js'
+        : manager === 'pnpm'
+          ? 'bin/pnpm.mjs'
+          : 'bin/yarn.js',
     ),
     packageDir,
     identities: [],
@@ -55,25 +77,35 @@ export function testLocation(
   version?: string,
 ): IGlobalResolvedLocation {
   const npm = manager === 'npm';
+  const yarn = manager === 'yarn';
   return {
     manager,
     tool: testTool(manager, version),
-    prefix: npm ? TEST_PATHS.prefix : null,
-    globalDir: npm ? null : TEST_PATHS.global,
+    prefix: npm ? TEST_PATHS.prefix : yarn ? TEST_PATHS.yarnPrefix : null,
+    globalDir: npm ? null : yarn ? TEST_PATHS.yarnGlobal : TEST_PATHS.global,
     globalRoot: win32.join(
-      npm ? TEST_PATHS.prefix : TEST_PATHS.global,
+      npm
+        ? TEST_PATHS.prefix
+        : yarn
+          ? TEST_PATHS.yarnGlobal
+          : TEST_PATHS.global,
       'node_modules',
     ),
-    binDir: npm ? TEST_PATHS.prefix : TEST_PATHS.bin,
-    cacheDir: npm ? TEST_PATHS.cache : null,
-    storeDir: npm ? null : TEST_PATHS.store,
-    userConfig: TEST_PATHS.userconfig,
-    globalConfig: TEST_PATHS.globalconfig,
+    binDir: npm
+      ? TEST_PATHS.prefix
+      : yarn
+        ? TEST_PATHS.yarnBin
+        : TEST_PATHS.bin,
+    cacheDir: npm ? TEST_PATHS.cache : yarn ? TEST_PATHS.yarnCache : null,
+    storeDir: npm || yarn ? null : TEST_PATHS.store,
+    userConfig: yarn ? TEST_PATHS.userYarnrc : TEST_PATHS.userconfig,
+    globalConfig: yarn ? TEST_PATHS.globalYarnrc : TEST_PATHS.globalconfig,
     configIdentities: [],
     cwd: TEST_PATHS.cwd,
     protectedPaths: [
       TEST_PATHS.npm,
       TEST_PATHS.pnpm,
+      TEST_PATHS.yarn,
       TEST_PATHS.node,
       TEST_PATHS.app,
       TEST_PATHS.source,
