@@ -96,7 +96,7 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1">
             <h2 ref={inventoryHeadingRef} tabIndex={-1} className="rounded-sm text-heading-lg focus-ring">{t("inventory")}</h2>
-            <p className="text-caption text-muted-foreground">{t("refreshHint")} {t("yarnUnsupported")}</p>
+            <p className="text-caption text-muted-foreground">{t("refreshHint")}</p>
           </div>
           <DisabledTooltip reason={blocked ? tDisabled("globalBusy") : null}>
             <Button
@@ -132,7 +132,7 @@ export function GlobalPackagesPanel({ snapshot, latest }: { snapshot: GlobalSnap
             value={activeTab}
             onValueChange={value => {
               setTab(value)
-              if (value === "npm" || value === "pnpm") controller.select({ manager: value, package: "", action: "remove" })
+              if (value === "npm" || value === "pnpm" || value === "yarn") controller.select({ manager: value, package: "", action: "remove" })
             }}
             className="min-w-0"
           >

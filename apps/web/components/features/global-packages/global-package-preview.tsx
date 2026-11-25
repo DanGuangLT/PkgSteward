@@ -82,7 +82,7 @@ export function GlobalPackagePreview({ controller, blocked, onCloseAutoFocus, on
         </div>}
         {preview.risk.reasons.length ? <ul className="space-y-2">{preview.risk.reasons.map(({ code }) => <li key={code}><GlobalCodeMessage kind="risk" code={code} /></li>)}</ul> : null}
         {preview.sharedPackages?.length ? <section aria-labelledby={`${id}-shared`} className="min-w-0 space-y-3 rounded-md border border-warning/40 bg-warning-soft p-4 text-warning">
-          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t("warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
+          <p className="font-medium"><AlertTriangleIcon aria-hidden="true" className="mr-1.5 inline size-4" />{t(preview.manager === "yarn" ? "warnings.YARN_SHARED_GLOBAL_PROJECT" : "warnings.PNPM_SHARED_GLOBAL_PROJECT")}</p>
           <h3 id={`${id}-shared`} className="font-semibold">{t("dialog.sharedPackages")}</h3>
           <ul className="min-w-0 space-y-2">{preview.sharedPackages.map(pkg => <li key={pkg.name} className="break-all">
             <span className="font-mono">{pkg.name} {pkg.version}</span>{pkg.linked ? <> · {t("dialog.linkedPackage")}</> : null}
