@@ -673,6 +673,22 @@ All routes below use `/api/v1/package-managers` and the standard response envelo
   after, then refreshes that project in the scan cache. `NPM_COMMAND_TIMEOUT_MS` empty means no deadline. Only
   `jobs/latest` and `jobs/:id` polling bypass throttling.
 
+## Node Runtime API
+
+These read-only routes report the Node.js version running the API, detected version managers and project
+compatibility. Project checks read `.nvmrc`, `.node-version` and `engines.node` in `package.json`. Any
+suggested install or switch commands are returned as text for manual use.
+
+| Route | Query | Success data |
+|---|---|---|
+| `GET /api/v1/node-runtime` | Optional `refresh` (`true` or `false`). Use `true` to bypass the 30-second manager probe cache. | Active runtime, detected managers and installed versions, and compatibility results from the latest scan. With no scan, `scanId` is `null` and `projects` is empty. |
+| `GET /api/v1/node-runtime/project` | Required `path`. Send the URL-encoded absolute path of a project directory allowed by the scan configuration. | Active runtime, detected managers and the compatibility result for that project, including its declarations and any suggested commands. |
+
+Both routes return `200 SUCCESS` with the result under `data` and send `Cache-Control: no-store`.
+They return `400 VALIDATION_ERROR` for invalid query values and `429 RATE_LIMITED` when throttled.
+The project route also returns `403 FORBIDDEN` when the path is outside the allowed scope and
+`404 NOT_FOUND` when the requested path does not exist.
+
 ## Documentation
 
 - Project overview and setup: [`README.md`](../../README.md)
