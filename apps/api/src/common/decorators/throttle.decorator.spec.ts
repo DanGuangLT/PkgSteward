@@ -6,6 +6,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import {
+  POLLING_ENDPOINT_KEY,
   PollingEndpoint,
   SkipThrottleAll,
 } from '@/common/decorators/throttle.decorator';
@@ -18,7 +19,7 @@ import {
 @Controller('t')
 class ProbeController {
   @Get('plain')
-  plain() {
+  plain(this: void) {
     return 'ok';
   }
 
@@ -85,4 +86,29 @@ describe('throttle decorators', () => {
       }
     },
   );
+
+  it('PollingEndpoint returns a MethodDecorator and marks only poll handlers', () => {
+    const decorator: MethodDecorator = PollingEndpoint();
+    expect(typeof decorator).toBe('function');
+
+    const reflector = new Reflector();
+    expect(
+      reflector.get<boolean>(
+        POLLING_ENDPOINT_KEY,
+        ProbeController.prototype.poll,
+      ),
+    ).toBe(true);
+    expect(
+      reflector.get<boolean | undefined>(
+        POLLING_ENDPOINT_KEY,
+        ProbeController.prototype.plain,
+      ),
+    ).toBeUndefined();
+    expect(
+      reflector.get<boolean | undefined>(
+        POLLING_ENDPOINT_KEY,
+        ProbeController.prototype.skip,
+      ),
+    ).toBeUndefined();
+  });
 });

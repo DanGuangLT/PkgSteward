@@ -1,5 +1,6 @@
-import { applyDecorators, SetMetadata } from '@nestjs/common';
+import { SetMetadata } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
+import { applyMethodDecorators } from '@/common/decorators/apply-method-decorators';
 import { THROTTLER_NAMES } from '@/core/throttler-config.module';
 
 export const POLLING_ENDPOINT_KEY = 'isPollingEndpoint';
@@ -12,5 +13,8 @@ export const SkipThrottleAll = () =>
   SkipThrottle(Object.fromEntries(THROTTLER_NAMES.map((name) => [name, true])));
 
 /** D8: endpoint poll tiến độ — không rate limit, LoggingInterceptor ghi mức debug. */
-export const PollingEndpoint = () =>
-  applyDecorators(SkipThrottleAll(), SetMetadata(POLLING_ENDPOINT_KEY, true));
+export const PollingEndpoint = (): MethodDecorator =>
+  applyMethodDecorators(
+    SkipThrottleAll(),
+    SetMetadata(POLLING_ENDPOINT_KEY, true),
+  );

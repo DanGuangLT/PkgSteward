@@ -1,5 +1,4 @@
 import {
-  applyDecorators,
   Body,
   Controller,
   Get,
@@ -25,6 +24,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { applyMethodDecorators } from '@/common/decorators/apply-method-decorators';
 import { PollingEndpoint } from '@/common/decorators/throttle.decorator';
 import type { IApiResponse } from '@/common/interceptors/transform.interceptor';
 import { ProjectAnalysisIdParamDto } from '@/projects/dto/project-analysis-id-param.dto';
@@ -63,15 +63,15 @@ const errorEnvelope = (statusCode: number, code: string) => ({
   },
 });
 
-const requestErrors = () =>
-  applyDecorators(
+const requestErrors = (): MethodDecorator =>
+  applyMethodDecorators(
     ApiBadRequestResponse({ schema: errorEnvelope(400, 'VALIDATION_ERROR') }),
     ApiNotFoundResponse({ schema: errorEnvelope(404, 'NOT_FOUND') }),
     ApiTooManyRequestsResponse({ schema: errorEnvelope(429, 'RATE_LIMITED') }),
   );
 
-const inputErrors = () =>
-  applyDecorators(
+const inputErrors = (): MethodDecorator =>
+  applyMethodDecorators(
     requestErrors(),
     ApiForbiddenResponse({ schema: errorEnvelope(403, 'FORBIDDEN') }),
     ApiConflictResponse({
