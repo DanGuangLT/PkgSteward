@@ -133,7 +133,7 @@ Sao chép `apps/api/.env.example` thành `apps/api/.env` rồi điền `SCAN_ROO
 | `SCAN_ROOT_PATHS` | `*` | Các thư mục gốc (đường dẫn tuyệt đối, VD `D:\Projects`) để quét, phân cách bằng dấu phẩy, hoặc `*` (hay để trống) để quét mọi ổ đĩa cố định; `*` phải đứng một mình. Đồng thời là danh sách path cho phép (thư mục hệ thống luôn bị loại) |
 | `MAX_SCAN_DEPTH` | `0` | Độ sâu tối đa khi quét, tính từ mỗi thư mục gốc (từ gốc mỗi ổ đĩa khi dùng `*`); `0` là không giới hạn |
 | `SCAN_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lần quét sau khoảng đó |
-| `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Thư mục dữ liệu runtime (log, cache, `settings.json`): đường dẫn tuyệt đối, hoặc tương đối tính từ thư mục gốc dự án. Mặc định là thư mục `PkgStewardLog` trong thư mục dự án |
+| `PKGSTEWARD_DATA_DIR` | (trống) | Thư mục dữ liệu runtime (log, cache, `settings.json`): đường dẫn tuyệt đối (hoặc tương đối trong dev checkout/portable) nếu đặt rõ; nếu để trống thì dùng `PkgStewardLog` khi chạy từ checkout `.git` hoặc chế độ portable (`PORTABLE_EXECUTABLE_DIR` / `portable.flag`), ngược lại dùng thư mục dữ liệu người dùng của OS (`%LOCALAPPDATA%\PkgSteward` trên Windows, `~/Library/Application Support/PkgSteward` trên macOS, `$XDG_DATA_HOME/PkgSteward` hoặc `~/.local/share/PkgSteward` trên Linux). Báo lỗi rõ ràng nếu thư mục không ghi được |
 | `NPM_COMMAND_TIMEOUT_MS` | (trống) | Không giới hạn thời gian; đặt số mili giây (tối thiểu `1000`) để dừng lệnh npm hoặc pnpm sau khoảng đó |
 
 Giá trị trong settings.json ở thư mục dữ liệu ghi đè biến môi trường.

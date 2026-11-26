@@ -62,7 +62,7 @@ Full list in `.env.example`.
 | `SCAN_ROOT_PATHS` | `*` | Comma-separated absolute root folders to scan (e.g. `D:\Projects`), or `*` (also when empty) for every local fixed drive; `*` must be used alone. Also the path allowlist (system folders are always excluded) |
 | `MAX_SCAN_DEPTH` | `0` | Maximum folder depth below each scan root (below each drive root for `*`); `0` means no limit |
 | `SCAN_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop a scan after that long |
-| `PKGSTEWARD_DATA_DIR` | `PkgStewardLog` | Folder for runtime data (logs, cache, `settings.json`): an absolute path, or a path relative to the project folder. The default is a `PkgStewardLog` folder inside the project folder |
+| `PKGSTEWARD_DATA_DIR` | (empty) | Folder for runtime data (logs, cache, `settings.json`): explicit absolute path (or relative in dev checkout/portable mode), else `PkgStewardLog` in a `.git` checkout or portable mode (`PORTABLE_EXECUTABLE_DIR` / `portable.flag`), else the OS user data folder (`%LOCALAPPDATA%\PkgSteward` on Windows, `~/Library/Application Support/PkgSteward` on macOS, `$XDG_DATA_HOME/PkgSteward` or `~/.local/share/PkgSteward` on Linux). Reports a clear error if the resolved folder is not writable |
 | `NPM_COMMAND_TIMEOUT_MS` | (empty) | No time limit; set milliseconds (minimum `1000`) to stop an npm or pnpm command after that long |
 
 See [Settings API](#settings-api) for the persisted format and how settings override environment variables.
