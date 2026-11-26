@@ -147,4 +147,49 @@ test("@supports not and prefers-reduced-transparency fallbacks cover bordered .b
   )
   assert.ok(reducedSection.includes('[data-slot="empty-icon"][data-variant="icon"]'))
   assert.ok(reducedSection.includes('[data-slot="tabs-list"][data-variant="default"] [data-slot="tabs-trigger"]'))
+  assert.ok(reducedSection.includes("clip-path: none;"), "Expected reduced transparency reset to clear modal clip-path")
+})
+
+test("Floating glass modals isolate backdrop compositing, clip to rounded corners without outward shadow, and reset clip-path under reduced transparency", () => {
+  const css = readGlobalsCss()
+  const overlayBaseSection = sliceBetween(
+    css,
+    "/* Apple Liquid Glass & Frosted surface materials",
+    "/* Inline glass surfaces use inset-only specular rims",
+  )
+  const specularSection = sliceBetween(
+    css,
+    "/* Floating overlays retain elevated shadow",
+    "@supports not ((backdrop-filter: blur(1px))",
+  )
+
+  const overlayRuleMatch = overlayBaseSection.match(
+    /\[data-slot="dialog-content"\][\s\S]*?\[data-slot="sheet-content"\][\s\S]*?\{([\s\S]*?)\}/,
+  )
+  assert.ok(overlayRuleMatch, "Expected floating overlays base glass rule")
+  assert.ok(overlayRuleMatch[1].includes("isolation: isolate;"), "Expected isolation: isolate on floating overlays")
+  assert.ok(
+    overlayRuleMatch[1].includes("background-clip: padding-box;"),
+    "Expected background-clip: padding-box on floating overlays",
+  )
+
+  assert.match(
+    overlayBaseSection,
+    /:is\(\[data-slot="dialog-content"\],\s*\[data-slot="alert-dialog-content"\]\)\s*\{[^}]*clip-path:\s*inset\(0 round var\(--radius-xl\)\);[^}]*box-shadow:\s*none;/,
+    "Expected rounded clip-path and box-shadow: none on modal dialogs in base glass rules",
+  )
+
+  assert.match(
+    specularSection,
+    /:is\(\[data-slot="dialog-content"\],\s*\[data-slot="alert-dialog-content"\]\)\s*\{[^}]*inset 0 1px 0 0[^}]*inset 0 -1px 0 0[^}]*\}/,
+    "Expected dedicated inset-only specular rule for modal dialogs",
+  )
+  const dialogSpecularMatch = specularSection.match(
+    /:is\(\[data-slot="dialog-content"\],\s*\[data-slot="alert-dialog-content"\]\)\s*\{([\s\S]*?)\}/,
+  )
+  assert.ok(dialogSpecularMatch, "Expected dialog specular block")
+  assert.ok(
+    !dialogSpecularMatch[1].includes("0 8px 24px"),
+    "Modal dialog specular rule must not emit outward drop-shadow",
+  )
 })

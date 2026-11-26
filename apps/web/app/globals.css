@@ -327,6 +327,14 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
   background-color: color-mix(in oklab, var(--popover) var(--app-glass-popover-opacity, 92%), transparent);
   -webkit-backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 1.15)) saturate(var(--app-glass-saturation, 140%));
   backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 1.15)) saturate(var(--app-glass-saturation, 140%));
+  isolation: isolate;
+  background-clip: padding-box;
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  clip-path: inset(0 round var(--radius-xl));
+  box-shadow: none;
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
@@ -394,11 +402,21 @@ html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surfac
     inset 0 -1px 0 0 color-mix(in oklab, var(--glass-rim-dark) 12%, transparent);
 }
 
-/* Floating overlays retain elevated shadow alongside specular rim */
+/* Floating overlays retain elevated shadow alongside specular rim; rounded modals stay inset-only inside clip-path */
+html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  background-image: linear-gradient(
+    135deg var(--in-oklab),
+    color-mix(in oklab, var(--glass-rim-light) var(--glass-sheen-alpha), transparent) 0%,
+    transparent 58%
+  );
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, var(--glass-rim-light) var(--glass-rim-top-alpha), transparent),
+    inset 0 -1px 0 0 color-mix(in oklab, var(--glass-rim-dark) 10%, transparent);
+}
+
 html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
   :is(
-    [data-slot="dialog-content"],
-    [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
     [data-slot="dropdown-menu-content"],
     [data-slot="dropdown-menu-sub-content"],
@@ -535,6 +553,7 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
     background-image: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+    clip-path: none;
   }
 }
 
