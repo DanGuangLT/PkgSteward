@@ -39,6 +39,20 @@ Open **Settings** from the navigation bar to change themes, layout, wallpapers, 
 
 See the [Settings guide](apps/web/README.md#settings) for appearance and plugins.
 
+## Node Runtime Inspector
+
+Open **Node Runtime** from the navigation bar to see which Node.js version is running PkgSteward's API and how it
+compares with the requirements of projects from the latest scan. For one project, go to **Projects → View details**
+and find the **Project Node.js compatibility** card.
+
+PkgSteward reads declarations such as `.nvmrc`, `.node-version` and `engines.node` in `package.json`.
+**Compatible** means the active version satisfies the requirement. **Version mismatch** means it falls outside the
+requirement. **Unknown range** means PkgSteward could not resolve the declaration, while **Undeclared** means the project
+has no Node.js version declaration that the inspector reads.
+
+The inspector is read-only. When a suggested command is available, **Copy** puts it on the clipboard so you can
+review and run it yourself in a terminal.
+
 ## Global packages
 
 Manage global packages with npm 10/11/12, pnpm 10/11/12 or Yarn Classic (1.x) through **preview → confirm** (Yarn 2+ removed `yarn global` upstream and is refused).
