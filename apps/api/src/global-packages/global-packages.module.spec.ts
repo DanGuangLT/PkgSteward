@@ -1,8 +1,6 @@
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
-import { mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, win32 } from 'node:path';
+import { win32 } from 'node:path';
 import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import {
   AppException,
@@ -13,6 +11,7 @@ import {
   GlobalPackagesModule,
 } from '@/global-packages/global-packages.module';
 import type { IGlobalRuntimeBindings } from '@/global-packages/global-packages.module';
+import * as globalCwdCleanup from '@/global-packages/discovery/global-cwd-cleanup';
 import * as runnerTools from '@/npm-runner/toolchain/runner-tool';
 import { GlobalPackagesService } from '@/global-packages/global-packages.service';
 import { discoverGlobalLocation } from '@/global-packages/discovery/global-location';
@@ -603,20 +602,16 @@ describe('GlobalPackagesModule runtime bindings', () => {
     expect(bBerry.launchProcess).not.toHaveBeenCalled();
   });
 
-  it('sweeps dead-PID temp cwd folders onModuleInit and removes own temp cwd onModuleDestroy in Tier 2, doing nothing on non-Windows or Tier 3', async () => {
-    const tempBase = mkdtempSync(join(tmpdir(), 'pkgsteward-mod-cwd-'));
-    const externalCache = mkdtempSync(join(tmpdir(), 'pkgsteward-ext-cache-'));
+  it('sweeps dead-PID temp cwd folders onModuleInit and removes own temp cwd onModuleDestroy in Tier 2, doing nothing on non-Windows, Tier 3, or invalid TEMP', async () => {
+    const tempBase = 'D:\\TEST\\SystemTemp';
+    const externalCache = 'D:\\TEST\\LocalAppData\\PkgSteward\\cache';
+    const sweepSpy = jest
+      .spyOn(globalCwdCleanup, 'sweepStaleGlobalCwds')
+      .mockResolvedValue(undefined);
+    const removeSpy = jest
+      .spyOn(globalCwdCleanup, 'removeOwnGlobalCwd')
+      .mockResolvedValue(undefined);
     try {
-      const deadDir = join(tempBase, 'pkgsteward-global-cwd-999999');
-      const liveDir = join(
-        tempBase,
-        `pkgsteward-global-cwd-${String(process.pid)}`,
-      );
-      const unrelated = join(tempBase, 'unrelated');
-      mkdirSync(deadDir);
-      mkdirSync(liveDir);
-      mkdirSync(unrelated);
-
       const b = bindings();
       b.input.paths = {
         cacheDir: 'D:\\TEST\\repo\\PkgStewardLog\\cache',
@@ -636,17 +631,19 @@ describe('GlobalPackagesModule runtime bindings', () => {
         createGlobalPackagesRuntime(b.input),
       );
       await mod.onModuleInit();
-      expect(existsSync(deadDir)).toBe(false);
-      expect(existsSync(liveDir)).toBe(true);
-      expect(existsSync(unrelated)).toBe(true);
+      expect(sweepSpy).toHaveBeenCalledTimes(1);
+      expect(sweepSpy).toHaveBeenCalledWith(tempBase, process.pid);
+      expect(removeSpy).not.toHaveBeenCalled();
 
       await mod.onModuleDestroy();
-      expect(existsSync(liveDir)).toBe(false);
-      expect(existsSync(unrelated)).toBe(true);
+      expect(removeSpy).toHaveBeenCalledTimes(1);
+      expect(removeSpy).toHaveBeenCalledWith(
+        `${tempBase}\\pkgsteward-global-cwd-${String(process.pid)}`,
+      );
 
-      // Tier 3 external cacheDir must never be touched
-      const extCwd = join(externalCache, 'global-packages-cwd');
-      mkdirSync(extCwd);
+      // Tier 3 external cacheDir must never sweep or remove temp cwd
+      sweepSpy.mockClear();
+      removeSpy.mockClear();
       const bExt = bindings();
       bExt.input.paths = {
         cacheDir: externalCache,
@@ -654,14 +651,15 @@ describe('GlobalPackagesModule runtime bindings', () => {
         sourceCheckoutDir: null,
         appRootDir: 'D:\\TEST\\installed',
         portableBaseDir: null,
-        dataDir: externalCache.replace(/\\cache$/, ''),
+        dataDir: 'D:\\TEST\\LocalAppData\\PkgSteward',
       };
       const extMod = new GlobalPackagesModule(
         createGlobalPackagesRuntime(bExt.input),
       );
       await extMod.onModuleInit();
       await extMod.onModuleDestroy();
-      expect(existsSync(extCwd)).toBe(true);
+      expect(sweepSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
 
       // Non-Windows skips cleanup without disk IO
       const bLinux = bindings();
@@ -671,15 +669,32 @@ describe('GlobalPackagesModule runtime bindings', () => {
         execPath: '/usr/bin/node',
         env: { TEMP: tempBase },
       };
-      mkdirSync(deadDir);
       const linuxMod = new GlobalPackagesModule(
         createGlobalPackagesRuntime(bLinux.input),
       );
       await linuxMod.onModuleInit();
-      expect(existsSync(deadDir)).toBe(true);
+      await linuxMod.onModuleDestroy();
+      expect(sweepSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+
+      // Invalid/non-Windows TEMP fails closed and skips cleanup
+      const bBadTemp = bindings();
+      bBadTemp.input.paths = b.input.paths;
+      bBadTemp.input.host = {
+        ...bBadTemp.input.host!,
+        platform: 'win32',
+        env: { ...bBadTemp.input.host!.env, TEMP: '/tmp/posix-temp' },
+      };
+      const badTempMod = new GlobalPackagesModule(
+        createGlobalPackagesRuntime(bBadTemp.input),
+      );
+      await badTempMod.onModuleInit();
+      await badTempMod.onModuleDestroy();
+      expect(sweepSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
     } finally {
-      rmSync(tempBase, { recursive: true, force: true });
-      rmSync(externalCache, { recursive: true, force: true });
+      sweepSpy.mockRestore();
+      removeSpy.mockRestore();
     }
   });
 });
