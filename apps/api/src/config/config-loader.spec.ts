@@ -259,6 +259,97 @@ describe('loadAppConfig', () => {
         path.join(path.resolve(base as string, 'x-data'), 'settings.json'),
       );
     });
+
+    it('uses CLI PKGSTEWARD_DATA_DIR over env PKGSTEWARD_DATA_DIR', () => {
+      const config = loadAppConfig({
+        env: { PKGSTEWARD_DATA_DIR: 'E:\\env-data' },
+        cli: { PKGSTEWARD_DATA_DIR: 'E:\\cli-data' },
+        projectDir,
+        readFile: enoent(),
+        ...winOptions,
+      });
+      expect(config.PKGSTEWARD_DATA_DIR).toBe('E:\\cli-data');
+    });
+
+    it('resolves portable mode via PORTABLE_EXECUTABLE_DIR and portable.flag when outside a checkout', () => {
+      const envPortable = loadAppConfig({
+        env: { PORTABLE_EXECUTABLE_DIR: 'F:\\PortableApp' },
+        projectDir: null,
+        appInstallDir: 'C:\\Program Files\\PkgSteward',
+        appRootDir: 'C:\\Program Files\\PkgSteward',
+        exists: () => false,
+        readFile: enoent(),
+        ...winOptions,
+      });
+      expect(envPortable.PKGSTEWARD_DATA_DIR).toBe(
+        'F:\\PortableApp\\PkgStewardLog',
+      );
+
+      const flagPortable = loadAppConfig({
+        env: {},
+        projectDir: null,
+        appInstallDir: 'E:\\USB\\PkgSteward',
+        appRootDir: 'E:\\USB\\PkgSteward',
+        exists: (p) => p === 'E:\\USB\\PkgSteward\\portable.flag',
+        readFile: enoent(),
+        ...winOptions,
+      });
+      expect(flagPortable.PKGSTEWARD_DATA_DIR).toBe(
+        'E:\\USB\\PkgSteward\\PkgStewardLog',
+      );
+    });
+
+    it('fails closed on invalid PORTABLE_EXECUTABLE_DIR', () => {
+      expect(() =>
+        loadAppConfig({
+          env: { PORTABLE_EXECUTABLE_DIR: 'relative\\dir' },
+          projectDir: null,
+          readFile: enoent(),
+          ...winOptions,
+        }),
+      ).toThrow(/PORTABLE_EXECUTABLE_DIR/);
+    });
+
+    it('uses OS user data directories across Windows APPDATA, macOS, and Linux XDG_DATA_HOME in Tier 3', () => {
+      const winAppData = loadAppConfig({
+        env: { APPDATA: 'C:\\Users\\a\\AppData\\Roaming' },
+        projectDir: null,
+        appInstallDir: 'C:\\Program Files\\PkgSteward',
+        appRootDir: 'C:\\Program Files\\PkgSteward',
+        exists: () => false,
+        readFile: enoent(),
+        ...winOptions,
+      });
+      expect(winAppData.PKGSTEWARD_DATA_DIR).toBe(
+        'C:\\Users\\a\\AppData\\Roaming\\PkgSteward',
+      );
+
+      const mac = loadAppConfig({
+        env: {},
+        projectDir: null,
+        appInstallDir: '/Applications/PkgSteward',
+        appRootDir: '/Applications/PkgSteward',
+        exists: () => false,
+        readFile: enoent(),
+        platform: 'darwin',
+        homeDir: '/Users/a',
+      });
+      expect(mac.PKGSTEWARD_DATA_DIR).toBe(
+        '/Users/a/Library/Application Support/PkgSteward',
+      );
+
+      const linuxXdg = loadAppConfig({
+        env: { XDG_DATA_HOME: '/custom/xdg' },
+        projectDir: null,
+        appInstallDir: '/opt/pkgsteward',
+        appRootDir: '/opt/pkgsteward',
+        exists: () => false,
+        readFile: enoent(),
+        platform: 'linux',
+        homeDir: '/home/a',
+      });
+      expect(linuxXdg.PKGSTEWARD_DATA_DIR).toBe('/custom/xdg/PkgSteward');
+    });
   });
 
   describe('structured v1 settings.json', () => {

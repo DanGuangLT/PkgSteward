@@ -1,5 +1,10 @@
-import { Module, RequestMethod } from '@nestjs/common';
-import type { MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { Inject, Module, RequestMethod } from '@nestjs/common';
+import type {
+  MiddlewareConsumer,
+  NestModule,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm } from 'node:fs/promises';
@@ -36,7 +41,15 @@ import {
   GLOBAL_PACKAGES_RUNTIME,
 } from '@/global-packages/interfaces/global-packages.runtime';
 import type { IGlobalDirectoryAccess } from '@/global-packages/discovery/global-location';
-import { createGlobalProbeSpawn } from '@/global-packages/discovery/global-location';
+import {
+  createGlobalProbeSpawn,
+  GLOBAL_CWD_TEMP_PREFIX,
+  resolveGlobalProbeCwd,
+} from '@/global-packages/discovery/global-location';
+import {
+  removeOwnGlobalCwd,
+  sweepStaleGlobalCwds,
+} from '@/global-packages/discovery/global-cwd-cleanup';
 import { createRunnerFs } from '@/npm-runner/toolchain/runner-input';
 import {
   resolveRunnerTool,
@@ -340,13 +353,21 @@ export function createGlobalPackagesRuntime(
         const install = appPaths.appInstallDir;
         const parent = win32.dirname(install);
         const sourceCheckoutDir =
-          'sourceCheckoutDir' in appPaths &&
-          typeof appPaths.sourceCheckoutDir === 'string'
-            ? appPaths.sourceCheckoutDir
-            : win32.basename(install) === 'api' &&
-                win32.basename(parent) === 'apps'
+          'sourceCheckoutDir' in appPaths
+            ? (appPaths.sourceCheckoutDir ?? null)
+            : win32.basename(install).toLowerCase() === 'api' &&
+                win32.basename(parent).toLowerCase() === 'apps'
               ? win32.dirname(parent)
               : null;
+        const appRootDir =
+          'appRootDir' in appPaths && typeof appPaths.appRootDir === 'string'
+            ? appPaths.appRootDir
+            : (sourceCheckoutDir ?? install);
+        const portableBaseDir =
+          'portableBaseDir' in appPaths &&
+          typeof appPaths.portableBaseDir === 'string'
+            ? appPaths.portableBaseDir
+            : null;
         return createGlobalPackagesRuntime({
           fs,
           processes,
@@ -359,6 +380,8 @@ export function createGlobalPackagesRuntime(
             cacheDir: appPaths.cacheDir,
             appInstallDir: install,
             sourceCheckoutDir,
+            appRootDir,
+            portableBaseDir,
             dataDir: appPaths.dataDir,
           },
         });
@@ -366,7 +389,36 @@ export function createGlobalPackagesRuntime(
     },
   ],
 })
-export class GlobalPackagesModule implements NestModule {
+export class GlobalPackagesModule
+  implements NestModule, OnModuleInit, OnModuleDestroy
+{
+  constructor(
+    @Inject(GLOBAL_PACKAGES_RUNTIME)
+    private readonly runtime: IGlobalServiceRuntime,
+  ) {}
+
+  private ownCwd(): string | null {
+    if (this.runtime.platform !== 'win32') return null;
+    try {
+      const cwd = resolveGlobalProbeCwd(this.runtime);
+      return win32.basename(cwd).startsWith(GLOBAL_CWD_TEMP_PREFIX)
+        ? cwd
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async onModuleInit(): Promise<void> {
+    const cwd = this.ownCwd();
+    if (cwd) await sweepStaleGlobalCwds(win32.dirname(cwd), process.pid);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    const cwd = this.ownCwd();
+    if (cwd) await removeOwnGlobalCwd(cwd);
+  }
+
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply((_request: Request, response: Response, next: NextFunction) => {

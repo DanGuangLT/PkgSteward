@@ -45,6 +45,8 @@ export class PathGuardService implements IPathGuardService {
       env: process.env,
       homeDir: homedir(),
       appInstallDir: appPaths.appInstallDir,
+      appRootDir: appPaths.appRootDir,
+      portableBaseDir: appPaths.portableBaseDir,
       sourceCheckoutDir: appPaths.sourceCheckoutDir,
       dataDir: appPaths.dataDir,
     });

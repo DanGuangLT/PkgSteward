@@ -249,6 +249,8 @@ export interface IGlobalServiceRuntime extends IGlobalRuntime {
     cacheDir: string;
     appInstallDir: string;
     sourceCheckoutDir: string | null;
+    appRootDir?: string | null;
+    portableBaseDir?: string | null;
     dataDir: string;
   };
   scannedProjectPaths(): readonly string[];

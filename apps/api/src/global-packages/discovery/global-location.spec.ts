@@ -1145,3 +1145,232 @@ describe('Yarn Classic real-Windows ancestor .yarnrc discovery (Tier B Finding 1
     );
   });
 });
+
+describe('Co-located Tier 2 & portable neutral cwd discovery (CDG)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function setupTier2Layout({ portable = false }: { portable?: boolean } = {}) {
+    const repo = 'D:\\TEST\\CheckoutRepo';
+    const appInstallDir = portable
+      ? 'C:\\Program Files\\PkgSteward\\apps\\api'
+      : `${repo}\\apps\\api`;
+    const portableBase = portable ? 'E:\\PortableUSB\\PkgSteward' : null;
+    const baseDir = portableBase ?? repo;
+    const dataDir = `${baseDir}\\PkgStewardLog`;
+    const cacheDir = `${dataDir}\\cache`;
+    const tempDir = 'D:\\TEST\\SystemTemp';
+    const expectedCwd = `${tempDir}\\pkgsteward-global-cwd-${String(process.pid)}`;
+    const profile = 'D:\\TEST\\Users\\alice';
+    const npmPrefix = 'D:\\TEST\\npm-global';
+    const pnpmHome = 'D:\\TEST\\pnpm-home';
+    const pnpmGlobal = 'D:\\TEST\\pnpm-global';
+    const pnpmBin = 'D:\\TEST\\pnpm-bin';
+    const pnpmStore = 'D:\\TEST\\pnpm-store';
+    const yarnPrefix = 'D:\\TEST\\yarn-prefix';
+    const mem = memoryFs();
+
+    for (const d of [
+      repo,
+      appInstallDir,
+      baseDir,
+      dataDir,
+      cacheDir,
+      tempDir,
+      profile,
+      npmPrefix,
+      `${npmPrefix}\\node_modules`,
+      'D:\\TEST\\npm-cache',
+      pnpmHome,
+      pnpmGlobal,
+      `${pnpmGlobal}\\5`,
+      `${pnpmGlobal}\\5\\node_modules`,
+      `${pnpmGlobal}\\v11`,
+      `${pnpmGlobal}\\v11\\node_modules`,
+      pnpmBin,
+      pnpmStore,
+      `${pnpmStore}\\v10`,
+      `${pnpmStore}\\v11`,
+      'D:\\TEST\\pnpm-cache',
+      'D:\\TEST\\pnpm-state',
+      'D:\\TEST\\pnpm-config',
+      'D:\\TEST\\pnpm-config\\pnpm',
+      yarnPrefix,
+      `${yarnPrefix}\\bin`,
+      'D:\\TEST\\yarn-data\\global',
+      'D:\\TEST\\yarn-data\\global\\node_modules',
+      'D:\\TEST\\yarn-cache',
+      'D:\\TEST\\yarn-bin',
+      'D:\\TEST\\yarn-bin\\node_modules\\yarn\\bin',
+    ]) {
+      mem.put(d, { directory: true });
+    }
+
+    // Repo/portable root contains package.json (the exact condition that broke <repo>\PkgStewardLog\cache\global-packages-cwd).
+    mem.put(`${baseDir}\\package.json`, {
+      text: '{"name":"pkgsteward-root","private":true}',
+    });
+    mem.put(P.node, { text: 'TEST node' });
+    mem.put('D:\\TEST\\pnpm-config\\pnpm\\config.yaml', {
+      text: JSON.stringify({
+        globalDir: pnpmGlobal,
+        globalBinDir: pnpmBin,
+        storeDir: pnpmStore,
+        npmrcAuthFile: `${profile}\\.npmrc`,
+      }),
+    });
+    mem.put('D:\\TEST\\yarn-bin\\node_modules\\yarn\\package.json', {
+      text: JSON.stringify({
+        name: 'yarn',
+        version: '1.22.22',
+        bin: { yarn: './bin/yarn.js' },
+      }),
+    });
+    mem.put('D:\\TEST\\yarn-bin\\node_modules\\yarn\\bin\\yarn.js', {
+      text: '// TEST yarn entry',
+    });
+
+    const makeDirectory = jest
+      .fn<Promise<void>, [string]>()
+      .mockImplementation((dirPath) => {
+        mem.put(dirPath, { directory: true });
+        return Promise.resolve();
+      });
+
+    const spawn = jest
+      .fn<
+        ReturnType<IGlobalLocationDeps['spawn']>,
+        Parameters<IGlobalLocationDeps['spawn']>
+      >()
+      .mockImplementation((_file, args) => {
+        const argStr = args.join(' ');
+        const map: Record<string, string> = {
+          prefix: npmPrefix,
+          userconfig: `${profile}\\.npmrc`,
+          globalconfig: `${npmPrefix}\\etc\\npmrc`,
+          cache: 'D:\\TEST\\npm-cache',
+        };
+        if (args.includes('root')) {
+          return Promise.resolve(
+            probeResult(null, {
+              stdout: Buffer.from(
+                argStr.includes('pnpm')
+                  ? `${pnpmGlobal}\\v11\\node_modules\n`
+                  : `${npmPrefix}\\node_modules\n`,
+              ),
+            }),
+          );
+        }
+        const key = args.at(-1)!;
+        return Promise.resolve(
+          probeResult(null, { stdout: Buffer.from(`${map[key] ?? ''}\n`) }),
+        );
+      });
+
+    const deps: IGlobalLocationDeps = {
+      fs: mem.fs,
+      environment: {
+        USERPROFILE: profile,
+        TEMP: tempDir,
+        PATH: `${pnpmBin};D:\\TEST\\yarn-bin;C:\\Program Files\\nodejs`,
+        PNPM_HOME: pnpmHome,
+        XDG_CACHE_HOME: 'D:\\TEST\\pnpm-cache',
+        XDG_STATE_HOME: 'D:\\TEST\\pnpm-state',
+        XDG_CONFIG_HOME: 'D:\\TEST\\pnpm-config',
+      },
+      execPath: P.node,
+      paths: {
+        cacheDir,
+        appInstallDir,
+        sourceCheckoutDir: portable ? null : repo,
+        appRootDir: portable ? 'C:\\Program Files\\PkgSteward' : repo,
+        portableBaseDir: portableBase,
+        dataDir,
+      },
+      scannedProjectPaths: ['D:\\TEST\\project'],
+      signal: new AbortController().signal,
+      spawn,
+      makeDirectory,
+    };
+
+    return { mem, deps, tempDir, expectedCwd, profile };
+  }
+
+  it.each([
+    { manager: 'npm' as const, portable: false, pnpmVersion: '11.22.0' },
+    { manager: 'pnpm' as const, portable: false, pnpmVersion: '10.34.9' },
+    { manager: 'pnpm' as const, portable: false, pnpmVersion: '11.22.0' },
+    { manager: 'pnpm' as const, portable: false, pnpmVersion: '12.21.0' },
+    { manager: 'yarn' as const, portable: true, pnpmVersion: '11.22.0' },
+  ])(
+    'succeeds for $manager (portable=$portable, pnpm=$pnpmVersion) using per-process temp cwd despite root package.json',
+    async ({ manager, portable, pnpmVersion }) => {
+      const h = setupTier2Layout({ portable });
+      if (manager === 'yarn') {
+        h.mem.put(`${h.profile}\\.yarnrc`, {
+          text: 'prefix "D:\\\\TEST\\\\yarn-prefix"\n',
+        });
+        h.mem.put('D:\\TEST\\yarn-data\\global\\package.json', {
+          text: '{"dependencies":{}}',
+        });
+        h.deps.environment = {
+          ...h.deps.environment,
+          LOCALAPPDATA: 'D:\\TEST\\yarn-local',
+          YARN_CACHE_FOLDER: 'D:\\TEST\\yarn-cache',
+        };
+        h.mem.put('D:\\TEST\\yarn-local\\Yarn\\Data\\global', {
+          directory: true,
+        });
+        h.mem.put('D:\\TEST\\yarn-local\\Yarn\\Data\\global\\node_modules', {
+          directory: true,
+        });
+      }
+      jest
+        .spyOn(runnerTools, 'resolveRunnerTool')
+        .mockImplementation((mgr) =>
+          Promise.resolve(
+            mgr === 'pnpm'
+              ? pnpmVersion.startsWith('12.')
+                ? pnpm12Tool(pnpmVersion)
+                : testTool('pnpm', pnpmVersion)
+              : testTool('npm'),
+          ),
+        );
+      jest
+        .spyOn(runnerTools, 'revalidateRunnerTool')
+        .mockResolvedValue(undefined);
+      if (manager === 'pnpm' && pnpmVersion.startsWith('10.')) {
+        h.mem.put('D:\\TEST\\pnpm-config\\pnpm\\rc', {
+          text: 'global-dir=D:\\TEST\\pnpm-global\nglobal-bin-dir=D:\\TEST\\pnpm-bin\nstore-dir=D:\\TEST\\pnpm-store\n',
+        });
+      }
+
+      const loc = await discoverGlobalLocation(manager, h.deps);
+      expect(loc.cwd).toBe(h.expectedCwd);
+    },
+  );
+
+  it('still fails closed when %TEMP% contains a hostile package.json or is a symlink', async () => {
+    const poisoned = setupTier2Layout();
+    poisoned.mem.put(`${poisoned.tempDir}\\package.json`, { text: '{}' });
+    jest
+      .spyOn(runnerTools, 'resolveRunnerTool')
+      .mockResolvedValue(testTool('npm'));
+    jest
+      .spyOn(runnerTools, 'revalidateRunnerTool')
+      .mockResolvedValue(undefined);
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', poisoned.deps),
+      'CONFIG_UNSUPPORTED',
+    );
+
+    const symlinkTemp = setupTier2Layout();
+    symlinkTemp.mem.put(symlinkTemp.tempDir, {
+      directory: true,
+      link: true,
+    });
+    await expectGlobalReason(
+      () => discoverGlobalLocation('npm', symlinkTemp.deps),
+      'LOCATION_AMBIGUOUS',
+    );
+  });
+});

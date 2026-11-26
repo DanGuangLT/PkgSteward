@@ -36,6 +36,8 @@ export interface IDenylistSources {
   env: Record<string, string | undefined>; // Windows: truyền thẳng process.env (không phân biệt hoa thường)
   homeDir: string;
   appInstallDir: string;
+  appRootDir?: string | null;
+  portableBaseDir?: string | null;
   sourceCheckoutDir: string | null;
   dataDir: string;
 }
@@ -64,6 +66,8 @@ export const buildDenylist = (sources: IDenylistSources): IDenyEntry[] => {
     'folder that holds user profiles',
   );
   add(sources.appInstallDir, 'subtree', 'PkgSteward installation folder');
+  add(sources.appRootDir, 'subtree', 'PkgSteward application folder');
+  add(sources.portableBaseDir, 'subtree', 'PkgSteward portable folder');
   add(sources.sourceCheckoutDir, 'subtree', 'PkgSteward source repository');
   add(sources.dataDir, 'subtree', 'PkgSteward data folder');
   return entries;

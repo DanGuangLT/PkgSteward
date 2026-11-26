@@ -2,7 +2,9 @@ export type AppDataSubdir = 'logs' | 'cache' | 'plugins';
 
 export interface IAppPathsService {
   readonly appInstallDir: string;
+  readonly appRootDir: string;
   readonly sourceCheckoutDir: string | null;
+  readonly portableBaseDir: string | null;
   readonly dataDir: string;
   readonly logsDir: string;
   readonly cacheDir: string;

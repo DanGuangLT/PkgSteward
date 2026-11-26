@@ -21,6 +21,10 @@ import {
   ValidationException,
 } from '@/common/exceptions/app.exception';
 import { isSameOrInside, toPathPlatform } from '@/common/utils/path.util';
+import {
+  isDataDirWriteError,
+  wrapDataDirWriteError,
+} from '@/core/app-paths/app-paths.util';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -332,10 +336,23 @@ export class PluginInstallerService {
 
   async ensurePreinstalled(pluginsSettings: IPluginsSettings): Promise<void> {
     if (pluginsSettings.directory !== null) return;
-    await ensurePreinstalledWallpaperPlugin(
-      this.registry.resolvePluginsDir(pluginsSettings),
-      pluginsSettings.removedPreinstalled ?? [],
-    );
+    const pluginsDir = this.registry.resolvePluginsDir(pluginsSettings);
+    try {
+      await ensurePreinstalledWallpaperPlugin(
+        pluginsDir,
+        pluginsSettings.removedPreinstalled ?? [],
+      );
+    } catch (error) {
+      if (isDataDirWriteError(error)) {
+        const dataDir =
+          'getDataDir' in this.registry &&
+          typeof this.registry.getDataDir === 'function'
+            ? this.registry.getDataDir()
+            : pluginsDir;
+        throw wrapDataDirWriteError(dataDir, pluginsDir, error);
+      }
+      throw error;
+    }
   }
 
   async previewInstallFromFile(
