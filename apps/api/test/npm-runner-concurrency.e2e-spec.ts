@@ -19,6 +19,7 @@ import type {
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import type { IAppPathsService } from '@/core/app-paths/interfaces/app-paths.service.interface';
 import type { IAuditRecord } from '@/core/audit-log/interfaces/audit-log.types';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { ScannerService } from '@/scanner/scanner.service';
@@ -106,17 +107,26 @@ jest.mock('node:fs/promises', () => {
   };
 });
 
+const fakeAppPaths: IAppPathsService = {
+  appInstallDir: 'D:\\TEST\\api',
+  appRootDir: 'D:\\TEST',
+  sourceCheckoutDir: 'D:\\TEST',
+  portableBaseDir: null,
+  dataDir: 'D:\\TEST\\data',
+  logsDir: 'D:\\TEST\\data\\logs',
+  cacheDir: 'D:\\TEST\\data\\cache',
+  pluginsDir: 'D:\\TEST\\data\\plugins',
+  settingsFilePath: 'D:\\TEST\\data\\settings.json',
+  auditLogFilePath: 'D:\\TEST\\data\\logs\\dangerous-operations.jsonl',
+  ensureDir: () =>
+    Promise.reject(new Error('TEST AppPathsService.ensureDir forbidden')),
+};
+
 @Global()
 @Module({
   providers: [
     { provide: ConfigService, useValue: {} },
-    {
-      provide: AppPathsService,
-      useValue: {
-        dataDir: 'D:\\TEST\\data',
-        appInstallDir: 'D:\\TEST\\api',
-      },
-    },
+    { provide: AppPathsService, useValue: fakeAppPaths },
     { provide: PathGuardService, useValue: {} },
     { provide: AuditLogService, useValue: {} },
   ],
@@ -472,8 +482,14 @@ describe('NpmRunner contention (real shared services, mocked IO)', () => {
     })
       .overrideProvider(ConfigService)
       .useValue(
-        new ConfigService({ SCAN_ROOT_PATHS: 'D:\\TEST', MAX_SCAN_DEPTH: 0 }),
+        new ConfigService({
+          SCAN_ROOT_PATHS: 'D:\\TEST',
+          MAX_SCAN_DEPTH: 0,
+          PKGSTEWARD_DATA_DIR: 'D:\\TEST\\data',
+        }),
       )
+      .overrideProvider(AppPathsService)
+      .useValue(fakeAppPaths)
       .overrideProvider(PathGuardService)
       .useValue(f.guard)
       .overrideProvider(AuditLogService)
