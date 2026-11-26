@@ -40,6 +40,20 @@ Mở **Cài đặt** từ thanh điều hướng để đổi chủ đề, bố 
 
 Xem [hướng dẫn Cài đặt](apps/web/README.md#settings) để biết thêm về giao diện và plugin (tiếng Anh).
 
+## Kiểm tra môi trường Node.js
+
+Mở **Môi trường Node** từ thanh điều hướng để xem phiên bản Node.js đang chạy API của PkgSteward và đối chiếu
+với yêu cầu của các dự án trong lần quét gần nhất. Để xem từng dự án, vào **Dự án → Xem chi tiết** và tìm thẻ
+**Tương thích Node.js của dự án**.
+
+PkgSteward đọc các khai báo như `.nvmrc`, `.node-version` và `engines.node` trong `package.json`.
+**Tương thích** nghĩa là phiên bản đang chạy đáp ứng yêu cầu. **Không khớp phiên bản** nghĩa là phiên bản
+nằm ngoài yêu cầu. **Chưa xác định dải phiên bản** nghĩa là PkgSteward chưa diễn giải được khai báo.
+**Chưa khai báo** nghĩa là dự án chưa có khai báo phiên bản Node.js mà công cụ này đọc được.
+
+Công cụ chỉ đọc dữ liệu. Khi có lệnh gợi ý, nút **Sao chép** đưa lệnh vào bộ nhớ tạm để bạn xem lại
+và tự chạy trong terminal.
+
 ## Gói global
 
 Quản lý gói global bằng npm 10/11/12, pnpm 10/11/12 hoặc Yarn Classic (1.x) qua bước **xem trước → xác nhận** (Yarn 2+ đã bỏ `yarn global` nên bị từ chối).
