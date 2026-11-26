@@ -25,6 +25,33 @@ const deny = (p: string) =>
 describe('buildDenylist', () => {
   it('skips missing or relative environment values', () =>
     expect(winDenylist.some((e) => e.path.includes('relative'))).toBe(false));
+
+  it('protects appRootDir and portableBaseDir subtrees when provided', () => {
+    const entries = buildDenylist({
+      platform: 'win32',
+      env: {},
+      homeDir: 'C:\\Users\\alice',
+      appInstallDir: 'D:\\Packaged\\apps\\api',
+      appRootDir: 'D:\\Packaged',
+      portableBaseDir: 'E:\\PortableBase',
+      sourceCheckoutDir: null,
+      dataDir: 'E:\\PortableBase\\PkgStewardLog',
+    });
+    expect(
+      findDenyMatch(
+        toComparable('D:\\Packaged\\apps\\web', 'win32'),
+        entries,
+        'win32',
+      ),
+    ).toBe('PkgSteward application folder');
+    expect(
+      findDenyMatch(
+        toComparable('E:\\PortableBase\\portable.flag', 'win32'),
+        entries,
+        'win32',
+      ),
+    ).toBe('PkgSteward portable folder');
+  });
 });
 
 describe('Windows system environment', () => {

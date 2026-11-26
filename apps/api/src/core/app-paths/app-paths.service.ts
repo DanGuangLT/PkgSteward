@@ -5,11 +5,13 @@ import { homedir } from 'os';
 import * as path from 'path';
 import {
   AUDIT_LOG_FILE_NAME,
+  findAppRootDir,
   findPackageRoot,
   findSourceCheckoutDir,
   PLUGINS_DIR_NAME,
-  resolveDataDir,
+  resolveAppDataDir,
   SETTINGS_FILE_NAME,
+  wrapDataDirWriteError,
 } from '@/core/app-paths/app-paths.util';
 import type {
   AppDataSubdir,
@@ -20,7 +22,9 @@ import type {
 @Injectable()
 export class AppPathsService implements IAppPathsService {
   readonly appInstallDir: string;
+  readonly appRootDir: string;
   readonly sourceCheckoutDir: string | null;
+  readonly portableBaseDir: string | null;
   readonly dataDir: string;
   readonly logsDir: string;
   readonly cacheDir: string;
@@ -29,14 +33,23 @@ export class AppPathsService implements IAppPathsService {
   readonly auditLogFilePath: string;
 
   constructor(configService: ConfigService) {
-    this.dataDir = resolveDataDir({
+    this.appInstallDir = findPackageRoot(__dirname);
+    this.sourceCheckoutDir = findSourceCheckoutDir(this.appInstallDir);
+    this.appRootDir = findAppRootDir(
+      this.appInstallDir,
+      this.sourceCheckoutDir,
+    );
+    const resolved = resolveAppDataDir({
       override: configService.get<string>('PKGSTEWARD_DATA_DIR'),
-      localAppData: process.env.LOCALAPPDATA,
+      appInstallDir: this.appInstallDir,
+      appRootDir: this.appRootDir,
+      sourceCheckoutDir: this.sourceCheckoutDir,
+      env: process.env,
       homeDir: homedir(),
       platform: process.platform,
     });
-    this.appInstallDir = findPackageRoot(__dirname);
-    this.sourceCheckoutDir = findSourceCheckoutDir(this.appInstallDir);
+    this.portableBaseDir = resolved.portableBaseDir;
+    this.dataDir = resolved.dataDir;
     this.logsDir = path.join(this.dataDir, 'logs');
     this.cacheDir = path.join(this.dataDir, 'cache');
     this.pluginsDir = path.join(this.dataDir, PLUGINS_DIR_NAME);
@@ -51,7 +64,11 @@ export class AppPathsService implements IAppPathsService {
         : subdir === 'cache'
           ? this.cacheDir
           : this.pluginsDir;
-    await mkdir(dir, { recursive: true });
+    try {
+      await mkdir(dir, { recursive: true });
+    } catch (error) {
+      throw wrapDataDirWriteError(this.dataDir, dir, error);
+    }
     return dir;
   }
 }

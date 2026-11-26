@@ -217,6 +217,8 @@ export interface IGlobalLocationDeps {
     cacheDir: string;
     appInstallDir: string;
     sourceCheckoutDir: string | null;
+    appRootDir?: string | null;
+    portableBaseDir?: string | null;
     dataDir: string;
   };
   scannedProjectPaths: readonly string[];
@@ -316,6 +318,61 @@ async function probeLocationPaths(
   return paths;
 }
 
+export const GLOBAL_CWD_TEMP_PREFIX = 'pkgsteward-global-cwd-';
+
+const readWindowsEnv = (
+  environment: Readonly<NodeJS.ProcessEnv>,
+  name: string,
+): string | undefined => {
+  const upper = name.toUpperCase();
+  const match = Object.entries(environment).find(
+    ([key]) => key.toUpperCase() === upper,
+  );
+  const value = match?.[1];
+  return typeof value === 'string' && value.trim() !== ''
+    ? value.trim()
+    : undefined;
+};
+
+// Package managers climb from cwd looking for package.json/.npmrc. A cache inside
+// the app or checkout tree would find the repo's own files, so use a per-process
+// empty folder under the OS temp dir instead. Outside those trees keep the
+// cache-based folder.
+export function resolveGlobalProbeCwd(
+  deps: Pick<IGlobalLocationDeps, 'paths' | 'environment'> & { pid?: number },
+  osTempDir?: string,
+): string {
+  const {
+    cacheDir,
+    appInstallDir,
+    sourceCheckoutDir,
+    appRootDir,
+    portableBaseDir,
+  } = deps.paths;
+  const appRoots = [
+    appInstallDir,
+    sourceCheckoutDir,
+    appRootDir,
+    portableBaseDir,
+  ].filter((root): root is string => typeof root === 'string' && root !== '');
+  const inApp = appRoots.some((root) => overlaps(cacheDir, root));
+  if (!inApp) return win32.join(cacheDir, 'global-packages-cwd');
+  const base =
+    readWindowsEnv(deps.environment, 'TEMP') ??
+    readWindowsEnv(deps.environment, 'TMP') ??
+    (typeof osTempDir === 'string' && osTempDir.trim() !== ''
+      ? osTempDir.trim()
+      : undefined);
+  if (!base || !isGlobalAbsolutePath(base)) throw failure('CONFIG_UNSUPPORTED');
+  const resolved = win32.resolve(base);
+  if (appRoots.some((root) => overlaps(resolved, root)))
+    throw failure('CONFIG_UNSUPPORTED');
+  return win32.join(
+    resolved,
+    `${GLOBAL_CWD_TEMP_PREFIX}${String(deps.pid ?? process.pid)}`,
+  );
+}
+
 async function prepareCwd(
   deps: IGlobalLocationDeps,
   manager: GlobalManager = 'npm',
@@ -323,7 +380,7 @@ async function prepareCwd(
   cwd: string;
   ancestorConfigs: IGlobalResolvedLocation['configIdentities'];
 }> {
-  const cwd = win32.join(deps.paths.cacheDir, 'global-packages-cwd');
+  const cwd = resolveGlobalProbeCwd(deps);
   await assertGlobalDirectory(cwd, deps.fs, deps.signal, true);
   const ancestorConfigs: IGlobalResolvedLocation['configIdentities'] = [];
   const budget = { remaining: GLOBAL_CONFIG_TOTAL_LIMIT };
@@ -441,6 +498,8 @@ function assertLocationScope(path: string, deps: IGlobalLocationDeps): void {
   for (const protectedPath of [
     deps.paths.appInstallDir,
     deps.paths.sourceCheckoutDir,
+    deps.paths.appRootDir,
+    deps.paths.portableBaseDir,
     deps.paths.dataDir,
     ...deps.scannedProjectPaths,
   ])
@@ -648,6 +707,8 @@ export async function discoverGlobalLocation(
         tool.file,
         deps.paths.appInstallDir,
         ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
+        ...(deps.paths.appRootDir ? [deps.paths.appRootDir] : []),
+        ...(deps.paths.portableBaseDir ? [deps.paths.portableBaseDir] : []),
         deps.paths.dataDir,
       ]),
     ],
@@ -755,6 +816,8 @@ async function discoverPnpmGlobalLocation(
         tool.file,
         deps.paths.appInstallDir,
         ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
+        ...(deps.paths.appRootDir ? [deps.paths.appRootDir] : []),
+        ...(deps.paths.portableBaseDir ? [deps.paths.portableBaseDir] : []),
         deps.paths.dataDir,
       ]),
     ],
@@ -840,6 +903,8 @@ async function discoverYarnGlobalLocation(
         tool.file,
         deps.paths.appInstallDir,
         ...(deps.paths.sourceCheckoutDir ? [deps.paths.sourceCheckoutDir] : []),
+        ...(deps.paths.appRootDir ? [deps.paths.appRootDir] : []),
+        ...(deps.paths.portableBaseDir ? [deps.paths.portableBaseDir] : []),
         deps.paths.dataDir,
       ]),
     ],

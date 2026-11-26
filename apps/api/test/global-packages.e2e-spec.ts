@@ -40,7 +40,10 @@ import type {
   IGlobalSnapshot,
 } from '@/global-packages/interfaces/global-packages.types';
 import { flushJobs } from '@/global-packages/__fixtures__/global-lifecycle';
-import { testTool } from '@/global-packages/__fixtures__/global-adapters';
+import {
+  TEST_PATHS,
+  testTool,
+} from '@/global-packages/__fixtures__/global-adapters';
 import { globalHttpFixture } from '@/../test/mocks/global-packages';
 import { npmLifecycleFixture } from '@/global-packages/__fixtures__/npm-overlay/lifecycle';
 import { npmTarget } from '@/global-packages/__fixtures__/npm-overlay/facts';
@@ -793,6 +796,70 @@ describe('Global packages HTTP PC (real Nest/service/adapters, mocked IO)', () =
     expect(f.child.launch).toHaveBeenCalledTimes(1);
     writeYarnFs('7.7.2');
     f.child.exit();
+    expect(await waitDone()).toMatchObject({
+      status: 'completed',
+      gateHeld: false,
+    });
+  });
+
+  it('keeps per-process neutral temp cwd identity stable across preview -> execute in Tier 2 co-located layout', async () => {
+    const repo = 'D:\\TEST\\source';
+    const dataDir = `${repo}\\PkgStewardLog`;
+    const cacheDir = `${dataDir}\\cache`;
+    const tempBase = 'D:\\TEST\\SystemTemp';
+    const expectedCwd = `${tempBase}\\pkgsteward-global-cwd-${String(process.pid)}`;
+    f.runtime.paths = {
+      cacheDir,
+      appInstallDir: `${repo}\\apps\\api`,
+      sourceCheckoutDir: repo,
+      appRootDir: repo,
+      portableBaseDir: null,
+      dataDir,
+    };
+    f.runtime.environment = {
+      ...f.runtime.environment,
+      TEMP: tempBase,
+    };
+    for (const d of [repo, dataDir, cacheDir, tempBase, expectedCwd]) {
+      f.fs.put(d, { directory: true });
+    }
+    f.fs.put(`${repo}\\package.json`, { text: '{"name":"pkgsteward"}' });
+    f.fs.put(TEST_PATHS.userconfig, { text: '' });
+    f.fs.put(TEST_PATHS.globalconfig, { text: '' });
+
+    const app = await open();
+    const waitDone = async () => {
+      for (let i = 0; i < 100; i++) {
+        await new Promise<void>((r) => setImmediate(r));
+        const job = await latest(app);
+        if (job?.phase === 'done') return job;
+      }
+      throw new Error('TEST Tier 2 HTTP job did not finish');
+    };
+
+    await request(app.getHttpServer())
+      .post(`${base}/preview`)
+      .send({
+        requestId: uuid(++serial),
+        manager: 'npm',
+        package: 'test-tool',
+        action: 'remove',
+      })
+      .expect(202);
+    const prevJob = await waitDone();
+    expect(prevJob.status).toBe('completed');
+    expect(prevJob.preview).toBeDefined();
+
+    await request(app.getHttpServer())
+      .post(`${base}/execute`)
+      .send(consent(prevJob.preview!))
+      .expect(202);
+    for (let i = 0; i < 100 && f.child.launch.mock.calls.length === 0; i++) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
+    expect(f.child.launch).toHaveBeenCalledTimes(1);
+    expect(f.child.launch.mock.calls[0][0].cwd).toBe(expectedCwd);
+    await f.removeAndExit();
     expect(await waitDone()).toMatchObject({
       status: 'completed',
       gateHeld: false,

@@ -43,11 +43,14 @@ export default class SwaggerConfig {
         deepScanRoutes: false,
       });
 
-    exportSwaggerJson(
-      join(app.get(AppPathsService).appInstallDir, 'docs_API'),
-      configService.get<boolean>('EXPORT_SWAGGER_API_JSON') === true,
-      documentFactory,
-    );
+    const appPaths = app.get(AppPathsService);
+    if (appPaths.sourceCheckoutDir !== null) {
+      exportSwaggerJson(
+        join(appPaths.appInstallDir, 'docs_API'),
+        configService.get<boolean>('EXPORT_SWAGGER_API_JSON') === true,
+        documentFactory,
+      );
+    }
 
     SwaggerModule.setup('swagger', app, documentFactory, {
       jsonDocumentUrl: '/swagger-json',

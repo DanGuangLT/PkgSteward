@@ -117,6 +117,10 @@ export class PluginRegistryService {
     return settings.directory ?? this.appPaths.pluginsDir;
   }
 
+  getDataDir(): string {
+    return this.appPaths.dataDir;
+  }
+
   async discover(settings: IPluginsSettings): Promise<IPluginsCatalog> {
     const pluginsDir = this.resolvePluginsDir(settings);
     const removedList = settings.removedPreinstalled ?? [];

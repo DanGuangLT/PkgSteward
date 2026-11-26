@@ -2,9 +2,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  detectPortableMode,
+  findAppRootDir,
   findPackageRoot,
   findSourceCheckoutDir,
+  resolveAppDataDir,
   resolveDataDir,
+  wrapDataDirWriteError,
 } from '@/core/app-paths/app-paths.util';
 
 describe('resolveDataDir', () => {
@@ -32,16 +36,218 @@ describe('resolveDataDir', () => {
     );
   });
 
-  it('falls back to <home>\\AppData\\Local when LOCALAPPDATA is missing', () => {
+  it('falls back to %APPDATA%\\PkgSteward then <home>\\AppData\\Local\\PkgSteward on Windows', () => {
+    expect(
+      resolveDataDir({
+        ...win,
+        localAppData: undefined,
+        appData: 'C:\\Users\\alice\\AppData\\Roaming',
+      }),
+    ).toBe('C:\\Users\\alice\\AppData\\Roaming\\PkgSteward');
     expect(resolveDataDir({ ...win, localAppData: undefined })).toBe(
       'C:\\Users\\alice\\AppData\\Local\\PkgSteward',
     );
   });
 
-  it('uses ~/.local/share/PkgSteward on other platforms', () => {
+  it('uses ~/Library/Application Support/PkgSteward on macOS', () => {
+    expect(
+      resolveDataDir({ homeDir: '/Users/alice', platform: 'darwin' }),
+    ).toBe('/Users/alice/Library/Application Support/PkgSteward');
+  });
+
+  it('uses $XDG_DATA_HOME/PkgSteward or ~/.local/share/PkgSteward on Linux', () => {
+    expect(
+      resolveDataDir({
+        homeDir: '/home/alice',
+        platform: 'linux',
+        xdgDataHome: '/var/lib/xdg',
+      }),
+    ).toBe('/var/lib/xdg/PkgSteward');
+    expect(
+      resolveDataDir({
+        homeDir: '/home/alice',
+        platform: 'linux',
+        xdgDataHome: 'relative/xdg',
+      }),
+    ).toBe('/home/alice/.local/share/PkgSteward');
     expect(resolveDataDir({ homeDir: '/home/alice', platform: 'linux' })).toBe(
       '/home/alice/.local/share/PkgSteward',
     );
+  });
+});
+
+describe('findAppRootDir & detectPortableMode', () => {
+  it('prefers sourceCheckoutDir, then packaged monorepo root, then appInstallDir', () => {
+    expect(
+      findAppRootDir('D:\\Repo\\apps\\api', 'D:\\Repo', () => false, 'win32'),
+    ).toBe('D:\\Repo');
+    expect(
+      findAppRootDir(
+        'D:\\Pkg\\APPS\\api',
+        null,
+        (filePath) => filePath.toLowerCase() === 'd:\\pkg\\package.json',
+        'win32',
+      ),
+    ).toBe('D:\\Pkg');
+    expect(
+      findAppRootDir('D:\\Standalone\\api', null, () => false, 'win32'),
+    ).toBe('D:\\Standalone\\api');
+  });
+
+  it('detects portable mode from valid PORTABLE_EXECUTABLE_DIR or portable.flag', () => {
+    expect(
+      detectPortableMode({
+        appRootDir: 'D:\\Pkg',
+        appInstallDir: 'D:\\Pkg\\apps\\api',
+        env: { PORTABLE_EXECUTABLE_DIR: 'E:\\Portable\\App' },
+        platform: 'win32',
+        exists: () => false,
+      }),
+    ).toEqual({ portable: true, baseDir: 'E:\\Portable\\App' });
+
+    expect(
+      detectPortableMode({
+        appRootDir: 'D:\\Pkg',
+        appInstallDir: 'D:\\Pkg\\apps\\api',
+        env: {},
+        platform: 'win32',
+        exists: (p) => p === 'D:\\Pkg\\apps\\api\\portable.flag',
+      }),
+    ).toEqual({ portable: true, baseDir: 'D:\\Pkg' });
+
+    expect(
+      detectPortableMode({
+        appRootDir: 'D:\\Pkg',
+        appInstallDir: 'D:\\Pkg\\apps\\api',
+        env: {},
+        platform: 'win32',
+        exists: () => false,
+      }),
+    ).toEqual({ portable: false, baseDir: null });
+  });
+
+  it.each(['relative', 'C:foo', '\\foo', '\\\\server\\share'])(
+    'rejects invalid PORTABLE_EXECUTABLE_DIR %s fail-closed',
+    (bad) => {
+      expect(() =>
+        detectPortableMode({
+          appRootDir: 'D:\\Pkg',
+          appInstallDir: 'D:\\Pkg\\apps\\api',
+          env: { PORTABLE_EXECUTABLE_DIR: bad },
+          platform: 'win32',
+          exists: () => false,
+        }),
+      ).toThrow(/PORTABLE_EXECUTABLE_DIR/);
+    },
+  );
+});
+
+describe('resolveAppDataDir (3-tier priority)', () => {
+  const baseWin = {
+    appInstallDir: 'D:\\Repo\\apps\\api',
+    appRootDir: 'D:\\Repo',
+    sourceCheckoutDir: 'D:\\Repo',
+    env: { LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local' },
+    homeDir: 'C:\\Users\\alice',
+    platform: 'win32' as const,
+    exists: () => false,
+  };
+
+  it('Tier 1: explicit absolute override wins over checkout and portable markers', () => {
+    expect(
+      resolveAppDataDir({
+        ...baseWin,
+        override: 'E:\\CustomData\\',
+        env: { ...baseWin.env, PORTABLE_EXECUTABLE_DIR: 'F:\\Portable' },
+      }),
+    ).toEqual({
+      dataDir: 'E:\\CustomData',
+      tier: 'explicit',
+      portableBaseDir: 'F:\\Portable',
+    });
+  });
+
+  it('Tier 2: unset override resolves co-located PkgStewardLog in checkout or portable mode', () => {
+    expect(resolveAppDataDir(baseWin)).toEqual({
+      dataDir: 'D:\\Repo\\PkgStewardLog',
+      tier: 'co-located',
+      portableBaseDir: null,
+    });
+    expect(
+      resolveAppDataDir({
+        ...baseWin,
+        sourceCheckoutDir: null,
+        appInstallDir: 'C:\\Program Files\\PkgSteward',
+        appRootDir: 'C:\\Program Files\\PkgSteward',
+        env: { ...baseWin.env, PORTABLE_EXECUTABLE_DIR: 'E:\\USB\\Pkg' },
+      }),
+    ).toEqual({
+      dataDir: 'E:\\USB\\Pkg\\PkgStewardLog',
+      tier: 'co-located',
+      portableBaseDir: 'E:\\USB\\Pkg',
+    });
+  });
+
+  it('Tier 2: relative override resolves against co-located base dir', () => {
+    expect(resolveAppDataDir({ ...baseWin, override: '../SharedLog' })).toEqual(
+      {
+        dataDir: 'D:\\SharedLog',
+        tier: 'explicit',
+        portableBaseDir: null,
+      },
+    );
+  });
+
+  it('Tier 3: standard packaged / npx layout falls back to OS user data dir', () => {
+    expect(
+      resolveAppDataDir({
+        ...baseWin,
+        sourceCheckoutDir: null,
+        appInstallDir: 'C:\\Program Files\\PkgSteward',
+        appRootDir: 'C:\\Program Files\\PkgSteward',
+      }),
+    ).toEqual({
+      dataDir: 'C:\\Users\\alice\\AppData\\Local\\PkgSteward',
+      tier: 'os-user',
+      portableBaseDir: null,
+    });
+  });
+
+  it('Tier 3: rejects relative override when no project/portable folder exists', () => {
+    expect(() =>
+      resolveAppDataDir({
+        ...baseWin,
+        sourceCheckoutDir: null,
+        appInstallDir: 'C:\\Program Files\\PkgSteward',
+        appRootDir: 'C:\\Program Files\\PkgSteward',
+        override: 'logs',
+      }),
+    ).toThrow(/no project folder/);
+  });
+
+  it.each(['C:data', '\\data', '/data', '\\\\server\\share'])(
+    'rejects ambiguous override %s',
+    (bad) => {
+      expect(() => resolveAppDataDir({ ...baseWin, override: bad })).toThrow(
+        /PKGSTEWARD_DATA_DIR/,
+      );
+    },
+  );
+});
+
+describe('wrapDataDirWriteError', () => {
+  it('wraps permission/read-only errors with actionable dataDir guidance', () => {
+    const err = Object.assign(new Error('EACCES: permission denied'), {
+      code: 'EACCES',
+    });
+    const wrapped = wrapDataDirWriteError(
+      'C:\\Program Files\\PkgStewardLog',
+      'C:\\Program Files\\PkgStewardLog\\logs',
+      err,
+    );
+    expect(wrapped.message).toMatch(/PKGSTEWARD_DATA_DIR/);
+    expect(wrapped.message).toContain('C:\\Program Files\\PkgStewardLog');
+    expect(wrapped.message).toContain('EACCES');
   });
 });
 

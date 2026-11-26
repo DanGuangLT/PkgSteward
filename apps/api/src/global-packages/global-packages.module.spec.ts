@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
-import { win32 } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, win32 } from 'node:path';
 import { RuntimeConfigService } from '@/core/runtime-config/runtime-config.service';
 import {
   AppException,
@@ -599,5 +601,85 @@ describe('GlobalPackagesModule runtime bindings', () => {
       berryRuntime.resolveTool('yarn', new AbortController().signal),
     ).rejects.toMatchObject({ details: { reason: 'TOOL_VERSION_MISMATCH' } });
     expect(bBerry.launchProcess).not.toHaveBeenCalled();
+  });
+
+  it('sweeps dead-PID temp cwd folders onModuleInit and removes own temp cwd onModuleDestroy in Tier 2, doing nothing on non-Windows or Tier 3', async () => {
+    const tempBase = mkdtempSync(join(tmpdir(), 'pkgsteward-mod-cwd-'));
+    const externalCache = mkdtempSync(join(tmpdir(), 'pkgsteward-ext-cache-'));
+    try {
+      const deadDir = join(tempBase, 'pkgsteward-global-cwd-999999');
+      const liveDir = join(
+        tempBase,
+        `pkgsteward-global-cwd-${String(process.pid)}`,
+      );
+      const unrelated = join(tempBase, 'unrelated');
+      mkdirSync(deadDir);
+      mkdirSync(liveDir);
+      mkdirSync(unrelated);
+
+      const b = bindings();
+      b.input.paths = {
+        cacheDir: 'D:\\TEST\\repo\\PkgStewardLog\\cache',
+        appInstallDir: 'D:\\TEST\\repo\\apps\\api',
+        sourceCheckoutDir: 'D:\\TEST\\repo',
+        appRootDir: 'D:\\TEST\\repo',
+        portableBaseDir: null,
+        dataDir: 'D:\\TEST\\repo\\PkgStewardLog',
+      };
+      b.input.host = {
+        ...b.input.host!,
+        platform: 'win32',
+        env: { ...b.input.host!.env, TEMP: tempBase },
+      };
+
+      const mod = new GlobalPackagesModule(
+        createGlobalPackagesRuntime(b.input),
+      );
+      await mod.onModuleInit();
+      expect(existsSync(deadDir)).toBe(false);
+      expect(existsSync(liveDir)).toBe(true);
+      expect(existsSync(unrelated)).toBe(true);
+
+      await mod.onModuleDestroy();
+      expect(existsSync(liveDir)).toBe(false);
+      expect(existsSync(unrelated)).toBe(true);
+
+      // Tier 3 external cacheDir must never be touched
+      const extCwd = join(externalCache, 'global-packages-cwd');
+      mkdirSync(extCwd);
+      const bExt = bindings();
+      bExt.input.paths = {
+        cacheDir: externalCache,
+        appInstallDir: 'D:\\TEST\\installed\\apps\\api',
+        sourceCheckoutDir: null,
+        appRootDir: 'D:\\TEST\\installed',
+        portableBaseDir: null,
+        dataDir: externalCache.replace(/\\cache$/, ''),
+      };
+      const extMod = new GlobalPackagesModule(
+        createGlobalPackagesRuntime(bExt.input),
+      );
+      await extMod.onModuleInit();
+      await extMod.onModuleDestroy();
+      expect(existsSync(extCwd)).toBe(true);
+
+      // Non-Windows skips cleanup without disk IO
+      const bLinux = bindings();
+      bLinux.input.paths = b.input.paths;
+      bLinux.input.host = {
+        platform: 'linux',
+        execPath: '/usr/bin/node',
+        env: { TEMP: tempBase },
+      };
+      mkdirSync(deadDir);
+      const linuxMod = new GlobalPackagesModule(
+        createGlobalPackagesRuntime(bLinux.input),
+      );
+      await linuxMod.onModuleInit();
+      expect(existsSync(deadDir)).toBe(true);
+    } finally {
+      rmSync(tempBase, { recursive: true, force: true });
+      rmSync(externalCache, { recursive: true, force: true });
+    }
   });
 });

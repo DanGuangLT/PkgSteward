@@ -20,6 +20,10 @@ import { readRawSettingsOverrides } from '@/config/config-loader';
 import { AppMode, validateEnv } from '@/config/environment/env.validation';
 import { parseScanRootPaths } from '@/config/environment/scan-roots';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
+import {
+  isDataDirWriteError,
+  wrapDataDirWriteError,
+} from '@/core/app-paths/app-paths.util';
 import { AuditLogService } from '@/core/audit-log/audit-log.service';
 import { MutationGateService } from '@/core/mutation-gate/mutation-gate.service';
 import { PathGuardService } from '@/core/path-guard/path-guard.service';
@@ -1299,10 +1303,10 @@ export class SettingsService implements ISettingsService {
     overrides: ISettingsOverrides,
   ): Promise<void> {
     const filePath = this.appPaths.settingsFilePath;
-    await mkdir(dirname(filePath), { recursive: true });
     const serialized = `${JSON.stringify(overrides, null, 2)}\n`;
     const tempPath = `${filePath}.${randomUUID()}.tmp`;
     try {
+      await mkdir(dirname(filePath), { recursive: true });
       // Validate round-trip before rename so corrupt JSON never replaces settings.json
       const verifyParsed = parseStructuredSettingsOverrides(
         JSON.parse(serialized),
@@ -1311,6 +1315,11 @@ export class SettingsService implements ISettingsService {
       void verifyParsed;
       await writeFile(tempPath, serialized, 'utf8');
       await rename(tempPath, filePath);
+    } catch (error) {
+      if (isDataDirWriteError(error)) {
+        throw wrapDataDirWriteError(this.appPaths.dataDir, filePath, error);
+      }
+      throw error;
     } finally {
       try {
         await unlink(tempPath);

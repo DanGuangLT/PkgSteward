@@ -1,12 +1,22 @@
 import { Global, Injectable, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
-import { homedir, tmpdir } from 'os';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { AppPathsService } from '@/core/app-paths/app-paths.service';
 import { AppPathsModule } from '@/core/app-paths/app-paths.module';
-import { resolveDataDir } from '@/core/app-paths/app-paths.util';
+import {
+  CO_LOCATED_DATA_DIR_NAME,
+  findPackageRoot,
+  findSourceCheckoutDir,
+} from '@/core/app-paths/app-paths.util';
 
 const fakeConfig = (dataDir?: string) =>
   ({
@@ -80,14 +90,23 @@ describe('AppPathsService', () => {
     }
   });
 
-  it('falls back to %LOCALAPPDATA%\\PkgSteward when PKGSTEWARD_DATA_DIR is unset', () => {
+  it('exposes appRootDir, portableBaseDir, and defaults to co-located PkgStewardLog in a source checkout when PKGSTEWARD_DATA_DIR is unset', () => {
     const paths = new AppPathsService(fakeConfig(undefined));
+    const expectedRepo = findSourceCheckoutDir(findPackageRoot(__dirname));
+    expect(expectedRepo).not.toBeNull();
+    expect(paths.appRootDir).toBe(expectedRepo);
+    expect(paths.portableBaseDir).toBeNull();
     expect(paths.dataDir).toBe(
-      resolveDataDir({
-        localAppData: process.env.LOCALAPPDATA,
-        homeDir: homedir(),
-        platform: process.platform,
-      }),
+      join(expectedRepo as string, CO_LOCATED_DATA_DIR_NAME),
+    );
+  });
+
+  it('surfaces an actionable PKGSTEWARD_DATA_DIR error if ensureDir hits a non-directory path', async () => {
+    const blocked = join(tmp, 'blocked-file');
+    writeFileSync(blocked, 'not a directory');
+    const paths = new AppPathsService(fakeConfig(blocked));
+    await expect(paths.ensureDir('logs')).rejects.toThrow(
+      /PKGSTEWARD_DATA_DIR/,
     );
   });
 

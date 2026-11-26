@@ -130,8 +130,8 @@ export class EnvironmentVariables {
   @IsOptional()
   SCAN_TIMEOUT_MS?: number;
 
-  // D3: defaults to PkgStewardLog in a source checkout, or
-  // %LOCALAPPDATA%\PkgSteward for an installed app on Windows when available.
+  // D3: 3-tier resolution — explicit override, else PkgStewardLog in a source
+  // checkout or portable mode, else OS user data dir (%LOCALAPPDATA%\PkgSteward).
   @Transform(blankToUndefined)
   @IsString()
   @IsOptional()

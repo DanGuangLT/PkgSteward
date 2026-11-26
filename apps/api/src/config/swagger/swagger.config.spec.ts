@@ -6,10 +6,16 @@ import {
   rmSync,
   writeFileSync,
 } from 'fs';
+import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { SwaggerModule } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
-import { exportSwaggerJson } from '@/config/swagger/swagger.config';
+import SwaggerConfig, {
+  exportSwaggerJson,
+} from '@/config/swagger/swagger.config';
+import { AppPathsService } from '@/core/app-paths/app-paths.service';
 
 describe('exportSwaggerJson', () => {
   let tmp: string;
@@ -45,4 +51,40 @@ describe('exportSwaggerJson', () => {
     expect(() =>
       exportSwaggerJson(join(tmp, 'none'), false, () => document),
     ).not.toThrow());
+});
+
+describe('SwaggerConfig.setup Tier 3 zero-write guarantee', () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'pkgsteward-swagger-tier3-'));
+  });
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it('skips docs_API file export when sourceCheckoutDir is null', () => {
+    const setupSpy = jest
+      .spyOn(SwaggerModule, 'setup')
+      .mockImplementation(() => undefined);
+    const app = {
+      get: (token: unknown) => {
+        if (token === ConfigService) {
+          return {
+            get: (key: string) =>
+              key === 'EXPORT_SWAGGER_API_JSON' ? true : '1',
+          };
+        }
+        if (token === AppPathsService) {
+          return { appInstallDir: tmp, sourceCheckoutDir: null };
+        }
+        return undefined;
+      },
+    } as unknown as INestApplication;
+
+    try {
+      SwaggerConfig.setup(app);
+      expect(existsSync(join(tmp, 'docs_API'))).toBe(false);
+      expect(setupSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      setupSpy.mockRestore();
+    }
+  });
 });
