@@ -178,7 +178,14 @@ html[data-motion="reduce"] *::after {
 
 /* Fallback translucency when live wallpaper runs alongside Solid surface mode (in oklab prevents neutral magenta shift) */
 html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"])
-  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt])) {
+  :is(
+    [data-slot="card"],
+    [data-slot="list-pagination"],
+    [data-slot="glass-preview-panel"],
+    .bg-card:not(span):not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"]))
+  ) {
   background-color: color-mix(in oklab, var(--card) var(--wallpaper-surface-opacity, 86%), transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
@@ -188,6 +195,32 @@ html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surf
   background-clip: padding-box;
 }
 
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"])
+  :where([data-slot="card"], .bg-card, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+  :is(
+    [data-slot="card"],
+    .bg-card:not(span):not([data-surface-exempt]),
+    .border-dashed.rounded-md:not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"]))
+  ):where(:not([data-slot="glass-preview-panel"])) {
+  background-color: color-mix(in oklab, var(--card) calc(var(--wallpaper-surface-opacity, 86%) * 0.52), transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transform: none;
+  backface-visibility: visible;
+}
+
+html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"])
+  :is(
+    [data-slot="input"],
+    [data-slot="select-trigger"],
+    [data-slot="button"][data-variant="outline"],
+    :is(select, textarea).bg-background
+  ):not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--background) 82%, transparent);
+}
+
 html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) header:not([data-slot="dialog-content"] *),
 html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surface-style="liquid-glass"]):not([data-surface-style="crystal"]) aside:not([data-slot="dialog-content"] *) {
   background-color: color-mix(in oklab, var(--background) var(--wallpaper-surface-opacity, 86%), transparent);
@@ -195,7 +228,7 @@ html[data-wallpaper="active"]:not([data-surface-style="frosted"]):not([data-surf
   backdrop-filter: blur(14px);
 }
 
-/* Apple Liquid Glass & Frosted surface materials across ALL cards, muted blocks, dashed placeholders, inputs, chrome, and floating overlays */
+/* Apple Liquid Glass & Frosted surface materials across ALL cards, panels, muted blocks, dashed placeholders, inputs, buttons, selects, chrome, and floating overlays */
 html:is([data-surface-style="liquid-glass"], [data-surface-style="crystal"]):not([data-wallpaper="active"]) body {
   background-image:
     radial-gradient(
@@ -212,7 +245,14 @@ html:is([data-surface-style="liquid-glass"], [data-surface-style="crystal"]):not
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt])) {
+  :is(
+    [data-slot="card"],
+    [data-slot="list-pagination"],
+    [data-slot="glass-preview-panel"],
+    .bg-card:not(span):not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"]))
+  ) {
   background-color: color-mix(in oklab, var(--card) var(--app-glass-opacity, 84%), transparent);
   -webkit-backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
   backdrop-filter: blur(var(--app-glass-blur, 14px)) saturate(var(--app-glass-saturation, 140%));
@@ -223,12 +263,7 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  :is(button, a).bg-card:not(:disabled):not([data-surface-exempt]):hover {
-  background-color: color-mix(in oklab, var(--card) var(--app-glass-chrome-opacity, 90%), transparent);
-}
-
-html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  :is(div, section, pre, ul, dl, article, form).bg-muted:not([data-surface-exempt]) {
+  :is(div, section, pre, ul, dl, article, form, p).bg-muted:not([data-surface-exempt]) {
   background-color: color-mix(in oklab, var(--muted) var(--app-glass-muted-opacity, 72%), transparent);
 }
 
@@ -244,8 +279,25 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  [data-slot="input"]:not([data-surface-exempt]) {
+  :is(
+    [data-slot="input"],
+    [data-slot="select-trigger"],
+    [data-slot="button"][data-variant="outline"],
+    [data-slot="empty-icon"][data-variant="icon"],
+    :is(select, textarea).bg-background
+  ):not([data-surface-exempt]) {
   background-color: color-mix(in oklab, var(--background) var(--app-glass-input-opacity, 78%), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  [data-slot="tabs-list"][data-variant="default"] [data-slot="tabs-trigger"]:is([data-state="active"], [data-active]:not([data-active="false"])):not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--background) var(--app-glass-input-opacity, 78%), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  select.bg-background option {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
 }
 
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
@@ -268,6 +320,7 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
     [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
     [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
     [data-slot="select-content"],
     [data-slot="sheet-content"]
   ) {
@@ -276,12 +329,49 @@ html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [da
   backdrop-filter: blur(calc(var(--app-glass-blur, 14px) * 1.15)) saturate(var(--app-glass-saturation, 140%));
 }
 
-/* Prevent double backdrop-filter stacking on cards inside glass dialogs while keeping live preview panels reactive */
 html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-  [data-slot="dialog-content"]
-  :is([data-slot="card"], .bg-card):not([data-slot="glass-preview-panel"]) {
+  [data-slot="select-content"]
+  :is([data-slot="select-scroll-up-button"], [data-slot="select-scroll-down-button"]) {
+  background-color: transparent;
+}
+
+/* Prevent double backdrop-filter stacking and dark tint buildup on nested cards/panels/controls while keeping live preview panels reactive */
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :where([data-slot="card"], .bg-card, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+  :is(
+    [data-slot="card"],
+    .bg-card:not(span):not([data-surface-exempt]),
+    .border-dashed.rounded-md:not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"]))
+  ):where(:not([data-slot="glass-preview-panel"])) {
+  background-color: color-mix(in oklab, var(--card) calc(var(--app-glass-opacity, 84%) * 0.52), transparent);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  transform: none;
+  backface-visibility: visible;
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :where([data-slot="card"], .bg-card, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+  :is(
+    [data-slot="input"],
+    [data-slot="select-trigger"],
+    [data-slot="button"][data-variant="outline"],
+    :is(select, textarea).bg-background
+  ):not([data-surface-exempt]) {
+  background-color: color-mix(in oklab, var(--background) calc(var(--app-glass-input-opacity, 78%) * 0.62), transparent);
+}
+
+html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+  :is(
+    :is(button, a).bg-card:not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"])),
+    [data-slot="button"][data-variant="outline"]:not([data-surface-exempt]),
+    [data-slot="select-trigger"]:not([data-surface-exempt])
+  ):not(:disabled):not([data-disabled]):hover {
+  background-color: color-mix(in oklab, var(--card) var(--app-glass-chrome-opacity, 90%), transparent);
 }
 
 /* Inline glass surfaces use inset-only specular rims so shadows never bleed across grid gaps into neighboring backdrop-filter cards */
@@ -290,7 +380,9 @@ html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surfac
     [data-slot="card"],
     [data-slot="list-pagination"],
     [data-slot="glass-preview-panel"],
-    .bg-card:not(span):not([data-surface-exempt])
+    .bg-card:not(span):not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt])
   ) {
   background-image: linear-gradient(
     135deg var(--in-oklab),
@@ -309,6 +401,7 @@ html[data-surface-specular="on"]:is([data-surface-style="frosted"], [data-surfac
     [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
     [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
     [data-slot="select-content"],
     [data-slot="sheet-content"]
   ) {
@@ -329,10 +422,13 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
     [data-slot="list-pagination"],
     [data-slot="glass-preview-panel"],
     .bg-card:not(span):not([data-surface-exempt]),
+    :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+      :is(div, section, article, dl, details, form).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]),
     [data-slot="dialog-content"],
     [data-slot="alert-dialog-content"],
     [data-slot="popover-content"],
     [data-slot="dropdown-menu-content"],
+    [data-slot="dropdown-menu-sub-content"],
     [data-slot="select-content"],
     [data-slot="sheet-content"]
   ):not(.border-foreground):not(.border-primary):not(.border-destructive):not(.border-warning) {
@@ -341,8 +437,27 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt]), .bg-card\/95, .bg-background\/95) {
+    :is(
+      [data-slot="card"],
+      [data-slot="list-pagination"],
+      [data-slot="glass-preview-panel"],
+      .bg-card:not(span):not([data-surface-exempt]),
+      :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+        :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"])),
+      .bg-card\/95,
+      .bg-background\/95
+    ) {
     background-color: color-mix(in oklab, var(--card) 95%, transparent);
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    :is(
+      [data-slot="input"],
+      [data-slot="select-trigger"],
+      [data-slot="button"][data-variant="outline"],
+      [data-slot="empty-icon"][data-variant="icon"],
+      :is(select, textarea).bg-background
+    ):not([data-surface-exempt]) {
+    background-color: color-mix(in oklab, var(--background) 95%, transparent);
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
     :is(header, aside):not([data-slot="dialog-content"] *) {
@@ -354,6 +469,7 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
       [data-slot="alert-dialog-content"],
       [data-slot="popover-content"],
       [data-slot="dropdown-menu-content"],
+      [data-slot="dropdown-menu-sub-content"],
       [data-slot="select-content"],
       [data-slot="sheet-content"]
     ) {
@@ -363,7 +479,17 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
 
 @media (prefers-reduced-transparency: reduce) {
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    :is([data-slot="card"], [data-slot="list-pagination"], [data-slot="glass-preview-panel"], .bg-card:not(span):not([data-surface-exempt]), .border-dashed.rounded-md:not([data-surface-exempt]), .bg-card\/95, .bg-background\/95) {
+    :is(
+      [data-slot="card"],
+      [data-slot="list-pagination"],
+      [data-slot="glass-preview-panel"],
+      .bg-card:not(span):not([data-surface-exempt]),
+      :where(main, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="sheet-content"])
+        :is(div, section, article, dl, details, form, pre, p, label, button, a).bg-background:is(.border, .border-x, .border-t, .border-b):not([data-surface-exempt]):where(:not([data-slot="checkbox"]):not([data-slot="button"]):not([data-slot="select-trigger"])),
+      .border-dashed.rounded-md:not([data-surface-exempt]),
+      .bg-card\/95,
+      .bg-background\/95
+    ) {
     background-color: var(--card);
     background-image: none;
     -webkit-backdrop-filter: none;
@@ -372,11 +498,21 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
     backface-visibility: visible;
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    :is(div, section, pre, ul, dl, article, form).bg-muted:not([data-surface-exempt]) {
+    :is(div, section, pre, ul, dl, article, form, p).bg-muted:not([data-surface-exempt]) {
     background-color: var(--muted);
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
-    [data-slot="input"]:not([data-surface-exempt]) {
+    :is(
+      [data-slot="input"],
+      [data-slot="select-trigger"],
+      [data-slot="button"][data-variant="outline"],
+      [data-slot="empty-icon"][data-variant="icon"],
+      :is(select, textarea).bg-background
+    ):not([data-surface-exempt]) {
+    background-color: var(--background);
+  }
+  html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
+    [data-slot="tabs-list"][data-variant="default"] [data-slot="tabs-trigger"]:is([data-state="active"], [data-active]:not([data-active="false"])):not([data-surface-exempt]) {
     background-color: var(--background);
   }
   html:is([data-surface-style="frosted"], [data-surface-style="liquid-glass"], [data-surface-style="crystal"])
@@ -391,6 +527,7 @@ html[data-surface-specular="on"]:not([data-contrast="high"]):is([data-surface-st
       [data-slot="alert-dialog-content"],
       [data-slot="popover-content"],
       [data-slot="dropdown-menu-content"],
+      [data-slot="dropdown-menu-sub-content"],
       [data-slot="select-content"],
       [data-slot="sheet-content"]
     ) {
