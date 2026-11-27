@@ -1,3 +1,4 @@
+import { createListTextMatcher } from "../ui/list-discovery.ts"
 import type {
   ManagerCommandSuggestion,
   NodeCompatibilityStatus,
@@ -55,22 +56,14 @@ export function filterAndSortNodeProjects(
     sort: NodeProjectSort
   },
 ): ProjectNodeCompatibility[] {
-  const needle = options.query.trim().toLowerCase()
+  const matchesText = createListTextMatcher(options.query)
   const statusSet =
     options.statuses.length > 0 ? new Set(options.statuses) : null
 
   const filtered = projects.filter((project) => {
     if (statusSet && !statusSet.has(project.status)) return false
-    if (!needle) return true
-
-    const nameMatch = (project.name ?? "").toLowerCase().includes(needle)
-    const pathMatch = project.path.toLowerCase().includes(needle)
-    const reqMatch = project.requirements.some(
-      (req) =>
-        req.raw.toLowerCase().includes(needle) ||
-        req.source.toLowerCase().includes(needle),
-    )
-    return nameMatch || pathMatch || reqMatch
+    return matchesText(project.name, project.path) ||
+      project.requirements.some((requirement) => matchesText(requirement.raw, requirement.source))
   })
 
   return filtered.sort((a, b) => {

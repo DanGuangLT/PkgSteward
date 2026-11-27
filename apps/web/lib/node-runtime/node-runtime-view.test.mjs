@@ -153,6 +153,28 @@ test("filterAndSortNodeProjects supports name sort, status filter, and requireme
   )
 })
 
+test("filterAndSortNodeProjects normalizes Unicode and whitespace in searchable fields", () => {
+  const project = {
+    ...sampleProjects[0],
+    name: "Dự án mẫu",
+    path: "D:\\TEST\\Thư  mục",
+    requirements: [{ ...sampleProjects[0].requirements[0], raw: ">=22   <25" }],
+  }
+  const projects = [...sampleProjects, project]
+
+  for (const query of [
+    "  DỰ   ÁN MẪU  ".normalize("NFD"),
+    "THƯ mục".normalize("NFD"),
+    ">=22 <25",
+  ]) {
+    assert.deepEqual(filterAndSortNodeProjects(projects, {
+      query,
+      statuses: ["compatible"],
+      sort: "name",
+    }), [project], query)
+  }
+})
+
 test("pickPrimaryCommand prioritizes nvm-windows -> fnm -> volta and returns null when empty", () => {
   assert.equal(pickPrimaryCommand([]), null)
   const picked = pickPrimaryCommand(sampleProjects[2].commands)
