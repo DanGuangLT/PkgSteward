@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <title>PkgSteward</title>
-  <rect width="512" height="512" rx="112" fill="#e60023"/>
-  <g fill="none" stroke="#fff" stroke-width="40" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M168 420V152L276 90l108 62v124l-108 62-108-62"/>
-    <path d="M168 152l108 62 108-62M276 214v124"/>
-  </g>
+  <rect width="512" height="512" rx="116" fill="#d92a2f"/>
+  <path fill="#ffffff" d="M256 79.5 L383.3 153 L256 226.5 L128.7 153 Z M122.2 164.25 L249.5 237.75 V384.75 L122.2 311.25 Z M389.8 164.25 L262.5 237.75 V384.75 L389.8 311.25 Z"/>
+  <path fill="#111111" d="M65 191 H102 V336.64 L256 425.55 L410 336.64 V191 H447 V358 L256 468.27 L65 358 Z"/>
 </svg>
