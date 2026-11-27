@@ -33,9 +33,10 @@ test("app/icon.svg matches .github/assets/logo.svg and uses new 3-color brand ma
   assert.doesNotMatch(appSvg, /stroke-width="40"/)
 })
 
-test("wordmark SVGs are pure vector outlines with light and dark Steward ink", () => {
+test("wordmark SVGs are pure vector outlines across light, dark, and pill badge variants", () => {
   const lightSvg = readFileSync(resolve(ASSETS_DIR, "logo-wordmark.svg"), "utf8")
   const darkSvg = readFileSync(resolve(ASSETS_DIR, "logo-wordmark-dark.svg"), "utf8")
+  const badgeSvg = readFileSync(resolve(ASSETS_DIR, "logo-wordmark-badge.svg"), "utf8")
 
   for (const svg of [lightSvg, darkSvg]) {
     assert.doesNotMatch(svg, /<text\b/i)
@@ -51,6 +52,12 @@ test("wordmark SVGs are pure vector outlines with light and dark Steward ink", (
   assert.match(lightTail, /fill="#111111"/)
   assert.match(darkTail, /fill="#f5f5f5"/)
   assert.doesNotMatch(darkTail, /fill="#111111"/)
+
+  assert.doesNotMatch(badgeSvg, /<text\b/i)
+  assert.match(badgeSvg, /viewBox="0 0 704 208"/)
+  assert.match(badgeSvg, /<rect[^>]*fill="#ffffff"[^>]*stroke="#e5e7eb"/)
+  assert.match(badgeSvg, /fill="#d92a2f"/)
+  assert.match(badgeSvg, /fill="#111111"/)
 })
 
 test("binary brand assets and favicons have expected dimensions and formats", () => {
@@ -110,11 +117,10 @@ test("Logo and BrandWordmark components use semantic tokens and no hardcoded hex
   assert.match(tokensCss, /--color-logo-cradle:\s*var\(--logo-cradle\);/)
 })
 
-test("root README headers reference the adaptive light/dark wordmark picture", () => {
+test("root README headers use theme-independent wordmark badge instead of OS prefers-color-scheme", () => {
   for (const file of ["README.md", "README.vi.md"]) {
     const md = readFileSync(resolve(REPO_ROOT, file), "utf8")
-    assert.match(md, /srcset="\.github\/assets\/logo-wordmark-dark\.svg"/)
-    assert.match(md, /srcset="\.github\/assets\/logo-wordmark\.svg"/)
-    assert.match(md, /src="\.github\/assets\/logo-wordmark\.svg"/)
+    assert.match(md, /src="\.github\/assets\/logo-wordmark-badge\.svg"/)
+    assert.doesNotMatch(md, /prefers-color-scheme/)
   }
 })

@@ -1,10 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-wordmark-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-wordmark.svg">
-    <img src=".github/assets/logo-wordmark.svg" alt="PkgSteward logo" width="320">
-  </picture>
-</p>
+<p align="center"><img src=".github/assets/logo-wordmark-badge.svg" alt="PkgSteward logo" width="340"></p>
 
 # PkgSteward
 
