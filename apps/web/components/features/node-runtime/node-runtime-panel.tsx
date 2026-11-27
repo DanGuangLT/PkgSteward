@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   AlertTriangleIcon,
@@ -245,22 +245,38 @@ export function NodeRuntimePanel({
   >([])
   const [sort, setSort] = useState<NodeProjectSort>("priority")
   const listAnchorRef = useRef<HTMLDivElement | null>(null)
+  const refreshControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      refreshControllerRef.current?.abort()
+      refreshControllerRef.current = null
+    }
+  }, [])
 
   async function handleRefresh() {
-    if (refreshing) return
+    if (refreshControllerRef.current) return
+
+    const controller = new AbortController()
+    const { signal } = controller
+    refreshControllerRef.current = controller
     setRefreshing(true)
     setErrorCode(null)
     try {
-      const next = await getBrowserNodeRuntimeOverview(true)
-      setOverview(next)
+      const next = await getBrowserNodeRuntimeOverview(true, signal)
+      if (!signal.aborted) setOverview(next)
     } catch (error) {
+      if (signal.aborted) return
       setErrorCode(
         error instanceof ApiError
           ? error.code ?? "INTERNAL_SERVER_ERROR"
           : "INTERNAL_SERVER_ERROR",
       )
     } finally {
-      setRefreshing(false)
+      if (!signal.aborted) {
+        refreshControllerRef.current = null
+        setRefreshing(false)
+      }
     }
   }
 
