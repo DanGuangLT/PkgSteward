@@ -304,7 +304,9 @@ export function NodeRuntimePanel({
 
   function toggleStatusFilter(status: NodeCompatibilityStatus) {
     setSelectedStatuses((current) =>
-      current.length === 1 && current[0] === status ? [] : [status],
+      current.includes(status)
+        ? current.filter((selectedStatus) => selectedStatus !== status)
+        : [...current, status],
     )
   }
 
@@ -521,9 +523,7 @@ export function NodeRuntimePanel({
                 </button>
 
                 {NODE_STATUS_ORDER.map((status) => {
-                  const active =
-                    selectedStatuses.length === 1 &&
-                    selectedStatuses[0] === status
+                  const active = selectedStatuses.includes(status)
                   return (
                     <button
                       key={status}
