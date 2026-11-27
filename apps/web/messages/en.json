@@ -2216,7 +2216,7 @@
       "switchStep": "Switch version",
       "copy": "Copy",
       "copiedShort": "Copied",
-      "copyAria": "Copy command {command}",
+      "copyAria": "{label} command {command}",
       "copied": "Copied command: {command}",
       "copyFailed": "Could not write to clipboard. Please select and copy the command manually.",
       "noManagerDetected": "No nvm-windows, fnm, or Volta binary was detected on PATH for command suggestions.",

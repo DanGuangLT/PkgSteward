@@ -2226,7 +2226,7 @@
       "switchStep": "Chuyển phiên bản",
       "copy": "Sao chép",
       "copiedShort": "Đã chép",
-      "copyAria": "Sao chép lệnh {command}",
+      "copyAria": "{label} lệnh {command}",
       "copied": "Đã sao chép lệnh: {command}",
       "copyFailed": "Không thể sao chép vào bảng tạm. Vui lòng bôi đen lệnh để sao chép thủ công.",
       "noManagerDetected": "Chưa phát hiện nvm-windows, fnm hoặc Volta trên PATH để gợi ý lệnh.",
