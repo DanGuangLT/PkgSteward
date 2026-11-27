@@ -81,8 +81,8 @@ export function PluginConfirmDialog({
 
   return (
     <AlertDialog open={pending !== null} onOpenChange={handleOpenChange}>
-      <AlertDialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-[580px]">
-        <AlertDialogHeader>
+      <AlertDialogContent className="flex max-h-[88dvh] flex-col gap-5 overflow-hidden p-5 sm:max-w-2xl sm:p-8">
+        <AlertDialogHeader className="shrink-0">
           <div className="flex flex-wrap items-center gap-2">
             <AlertDialogTitle>
               {pending?.kind === "uninstall" ? t("uninstallTitle") : t("installTitle")}
@@ -107,41 +107,51 @@ export function PluginConfirmDialog({
         </AlertDialogHeader>
 
         {pending && (
-          <div className="flex flex-col gap-4">
-            <div className="grid gap-2 rounded-md border border-border bg-muted/40 p-3 text-body-sm sm:grid-cols-2">
-              <div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto">
+            <div className="grid min-w-0 gap-2 rounded-md border border-border bg-muted/40 p-3 text-body-sm sm:grid-cols-2">
+              <div className="min-w-0">
                 <div className="text-caption text-muted-foreground">{t("nameLabel")}</div>
-                <div className="font-semibold text-foreground">{pending.data.pluginName}</div>
+                <div className="font-semibold text-foreground [overflow-wrap:anywhere]">
+                  {pending.data.pluginName}
+                </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="text-caption text-muted-foreground">{t("idLabel")}</div>
-                <div className="font-mono text-foreground">{pending.data.pluginId}</div>
+                <div className="font-mono text-foreground [overflow-wrap:anywhere]">
+                  {pending.data.pluginId}
+                </div>
               </div>
               {pending.kind === "install" ? (
                 <>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-caption text-muted-foreground">{t("formatLabel")}</div>
                     <div className="font-mono text-foreground">
                       {pending.data.format} ({pending.data.entryKind})
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-caption text-muted-foreground">{t("packageSizeLabel")}</div>
                     <div className="font-mono text-foreground">
                       {pending.data.fileCount} · {formatBytes(pending.data.totalBytes)}
                     </div>
                   </div>
-                  <div className="sm:col-span-2">
+                  <div className="min-w-0 sm:col-span-2">
                     <div className="text-caption text-muted-foreground">{t("sourceLabel")}</div>
-                    <div className="truncate font-mono text-caption text-foreground">
+                    <div
+                      className="truncate font-mono text-caption text-foreground"
+                      title={pending.data.sourceLabel}
+                    >
                       {pending.data.sourceLabel}
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="sm:col-span-2">
+                <div className="min-w-0 sm:col-span-2">
                   <div className="text-caption text-muted-foreground">{t("targetDirLabel")}</div>
-                  <div className="truncate font-mono text-caption text-foreground">
+                  <div
+                    className="truncate font-mono text-caption text-foreground"
+                    title={pending.data.targetDir}
+                  >
                     {pending.data.targetDir}
                   </div>
                 </div>
@@ -149,14 +159,14 @@ export function PluginConfirmDialog({
             </div>
 
             {pending.kind === "uninstall" && pending.data.preinstalled && (
-              <div className="flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
+              <div className="flex min-w-0 items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
                 <Trash2Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>{t("preinstalledUninstallHint")}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{t("preinstalledUninstallHint")}</span>
               </div>
             )}
 
             {reasons.length > 0 && (
-              <div className="flex flex-col gap-2">
+              <div className="flex min-w-0 flex-col gap-2">
                 {reasons.map((reason) => {
                   const isHigh = reason.level === "high"
                   const checked = acknowledged.includes(reason.code)
@@ -165,19 +175,21 @@ export function PluginConfirmDialog({
                       key={reason.code}
                       className={
                         isHigh
-                          ? "flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive"
-                          : "flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning"
+                          ? "flex min-w-0 flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive"
+                          : "flex min-w-0 items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning"
                       }
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex min-w-0 items-start gap-2">
                         {isHigh ? (
                           <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
                         ) : (
                           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
                         )}
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex min-w-0 flex-col gap-0.5">
                           <span className="font-mono text-caption font-semibold">{reason.code}</span>
-                          <span>{getRiskReasonText(tConfirm, reason.code, reason.message)}</span>
+                          <span className="[overflow-wrap:anywhere]">
+                            {getRiskReasonText(tConfirm, reason.code, reason.message)}
+                          </span>
                         </div>
                       </div>
                       {isHigh && (
@@ -205,7 +217,7 @@ export function PluginConfirmDialog({
           </div>
         )}
 
-        <AlertDialogFooter>
+        <AlertDialogFooter className="shrink-0">
           <AlertDialogCancel disabled={submitting} onClick={() => setAcknowledged([])}>
             {tCommon("cancel")}
           </AlertDialogCancel>
