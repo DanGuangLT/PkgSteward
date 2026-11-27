@@ -24,6 +24,10 @@ import type { ProjectNodeRuntimeDetail } from "@/lib/node-runtime/node-runtime-t
 import { appendReturnContext } from "@/lib/ui/navigation-targets"
 
 export function ProjectNodeRuntimeCard({ path }: { path: string }) {
+  return <ProjectNodeRuntimeCardContent key={path} path={path} />
+}
+
+function ProjectNodeRuntimeCardContent({ path }: { path: string }) {
   const t = useTranslations("nodeRuntime")
   const tDisabled = useTranslations("disabledReasons")
   const titleId = useId()
