@@ -991,14 +991,14 @@
     "tocLabel": "On this page",
     "brand": {
       "title": "Brand",
-      "description": "The PkgSteward logo is a letter P whose bowl is a package box. The background uses primary and the strokes use primary-foreground, so the logo follows the preset.",
+      "description": "The PkgSteward mark pairs a floating isometric package cube with a protective cradle on a rounded red badge, using semantic logo tokens so it matches the app icon and favicon.",
       "logo": {
         "title": "Logo",
         "description": "Same shape as the app icon in the browser tab. The navigation bar uses the 32px size."
       },
       "lockup": {
         "title": "Logo with name",
-        "description": "The logo sits before the app name, 8px apart. The name is large, bold red text: smaller red text does not have enough contrast in dark mode."
+        "description": "The icon sits before the two-tone wordmark, 8px apart: bold red \"Pkg\" paired with theme foreground ink for \"Steward\" so the lockup stays legible in both light and dark modes."
       }
     },
     "colors": {

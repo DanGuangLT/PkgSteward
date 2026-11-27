@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server"
 
-import { Logo } from "@/components/layout/logo"
+import { BrandWordmark, Logo } from "@/components/layout/logo"
 import { cn } from "@/lib/utils"
 
 import { ShowcaseItem, ShowcaseSection, TokenName } from "@/app/design-system/_components/showcase"
@@ -36,9 +36,9 @@ export async function BrandSection() {
           ))}
         </ShowcaseItem>
         <ShowcaseItem title={t("lockup.title")} description={t("lockup.description")}>
-          <span className="flex items-center gap-2 text-heading-lg font-bold text-primary">
+          <span className="flex items-center gap-2 text-heading-lg font-bold">
             <Logo className="size-8 shrink-0" />
-            {tNav("brand")}
+            <BrandWordmark label={tNav("brand")} />
           </span>
         </ShowcaseItem>
       </div>

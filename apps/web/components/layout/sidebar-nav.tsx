@@ -5,7 +5,7 @@ import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
 import { useTranslations } from "next-intl"
 
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher"
-import { Logo } from "@/components/layout/logo"
+import { BrandWordmark, Logo } from "@/components/layout/logo"
 import { NavLinks } from "@/components/layout/nav-links"
 import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { useSettings } from "@/components/settings/settings-provider"
@@ -69,10 +69,10 @@ export function SidebarNav() {
           <>
             <Link
               href="/"
-              className="flex items-center gap-2 rounded-sm text-heading-md font-bold text-primary focus-ring"
+              className="flex items-center gap-2 rounded-sm text-heading-md font-bold focus-ring"
             >
               <Logo className="size-7 shrink-0" />
-              <span>{t("brand")}</span>
+              <BrandWordmark label={t("brand")} />
             </Link>
             <Button
               type="button"
