@@ -227,15 +227,16 @@ test('an invalid startup timeout fails before any app launches', (t) => {
   }
 });
 
-test('root dev never opens browser while start reports ready when both apps finish starting', (t) => {
+test('root start reports browser readiness only when browser opening is enabled', (t) => {
   const { launcher, cli } = setupFakeLauncher(
     t,
     [
       "const { basename } = require('node:path');",
       "const app = basename(process.cwd());",
+      "console.log('TEST PID: ' + process.pid);",
       "if (app === 'api') {",
       "  setTimeout(() => console.log('Application is running on: http://127.0.0.1:24681/api/v1'), 80);",
-      '  setTimeout(() => process.exit(99), 4000);',
+      "  setTimeout(() => { console.log('TEST API fallback exit'); process.exit(99); }, 4000);",
       '} else {',
       "  console.log('Local: invalid-not-loopback-so-no-browser-tab');",
       "  console.log('Ready in 10 ms');",
@@ -267,6 +268,22 @@ test('root dev never opens browser while start reports ready when both apps fini
   });
   assert.equal(startResult.status, 5);
   assert.match(startResult.stdout, /Both apps are ready/);
+
+  const optOutResult = spawnSync(process.execPath, [launcher, 'start'], {
+    env: { ...env, PKGSTEWARD_NO_BROWSER: '1' },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.equal(optOutResult.error, undefined);
+  assert.equal(optOutResult.status, 5);
+  assert.match(optOutResult.stdout, /\[api\] Application is running on:/);
+  assert.match(optOutResult.stdout, /\[web\] Ready in 10 ms/);
+  assert.doesNotMatch(optOutResult.stdout, /Both apps are ready|Opening |Could not open a browser/);
+  assert.match(optOutResult.stderr, /apps\/web stopped \(exit code 5\); stopping the other app/);
+  assert.doesNotMatch(optOutResult.stdout, /TEST API fallback exit/);
+  const apiPid = optOutResult.stdout.match(/\[api\] TEST PID: (\d+)/)?.[1];
+  assert.ok(apiPid, 'the fake API process must report its PID');
+  assert.throws(() => process.kill(Number(apiPid), 0), { code: 'ESRCH' });
 });
 
 test('root launcher installs missing app dependencies before running tasks and aborts if install fails', (t) => {
