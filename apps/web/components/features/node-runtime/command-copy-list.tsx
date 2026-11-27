@@ -70,6 +70,8 @@ function CommandCopyRow({
   onCopy(command: string): void
 }) {
   const t = useTranslations("nodeRuntime")
+  const copyLabel = t(copied ? "commands.copiedShort" : "commands.copy")
+
   return (
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2">
       <div className="min-w-0 flex-1 space-y-0.5">
@@ -83,7 +85,7 @@ function CommandCopyRow({
         variant="outline"
         size="sm"
         className="shrink-0"
-        aria-label={t("commands.copyAria", { command })}
+        aria-label={t("commands.copyAria", { label: copyLabel, command })}
         onClick={() => onCopy(command)}
       >
         {copied ? (
@@ -91,7 +93,7 @@ function CommandCopyRow({
         ) : (
           <CopyIcon data-icon="inline-start" aria-hidden="true" />
         )}
-        {t(copied ? "commands.copiedShort" : "commands.copy")}
+        {copyLabel}
       </Button>
     </div>
   )
