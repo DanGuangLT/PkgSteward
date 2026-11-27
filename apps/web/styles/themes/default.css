@@ -59,6 +59,11 @@
   --overlay: rgb(0 0 0 / 0.5);
   --shadow-color: rgb(0 0 0 / 0.16);
 
+  /* Thương hiệu logo */
+  --logo-surface: #d92a2f;
+  --logo-cube: #ffffff;
+  --logo-cradle: #111111;
+
   /* Hình khối & chữ — đổi 1 biến là cả thang đổi theo */
   --radius: 1rem; /* rounded.md = 16px */
   --font-body: var(--font-inter);

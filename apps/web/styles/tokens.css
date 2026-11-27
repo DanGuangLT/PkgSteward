@@ -41,6 +41,9 @@
   --color-ring: var(--ring);
   --color-focus-inner: var(--focus-inner);
   --color-overlay: var(--overlay);
+  --color-logo-surface: var(--logo-surface);
+  --color-logo-cube: var(--logo-cube);
+  --color-logo-cradle: var(--logo-cradle);
 
   /* Font */
   --font-sans:

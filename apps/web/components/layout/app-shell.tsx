@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useTranslations } from "next-intl"
 
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher"
-import { Logo } from "@/components/layout/logo"
+import { BrandWordmark, Logo } from "@/components/layout/logo"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { SidebarNav } from "@/components/layout/sidebar-nav"
@@ -41,10 +41,10 @@ export function AppShell({
           <MobileNav />
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold text-primary focus-ring sm:gap-2"
+            className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold focus-ring sm:gap-2"
           >
             <Logo className="size-7 shrink-0" />
-            <span className="truncate">{t("brand")}</span>
+            <BrandWordmark label={t("brand")} className="truncate" />
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
             <LocaleSwitcher />

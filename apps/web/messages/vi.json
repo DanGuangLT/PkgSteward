@@ -1001,14 +1001,14 @@
     "tocLabel": "Mục lục",
     "brand": {
       "title": "Thương hiệu",
-      "description": "Logo PkgSteward là chữ P có phần bụng là hộp package. Nền dùng màu primary, nét dùng primary-foreground, nên logo đổi màu theo preset.",
+      "description": "Logo PkgSteward kết hợp khối hộp package nổi với khung đỡ chữ U trên nền đỏ bo góc, dùng token ngữ nghĩa để đồng bộ hoàn toàn với icon ứng dụng và favicon.",
       "logo": {
         "title": "Logo",
         "description": "Cùng hình với icon ứng dụng trên tab trình duyệt. Thanh điều hướng dùng cỡ 32px."
       },
       "lockup": {
         "title": "Logo kèm tên",
-        "description": "Logo đứng trước tên ứng dụng, cách 8px. Tên là chữ đỏ, đậm, cỡ lớn: chữ đỏ cỡ nhỏ hơn không đủ tương phản ở chế độ tối."
+        "description": "Logo đứng trước tên ứng dụng hai tông màu, cách 8px: chữ \"Pkg\" màu đỏ chủ đạo đi cùng \"Steward\" theo màu chữ chính của theme để đọc rõ ở cả chế độ sáng và tối."
       }
     },
     "colors": {

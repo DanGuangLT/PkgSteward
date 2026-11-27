@@ -3,13 +3,13 @@ import { getTranslations } from "next-intl/server"
 
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher"
 import { Container } from "@/components/layout/container"
-import { Logo } from "@/components/layout/logo"
+import { BrandWordmark, Logo } from "@/components/layout/logo"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { NavLinks } from "@/components/layout/nav-links"
 import { SettingsNavButton } from "@/components/layout/settings-nav-button"
 import { ModeToggle } from "@/components/theme/mode-toggle"
 
-/** Primary nav: sticky, cao 64px, viền dưới hairline, logo + wordmark đỏ bên trái. */
+/** Primary nav: sticky, cao 64px, viền dưới hairline, logo + wordmark hai màu bên trái. */
 export async function TopNav() {
   const t = await getTranslations("nav")
 
@@ -19,10 +19,10 @@ export async function TopNav() {
         <MobileNav triggerClassName="lg:hidden" />
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold text-primary focus-ring sm:gap-2 sm:text-heading-lg lg:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold focus-ring sm:gap-2 sm:text-heading-lg lg:shrink-0"
         >
           <Logo className="size-7 shrink-0 sm:size-8" />
-          <span className="truncate">{t("brand")}</span>
+          <BrandWordmark label={t("brand")} className="truncate" />
         </Link>
         <nav
           aria-label={t("mainNavigation")}
