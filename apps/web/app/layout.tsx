@@ -111,10 +111,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                       {t("skipToContent")}
                     </a>
                     <div className="relative z-10 flex min-h-full flex-1 flex-col">
-                      <AppShell topNav={<TopNav />}>{children}</AppShell>
+                      <AppShell topNav={<TopNav />} dock={<NativeSessionStatus />}>
+                        {children}
+                      </AppShell>
                     </div>
                     <SettingsWindowModal />
-                    <NativeSessionStatus />
                     <Toaster />
                   </NpmRunnerProvider>
                 </NavigationContinuityProvider>

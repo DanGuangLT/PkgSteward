@@ -13,9 +13,11 @@ import { ModeToggle } from "@/components/theme/mode-toggle"
 
 export function AppShell({
   topNav,
+  dock,
   children,
 }: {
   topNav: React.ReactNode
+  dock?: React.ReactNode
   children: React.ReactNode
 }) {
   const t = useTranslations("nav")
@@ -29,6 +31,7 @@ export function AppShell({
         <main id="main-content" className="flex flex-1 flex-col">
           {children}
         </main>
+        {dock}
       </>
     )
   }
@@ -41,7 +44,7 @@ export function AppShell({
           <MobileNav />
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold focus-ring sm:gap-2"
+            className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-lg font-bold focus-ring sm:gap-2"
           >
             <Logo className="size-7 shrink-0" />
             <BrandWordmark label={t("brand")} className="truncate" />
@@ -55,6 +58,7 @@ export function AppShell({
         <main id="main-content" className="flex flex-1 flex-col">
           {children}
         </main>
+        {dock}
       </div>
     </div>
   )

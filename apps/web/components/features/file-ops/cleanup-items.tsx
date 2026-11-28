@@ -349,7 +349,7 @@ export function CleanupItems({
                         handleTargetClick(target.path, event.shiftKey)
                       }}
                       className={cn(
-                        "flex flex-col gap-3 px-4 py-3 transition-colors md:flex-row md:items-center md:justify-between",
+                        "flex flex-col gap-3 px-4 py-3 transition-colors xl:flex-row xl:items-start xl:justify-between",
                         canPick ? "cursor-pointer hover:bg-muted/40" : "opacity-75",
                         isSelected && "bg-muted/60",
                       )}
@@ -364,11 +364,11 @@ export function CleanupItems({
                         />
                         <TargetIdentity target={target} compact />
                       </div>
-                      <div className="flex flex-wrap items-center gap-4 pl-8 md:pl-0">
+                      <div className="flex min-w-0 flex-wrap items-start gap-4 pl-8 xl:shrink-0 xl:pl-0">
                         <TargetSizeCell target={target} maxBytes={effectiveMaxBytes} />
                         <TargetActivityCell isoDate={target.lastActivityAt} referenceNowMs={referenceNowMs} />
                         {target.valid ? (
-                          <div className="min-w-28 space-y-1">
+                          <div className="min-w-28 max-w-64 space-y-1 [overflow-wrap:anywhere]">
                             <RiskBadge level={target.risk.level} />
                             <RiskReasons risk={target.risk} />
                           </div>
@@ -389,13 +389,15 @@ export function CleanupItems({
     <div className="min-w-0">
       <p role="status" aria-live="polite" className="sr-only">{sortAnnouncement}</p>
 
-      <div
-        tabIndex={0}
-        role="region"
-        aria-label={t("listLabel")}
-        className="hidden overflow-x-auto rounded-md border border-border bg-card md:block"
-      >
-        <Table>
+      <div className="hidden rounded-md border border-border bg-card md:block">
+        <Table
+          containerProps={{
+            tabIndex: 0,
+            role: "region",
+            "aria-label": t("listLabel"),
+            className: "rounded-md focus-ring",
+          }}
+        >
           <TableHeader>
             <TableRow>
               <TableHead scope="col" className="w-11">

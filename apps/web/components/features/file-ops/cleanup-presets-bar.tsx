@@ -91,7 +91,7 @@ export function CleanupPresetsBar({
               <div
                 key={preset.id}
                 className={cn(
-                  "flex min-w-0 flex-col justify-between overflow-hidden rounded-md border bg-card transition-colors",
+                  "flex min-w-0 flex-col justify-between rounded-md border bg-card transition-colors",
                   isSelected ? "border-foreground" : "border-border hover:border-foreground/40",
                 )}
               >
@@ -184,7 +184,7 @@ export function CleanupPresetsBar({
                 <div
                   key={preset.id}
                   className={cn(
-                    "flex min-w-0 flex-col justify-between overflow-hidden rounded-md border bg-card transition-colors",
+                    "flex min-w-0 flex-col justify-between rounded-md border bg-card transition-colors",
                     isSelected ? "border-foreground" : "border-border hover:border-foreground/40",
                   )}
                 >

@@ -175,7 +175,7 @@ function ProjectNodeRuntimeCardContent({ path }: { path: string }) {
                           ? "secondary"
                           : "outline"
                       }
-                      className="font-mono"
+                      className="h-auto min-h-6 max-w-full py-1 font-mono leading-tight whitespace-normal [overflow-wrap:anywhere]"
                     >
                       {req.source}: {req.raw}
                     </Badge>

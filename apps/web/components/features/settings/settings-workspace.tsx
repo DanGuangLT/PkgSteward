@@ -209,7 +209,7 @@ export function SettingsWorkspace({
         className={cn(
           "relative flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-left text-body-sm transition-colors focus-ring md:w-full",
           selected
-            ? "bg-primary/10 font-semibold text-primary"
+            ? "bg-primary/15 font-semibold text-foreground"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         )}
       >
@@ -375,12 +375,12 @@ export function SettingsWorkspace({
       </div>
     ) : (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-x border-t border-b border-border bg-card/60 p-4 sm:px-6">
-        <div className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-2.5">
             <Settings2Icon className="size-5 shrink-0 text-primary" aria-hidden />
             <h1 className="truncate text-heading-xl text-foreground">{t("title")}</h1>
           </div>
-          <p className="truncate text-caption text-muted-foreground">{t("description")}</p>
+          <p className="text-caption text-muted-foreground">{t("description")}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -428,7 +428,6 @@ export function SettingsWorkspace({
         <div
           role="tablist"
           aria-label={t("navCategoriesLabel")}
-          aria-orientation="vertical"
           className="flex flex-row gap-1 overflow-x-auto p-2 md:flex-1 md:flex-col md:overflow-y-auto md:p-3"
         >
           {basicCategories.map(renderCategoryButton)}

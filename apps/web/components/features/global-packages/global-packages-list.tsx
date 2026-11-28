@@ -42,7 +42,7 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
         <DiscoverySort value={view.sort} options={[{ value: "name", label: d("name") }, { value: "version", label: d("version") }]} onValueChange={sort => setView({ ...view, sort })} />
       </DiscoveryControls>
       <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 overflow-hidden rounded-md border border-border bg-card text-card-foreground">
-        <div aria-hidden="true" className="hidden min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-4 border-b border-border bg-muted px-4 py-3 text-caption font-semibold md:grid">
+        <div aria-hidden="true" className="hidden min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-4 border-b border-border bg-muted px-4 py-3 text-caption font-semibold lg:grid">
           <span>{t("package")}</span><span>{t("version")}</span><span>{t("statusLabel")}</span><span>{t("actions")}</span>
         </div>
         {rows.length ? (
@@ -52,7 +52,7 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
               // npm itself is managed by the npm version card above the list (M9G).
               const npmSelf = inventory.manager === "npm" && pkg.name === "npm"
               return (
-                <li key={pkg.name} className="grid min-w-0 gap-4 p-4 text-body-sm transition-colors hover:bg-muted/30 md:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
+                <li key={pkg.name} className="grid min-w-0 gap-4 p-4 text-body-sm transition-colors hover:bg-muted/30 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
                   <div className="min-w-0 space-y-1.5">
                     <h3 className="font-semibold text-foreground [overflow-wrap:anywhere]">{pkg.name}</h3>
                     <dl className="min-w-0 text-caption">
@@ -61,13 +61,13 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
                     </dl>
                   </div>
                   <dl className="min-w-0">
-                    <dt className="text-caption text-muted-foreground md:sr-only">{t("version")}</dt>
+                    <dt className="text-caption text-muted-foreground lg:sr-only">{t("version")}</dt>
                     <dd className="font-mono tabular-nums [overflow-wrap:anywhere]">{pkg.version}</dd>
                   </dl>
                   <dl className="min-w-0">
-                    <dt className="text-caption text-muted-foreground md:sr-only">{t("statusLabel")}</dt>
+                    <dt className="text-caption text-muted-foreground lg:sr-only">{t("statusLabel")}</dt>
                     <dd className="space-y-1.5 [overflow-wrap:anywhere]">
-                      <Badge variant={manageable ? "success" : "outline"} className="h-auto min-h-6 max-w-full whitespace-normal">
+                      <Badge variant={manageable ? "success" : "outline"} className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal">
                         {t(manageable ? "ready" : `packageStatus.${pkg.status}`)}
                       </Badge>
                       {npmSelf ? <p className="text-caption text-muted-foreground">{t("npmVersion.listHint")}</p>
@@ -75,7 +75,7 @@ export function GlobalPackagesList({ inventory, controller, blocked, onPreview }
                     </dd>
                   </dl>
                   <div className="min-w-0 space-y-2">
-                    <p className="text-caption text-muted-foreground md:sr-only">{t("actions")}</p>
+                    <p className="text-caption text-muted-foreground lg:sr-only">{t("actions")}</p>
                     {manageable ? (
                       <GlobalPackageActions manager={inventory.manager} pkg={pkg} controller={controller} blocked={blocked} onPreview={onPreview} />
                     ) : (

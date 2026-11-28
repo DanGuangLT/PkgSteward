@@ -366,7 +366,7 @@ export function ProjectManagerPanel({ path }: { path: string }) {
       <p className="text-caption text-muted-foreground">{t("method")} {t("registry")}</p>
 
       <div className="min-w-0 space-y-2 border-t border-border/60 pt-3 text-body-sm">
-        <h3 ref={statusRef} tabIndex={-1} className="rounded-sm font-semibold focus-ring">{t("statusTitle")}</h3>
+        <h3 ref={statusRef} tabIndex={-1} className="scroll-mt-24 rounded-sm font-semibold focus-ring">{t("statusTitle")}</h3>
         <p aria-live="polite" aria-atomic="true"><CircleIcon aria-hidden="true" className="mr-1 inline size-4" />
           {key ? t(key) : t("status.done")}</p>
         {otherRunning && state.otherJob ? <div className="space-y-2">

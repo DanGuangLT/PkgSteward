@@ -106,10 +106,10 @@ export function ServerTab({
             <CardDescription>{t("configDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label>{t("modeLabel")}</Label>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label className="min-w-0 leading-snug">{t("modeLabel")}</Label>
                   <Badge variant={snapshot.sources.server.mode === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.mode)}
                   </Badge>
@@ -126,9 +126,9 @@ export function ServerTab({
                 </ToggleGroup>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label>{t("hostLabel")}</Label>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label className="min-w-0 leading-snug">{t("hostLabel")}</Label>
                   <Badge variant={snapshot.sources.server.host === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.host)}
                   </Badge>
@@ -151,9 +151,9 @@ export function ServerTab({
                 )}
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="srv-port">{t("portLabel")}</Label>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="srv-port" className="min-w-0 leading-snug">{t("portLabel")}</Label>
                   <Badge variant={snapshot.sources.server.port === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.port)}
                   </Badge>
@@ -172,9 +172,9 @@ export function ServerTab({
                 />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="srv-prefix">{t("prefixLabel")}</Label>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="srv-prefix" className="min-w-0 leading-snug">{t("prefixLabel")}</Label>
                   <Badge variant={snapshot.sources.server.globalPrefix === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.globalPrefix)}
                   </Badge>
@@ -193,9 +193,9 @@ export function ServerTab({
                 )}
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="srv-version">{t("versionLabel")}</Label>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="srv-version" className="min-w-0 leading-snug">{t("versionLabel")}</Label>
                   <Badge variant={snapshot.sources.server.version === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.version)}
                   </Badge>
@@ -214,9 +214,9 @@ export function ServerTab({
                 )}
               </div>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="srv-cors">{t("corsLabel")}</Label>
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="srv-cors" className="min-w-0 leading-snug">{t("corsLabel")}</Label>
                   <Badge variant={snapshot.sources.server.listOriginCors === "settings" ? "default" : "secondary"}>
                     {tSrc(snapshot.sources.server.listOriginCors)}
                   </Badge>
@@ -261,14 +261,17 @@ export function ServerTab({
         <CardContent>
           <dl className="divide-y divide-border rounded-md border border-border bg-background">
             {pathRows.map(([label, val]) => (
-              <div key={label} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                <dt className="text-body-sm font-medium text-muted-foreground">{label}</dt>
-                <dd className="flex items-center gap-2">
-                  <code className="max-w-md truncate font-mono text-caption text-foreground">{val}</code>
+              <div key={label} className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+                <dt className="shrink-0 text-body-sm font-medium text-muted-foreground">{label}</dt>
+                <dd className="flex min-w-0 max-w-full flex-1 items-center justify-end gap-2">
+                  <code title={val} className="min-w-0 max-w-full truncate font-mono text-caption text-foreground sm:max-w-md">
+                    {val}
+                  </code>
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
+                    className="shrink-0"
                     aria-label={t("copyValue", { label })}
                     onClick={() => void copyPath(val)}
                   >

@@ -193,3 +193,86 @@ test("Floating glass modals isolate backdrop compositing, clip to rounded corner
     "Modal dialog specular rule must not emit outward drop-shadow",
   )
 })
+
+test("Adaptive Text Readability lowers override specificity via :where() and preserves warning/success/destructive tokens (H4)", () => {
+  const css = readGlobalsCss()
+  const readabilitySection = sliceBetween(
+    css,
+    "/* Adaptive Text Readability:",
+    "/* Theme-aligned range slider",
+  )
+
+  assert.match(
+    readabilitySection,
+    /html:where\([\s\S]*?:where\(main\)\s*:where\(h1, h2, h3, h4, h5, h6, p, dt, dd, td, th, label, legend, li, code\):where\(/,
+    "Expected low-specificity :where() wrappers on Adaptive Text Readability main color rule",
+  )
+
+  for (const excluded of [
+    ":not(.text-warning)",
+    ":not(.text-destructive)",
+    ":not(.text-success)",
+    ":not(.bg-warning-soft)",
+    ":not(.bg-success-soft)",
+    ":not(.bg-destructive)",
+    ":not(.bg-warning-soft *)",
+    ":not(.bg-success-soft *)",
+    ":not(.bg-destructive *)",
+  ]) {
+    assert.ok(readabilitySection.includes(excluded), `Missing semantic exclusion ${excluded} in readability color rule`)
+  }
+
+  const shadowExemption = sliceBetween(
+    readabilitySection,
+    "/* Exempt solid buttons",
+    "color: inherit;",
+  )
+  for (const token of [
+    ".bg-warning-soft",
+    ".bg-success-soft",
+    ".bg-destructive",
+    ".text-warning",
+    ".text-destructive",
+    ".text-success",
+  ]) {
+    assert.ok(shadowExemption.includes(token), `Missing ${token} in text-shadow/stroke exemption`)
+  }
+
+  const inheritExemption = sliceBetween(
+    readabilitySection,
+    "/* Exempt solid buttons",
+    null,
+  ).split("color: inherit;")[0]
+  assert.match(inheritExemption, /\.bg-destructive[\s\S]*:not\(\.text-warning\):not\(\.text-destructive\):not\(\.text-success\):not\(\.text-muted-foreground\):not\(\.text-foreground\)/)
+})
+
+test("Inline specular rim box-shadow preserves @utility focus-ring on .bg-card buttons and cards (H5)", () => {
+  const css = readGlobalsCss()
+  const inlineSpecularSection = sliceBetween(
+    css,
+    "/* Inline glass surfaces use inset-only specular rims",
+    "/* Floating overlays retain elevated shadow",
+  )
+
+  assert.match(
+    inlineSpecularSection,
+    /:not\(:focus-visible\)\s*\{[^}]*box-shadow:/,
+    "Expected inline specular box-shadow rule to scope out :focus-visible",
+  )
+  assert.match(
+    inlineSpecularSection,
+    /\.focus-ring:focus-visible\s*\{[^}]*inset 0 1px 0 0[^}]*0 0 0 2px var\(--focus-inner\)[^}]*0 0 0 4px var\(--ring\)/,
+    "Expected .focus-ring:focus-visible rule composing inset specular rim with focus ring",
+  )
+})
+
+test("Chrome glass rules scope away from <header>/<aside> nested inside <main> (L2)", () => {
+  const css = readGlobalsCss()
+  const headerMatches = css.match(/header:not\(\[data-slot="dialog-content"\] \*\):not\(main \*\)/g) ?? []
+  const asideMatches = css.match(/aside:not\(\[data-slot="dialog-content"\] \*\):not\(main \*\)/g) ?? []
+  const combinedMatches = css.match(/:is\(header, aside\):not\(\[data-slot="dialog-content"\] \*\):not\(main \*\)/g) ?? []
+
+  assert.equal(headerMatches.length, 1, "Expected wallpaper fallback header rule to include :not(main *)")
+  assert.equal(asideMatches.length, 1, "Expected wallpaper fallback aside rule to include :not(main *)")
+  assert.equal(combinedMatches.length, 3, "Expected all 3 Liquid Glass chrome rules to include :not(main *)")
+})

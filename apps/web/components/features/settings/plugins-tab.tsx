@@ -238,13 +238,13 @@ export function PluginsTab({
           {behavior.advancedMode && (
             <div className="flex flex-col gap-2">
               <span className="text-body-sm font-semibold text-foreground">{t("extensionPointsTitle")}</span>
-              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {catalog.extensionPoints.map((ep) => (
                   <div
                     key={ep.capability}
-                    className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
+                    className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
                   >
-                    <span className="font-mono text-caption text-foreground">{ep.capability}</span>
+                    <span className="min-w-0 font-mono text-caption text-foreground [overflow-wrap:anywhere]">{ep.capability}</span>
                     <Badge variant="outline">{t("schemaReady")}</Badge>
                   </div>
                 ))}
@@ -316,7 +316,7 @@ export function PluginsTab({
           <form noValidate onSubmit={handleInstallUrlSubmit} className="flex flex-col gap-2">
             <Label htmlFor="install-plugin-url">{t("installUrlLabel")}</Label>
             <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-64 flex-1">
+              <div className="relative w-full min-w-0 flex-1 sm:min-w-60">
                 <GlobeIcon
                   className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden
@@ -388,7 +388,7 @@ export function PluginsTab({
                     {tVal(directoryError)}
                   </p>
                 )}
-                <p className="text-caption text-muted-foreground">
+                <p className="text-caption text-muted-foreground [overflow-wrap:anywhere]">
                   {t("directoryHint", { defaultDir: snapshot.systemPaths.pluginsDir })}
                 </p>
               </div>
@@ -458,7 +458,7 @@ export function PluginsTab({
             </div>
           </div>
           {behavior.advancedMode && (
-            <CardDescription className="font-mono">{catalog.pluginsDir}</CardDescription>
+            <CardDescription className="font-mono [overflow-wrap:anywhere]">{catalog.pluginsDir}</CardDescription>
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -489,14 +489,14 @@ export function PluginsTab({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-body-md font-semibold text-foreground">{plugin.name}</span>
-                        <Badge variant="outline" className="font-mono">
+                        <Badge variant="outline" className="h-auto min-h-6 max-w-full py-0.5 font-mono leading-tight whitespace-normal [overflow-wrap:anywhere]">
                           {plugin.id}
                         </Badge>
                         {plugin.preinstalled && (
                           <Badge variant="secondary">{t("preinstalledBadge")}</Badge>
                         )}
                         {behavior.advancedMode && (
-                          <Badge variant="outline" className="font-mono">
+                          <Badge variant="outline" className="h-auto min-h-6 max-w-full py-0.5 font-mono leading-tight whitespace-normal [overflow-wrap:anywhere]">
                             {plugin.format} · {plugin.entry.kind}
                           </Badge>
                         )}
@@ -634,7 +634,7 @@ export function PluginsTab({
             <div className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
               <span className="font-semibold">{t("invalidManifestsTitle")}</span>
               {catalog.invalid.map((bad) => (
-                <div key={`${bad.directoryName}-${bad.manifestPath}`} className="font-mono text-caption">
+                <div key={`${bad.directoryName}-${bad.manifestPath}`} className="font-mono text-caption [overflow-wrap:anywhere]">
                   {bad.directoryName}: {bad.error}
                 </div>
               ))}

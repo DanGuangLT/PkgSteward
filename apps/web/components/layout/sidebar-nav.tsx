@@ -69,10 +69,10 @@ export function SidebarNav() {
           <>
             <Link
               href="/"
-              className="flex items-center gap-2 rounded-sm text-heading-md font-bold focus-ring"
+              className="flex min-w-0 items-center gap-2 rounded-sm text-heading-lg font-bold focus-ring"
             >
               <Logo className="size-7 shrink-0" />
-              <BrandWordmark label={t("brand")} />
+              <BrandWordmark label={t("brand")} className="truncate" />
             </Link>
             <Button
               type="button"

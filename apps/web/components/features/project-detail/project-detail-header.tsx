@@ -55,7 +55,7 @@ export function ProjectDetailHeader({
                 {detail.name ?? t("summary.unknown")}
               </h2>
               {detail.version ? (
-                <Badge variant="outline" className="font-mono">
+                <Badge variant="outline" className="h-auto min-h-6 max-w-full py-1 font-mono leading-tight whitespace-normal [overflow-wrap:anywhere]">
                   v{detail.version}
                 </Badge>
               ) : null}
@@ -75,7 +75,7 @@ export function ProjectDetailHeader({
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{manager}</Badge>
           {detail.packageManager ? (
-            <Badge variant="outline" className="font-mono">
+            <Badge variant="outline" className="h-auto min-h-6 max-w-full py-1 font-mono leading-tight whitespace-normal [overflow-wrap:anywhere]">
               {detail.packageManager}
             </Badge>
           ) : null}

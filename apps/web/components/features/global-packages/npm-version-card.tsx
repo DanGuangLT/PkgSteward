@@ -61,11 +61,11 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
 
   return (
     <section aria-labelledby={`${id}-title`} className="min-w-0 space-y-4 rounded-md border border-border bg-background p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-56 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 id={`${id}-title`} className="text-body-md font-semibold text-foreground">{t("npmVersion.title")}</h3>
-            <Badge variant={stateBadgeVariant} className="h-auto min-h-6 max-w-full whitespace-normal">
+            <Badge variant={stateBadgeVariant} className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal">
               {t(`npmVersion.state.${card.state}`)}
             </Badge>
           </div>
@@ -73,7 +73,7 @@ export function NpmVersionCard({ inventory, controller, blocked, onPreview }: {
         </div>
 
         {card.canChange || card.canRestore || card.canRepair ? (
-          <div className="flex shrink-0 flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {card.canChange ? (
               <DisabledTooltip reason={blockedReason}>
                 <Button

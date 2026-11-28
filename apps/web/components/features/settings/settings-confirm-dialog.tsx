@@ -87,8 +87,8 @@ export function SettingsConfirmDialog({
 
   return (
     <AlertDialog open={preview !== null} onOpenChange={handleOpenChange}>
-      <AlertDialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-[640px]">
-        <AlertDialogHeader>
+      <AlertDialogContent className="flex max-h-[88dvh] flex-col gap-5 overflow-hidden p-5 sm:max-w-4xl sm:p-8">
+        <AlertDialogHeader className="shrink-0">
           <div className="flex flex-wrap items-center gap-2">
             <AlertDialogTitle>
               {preview?.action === "import"
@@ -115,18 +115,18 @@ export function SettingsConfirmDialog({
         </AlertDialogHeader>
 
         {preview && (
-          <div className="flex flex-col gap-4">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto">
             {preview.clearsScanCache && (
-              <div className="flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
+              <div className="flex min-w-0 items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
                 <Trash2Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>{t("clearsScanCache")}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{t("clearsScanCache")}</span>
               </div>
             )}
 
             {preview.restartRequiredFields.length > 0 && (
-              <div className="flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
+              <div className="flex min-w-0 items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning">
                 <RefreshCwIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">
                   {t("restartRequired", {
                     fields: preview.restartRequiredFields.join(", "),
                   })}
@@ -135,7 +135,7 @@ export function SettingsConfirmDialog({
             )}
 
             {preview.risk.reasons.length > 0 && (
-              <div className="flex flex-col gap-2">
+              <div className="flex min-w-0 flex-col gap-2">
                 {preview.risk.reasons.map((reason) => {
                   const isHigh = reason.level === "high"
                   const checked = acknowledged.includes(reason.code)
@@ -144,19 +144,21 @@ export function SettingsConfirmDialog({
                       key={reason.code}
                       className={
                         isHigh
-                          ? "flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive"
-                          : "flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning"
+                          ? "flex min-w-0 flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-body-sm text-destructive"
+                          : "flex min-w-0 items-start gap-2.5 rounded-md border border-warning/40 bg-warning-soft p-3 text-body-sm text-warning"
                       }
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex min-w-0 items-start gap-2">
                         {isHigh ? (
                           <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
                         ) : (
                           <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
                         )}
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex min-w-0 flex-col gap-0.5">
                           <span className="font-mono text-caption font-semibold">{reason.code}</span>
-                          <span>{getRiskReasonText(t, reason.code, reason.message)}</span>
+                          <span className="[overflow-wrap:anywhere]">
+                            {getRiskReasonText(t, reason.code, reason.message)}
+                          </span>
                         </div>
                       </div>
                       {isHigh && (
@@ -180,7 +182,7 @@ export function SettingsConfirmDialog({
               </div>
             )}
 
-            <div className="flex flex-col gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <div className="text-body-sm font-semibold text-foreground">
                 {t("changesTitle", { count: preview.changes.length })}
               </div>
@@ -189,41 +191,53 @@ export function SettingsConfirmDialog({
                   {t("noChanges")}
                 </p>
               ) : (
-                <div className="max-h-60 overflow-auto rounded-md border border-border">
+                <div className="max-h-72 min-w-0 overflow-auto rounded-md border border-border">
                   <table className="w-full text-left text-caption">
                     <thead className="border-b border-border bg-muted/60 text-muted-foreground">
                       <tr>
-                        <th className="px-3 py-2 font-semibold">{t("colField")}</th>
-                        <th className="px-3 py-2 font-semibold">{t("colBefore")}</th>
-                        <th className="px-3 py-2 font-semibold">{t("colAfter")}</th>
-                        <th className="px-3 py-2 font-semibold">{t("colEffect")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-semibold">{t("colField")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-semibold">{t("colBefore")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-semibold">{t("colAfter")}</th>
+                        <th className="whitespace-nowrap px-3 py-2 font-semibold">{t("colEffect")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {preview.changes.map((item) => (
-                        <tr key={item.path}>
-                          <td className="px-3 py-2 font-mono text-foreground">{item.path}</td>
-                          <td className="max-w-36 truncate px-3 py-2 font-mono text-muted-foreground">
-                            {formatPreviewValue(item.before)}
-                          </td>
-                          <td className="max-w-36 truncate px-3 py-2 font-mono font-semibold text-foreground">
-                            {formatPreviewValue(item.after)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge
-                              variant={
-                                item.effect === "restart-required"
-                                  ? "warning"
-                                  : item.effect === "hot-reload"
-                                    ? "success"
-                                    : "secondary"
-                              }
+                      {preview.changes.map((item) => {
+                        const beforeText = formatPreviewValue(item.before)
+                        const afterText = formatPreviewValue(item.after)
+                        return (
+                          <tr key={item.path}>
+                            <td className="px-3 py-2 font-mono text-foreground [overflow-wrap:anywhere]">
+                              {item.path}
+                            </td>
+                            <td
+                              className="max-w-44 truncate px-3 py-2 font-mono text-muted-foreground"
+                              title={beforeText}
                             >
-                              {t(`effect.${item.effect}`)}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
+                              {beforeText}
+                            </td>
+                            <td
+                              className="max-w-44 truncate px-3 py-2 font-mono font-semibold text-foreground"
+                              title={afterText}
+                            >
+                              {afterText}
+                            </td>
+                            <td className="w-px whitespace-nowrap px-3 py-2">
+                              <Badge
+                                variant={
+                                  item.effect === "restart-required"
+                                    ? "warning"
+                                    : item.effect === "hot-reload"
+                                      ? "success"
+                                      : "secondary"
+                                }
+                              >
+                                {t(`effect.${item.effect}`)}
+                              </Badge>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -232,7 +246,7 @@ export function SettingsConfirmDialog({
           </div>
         )}
 
-        <AlertDialogFooter>
+        <AlertDialogFooter className="shrink-0">
           <AlertDialogCancel disabled={submitting} onClick={() => setAcknowledged([])}>
             {tCommon("cancel")}
           </AlertDialogCancel>
