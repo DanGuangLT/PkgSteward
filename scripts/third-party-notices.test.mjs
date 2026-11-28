@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { test } from 'node:test';
 
-function setupNotices(t) {
+function setupNotices(t, responses = {}) {
   const root = mkdtempSync(join(tmpdir(), 'pkgsteward-notices-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const folder of ['scripts', 'apps/api', 'apps/web', 'bin']) {
@@ -23,9 +23,16 @@ function setupNotices(t) {
       homepage: 'https://example.invalid/docs\nReadme',
     }],
   };
-  writeFileSync(join(bin, 'data.json'), JSON.stringify(data));
-  writeFileSync(join(bin, 'pnpm.cmd'), '@echo off\r\ntype "%~dp0data.json"\r\n');
-  writeFileSync(join(bin, 'pnpm'), '#!/bin/sh\ncat "$(dirname "$0")/data.json"\n', { mode: 0o755 });
+  writeFileSync(join(bin, 'fixtures.json'), JSON.stringify({ default: { output: JSON.stringify(data) }, ...responses }));
+  writeFileSync(join(bin, 'fake-pnpm.cjs'), [
+    "const { basename } = require('node:path');",
+    "const fixtures = require('./fixtures.json');",
+    'const { output, status } = fixtures[basename(process.cwd())] ?? fixtures.default;',
+    'process.stdout.write(output);',
+    'process.exitCode = status ?? 0;',
+  ].join('\n'));
+  writeFileSync(join(bin, 'pnpm.cmd'), '@echo off\r\nnode "%~dp0fake-pnpm.cjs"\r\n');
+  writeFileSync(join(bin, 'pnpm'), '#!/bin/sh\nexec node "$(dirname "$0")/fake-pnpm.cjs"\n', { mode: 0o755 });
   const env = { ...process.env };
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
   env[pathKey] = [bin, dirname(process.execPath), env[pathKey]].filter(Boolean).join(delimiter);
@@ -71,3 +78,37 @@ test('notice check reports stale or missing output without rewriting it', (t) =>
   assert.match(current.stdout, /THIRD_PARTY_NOTICES\.md is up to date/);
   assert.equal(readFileSync(noticePath, 'utf8'), currentContent);
 });
+
+const listingFailures = [
+  {
+    name: 'pnpm license listing fails with a structured error',
+    responses: { api: { status: 7, output: JSON.stringify({ error: { message: 'Fixture dependency is missing' } }) } },
+    message: '[third-party-notices] apps/api: pnpm license listing failed: Fixture dependency is missing',
+  },
+  {
+    name: 'pnpm license listing fails without a structured error',
+    responses: { web: { status: 8, output: '' } },
+    message: '[third-party-notices] apps/web: pnpm license listing failed: exit code 8',
+  },
+  {
+    name: 'pnpm license listing returns invalid JSON',
+    responses: { web: { output: '{not JSON' } },
+    message: '[third-party-notices] apps/web: pnpm license listing returned invalid JSON.',
+  },
+];
+
+for (const { name, responses, message } of listingFailures) {
+  test(name, (t) => {
+    const { run, noticePath } = setupNotices(t, responses);
+    const existing = Buffer.from('Existing notices\r\n', 'utf8');
+    writeFileSync(noticePath, existing);
+
+    for (const args of [[], ['--check']]) {
+      const result = run(...args);
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr.trim(), message);
+      assert.equal(result.stdout, '');
+      assert.deepEqual(readFileSync(noticePath), existing);
+    }
+  });
+}

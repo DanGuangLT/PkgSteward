@@ -2,7 +2,7 @@
 // Writes THIRD_PARTY_NOTICES.md at the repository root from `pnpm licenses list --prod --json`
 // of each app. Run from anywhere after installing both apps: node scripts/third-party-notices.mjs
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,18 +24,44 @@ const ATTENTION_NOTES = [
   [/ AND /, 'Every listed license applies: keep each notice.'],
 ];
 
+const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+
+function describeListingFailure(error) {
+  try {
+    const message = JSON.parse(error.stdout)?.error?.message;
+    if (typeof message === 'string' && message.trim()) return oneLine(message);
+  } catch {
+    // Older pnpm versions and shell failures may not provide structured output.
+  }
+  return typeof error.status === 'number' ? `exit code ${error.status}` : oneLine(error.message);
+}
+
+function failListing(dir, reason) {
+  // Write before exiting even when stderr is piped.
+  writeSync(process.stderr.fd, `[third-party-notices] ${dir}: ${reason}\n`);
+  process.exit(1);
+}
+
 const listLicenses = (dir) => {
-  // Constant command, no user input: shell is only needed to resolve pnpm.cmd on Windows.
-  const out = execSync('pnpm licenses list --prod --json', {
-    cwd: join(root, dir),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return JSON.parse(out);
+  let out;
+  try {
+    // Constant command, no user input: shell is only needed to resolve pnpm.cmd on Windows.
+    out = execSync('pnpm licenses list --prod --json', {
+      cwd: join(root, dir),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (error) {
+    failListing(dir, `pnpm license listing failed: ${describeListingFailure(error)}`);
+  }
+  try {
+    return JSON.parse(out);
+  } catch {
+    failListing(dir, 'pnpm license listing returned invalid JSON.');
+  }
 };
 
-const oneLine = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
 // Escape "\" too, so a value ending in "\" cannot escape the next "|".
 const cell = (value) => oneLine(value).replace(/[\\|]/g, '\\$&');
 // Keep the author's name only: npm writes "Name <email> (url)", so take the text before the first "<" or "(".
