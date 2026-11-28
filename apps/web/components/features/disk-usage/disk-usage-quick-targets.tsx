@@ -102,27 +102,28 @@ export function DiskUsageQuickTargets({
       </div>
 
       {roots.length > 0 ? (
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <p className="text-caption font-medium text-muted-foreground">{t("quickTargets.rootsLabel")}</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {roots.map((root) => {
               const isCurrent = activeComparisonKey !== "" && activeComparisonKey === diskFavoriteComparisonKey(root, "directory")
               return (
-                <DisabledTooltip key={root} reason={disabledReason} className="rounded-full">
+                <DisabledTooltip key={root} reason={disabledReason} className="min-w-0 max-w-full rounded-full">
                   <button
                     type="button"
                     disabled={disabled}
                     aria-current={isCurrent ? "true" : undefined}
+                    title={disabled ? undefined : root}
                     onClick={() => onPickTarget(root, "directory")}
                     className={cn(
-                      "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-caption transition-colors focus-ring disabled:opacity-50",
+                      "inline-flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-caption transition-colors focus-ring disabled:opacity-50",
                       isCurrent
                         ? "border-foreground bg-foreground text-background"
                         : "border-border bg-background text-foreground hover:bg-muted",
                     )}
                   >
                     <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{root}</span>
+                    <span className="min-w-0 truncate">{root}</span>
                   </button>
                 </DisabledTooltip>
               )
@@ -132,14 +133,14 @@ export function DiskUsageQuickTargets({
       ) : null}
 
       {topProjects.length > 0 ? (
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <p className="text-caption font-medium text-muted-foreground">{t("quickTargets.heaviestLabel")}</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {topProjects.map((project) => {
               const nmPath = project.nodeModules.path
               const isCurrent = activeComparisonKey !== "" && activeComparisonKey === diskFavoriteComparisonKey(nmPath, "packages")
               return (
-                <DisabledTooltip key={project.path} reason={disabledReason} className="rounded-full">
+                <DisabledTooltip key={project.path} reason={disabledReason} className="min-w-0 max-w-full rounded-full">
                   <button
                     type="button"
                     disabled={disabled}
@@ -147,14 +148,14 @@ export function DiskUsageQuickTargets({
                     title={disabled ? undefined : nmPath}
                     onClick={() => onPickTarget(nmPath, "packages")}
                     className={cn(
-                      "inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 text-caption transition-colors focus-ring disabled:opacity-50",
+                      "inline-flex min-h-9 min-w-0 max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 text-caption transition-colors focus-ring disabled:opacity-50",
                       isCurrent
                         ? "border-foreground bg-foreground text-background"
                         : "border-border bg-background text-foreground hover:bg-muted",
                     )}
                   >
                     <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                    <span className="truncate font-medium">{projectDisplayName(project)}</span>
+                    <span className="min-w-0 truncate font-medium">{projectDisplayName(project)}</span>
                     {project.nodeModules.sizeBytes !== null ? (
                       <span className={cn("shrink-0 tabular-nums", isCurrent ? "text-background/80" : "text-muted-foreground")}>
                         <DiskSize bytes={project.nodeModules.sizeBytes} />
@@ -257,8 +258,8 @@ export function DiskUsageQuickTargets({
         </div>
       ) : null}
 
-      <div className="space-y-1.5 border-t border-border/60 pt-3">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 space-y-1.5 border-t border-border/60 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
           <BookmarkIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
           <p className="text-caption font-medium text-muted-foreground">{t("favorites.heading")}</p>
           <Badge variant="secondary">
@@ -271,34 +272,34 @@ export function DiskUsageQuickTargets({
         {favorites.length === 0 ? (
           <p className="text-caption text-muted-foreground">{t("favorites.empty")}</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             {favorites.map((fav) => {
               const isCurrent = activeComparisonKey !== "" && activeComparisonKey === diskFavoriteComparisonKey(fav.path, fav.view)
               return (
                 <div
                   key={fav.id}
                   className={cn(
-                    "inline-flex max-w-full items-center rounded-full border text-caption transition-colors",
+                    "inline-flex min-w-0 max-w-full items-center rounded-full border text-caption transition-colors",
                     isCurrent
                       ? "border-foreground bg-foreground text-background"
                       : "border-border bg-background text-foreground",
                   )}
                 >
-                  <DisabledTooltip reason={disabledReason} className="min-w-0 rounded-l-full">
+                  <DisabledTooltip reason={disabledReason} className="min-w-0 max-w-full rounded-l-full">
                     <button
                       type="button"
                       disabled={disabled}
                       aria-current={isCurrent ? "true" : undefined}
                       title={disabled ? undefined : fav.path}
                       onClick={() => onPickTarget(fav.path, fav.view)}
-                      className="inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-l-full py-1 pr-2 pl-3 transition-colors focus-ring hover:opacity-85 disabled:opacity-50"
+                      className="inline-flex min-h-8 min-w-0 max-w-full items-center gap-1.5 rounded-l-full py-1 pr-2 pl-3 transition-colors focus-ring hover:opacity-85 disabled:opacity-50"
                     >
                       {fav.view === "packages" ? (
                         <PackageIcon className="size-3.5 shrink-0" aria-hidden="true" />
                       ) : (
                         <FolderIcon className="size-3.5 shrink-0" aria-hidden="true" />
                       )}
-                      <span className="truncate font-medium">{fav.label}</span>
+                      <span className="min-w-0 truncate font-medium">{fav.label}</span>
                     </button>
                   </DisabledTooltip>
                   <button

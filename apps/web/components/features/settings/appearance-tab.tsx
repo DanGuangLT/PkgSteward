@@ -225,7 +225,7 @@ function CustomWallpaperMediaPanel({
           </div>
 
           {savedAsset && localAssetUrl ? (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               {!isLocalVideo && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -234,7 +234,7 @@ function CustomWallpaperMediaPanel({
                   className="h-16 w-28 rounded-sm border border-border object-cover"
                 />
               )}
-              <span className="truncate font-mono text-caption text-muted-foreground">
+              <span title={savedAsset} className="min-w-0 max-w-full truncate font-mono text-caption text-muted-foreground">
                 {savedAsset}
               </span>
             </div>
@@ -267,7 +267,7 @@ function CustomWallpaperMediaPanel({
                 }}
                 placeholder={t("wallpaperMediaUrlPlaceholder")}
                 aria-invalid={rawUrlError ? true : undefined}
-                className="min-w-60 flex-1 font-mono"
+                className="w-full min-w-0 flex-1 font-mono sm:min-w-56"
               />
               <Button type="submit" disabled={busy || Boolean(rawUrlError)}>
                 {t("wallpaperApplyUrlCta")}
@@ -365,7 +365,7 @@ function WallpaperTuningForm({
       className="flex flex-col gap-4 rounded-md border border-border bg-background p-4"
     >
       <span className="text-body-sm font-semibold text-foreground">{t("wallpaperTuningTitle")}</span>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="flex flex-col gap-1">
           <Label htmlFor="wp-blur">{t("wallpaperBlurLabel")}</Label>
           <UnitNumberInput
@@ -560,7 +560,7 @@ function SurfaceMaterialCard({
         <CardDescription>{t("surfaceSectionDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {SURFACE_STYLES.map((style) => {
             const preset = SURFACE_STYLE_PRESETS[style]
             const selected = appearance.surfaceStyle === style

@@ -222,7 +222,7 @@ export function CleanupFilters({
         >
           {editingPreset ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background px-3 py-2 text-caption">
-              <span className="font-semibold text-foreground">
+              <span className="min-w-0 font-semibold text-foreground [overflow-wrap:anywhere]">
                 {t("presets.editingBanner", { name: editingPreset.name })}
               </span>
               <Button type="button" variant="ghost" size="sm" onClick={onStopEditingPreset}>
@@ -312,7 +312,7 @@ export function CleanupFilters({
           {projects.length > 0 || form.projectPaths.length > 0 ? (
             <div className="space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <FolderGit2Icon className="size-4 text-muted-foreground" aria-hidden="true" />
                   <span className="text-body-sm font-semibold text-foreground">{t("customizer.projectScope")}</span>
                   <Badge variant={form.projectPaths.length > 0 ? "default" : "secondary"}>
@@ -423,8 +423,8 @@ export function CleanupFilters({
                                 onCheckedChange={() => toggleProject(project.path)}
                               />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate font-medium text-foreground">{project.name ?? project.path}</p>
-                                <p className="truncate font-mono text-caption text-muted-foreground">{project.path}</p>
+                                <p title={project.name ?? project.path} className="truncate font-medium text-foreground">{project.name ?? project.path}</p>
+                                <p title={project.path} className="truncate font-mono text-caption text-muted-foreground">{project.path}</p>
                               </div>
                               {project.nodeModulesSizeBytes !== null ? (
                                 <span className="shrink-0 text-caption text-muted-foreground">
@@ -444,7 +444,7 @@ export function CleanupFilters({
 
           {saveOpen ? (
             <div className="space-y-2.5 rounded-md border border-border bg-background p-3.5">
-              <Label htmlFor={`${baseId}-preset-name`}>
+              <Label htmlFor={`${baseId}-preset-name`} className="leading-snug [overflow-wrap:anywhere]">
                 {editingPreset
                   ? t("presets.updateOpen", { name: editingPreset.name })
                   : t("presets.saveOpen")}
@@ -465,7 +465,7 @@ export function CleanupFilters({
                       handleSave(false)
                     }
                   }}
-                  className="min-w-48 flex-1"
+                  className="w-full min-w-0 flex-1 sm:min-w-48"
                 />
                 <Button type="button" size="sm" variant="secondary" onClick={() => handleSave(false)}>
                   {t("presets.saveConfirm")}
@@ -499,12 +499,13 @@ export function CleanupFilters({
                   {t("actions.findAndMeasure")}
                 </Button>
               </DisabledTooltip>
-              <DisabledTooltip reason={saveDisabledReason}>
+              <DisabledTooltip reason={saveDisabledReason} className="max-w-full">
                 <Button
                   type="button"
                   variant="secondary"
                   disabled={disabled || input === null}
                   onClick={openSaveComposer}
+                  className="h-auto min-h-10 max-w-full py-2 text-left whitespace-normal [overflow-wrap:anywhere]"
                 >
                   <BookmarkPlusIcon aria-hidden="true" />
                   {editingPreset
@@ -561,7 +562,11 @@ export function ActiveCriteriaBar({
         {form ? (
           <>
             <span className="text-caption font-semibold text-muted-foreground">{t("customizer.activeBarLabel")}</span>
-            {activeLabel ? <Badge variant="default">{activeLabel}</Badge> : null}
+            {activeLabel ? (
+              <Badge variant="default" className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal [overflow-wrap:anywhere]">
+                {activeLabel}
+              </Badge>
+            ) : null}
             {form.kinds.map((kind) => (
               <Badge key={kind} variant="secondary">{t(`kinds.${kind}`)}</Badge>
             ))}

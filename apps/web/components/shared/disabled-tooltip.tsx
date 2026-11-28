@@ -41,7 +41,7 @@ export function DisabledTooltip({
         <span
           tabIndex={active ? 0 : undefined}
           className={cn(
-            "inline-grid max-w-full",
+            "inline-grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)]",
             active && "cursor-not-allowed rounded-md focus-ring [&_button:disabled]:pointer-events-none",
             className,
           )}

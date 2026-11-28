@@ -54,7 +54,7 @@ function TreeRow({ entry, ...tree }: FileTreeProps & { entry: FileTreeEntry }) {
           checked={state === "indeterminate" ? "indeterminate" : state === "checked"}
           onCheckedChange={() => tree.onToggle(entry)} />
         <EntryIcon entry={entry} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-28 flex-1">
           <Label htmlFor={checkboxId} className={cn(
             "block cursor-pointer font-mono text-body-sm leading-snug font-normal [overflow-wrap:anywhere]",
             !entry.selectable && "cursor-default text-muted-foreground",
@@ -116,7 +116,9 @@ export function FileTree(props: FileTreeProps) {
       <p className="text-caption text-muted-foreground">{d("loadedScope")}</p>
       {hidden > 0 ? <p role="status" className="rounded-sm border border-border bg-muted px-3 py-2 text-caption font-medium">{d("hiddenSelected", { count: format.number(hidden) })}</p> : null}
       {discovery.active && discovery.count === 0 ? <DiscoveryEmpty total={discovery.total} /> : null}
-      <TreeLevelView {...props} path={props.root} visiblePaths={discovery.visiblePaths} filtering={discovery.active} />
+      <div className="min-w-0 overflow-x-auto pb-1">
+        <TreeLevelView {...props} path={props.root} visiblePaths={discovery.visiblePaths} filtering={discovery.active} />
+      </div>
     </div>
   )
 }

@@ -61,7 +61,7 @@ function DiskRowStatus({ row }: { row: DiskUsageRow }) {
       : "outline"
   return (
     <div className="space-y-1 text-body-sm">
-      <Badge variant={badgeVariant} className="h-auto min-h-6 max-w-full whitespace-normal">
+      <Badge variant={badgeVariant} className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal">
         {t(`rows.${row.state}`)}
       </Badge>
       {row.reason ? <p className="text-caption text-muted-foreground">{t(`reasons.${row.reason}`)}</p> : null}
@@ -312,8 +312,8 @@ export function DiskUsageItems({
             }))}
             onValueChange={states => setView({ ...view, states })}
           />
-          <div className="flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3.5 py-2 text-body-sm transition-shadow focus-within:border-foreground focus-within:ring-2 focus-within:ring-ring sm:w-auto">
-            <Label htmlFor={minId} className="shrink-0 text-body-sm font-semibold text-foreground">{d("minSize")}</Label>
+          <div className="flex min-h-10 w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border bg-background px-3.5 py-2 text-body-sm transition-shadow focus-within:border-foreground focus-within:ring-2 focus-within:ring-ring sm:w-auto sm:flex-nowrap">
+            <Label htmlFor={minId} className="text-body-sm font-semibold text-foreground sm:shrink-0">{d("minSize")}</Label>
             <input
               id={minId}
               type="text"
@@ -324,7 +324,7 @@ export function DiskUsageItems({
                 const minSize = event.target.value
                 if (/^\d{0,15}$/.test(minSize)) setView({ ...view, minSize })
               }}
-              className="w-24 min-w-0 bg-transparent text-body-sm text-foreground outline-none placeholder:text-muted-foreground"
+              className="min-w-20 flex-1 bg-transparent text-body-sm text-foreground outline-none placeholder:text-muted-foreground sm:w-24 sm:flex-none"
             />
           </div>
           <DiscoverySort
@@ -424,9 +424,9 @@ export function DiskUsageItems({
                           <dt className="text-caption text-muted-foreground">{t("columns.fileCount")}</dt>
                           <dd><DiskFileCount count={row.fileCount} /></dd>
                         </div>
-                        <div className="flex items-start justify-between gap-2">
-                          <dt className="text-caption text-muted-foreground">{t("columns.status")}</dt>
-                          <dd><DiskRowStatus row={row} /></dd>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <dt className="shrink-0 text-caption text-muted-foreground">{t("columns.status")}</dt>
+                          <dd className="min-w-0 max-w-full"><DiskRowStatus row={row} /></dd>
                         </div>
                       </dl>
                     </CardContent>

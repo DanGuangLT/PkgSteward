@@ -24,8 +24,22 @@ function DependencyName({ dependency, badges }: {
   return (
     <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
       <p className="font-mono font-semibold">{dependency.name}</p>
-      {badges.outdated ? <Badge variant="secondary" className="h-auto whitespace-normal"><ArrowUpIcon aria-hidden="true" />{t("dependencies.outdated")}</Badge> : null}
-      {badges.vulnerable ? <Badge variant="warning" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("dependencies.vulnerable")}</Badge> : null}
+      {badges.outdated || badges.vulnerable ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {badges.outdated ? (
+            <Badge variant="secondary" className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal">
+              <ArrowUpIcon aria-hidden="true" />
+              {t("dependencies.outdated")}
+            </Badge>
+          ) : null}
+          {badges.vulnerable ? (
+            <Badge variant="warning" className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal">
+              <AlertTriangleIcon aria-hidden="true" />
+              {t("dependencies.vulnerable")}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

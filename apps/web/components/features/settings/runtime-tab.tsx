@@ -233,7 +233,7 @@ export function RuntimeTab({
 
           {scanMode === "custom" && (
             <div className="flex flex-col gap-3">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Input
                   value={newPathInput}
                   onChange={(e) => {
@@ -249,7 +249,7 @@ export function RuntimeTab({
                   placeholder={t("pathPlaceholder")}
                   aria-label={t("pathPlaceholder")}
                   aria-invalid={livePathError ? true : undefined}
-                  className="font-mono"
+                  className="w-full min-w-0 flex-1 font-mono sm:min-w-56"
                 />
                 <Button type="button" variant="secondary" onClick={handleAddPath}>
                   <PlusIcon className="size-4" aria-hidden />
@@ -269,13 +269,14 @@ export function RuntimeTab({
                   {scanPaths.map((dir) => (
                     <li
                       key={dir}
-                      className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2"
                     >
-                      <span className="truncate font-mono text-body-sm text-foreground">{dir}</span>
+                      <span title={dir} className="min-w-0 flex-1 truncate font-mono text-body-sm text-foreground">{dir}</span>
                       <Button
                         type="button"
                         size="icon-sm"
                         variant="ghost"
+                        className="shrink-0"
                         aria-label={t("removePath", { path: dir })}
                         onClick={() => setScanPaths((prev) => prev.filter((item) => item !== dir))}
                       >
@@ -311,9 +312,9 @@ export function RuntimeTab({
             <CardDescription>{t("limitsDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="max-scan-depth">{t("maxScanDepthLabel")}</Label>
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="max-scan-depth" className="min-w-0 leading-snug">{t("maxScanDepthLabel")}</Label>
                 <SourceBadge source={snapshot.sources.runtime.maxScanDepth} />
               </div>
               <UnitNumberInput
@@ -331,9 +332,9 @@ export function RuntimeTab({
               />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="scan-timeout-ms">{t("scanTimeoutLabel")}</Label>
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="scan-timeout-ms" className="min-w-0 leading-snug">{t("scanTimeoutLabel")}</Label>
                 <SourceBadge source={snapshot.sources.runtime.scanTimeoutMs} />
               </div>
               <label className="flex cursor-pointer items-center gap-2.5 select-none">
@@ -360,9 +361,9 @@ export function RuntimeTab({
               )}
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="npm-timeout-ms">{t("npmTimeoutLabel")}</Label>
+            <div className="flex min-w-0 flex-col gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="npm-timeout-ms" className="min-w-0 leading-snug">{t("npmTimeoutLabel")}</Label>
                 <SourceBadge source={snapshot.sources.runtime.npmCommandTimeoutMs} />
               </div>
               <label className="flex cursor-pointer items-center gap-2.5 select-none">

@@ -153,7 +153,7 @@ export function NpmRunnerForm({ context, selection, blockedReason, shellDisabled
                 size="sm"
                 variant={active ? "secondary" : "outline"}
                 aria-pressed={active}
-                className="h-8 font-mono text-caption"
+                className="h-auto min-h-8 max-w-full py-1.5 font-mono text-caption whitespace-normal [overflow-wrap:anywhere]"
                 onClick={() => onChange({ action: "script", script: script.name, consoleShell: currentShell })}
               >
                 {script.name}

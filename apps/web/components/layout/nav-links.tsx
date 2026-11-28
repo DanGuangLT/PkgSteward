@@ -36,7 +36,7 @@ const navLinkVariants = cva(
       orientation: {
         horizontal:
           "relative inline-flex h-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:rounded-full after:bg-primary after:opacity-0 data-active:after:opacity-100",
-        vertical: "flex h-11 items-center gap-2.5 rounded-md px-3 hover:bg-muted data-active:bg-muted",
+        vertical: "flex h-11 w-full items-center gap-2.5 rounded-md px-3 hover:bg-muted data-active:bg-muted",
       },
     },
     defaultVariants: {

@@ -44,7 +44,7 @@ export function ProjectAdvisories({ items, resourceKey }: { items: readonly Proj
         <div ref={listAnchorRef} className="min-w-0 scroll-mt-20 space-y-4">
           <ul className="min-w-0 space-y-4">{advisoriesPagination.items.map(item => (
             <li key={JSON.stringify([item.name, item.id, item.range])} className="min-w-0 space-y-3 rounded-md border border-border bg-card p-4 text-body-sm text-card-foreground [overflow-wrap:anywhere]">
-              <Badge variant="outline" className="h-auto whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("audit.severity")}: {t(`audit.severities.${item.severity}`)}</Badge>
+              <Badge variant="outline" className="h-auto min-h-6 max-w-full py-1 leading-tight whitespace-normal"><AlertTriangleIcon aria-hidden="true" />{t("audit.severity")}: {t(`audit.severities.${item.severity}`)}</Badge>
               <h3 className="text-heading-md">{item.url !== null ? (
                 <a href={item.url} rel="noreferrer" target="_blank" className="rounded-sm text-ink-soft underline focus-ring">{item.title}</a>
               ) : item.title}</h3>

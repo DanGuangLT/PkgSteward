@@ -19,7 +19,7 @@ export async function TopNav() {
         <MobileNav triggerClassName="lg:hidden" />
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-md font-bold focus-ring sm:gap-2 sm:text-heading-lg lg:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 rounded-sm text-heading-lg font-bold focus-ring sm:gap-2 lg:shrink-0"
         >
           <Logo className="size-7 shrink-0 sm:size-8" />
           <BrandWordmark label={t("brand")} className="truncate" />

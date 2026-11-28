@@ -227,7 +227,7 @@ export function NativeSessionStatus() {
               </span>
             ) : null}
             {job ? (
-              <span className="truncate font-mono text-body-sm text-muted-foreground [overflow-wrap:anywhere]">
+              <span title={job.path} className="min-w-0 max-w-full truncate font-mono text-body-sm text-muted-foreground">
                 {job.path}
               </span>
             ) : null}

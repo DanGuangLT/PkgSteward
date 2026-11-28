@@ -274,15 +274,15 @@ export function DiskUsagePanel({
       {embedded ? <p className="text-body-sm text-muted-foreground">{t("description")}</p> : null}
 
       {job !== null && !controlsExpanded ? (
-        <div className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
+          <div className="min-w-0 flex-1 basis-60 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-caption font-medium text-muted-foreground">{t("activeBar.label")}</span>
               <Badge variant="secondary">{t(`views.${job.view}`)}</Badge>
             </div>
             <p className="font-mono text-body-sm font-medium text-foreground [overflow-wrap:anywhere]">{job.path}</p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {!embedded ? (
               <DisabledTooltip reason={busyReason}>
                 <Button

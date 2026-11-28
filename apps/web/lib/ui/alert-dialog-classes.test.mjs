@@ -10,6 +10,8 @@ test("default alert dialog content base classes lock a single min-w-0 grid colum
   assert.equal(tokens.includes("grid-cols-1"), true)
   assert.equal(tokens.includes("min-w-0"), true)
   assert.equal(tokens.includes("w-[calc(100%-2rem)]"), true)
+  assert.equal(tokens.includes("border"), true)
+  assert.equal(tokens.includes("border-border"), true)
   assert.equal(tokens.includes("sm:max-w-[480px]"), true)
   assert.equal(
     tokens.some((token) => token.startsWith("data-[size=default]:sm:max-w-")),
